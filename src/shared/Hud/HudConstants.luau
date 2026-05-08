@@ -1,0 +1,64 @@
+----------------------------------------------------------------------
+-- HudConstants
+----------------------------------------------------------------------
+-- Central configuration for the entire HUD layout system.
+-- All screen regions, sizes, and responsive scaling are defined here.
+----------------------------------------------------------------------
+
+local HudConstants = {
+	REGIONS = {
+		BottomLeft = {
+			Position = UDim2.new(0, 20, 1, -20),
+			AnchorPoint = Vector2.new(0, 1),
+			Size = UDim2.new(0, 300, 0, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			ZIndex = 1,
+		},
+		BottomRight = {
+			Position = UDim2.new(1, -20, 1, -20),
+			AnchorPoint = Vector2.new(1, 1),
+			Size = UDim2.new(0, 300, 0, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			ZIndex = 1,
+		},
+		BottomCenter = {
+			Position = UDim2.new(0.5, 0, 1, -20),
+			AnchorPoint = Vector2.new(0.5, 1),
+			Size = UDim2.new(0, 400, 0, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			ZIndex = 1,
+		},
+		TopCenter = {
+			Position = UDim2.new(0.5, 0, 0, 8),
+			AnchorPoint = Vector2.new(0.5, 0),
+			Size = UDim2.new(0.4, 0, 0, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			ZIndex = 1,
+		},
+		TopRight = {
+			Position = UDim2.new(1, -20, 0, 20),
+			AnchorPoint = Vector2.new(1, 0),
+			Size = UDim2.new(0, 400, 0, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			ZIndex = 1,
+		},
+		Center = {
+			Position = UDim2.new(0.5, 0, 0.5, 0),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Size = UDim2.new(1, 0, 1, 0),
+			AutomaticSize = Enum.AutomaticSize.None,
+			ZIndex = 2,
+		},
+	},
+	SMALL_SCREEN_THRESHOLD = 500,
+	SMALL_SCREEN_SCALE = 0.6,
+	HUD_DISPLAY_ORDER = 10,
+	OVERLAY_DISPLAY_ORDER = 20,
+	HEALTH_REGION = "BottomLeft",
+	WEAPON_PANEL_REGION = "BottomRight",
+	RETICLE_REGION = "Center",
+	TOUCH_CONTROLS_REGION = "BottomRight",
+	WEAPON_PANEL_TOUCH_REGION = "BottomCenter",
+}
+
+return HudConstants

@@ -1,0 +1,67 @@
+---
+type: system
+description: Game mode framework — RoundManager, ScoreTracker, SpawnManager, mode registry. FFA Deathmatch + TDM modes.
+updated: 2026-04-30
+---
+
+# GameMode System
+
+Round-based game modes share a common scaffold: a state-machine round, a per-player score tracker, a spawn manager, and a mode-specific definition. Each mode plugs into the registry under `src/shared/GameMode/`.
+
+## Files
+
+```
+src/shared/GameMode/
+  GameModeTypes.luau              — type definitions
+  Modes/init.luau                 — mode registry
+  Modes/FFADeathmatch.luau
+  Modes/TeamDeathmatch.luau
+src/server/GameMode/Scripts/
+  GameModeService/                — orchestrator
+    ScoreTracker.luau             — per-player kills/deaths/assists
+  RoundManager/                   — generic state machine: Waiting → Countdown → Active → PostRound
+  SpawnManager/                   — picks SpawnLocation per mode, handles team-aware spawning
+  TeamService/                    — team assignment, auto-balance
+  NametagService/                 — team-coloured nametags above heads
+src/server/Arena/
+  DeathZoneService.server.luau    — fall-kill volume (CollectionService tag "DeathZone")
+```
+
+## Mode resolution
+
+Active mode is read from `workspace:GetAttribute("ActiveGameMode")` (default: `FFADeathmatch`). Each mode exposes:
+
+- `getConfig()` — score limit, round time, respawn time, spawn-tag, etc.
+- `onPlayerJoin(player)` — hook for mode-specific player setup (team assignment, etc.)
+
+## Round states
+
+```
+Waiting   — < min players, idle
+Countdown — start countdown, lock spawns
+Active    — gameplay; ScoreTracker accrues
+PostRound — winner overlay, auto-restart timer
+```
+
+`RoundManager` exposes `RoundStarted` / `RoundEnded` BindableEvents. Note: these are versioned via per-file `.model.json` (the legacy `children`-array format silently failed Rojo sync — see [[concepts/ModelJsonInstances]]).
+
+## Modes
+
+| Mode | Status | Notes |
+|---|---|---|
+| FFA Deathmatch | Most of plan shipped | First mode; hardened the round/spawn/score scaffolding. Lessons from the TDM build retroactively apply. |
+| Team Deathmatch (TDM) | Steps 1–4 shipped | Step 5 tuning + KillFeed UI consumer outstanding. |
+| Control Points | Not built | Greybox geometry ready; `CapturePointService` is the next big build. |
+
+## Friendly fire (TDM)
+
+Friendly-fire block lives in `HealthService.applyDamage.process` (not in TeamService) — that way it applies to any damage path uniformly. See [[systems/Health]].
+
+## Respawn handler ordering
+
+In `onPlayerAdded`, `setupCharacter` (which connects `humanoid.Died` → respawn loop and adds the spawn-protection `ForceField`) is defined as a local function and **connected to `CharacterAdded` BEFORE** any `LoadCharacter()` call. Otherwise the very-first character (when team mode triggers an explicit `LoadCharacter` because `CharacterAutoLoads = false`) gets no Died handler and players appear stuck on the respawn screen after their first death. After connecting, `setupCharacter` is also applied to any already-loaded `player.Character` so non-team modes (Roblox auto-loaded) get the handler too. Fixed `dcd312d`.
+
+## Cross-references
+
+- Death zone wiring → `src/server/Arena/DeathZoneService.server.luau`
+- Kill feed remote (consumer not yet built) → `gameModeRemotes.KillFeed`

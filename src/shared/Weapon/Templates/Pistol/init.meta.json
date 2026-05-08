@@ -1,0 +1,46 @@
+{
+  "className": "Tool",
+  "ignoreUnknownInstances": true,
+  "properties": {
+    "RequiresHandle": true,
+    "CanBeDropped": false,
+    "ToolTip": "",
+    "Grip": {
+      "CFrame": {
+        "position": [0, 0, 0],
+        "orientation": [[0.965925813, -0.0885213166, 0.243210316], [0, 0.939692616, 0.342020154], [-0.258819014, -0.330366105, 0.907673359]]
+      }
+    },
+    "Attributes": {
+      "Attributes": {
+        "_ammo": { "Int32": 10 },
+        "_reloading": { "Bool": false },
+        "_reserveAmmo": { "Int32": 30 },
+        "startingReserveAmmo": { "Int32": 30 },
+        "pickupAmmoBonus": { "Int32": 10 },
+        "maxReserveAmmo": { "Int32": 60 },
+        "magazineSize": { "Int32": 10 },
+        "fireMode": { "String": "Auto" },
+        "rateOfFire": { "Float32": 600.0 },
+        "damage": { "Float32": 35.0 },
+        "range": { "Float32": 1000.0 },
+        "raysPerShot": { "Int32": 1 },
+        "rayRadius": { "Float32": 0.4 },
+        "spread": { "Float32": 0.0 },
+        "reloadTime": { "Float32": 1.0 },
+        "recoilMin": { "Vector2": [0.0, 0.0] },
+        "recoilMax": { "Vector2": [0.0, 0.0] },
+        "aimAssistRange": { "Float32": 100.0 },
+        "aimAssistFov": { "Float32": 20.0 },
+        "aimAssistFrictionStrength": { "Float32": 0.5 },
+        "aimAssistTrackingStrength": { "Float32": 0.5 },
+        "aimAssistCenteringStrength": { "Float32": 0.0 },
+        "viewModel": { "String": "Pistol" },
+        "cameraModeFamily": { "String": "Handgun" },
+        "unanchoredImpulseForce": { "Float32": 5.0 },
+        "EnableFireRotation": { "Bool": true },
+        "WeaponCategory": { "String": "Normal" }
+      }
+    }
+  }
+}

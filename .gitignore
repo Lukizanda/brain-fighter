@@ -1,0 +1,37 @@
+# Project place file
+/BrainFighter.rbxlx
+
+# Roblox Studio lock files
+/*.rbxlx.lock
+/*.rbxl.lock
+
+sourcemap.json
+
+# MCP config (contains API keys)
+.mcp.json
+
+# Local secrets (Meshy API key, Roblox Open Cloud key, etc.)
+.env
+.env.local
+.env.*.local
+
+# Python bytecode cache from tools/
+__pycache__/
+
+# Obsidian vault — per-machine view state. App / appearance / core-plugins
+# are versioned for plugin + theme parity across machines; graph.json,
+# workspace pane layout, and search cache are user-local and drift on
+# every session — leave them untracked.
+wiki/.obsidian/workspace.json
+wiki/.obsidian/workspace-mobile.json
+wiki/.obsidian/cache
+wiki/.obsidian/graph.json
+
+# Session-handoff artifact written by /whats-next or compaction. Each
+# session can produce one; not for git.
+whats-next.md
+
+# Claude Code per-machine permission settings — not team-shared.
+# `.claude/settings.json` (versioned) holds the team-shared allowlist;
+# `.claude/settings.local.json` is each contributor's local additions.
+.claude/settings.local.json

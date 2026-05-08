@@ -1,0 +1,23 @@
+#!/bin/sh
+# Validates staged Rojo `.meta.json` / `.model.json` files for the
+# silent-fail traps that have bitten this repo (children-array in meta,
+# missing className in model, etc). See tools/validate_rojo_json.py.
+#
+# Enable once per clone:
+#   git config core.hooksPath .githooks
+#
+# Bypass for an emergency commit:
+#   git commit --no-verify -m "..."
+
+if ! command -v python >/dev/null 2>&1 && ! command -v python3 >/dev/null 2>&1; then
+	echo "pre-commit: python not found in PATH; skipping Rojo JSON validation" >&2
+	exit 0
+fi
+
+PYTHON=python
+if ! command -v python >/dev/null 2>&1; then
+	PYTHON=python3
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+"$PYTHON" "$REPO_ROOT/tools/validate_rojo_json.py" --staged
