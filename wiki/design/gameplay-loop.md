@@ -73,13 +73,17 @@ Each color's reservoir is the cast surface for that color.
 - **Drag from a reservoir** = a vertical menu opens alongside it, listing **all currently-affordable tiers of that color** (e.g. red: Spark T1·10, Fireball T2·30, Inferno T3·80). Affordable tiers are bright; tiers above the current energy are greyed/locked. Release on a tier to fire that spell.
 - **Release outside the menu** = cancel; no energy spent.
 - The menu opens **toward the screen interior** (reservoirs live on the right edge → menu opens to the left), so the player's finger doesn't occlude the choices.
+- **Placement-mode spells are visually marked** in the menu — a crosshair glyph (⌖) at the right edge of the entry, plus a **dashed outline** around the entry (auto-target entries use a solid outline). Two layered cues: the glyph identifies the targeting mode; the dashed outline signals "this entry has a second step after release." First-time use of any placement spell triggers a one-shot tutorial flash so the second aim step doesn't surprise the player.
 
-*Why:* anchoring the cast on the color reservoir resolves two problems with the prior single-button drag-cast — (1) color is now explicit by virtue of which bar you touched, so there's no arbitrary tap-default rule, and (2) the menu has room to show all three tiers of that one color rather than compressing into one entry per color, which gives the "save big, fire small" decision a natural home.
+*Why:* anchoring the cast on the color reservoir resolves two problems with the prior single-button drag-cast — (1) color is now explicit by virtue of which bar you touched, so there's no arbitrary tap-default rule, and (2) the menu has room to show all three tiers of that one color rather than compressing into one entry per color, which gives the "save big, fire small" decision a natural home. The placement-mode marker is layered (glyph + outline) because either alone is ambiguous — a single icon needs to be learned, but a dashed outline reinforces the meaning visually without requiring memory.
 
 ### Spawner
 
 - **Constrained-random with soft heuristics + escape hatches, not a hard "always spellable" guarantee.** *Why:* a hard guarantee is brittle (what counts as "spellable" depends on what's already in the buffer, what tier the player is going for, etc.) and expensive to compute. Soft bias + "if stuck, spawn extras" + "player can reroll" covers the same failure mode with much less code. Don't over-engineer this up front.
 - **Shot blocks vanish, spawner replenishes; blocks float and require player movement.** *Why:* movement-gated letter pickup is what couples the TPS template's locomotion to the spelling layer — without it, the player roots and the game becomes a typing test with no shooter texture.
+- **~24 blocks floating at once in a moderate arena, framed as density-per-area in code.** *Why:* 8 blocks per color is just enough for a 5-letter same-color word to be findable without the search dominating; 24 total keeps the arena legible rather than soup. Storing as `BLOCKS_PER_100_SQ_STUDS` (≈ 0.4) means the number tracks level size automatically — no per-level hand-tuning of an absolute count.
+- **Letter selection within a color is Scrabble-frequency-weighted, independent of color weighting.** *Why:* English vowels and common consonants (E, A, I, O, N, R, T, L, S, U) carry most words; an even letter distribution would over-represent rare letters and make the pool feel unspellable. Frequency-weighting also makes Q/Z/J/X feel like treasure moments — exactly because they're worth more energy AND rarer to spawn.
+- **Color weighting defaults to 33/33/33, but is per-level configurable via `colorWeights`.** *Why:* equal-weight is the right neutral for tutorialization and most encounters. The per-level override is what unlocks future encounter design (a boss balanced around scarce green = "no easy healing, plan offensively") and costs nothing to plumb now vs adding it later as a refactor. **No adaptive spawning** based on player state — it erodes player agency and is over-engineering for first prototype.
 
 ### Dictionary
 
@@ -169,14 +173,16 @@ Mixed-color words split energy value-weighted, not count-weighted. Each tile con
 
 The Red+Blue Z-padding-exploit ("stuff a Z into red, pad with cheap blue letters for a 50/50 split") is structurally impossible — the Z's 10 points only ever feed the color of the Z's tile.
 
-## Open design questions
+## Playtest verification
 
-These are the next decisions to make, before or during prototype. Each is paired with the trade-off the prototype is meant to surface.
+All major design decisions are now resolved (see the resolved-decisions sections above). What remains is **tuning** — every concrete number in this doc is an educated starting point, and the first playable prototype is what tells us whether the curve feels right. The list below names the levers most likely to need adjustment.
 
-- **Spawn density.** How many blocks float at once? Too few and the player is starved between casts; too many and the level reads as visual noise and the spawner's color bias matters less. This depends on level size and is best tuned against a real arena.
-- **Color distribution in spawner.** Equal-weight R/G/B, or weighted (e.g. 50/25/25)? Equal is neutral; weighted lets monster designs lean on scarce colors ("this fight is hard because green is rare and you need walls"). Weighting needs the monster system to be in place to be meaningful — premature otherwise.
-
-We'll have evidence on all three after the first playable prototype puts a real player in a real arena with real monsters. Premature locking is worse than the cost of revisiting.
+- **Energy curve.** `Σ letter_values × length_multiplier` produces (CAT, FIRE, FLAME, LIGHTNING, EARTHQUAKES) → (5, 7, 15, 42, 81). Are short words rewarding enough to not feel wasteful? Are long words rewarding enough to justify the build-up time? Does `CHARACTERIZE`=84 trivialize a boss in one cast, or is that the desired payoff moment?
+- **Spell tier thresholds (10 / 30 / 80).** Is T1 reachable within ~10 sec of combat starting? Does T3 feel earned rather than constantly out of reach? If players are firing T1 spam exclusively, T1's cost may be too low (or its payoff too high).
+- **Spawn density (~24 blocks, ~8 per color).** Is the player ever starved for >5 sec between word attempts (too few)? Does the arena read as "block soup" (too many)? Tune via the `BLOCKS_PER_100_SQ_STUDS` constant.
+- **Color weighting.** Default 33/33/33. Per-level designers may want to lean specific colors scarce for encounter shape; the first signal will come when monster designs are concrete.
+- **Mind Full pacing.** With a 12-slot buffer, how often does the player actually hit the cap? If it's a rare emergency, the cap is well-placed; if "destroy a letter to keep shooting" becomes a constant mode, the cap is too low or the Memorize gesture isn't being used enough.
+- **Spawner reroll trigger.** How often do players manually reroll vs how often does the spawner's soft heuristic save them automatically? Heavy manual rerolls might mean the heuristic is too loose.
 
 ## References
 

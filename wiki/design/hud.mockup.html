@@ -967,6 +967,9 @@
     opacity: 0.4;
     filter: grayscale(0.7);
   }
+  .spell-entry.placement {
+    border-style: dashed;
+  }
   .spell-entry .targeting-hint {
     font-size: 13px;
     color: var(--gold);
@@ -1454,11 +1457,11 @@
           <span class="name">Mend</span>
           <span class="cost">T1 · 10</span>
         </div>
-        <div class="spell-entry green highlighted">
+        <div class="spell-entry green highlighted placement">
           <span class="icon">🪨</span>
           <span class="name">Stone Wall</span>
           <span class="cost">T2 · 30</span>
-          <span class="targeting-hint" title="placement spell">✛</span>
+          <span class="targeting-hint" title="placement spell — aim required">⌖</span>
         </div>
         <div class="spell-entry green locked">
           <span class="icon">🌿</span>
@@ -1550,9 +1553,11 @@ should be reviewed by the parent session before locking in:
 
 1b. Drag-state demoed against the GREEN reservoir to illustrate the
     locked-tier visual (Green=35 → Mend T1 + Stone Wall T2 affordable;
-    Sanctuary T3 locked). Picking Stone Wall also flags the open
-    question of how placement-mode spells should be marked in the
-    menu — the ✛ glyph is a quick placeholder.
+    Sanctuary T3 locked). Stone Wall shows the resolved placement-
+    mode marker: ⌖ crosshair glyph on the right + dashed border on
+    the entry (auto-target entries use solid borders). Production
+    should match this crosshair glyph to whatever in-world targeting
+    reticle the player sees during the placement aim step.
 
 1c. Cancel-zone visual treatment (dashed border + "release outside
     cancel" microlabel) is a placeholder. Production should adopt
