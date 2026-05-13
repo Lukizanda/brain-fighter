@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-05-08
+updated: 2026-05-13
 ---
 
 # Wiki Index
@@ -10,6 +10,7 @@ Start here. See [[WIKI]] for conventions and operations.
 
 ## Design
 
+- [[design/gameplay-loop]] — canonical core loop: aim → shoot letter blocks → buffer/arrange → cast color-typed spells; tuning, spell roster, worked examples
 - [[design/ArtDirection]] — lowpoly / chunky / oversized sci-fi proportions; greybox-first level building
 
 ## Systems

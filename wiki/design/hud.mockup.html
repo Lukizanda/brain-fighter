@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Brain Fighter — HUD Mockup</title>
+<style>
+  :root {
+    --gold: #f0c050;
+    --gold-deep: #8b5a1f;
+    --gold-light: #ffe79a;
+    --panel-bg: rgba(28, 14, 56, 0.82);
+    --panel-bg-strong: rgba(20, 8, 40, 0.92);
+    --panel-border: #d4a747;
+    --red: #ff5a3a;
+    --red-light: #ffaa78;
+    --red-deep: #b02818;
+    --green: #5ad84a;
+    --green-light: #b0f0a0;
+    --green-deep: #2a8a28;
+    --blue: #58b8ff;
+    --blue-light: #b0e0ff;
+    --blue-deep: #1d5fb8;
+    --text: #fff8e8;
+    --text-dim: rgba(255, 248, 232, 0.7);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 16px 20px 40px;
+    font-family: 'Trebuchet MS', 'Comic Sans MS', sans-serif;
+    background:
+      radial-gradient(ellipse at top, #2a1858 0%, #120828 60%, #08041a 100%);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 18px;
+    color: var(--gold-light);
+    margin: 0;
+    text-shadow: 0 2px 0 #000, 0 0 18px rgba(240, 192, 80, 0.5);
+    letter-spacing: 2px;
+  }
+
+  .caption {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: -18px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* ====================================================== */
+  /* GAME FRAME — 16:9                                       */
+  /* ====================================================== */
+
+  .game-frame {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 4px #1a0a32,
+      0 0 0 6px var(--gold),
+      0 30px 80px rgba(0, 0, 0, 0.7),
+      inset 0 0 60px rgba(0, 0, 0, 0.3);
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 30%, #5a8ad8 0%, #4060a8 30%, #2a3868 60%, #181838 100%),
+      linear-gradient(180deg, #2a3868 0%, #181838 100%);
+    font-family: 'Trebuchet MS', sans-serif;
+  }
+
+  /* Stars */
+  .star {
+    position: absolute;
+    width: 3px; height: 3px;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 0 6px white;
+    opacity: 0.8;
+  }
+  .star.s1 { top: 8%; left: 12%; }
+  .star.s2 { top: 15%; left: 28%; width: 2px; height: 2px; }
+  .star.s3 { top: 6%; left: 60%; }
+  .star.s4 { top: 19%; left: 78%; }
+  .star.s5 { top: 11%; left: 92%; width: 2px; height: 2px; }
+  .star.s6 { top: 22%; left: 45%; }
+  .star.s7 { top: 4%; left: 38%; width: 4px; height: 4px; }
+
+  /* Ground / arena */
+  .ground {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background:
+      radial-gradient(ellipse 90% 70% at 50% 90%, #8a6038 0%, #5a3e22 30%, #3a2812 70%, #1c1208 100%);
+  }
+  .ground::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0; right: 0;
+    height: 24px;
+    background: linear-gradient(180deg, #6a8848 0%, #4a6828 100%);
+    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+    box-shadow: inset 0 -4px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Wizard (left foreground) */
+  .wizard {
+    position: absolute;
+    bottom: 160px;
+    left: 320px;
+    width: 90px;
+    height: 160px;
+    z-index: 3;
+    transform: scale(0.85);
+    transform-origin: bottom center;
+  }
+  .wizard .hat {
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 36px solid transparent;
+    border-right: 36px solid transparent;
+    border-bottom: 80px solid #6a3aa8;
+    filter: drop-shadow(0 4px 4px rgba(0,0,0,0.4));
+  }
+  .wizard .hat::after {
+    content: "★";
+    position: absolute;
+    top: 38px; left: -8px;
+    color: var(--gold-light);
+    font-size: 22px;
+    text-shadow: 0 0 10px var(--gold);
+  }
+  .wizard .head {
+    position: absolute;
+    top: 64px; left: 50%;
+    transform: translateX(-50%);
+    width: 44px; height: 44px;
+    background: #f0c8a0;
+    border-radius: 50%;
+    border: 2px solid #b08868;
+  }
+  .wizard .head::before { /* beard */
+    content: "";
+    position: absolute;
+    bottom: -16px; left: 50%;
+    transform: translateX(-50%);
+    width: 36px; height: 30px;
+    background: #f8f4e8;
+    border-radius: 50% 50% 50% 50% / 30% 30% 80% 80%;
+  }
+  .wizard .head::after { /* eyes */
+    content: "• •";
+    position: absolute;
+    top: 12px; left: 50%;
+    transform: translateX(-50%);
+    color: #1a0a28;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 4px;
+  }
+  .wizard .robe {
+    position: absolute;
+    top: 110px; left: 50%;
+    transform: translateX(-50%);
+    width: 80px; height: 80px;
+    background: linear-gradient(180deg, #6a3aa8 0%, #4a2080 100%);
+    border-radius: 40% 40% 10% 10% / 60% 60% 10% 10%;
+    border: 2px solid #2a1058;
+  }
+  .wizard .staff {
+    position: absolute;
+    bottom: 0; right: -10px;
+    width: 6px; height: 140px;
+    background: linear-gradient(180deg, #8a6038 0%, #4a2812 100%);
+    border-radius: 3px;
+    transform: rotate(8deg);
+  }
+  .wizard .staff::before {
+    content: "";
+    position: absolute;
+    top: -14px; left: -7px;
+    width: 20px; height: 20px;
+    background: radial-gradient(circle, #ffe888 0%, #f0c050 60%, transparent 100%);
+    border-radius: 50%;
+    box-shadow: 0 0 18px var(--gold);
+  }
+
+  /* Monster (right foreground) */
+  .monster {
+    position: absolute;
+    bottom: 170px;
+    right: 320px;
+    width: 150px;
+    height: 180px;
+    z-index: 2;
+    transform: scale(0.85);
+    transform-origin: bottom center;
+  }
+  .monster .body {
+    position: absolute;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 140px;
+    height: 160px;
+    background: radial-gradient(circle at 35% 30%, #8a5a3a 0%, #5a3818 70%);
+    border-radius: 50% 50% 30% 30% / 60% 60% 40% 40%;
+    border: 3px solid #2a1808;
+  }
+  .monster .eye {
+    position: absolute;
+    top: 56px;
+    width: 28px; height: 36px;
+    background: #ffea50;
+    border-radius: 50%;
+    border: 3px solid #1a0a08;
+  }
+  .monster .eye::before {
+    content: "";
+    position: absolute;
+    top: 8px; left: 50%;
+    transform: translateX(-50%);
+    width: 10px; height: 16px;
+    background: #1a0a08;
+    border-radius: 50%;
+  }
+  .monster .eye.left { left: 28px; }
+  .monster .eye.right { right: 28px; }
+  .monster .horn {
+    position: absolute;
+    top: 4px;
+    width: 0; height: 0;
+    border-left: 14px solid transparent;
+    border-right: 14px solid transparent;
+    border-bottom: 38px solid #d8d0b8;
+  }
+  .monster .horn.left { left: 16px; transform: rotate(-18deg); }
+  .monster .horn.right { right: 16px; transform: rotate(18deg); }
+  .monster .mouth {
+    position: absolute;
+    bottom: 28px; left: 50%;
+    transform: translateX(-50%);
+    width: 60px; height: 18px;
+    background: #1a0a08;
+    border-radius: 0 0 30px 30px;
+  }
+  .monster .mouth::before, .monster .mouth::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    width: 10px; height: 14px;
+    background: white;
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+  }
+  .monster .mouth::before { left: 8px; }
+  .monster .mouth::after { right: 8px; }
+
+  /* Monster HP bar */
+  .monster-hp {
+    position: absolute;
+    top: -28px; left: 50%;
+    transform: translateX(-50%);
+    width: 160px;
+    text-align: center;
+  }
+  .monster-hp-label {
+    font-size: 12px;
+    color: white;
+    text-shadow: 0 2px 0 #000;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    font-weight: bold;
+  }
+  .monster-hp-bar {
+    height: 12px;
+    background: rgba(0,0,0,0.6);
+    border: 2px solid #1a0a08;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .monster-hp-fill {
+    height: 100%;
+    width: 70%;
+    background: linear-gradient(180deg, #ff5050 0%, #a02020 100%);
+  }
+
+  /* Floating letter blocks (in world) */
+  .block {
+    position: absolute;
+    width: 56px; height: 56px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 30px;
+    color: white;
+    text-shadow: 0 2px 0 rgba(0,0,0,0.4);
+    border: 3px solid rgba(0,0,0,0.35);
+    box-shadow:
+      inset 0 -8px 0 rgba(0,0,0,0.2),
+      inset 0 6px 0 rgba(255,255,255,0.25),
+      0 6px 12px rgba(0,0,0,0.5);
+    z-index: 2;
+  }
+  .block.red { background: linear-gradient(180deg, #ff8a5a, #d8482a); }
+  .block.green { background: linear-gradient(180deg, #88e088, #3aa83a); }
+  .block.blue { background: linear-gradient(180deg, #82c8ff, #3070d0); }
+
+  .block.b1 { top: 38%; left: 24%; transform: rotate(-8deg); }
+  .block.b2 { top: 30%; left: 36%; transform: rotate(6deg); }
+  .block.b3 { top: 46%; left: 46%; transform: rotate(-4deg); }
+  .block.b4 { top: 34%; left: 54%; transform: rotate(12deg); }
+  .block.b5 { top: 50%; left: 62%; transform: rotate(-10deg); }
+  .block.b6 { top: 28%; left: 60%; transform: rotate(4deg); }
+  .block.b7 { top: 42%; left: 16%; transform: rotate(10deg); }
+
+  /* Crosshair */
+  .crosshair {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 36px; height: 36px;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .crosshair::before, .crosshair::after {
+    content: "";
+    position: absolute;
+    background: rgba(255,232,160,0.95);
+    box-shadow: 0 0 8px rgba(255,232,160,0.6);
+  }
+  .crosshair::before {
+    top: 50%; left: 0; right: 0;
+    height: 2px;
+    transform: translateY(-50%);
+  }
+  .crosshair::after {
+    left: 50%; top: 0; bottom: 0;
+    width: 2px;
+    transform: translateX(-50%);
+  }
+  .crosshair .ring {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,232,160,0.9);
+    border-radius: 50%;
+  }
+
+  /* ====================================================== */
+  /* HUD OVERLAY                                            */
+  /* ====================================================== */
+
+  .hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* ---- Player health (top-left) ---- */
+  .health-panel {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: var(--panel-bg);
+    border: 3px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
+  }
+  .health-icon {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #ffe79a 0%, #f0c050 60%, #b08020 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    border: 2px solid #5a3e08;
+    box-shadow: 0 0 14px rgba(240,192,80,0.5);
+  }
+  .health-body { display: flex; flex-direction: column; gap: 4px; min-width: 220px; }
+  .health-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .health-label {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--gold-light);
+    font-weight: bold;
+    text-shadow: 0 1px 0 #000;
+  }
+  .health-value {
+    font-size: 16px;
+    font-weight: bold;
+    color: white;
+    text-shadow: 0 1px 0 #000;
+  }
+  .health-bar {
+    height: 14px;
+    background: rgba(0,0,0,0.5);
+    border: 2px solid #2a1808;
+    border-radius: 7px;
+    overflow: hidden;
+    position: relative;
+  }
+  .health-fill {
+    height: 100%;
+    width: 75%;
+    background:
+      linear-gradient(180deg, #ff9090 0%, #d83030 100%);
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.25), inset 0 3px 0 rgba(255,255,255,0.25);
+    border-radius: 5px 0 0 5px;
+  }
+
+  /* ---- Energy reservoirs (right column) ---- */
+  .energy-rail {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .reservoir {
+    width: 210px;
+    background: var(--panel-bg);
+    border: 3px solid;
+    border-radius: 14px;
+    padding: 10px 12px 8px;
+    pointer-events: auto;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
+  }
+  .reservoir.red { border-color: var(--red); }
+  .reservoir.green { border-color: var(--green); }
+  .reservoir.blue { border-color: var(--blue); }
+
+  .reservoir-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .reservoir-icon {
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+    border: 2px solid rgba(0,0,0,0.4);
+  }
+  .reservoir.red .reservoir-icon {
+    background: linear-gradient(180deg, #ff8a5a, #b02818);
+    box-shadow: 0 0 12px rgba(255,90,58,0.5);
+  }
+  .reservoir.green .reservoir-icon {
+    background: linear-gradient(180deg, #88e088, #2a8a28);
+    box-shadow: 0 0 12px rgba(90,216,74,0.5);
+  }
+  .reservoir.blue .reservoir-icon {
+    background: linear-gradient(180deg, #88c8ff, #1d5fb8);
+    box-shadow: 0 0 12px rgba(88,184,255,0.5);
+  }
+
+  .reservoir-name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--text);
+    text-shadow: 0 1px 0 #000;
+    letter-spacing: 0.5px;
+  }
+  .reservoir-name small {
+    display: block;
+    font-size: 10px;
+    color: var(--text-dim);
+    font-weight: normal;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .reservoir-value {
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--gold-light);
+    text-shadow: 0 1px 0 #000;
+  }
+  .reservoir-value small { color: var(--text-dim); font-weight: normal; }
+
+  /* Bar with tick markers */
+  .res-bar {
+    position: relative;
+    height: 18px;
+    background: rgba(0,0,0,0.55);
+    border: 2px solid rgba(0,0,0,0.7);
+    border-radius: 9px;
+    overflow: visible;
+    margin: 22px 0 8px;
+  }
+  .res-fill {
+    height: 100%;
+    border-radius: 7px 0 0 7px;
+    position: relative;
+  }
+  .reservoir.red .res-fill {
+    background: linear-gradient(180deg, #ffaa78 0%, #d8482a 60%, #b02818 100%);
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.25), inset 0 3px 0 rgba(255,255,255,0.2), 0 0 12px rgba(255,90,58,0.6);
+  }
+  .reservoir.green .res-fill {
+    background: linear-gradient(180deg, #b0f0a0 0%, #3aa83a 60%, #2a8a28 100%);
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.25), inset 0 3px 0 rgba(255,255,255,0.2), 0 0 12px rgba(90,216,74,0.6);
+  }
+  .reservoir.blue .res-fill {
+    background: linear-gradient(180deg, #b0e0ff 0%, #3070d0 60%, #1d5fb8 100%);
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.25), inset 0 3px 0 rgba(255,255,255,0.2), 0 0 12px rgba(88,184,255,0.6);
+  }
+
+  .tier-tick {
+    position: absolute;
+    top: -3px;
+    width: 2px;
+    height: 24px;
+    background: rgba(255,255,255,0.9);
+    z-index: 2;
+    pointer-events: none;
+  }
+  .tier-label {
+    position: absolute;
+    top: -18px;
+    transform: translateX(-50%);
+    font-size: 9px;
+    font-weight: bold;
+    color: white;
+    text-shadow: 0 1px 0 #000;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    background: rgba(0,0,0,0.5);
+    padding: 1px 4px;
+    border-radius: 4px;
+  }
+  .tier-tick.t1 { left: 6.25%; }   /* 10/160 */
+  .tier-tick.t2 { left: 18.75%; }  /* 30/160 */
+  .tier-tick.t3 { left: 50%; }     /* 80/160 */
+  .tier-label.t1 { left: 6.25%; }
+  .tier-label.t2 { left: 18.75%; }
+  .tier-label.t3 { left: 50%; }
+  .tier-label.cap { left: 100%; transform: translateX(-100%); color: var(--gold-light); }
+
+  .tier-tick.unlocked {
+    background: var(--gold);
+    box-shadow: 0 0 8px var(--gold);
+  }
+
+  /* Tier spell roster (under bar) */
+  .tier-spells {
+    display: flex;
+    justify-content: space-between;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.4px;
+    margin-top: 2px;
+  }
+  .spell {
+    flex: 1;
+    text-align: center;
+    padding: 4px 2px;
+    border-radius: 6px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.08);
+    font-weight: bold;
+    font-size: 9px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .spell.ready {
+    color: white;
+    border-color: var(--gold);
+    background: rgba(240, 192, 80, 0.15);
+    box-shadow: inset 0 0 8px rgba(240, 192, 80, 0.3);
+  }
+  .spell.locked { opacity: 0.45; }
+
+  /* Reservoir cast-ready affordance (resting state — "this bar is tappable") */
+  .reservoir.cast-ready {
+    box-shadow:
+      0 0 22px rgba(240, 192, 80, 0.18),
+      0 4px 14px rgba(0,0,0,0.5);
+  }
+  .reservoir-cast-hint {
+    margin-top: 8px;
+    padding: 4px 8px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(240, 192, 80, 0.35);
+    border-radius: 6px;
+    font-size: 9px;
+    font-weight: bold;
+    color: var(--gold);
+    letter-spacing: 1.4px;
+    text-align: center;
+    text-transform: uppercase;
+    animation: hint-shimmer 3s ease-in-out infinite;
+  }
+  .reservoir-cast-hint .arrow {
+    color: var(--gold-light);
+    margin: 0 3px;
+  }
+  @keyframes hint-shimmer {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+
+  /* ---- Word buffer (bottom-center) ---- */
+
+  .buffer-area {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    pointer-events: auto;
+  }
+
+  .buffer-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-shadow: 0 1px 0 #000;
+  }
+  .buffer-label strong { color: var(--gold-light); }
+
+  .buffer-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .buffer {
+    display: flex;
+    gap: 8px;
+    background: var(--panel-bg-strong);
+    border: 3px solid var(--panel-border);
+    border-radius: 18px;
+    padding: 12px 14px;
+    box-shadow:
+      0 8px 24px rgba(0, 0, 0, 0.6),
+      inset 0 0 30px rgba(0, 0, 0, 0.4);
+  }
+
+  .slot {
+    width: 54px; height: 54px;
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 900;
+    position: relative;
+    flex-shrink: 0;
+    font-family: 'Trebuchet MS', sans-serif;
+  }
+  .slot.empty {
+    background: rgba(0, 0, 0, 0.45);
+    border: 2px dashed rgba(255, 255, 255, 0.18);
+  }
+  .slot.empty::after {
+    content: "";
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.18);
+  }
+  .slot.filled {
+    color: white;
+    text-shadow: 0 2px 0 rgba(0,0,0,0.45);
+    border: 2px solid rgba(0,0,0,0.4);
+    box-shadow:
+      inset 0 -7px 0 rgba(0,0,0,0.25),
+      inset 0 5px 0 rgba(255,255,255,0.3),
+      0 4px 8px rgba(0,0,0,0.4);
+    cursor: grab;
+  }
+  .slot.red { background: linear-gradient(180deg, #ff8a5a, #d8482a); }
+  .slot.green { background: linear-gradient(180deg, #88e088, #3aa83a); }
+  .slot.blue { background: linear-gradient(180deg, #82c8ff, #3070d0); }
+
+  /* drag handle dots — top of every filled slot */
+  .slot.filled::before {
+    content: "⋮⋮";
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    color: rgba(255,255,255,0.7);
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+
+  /* hovered state — shows × destroy affordance */
+  .slot.hovered {
+    transform: translateY(-3px);
+    box-shadow:
+      inset 0 -7px 0 rgba(0,0,0,0.25),
+      inset 0 5px 0 rgba(255,255,255,0.3),
+      0 6px 14px rgba(0,0,0,0.5),
+      0 0 0 3px var(--gold);
+  }
+  .destroy-x {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    width: 22px; height: 22px;
+    background: #d83030;
+    color: white;
+    border: 2px solid white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 900;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.5);
+    z-index: 4;
+  }
+
+  /* dragging state — lifted, rotated, with ghost */
+  .slot.dragging {
+    transform: translateY(-18px) rotate(-6deg) scale(1.08);
+    box-shadow:
+      inset 0 -7px 0 rgba(0,0,0,0.25),
+      inset 0 5px 0 rgba(255,255,255,0.3),
+      0 14px 22px rgba(0,0,0,0.6);
+    z-index: 6;
+    cursor: grabbing;
+  }
+  .ghost-slot {
+    position: absolute;
+    width: 54px; height: 54px;
+    border: 2px dashed var(--gold);
+    background: rgba(240, 192, 80, 0.15);
+    border-radius: 11px;
+  }
+
+  /* ---- Cast button cluster ---- */
+  .cast-cluster {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .cast-button {
+    background: linear-gradient(180deg, #ff7858 0%, #d83820 100%);
+    border: 3px solid #6a1408;
+    border-radius: 16px;
+    padding: 16px 36px;
+    font-size: 22px;
+    font-weight: 900;
+    color: white;
+    cursor: pointer;
+    pointer-events: auto;
+    letter-spacing: 2px;
+    text-shadow: 0 2px 0 rgba(0,0,0,0.4);
+    box-shadow:
+      inset 0 -6px 0 rgba(0,0,0,0.25),
+      inset 0 4px 0 rgba(255,255,255,0.25),
+      0 6px 0 #6a1408,
+      0 10px 22px rgba(0,0,0,0.5),
+      0 0 30px rgba(255, 120, 88, 0.5);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: inherit;
+  }
+  .cast-button .icon {
+    font-size: 26px;
+    filter: drop-shadow(0 2px 0 rgba(0,0,0,0.4));
+  }
+  .cast-button .word-preview {
+    font-size: 16px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 8px;
+    padding: 4px 10px;
+    letter-spacing: 3px;
+  }
+  .cast-hint {
+    font-size: 11px;
+    color: rgba(255,255,255,0.65);
+    text-align: center;
+    line-height: 1.5;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+    max-width: 200px;
+  }
+  .cast-hint strong { color: rgba(255,255,255,0.92); }
+
+  /* ====================================================== */
+  /* DRAG-CAST ACTIVE PANEL (annotation below frame)        */
+  /* ====================================================== */
+
+  .dragcast-panel {
+    width: 1280px;
+    background: linear-gradient(180deg, #1c0e3b 0%, #100829 100%);
+    border: 3px solid var(--gold);
+    border-radius: 14px;
+    padding: 24px 28px;
+    display: flex;
+    gap: 36px;
+    align-items: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  .dragcast-panel h2 {
+    color: var(--gold);
+    font-size: 22px;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .dragcast-panel .sub {
+    color: rgba(255,255,255,0.7);
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 14px;
+    max-width: 520px;
+  }
+  .dragcast-stage {
+    position: relative;
+    width: 320px;
+    height: 360px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    padding-bottom: 8px;
+  }
+  .dragcast-stage .cancel-zone {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 2px dashed rgba(255,255,255,0.18);
+    border-radius: 14px;
+    pointer-events: none;
+  }
+  .dragcast-stage .cancel-label {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.4);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .spell-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+    z-index: 2;
+  }
+  .spell-entry {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    min-width: 240px;
+    border: 2px solid transparent;
+    color: white;
+    font-weight: bold;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+  }
+  .spell-entry .icon { font-size: 22px; line-height: 1; }
+  .spell-entry .name { flex: 1; font-size: 15px; letter-spacing: 0.5px; }
+  .spell-entry .cost {
+    font-size: 11px;
+    background: rgba(0,0,0,0.3);
+    padding: 3px 8px;
+    border-radius: 6px;
+    letter-spacing: 1px;
+  }
+  .spell-entry.red    { background: linear-gradient(180deg, #d44032 0%, #8a1a10 100%); border-color: #6a1408; }
+  .spell-entry.green  { background: linear-gradient(180deg, #3aa050 0%, #1a5a28 100%); border-color: #0d3a18; }
+  .spell-entry.blue   { background: linear-gradient(180deg, #3a78d0 0%, #1a3a78 100%); border-color: #0d244a; }
+  .spell-entry.highlighted {
+    transform: scale(1.06);
+    box-shadow:
+      0 0 0 3px rgba(240, 192, 80, 0.85),
+      0 0 24px rgba(240, 192, 80, 0.6),
+      0 6px 14px rgba(0,0,0,0.5);
+    border-color: var(--gold);
+  }
+  .drag-trail {
+    position: absolute;
+    bottom: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 3px;
+    height: 36px;
+    background: linear-gradient(180deg, rgba(240,192,80,0.0) 0%, rgba(240,192,80,0.8) 100%);
+    border-radius: 2px;
+    z-index: 1;
+  }
+  .touch-indicator {
+    position: absolute;
+    top: 78px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.7);
+    background: rgba(240, 192, 80, 0.18);
+    box-shadow:
+      0 0 0 6px rgba(240, 192, 80, 0.12),
+      0 0 18px rgba(240, 192, 80, 0.5);
+    pointer-events: none;
+    z-index: 3;
+  }
+  /* ---- Reservoir-cast stage (horizontal layout, menu opens left) ---- */
+  .reservoir-stage {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 16px;
+    height: 240px;
+    width: 520px;
+  }
+  .reservoir-menu {
+    margin-bottom: 0;
+    margin-right: 22px;
+    z-index: 2;
+  }
+  .spell-entry.locked {
+    opacity: 0.4;
+    filter: grayscale(0.7);
+  }
+  .spell-entry .targeting-hint {
+    font-size: 13px;
+    color: var(--gold);
+    background: rgba(0,0,0,0.35);
+    padding: 2px 6px;
+    border-radius: 6px;
+    margin-left: 4px;
+  }
+  .reservoir-trail {
+    bottom: auto;
+    top: 50%;
+    left: auto;
+    right: 100px;
+    width: 36px;
+    height: 3px;
+    background: linear-gradient(270deg, rgba(240,192,80,0.0) 0%, rgba(240,192,80,0.8) 100%);
+    transform: translateY(-50%);
+  }
+  .reservoir-touch {
+    top: 50%;
+    left: auto;
+    right: 200px;
+    transform: translate(0, -50%);
+  }
+  .mini-reservoir {
+    z-index: 2;
+    background: rgba(0,0,0,0.35);
+    border: 2.5px solid rgba(58, 160, 80, 0.85);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 80px;
+    box-shadow: 0 0 24px rgba(58, 160, 80, 0.4);
+  }
+  .mini-reservoir.green {
+    border-color: rgba(58, 160, 80, 0.85);
+    box-shadow: 0 0 24px rgba(58, 160, 80, 0.4);
+  }
+  .mini-reservoir .mini-icon { font-size: 24px; }
+  .mini-reservoir .mini-bar {
+    position: relative;
+    width: 100%;
+    height: 12px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 6px;
+    overflow: visible;
+  }
+  .mini-reservoir .mini-fill {
+    height: 100%;
+    background: linear-gradient(180deg, #6ec985 0%, #3aa050 100%);
+    border-radius: 6px;
+  }
+  .mini-reservoir .mini-tick {
+    position: absolute;
+    top: -2px;
+    height: 16px;
+    width: 2px;
+    background: rgba(255,255,255,0.55);
+  }
+  .mini-reservoir .mini-tick.t1 { left: 6.25%; }
+  .mini-reservoir .mini-tick.t2 { left: 18.75%; }
+  .mini-reservoir .mini-tick.t3 { left: 50%; }
+  .mini-reservoir .mini-value {
+    font-size: 11px;
+    font-weight: bold;
+    color: rgba(255,255,255,0.85);
+    letter-spacing: 1px;
+  }
+
+  /* ====================================================== */
+  /* MIND FULL STATE PANEL (annotation below frame)         */
+  /* ====================================================== */
+
+  .annotation-frame {
+    width: 1280px;
+    background: linear-gradient(180deg, #1c0e3a 0%, #100828 100%);
+    border: 3px solid var(--gold);
+    border-radius: 14px;
+    padding: 24px 28px;
+    display: flex;
+    gap: 30px;
+    align-items: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+
+  .annotation-frame h2 {
+    margin: 0;
+    color: var(--gold-light);
+    font-size: 18px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-shadow: 0 2px 0 #000;
+  }
+
+  .mindfull-buffer {
+    background: rgba(60, 12, 12, 0.85);
+    border: 3px solid #ff5050;
+    box-shadow: 0 0 24px rgba(255, 80, 80, 0.5), inset 0 0 30px rgba(80, 0, 0, 0.5);
+  }
+
+  .mindfull-banner {
+    background: rgba(255, 80, 80, 0.15);
+    border: 2px solid #ff5050;
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: #ffb0a0;
+    font-weight: bold;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    font-size: 13px;
+    text-shadow: 0 1px 0 #000;
+    margin-bottom: 10px;
+  }
+  .mindfull-banner .pulse {
+    display: inline-block;
+    color: #ff7050;
+    font-size: 16px;
+    margin-right: 6px;
+    text-shadow: 0 0 8px rgba(255, 100, 80, 0.8);
+  }
+  .mindfull-sub {
+    font-size: 11px;
+    color: rgba(255, 200, 180, 0.7);
+    text-transform: none;
+    letter-spacing: 0.5px;
+    font-weight: normal;
+    margin-top: 4px;
+  }
+
+  .mf-crosshair-demo {
+    width: 50px; height: 50px;
+    position: relative;
+    flex-shrink: 0;
+    opacity: 0.4;
+  }
+  .mf-crosshair-demo::before, .mf-crosshair-demo::after {
+    content: "";
+    position: absolute;
+    background: rgba(180,180,180,0.6);
+  }
+  .mf-crosshair-demo::before {
+    top: 50%; left: 0; right: 0; height: 2px; transform: translateY(-50%);
+  }
+  .mf-crosshair-demo::after {
+    left: 50%; top: 0; bottom: 0; width: 2px; transform: translateX(-50%);
+  }
+  .mf-crosshair-demo .ring {
+    position: absolute;
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 18px; height: 18px;
+    border: 2px solid rgba(180,180,180,0.6);
+    border-radius: 50%;
+  }
+  .mf-crosshair-demo .slash {
+    position: absolute;
+    top: -2px; left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 3px; height: 60px;
+    background: #ff5050;
+    border-radius: 2px;
+    transform-origin: center;
+    box-shadow: 0 0 6px rgba(255,80,80,0.8);
+  }
+
+  .mf-text {
+    flex: 1;
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .mf-text strong { color: white; }
+
+  /* Hover tooltip mock */
+  .hover-tip {
+    position: absolute;
+    background: rgba(20,8,40,0.95);
+    border: 2px solid var(--gold);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--text);
+    white-space: nowrap;
+    z-index: 8;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+  }
+  .hover-tip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 6px solid var(--gold);
+  }
+
+  /* Annotation arrows / callouts */
+  .legend {
+    width: 1280px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .legend-item {
+    background: rgba(28, 14, 56, 0.6);
+    border: 1px solid rgba(212, 167, 71, 0.4);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .legend-item h3 {
+    margin: 0 0 6px;
+    color: var(--gold-light);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .legend-item p {
+    margin: 0;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+  <h1>BRAIN FIGHTER — HUD MOCKUP</h1>
+  <div class="caption">Cast spells by spelling words • 16:9 game view • Touch-first</div>
+
+  <!-- ============================================ -->
+  <!-- MAIN GAME FRAME                              -->
+  <!-- ============================================ -->
+  <div class="game-frame">
+
+    <!-- Sky stars -->
+    <div class="star s1"></div><div class="star s2"></div><div class="star s3"></div>
+    <div class="star s4"></div><div class="star s5"></div><div class="star s6"></div>
+    <div class="star s7"></div>
+
+    <!-- Ground -->
+    <div class="ground"></div>
+
+    <!-- Floating letter blocks (in world) -->
+    <div class="block red b1">R</div>
+    <div class="block blue b2">S</div>
+    <div class="block green b3">T</div>
+    <div class="block red b4">A</div>
+    <div class="block blue b5">I</div>
+    <div class="block green b6">N</div>
+    <div class="block red b7">E</div>
+
+    <!-- Wizard -->
+    <div class="wizard">
+      <div class="hat"></div>
+      <div class="head"></div>
+      <div class="robe"></div>
+      <div class="staff"></div>
+    </div>
+
+    <!-- Monster -->
+    <div class="monster">
+      <div class="monster-hp">
+        <div class="monster-hp-label">GRUMBLE-KIN — LEVEL 1</div>
+        <div class="monster-hp-bar"><div class="monster-hp-fill"></div></div>
+      </div>
+      <div class="body">
+        <div class="horn left"></div>
+        <div class="horn right"></div>
+        <div class="eye left"></div>
+        <div class="eye right"></div>
+        <div class="mouth"></div>
+      </div>
+    </div>
+
+    <!-- Crosshair -->
+    <div class="crosshair"><div class="ring"></div></div>
+
+    <!-- HUD overlay -->
+    <div class="hud">
+
+      <!-- Health (top-left) -->
+      <div class="health-panel">
+        <div class="health-icon">🧙</div>
+        <div class="health-body">
+          <div class="health-row">
+            <span class="health-label">Wizard</span>
+            <span class="health-value">75 / 100</span>
+          </div>
+          <div class="health-bar"><div class="health-fill"></div></div>
+        </div>
+      </div>
+
+      <!-- Energy reservoirs (top-right) -->
+      <div class="energy-rail">
+
+        <!-- RED -->
+        <div class="reservoir red cast-ready">
+          <div class="reservoir-header">
+            <div class="reservoir-icon">🔥</div>
+            <div class="reservoir-name">
+              Damage
+              <small>Red Energy</small>
+            </div>
+            <div class="reservoir-value">85<small>/160</small></div>
+          </div>
+          <div class="res-bar">
+            <div class="res-fill" style="width: 53%;"></div>
+            <div class="tier-tick t1 unlocked"></div>
+            <div class="tier-tick t2 unlocked"></div>
+            <div class="tier-tick t3 unlocked"></div>
+            <div class="tier-label t1">10</div>
+            <div class="tier-label t2">30</div>
+            <div class="tier-label t3">80</div>
+            <div class="tier-label cap">160</div>
+          </div>
+          <div class="tier-spells">
+            <div class="spell ready">T1·SPARK</div>
+            <div class="spell ready">T2·FIREBALL</div>
+            <div class="spell ready">T3·INFERNO</div>
+          </div>
+          <div class="reservoir-cast-hint">Tap <span class="arrow">·</span> Drag <span class="arrow">⟵</span> to cast</div>
+        </div>
+
+        <!-- GREEN -->
+        <div class="reservoir green cast-ready">
+          <div class="reservoir-header">
+            <div class="reservoir-icon">🌿</div>
+            <div class="reservoir-name">
+              Healing
+              <small>Green Energy</small>
+            </div>
+            <div class="reservoir-value">35<small>/160</small></div>
+          </div>
+          <div class="res-bar">
+            <div class="res-fill" style="width: 22%;"></div>
+            <div class="tier-tick t1 unlocked"></div>
+            <div class="tier-tick t2 unlocked"></div>
+            <div class="tier-tick t3"></div>
+            <div class="tier-label t1">10</div>
+            <div class="tier-label t2">30</div>
+            <div class="tier-label t3">80</div>
+            <div class="tier-label cap">160</div>
+          </div>
+          <div class="tier-spells">
+            <div class="spell ready">T1·MEND</div>
+            <div class="spell ready">T2·WALL</div>
+            <div class="spell locked">T3·SANCTUARY</div>
+          </div>
+          <div class="reservoir-cast-hint">Tap <span class="arrow">·</span> Drag <span class="arrow">⟵</span> to cast</div>
+        </div>
+
+        <!-- BLUE -->
+        <div class="reservoir blue cast-ready">
+          <div class="reservoir-header">
+            <div class="reservoir-icon">❄️</div>
+            <div class="reservoir-name">
+              Utility
+              <small>Blue Energy</small>
+            </div>
+            <div class="reservoir-value">22<small>/160</small></div>
+          </div>
+          <div class="res-bar">
+            <div class="res-fill" style="width: 14%;"></div>
+            <div class="tier-tick t1 unlocked"></div>
+            <div class="tier-tick t2"></div>
+            <div class="tier-tick t3"></div>
+            <div class="tier-label t1">10</div>
+            <div class="tier-label t2">30</div>
+            <div class="tier-label t3">80</div>
+            <div class="tier-label cap">160</div>
+          </div>
+          <div class="tier-spells">
+            <div class="spell ready">T1·FROST</div>
+            <div class="spell locked">T2·SHIELD</div>
+            <div class="spell locked">T3·STASIS</div>
+          </div>
+          <div class="reservoir-cast-hint">Tap <span class="arrow">·</span> Drag <span class="arrow">⟵</span> to cast</div>
+        </div>
+
+      </div>
+
+      <!-- Buffer + cast (bottom-center) -->
+      <div class="buffer-area">
+
+        <div class="buffer-label">
+          MIND BUFFER — <strong>5 / 12</strong> &nbsp;•&nbsp; DRAG TO REORDER &nbsp;•&nbsp; DOUBLE-TAP TO DESTROY
+        </div>
+
+        <div class="buffer-row">
+
+          <!-- 12-slot buffer with FLAME spelled -->
+          <div class="buffer">
+            <div class="slot filled red">F</div>
+            <div class="slot filled red">L</div>
+            <!-- hovered slot showing × destroy affordance -->
+            <div class="slot filled red hovered">
+              A
+              <div class="destroy-x">×</div>
+              <div class="hover-tip" style="bottom: 68px; left: 50%; transform: translateX(-50%);">double-tap to destroy</div>
+            </div>
+            <!-- dragging slot lifted -->
+            <div class="slot filled red dragging">M</div>
+            <div class="slot filled red">E</div>
+            <div class="slot empty"></div>
+            <div class="slot empty"></div>
+            <div class="slot empty"></div>
+            <div class="slot empty"></div>
+            <div class="slot empty"></div>
+            <div class="slot empty"></div>
+            <div class="slot empty"></div>
+          </div>
+
+          <!-- Memorize cluster (commits buffered word into reservoir mana) -->
+          <div class="cast-cluster">
+            <button class="cast-button memorize">
+              <span class="icon">✨</span>
+              <span class="word-preview">FLAME</span>
+            </button>
+            <div class="cast-hint">
+              Tap to absorb the word into mana
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- MIND-FULL VARIANT (annotation panel)         -->
+  <!-- ============================================ -->
+  <div class="annotation-frame">
+
+    <div class="mf-crosshair-demo">
+      <div class="ring"></div>
+      <div class="slash"></div>
+    </div>
+
+    <div style="flex: 1;">
+      <h2 style="margin-bottom: 12px;">VARIANT — Mind Full state (all 12 slots used)</h2>
+
+      <div class="mindfull-banner">
+        <span class="pulse">⚠</span> MIND FULL — DESTROY OR CAST A SPELL TO FREE SPACE
+        <div class="mindfull-sub">Shooting blocked • crosshair greyed • shots fizzle until a slot is freed</div>
+      </div>
+
+      <div class="buffer mindfull-buffer">
+        <div class="slot filled red">D</div>
+        <div class="slot filled green">R</div>
+        <div class="slot filled blue">A</div>
+        <div class="slot filled red">G</div>
+        <div class="slot filled green">O</div>
+        <div class="slot filled blue">N</div>
+        <div class="slot filled red">F</div>
+        <div class="slot filled green">L</div>
+        <div class="slot filled blue">Y</div>
+        <div class="slot filled red">Q</div>
+        <div class="slot filled green">Z</div>
+        <div class="slot filled red">X</div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ============================================ -->
+  <!-- RESERVOIR-CAST ACTIVE VARIANT (annotation)   -->
+  <!-- ============================================ -->
+  <div class="dragcast-panel">
+
+    <div class="dragcast-stage reservoir-stage">
+      <div class="cancel-zone"></div>
+      <div class="cancel-label">release outside · cancel</div>
+
+      <!-- Spell menu (opens leftward, toward screen interior, away from the right-edge reservoir) -->
+      <div class="spell-menu reservoir-menu">
+        <div class="spell-entry green">
+          <span class="icon">🌿</span>
+          <span class="name">Mend</span>
+          <span class="cost">T1 · 10</span>
+        </div>
+        <div class="spell-entry green highlighted">
+          <span class="icon">🪨</span>
+          <span class="name">Stone Wall</span>
+          <span class="cost">T2 · 30</span>
+          <span class="targeting-hint" title="placement spell">✛</span>
+        </div>
+        <div class="spell-entry green locked">
+          <span class="icon">🌿</span>
+          <span class="name">Sanctuary</span>
+          <span class="cost">T3 · 80 — locked</span>
+        </div>
+      </div>
+
+      <!-- Finger / touch indicator hovering on Stone Wall (middle) -->
+      <div class="touch-indicator reservoir-touch"></div>
+
+      <!-- Trail from reservoir to the menu (horizontal, pointing left) -->
+      <div class="drag-trail reservoir-trail"></div>
+
+      <!-- Mini green reservoir (gesture origin on the right edge) -->
+      <div class="mini-reservoir green">
+        <div class="mini-icon">🌿</div>
+        <div class="mini-bar">
+          <div class="mini-fill" style="width: 21.875%;"></div>
+          <div class="mini-tick t1"></div>
+          <div class="mini-tick t2"></div>
+          <div class="mini-tick t3"></div>
+        </div>
+        <div class="mini-value">35 / 160</div>
+      </div>
+    </div>
+
+    <div style="flex: 1;">
+      <h2>VARIANT — Reservoir-cast active</h2>
+      <div class="sub">
+        Player <strong>drags from the Green reservoir inward</strong> (toward the screen center); a vertical menu opens to the left, listing <em>all currently-affordable tiers of green</em>. With Green at 35: <strong>Mend</strong> (T1·10) and <strong>Stone Wall</strong> (T2·30) are bright and selectable; <strong>Sanctuary</strong> (T3·80) is locked. Finger hovers on Stone Wall — releasing here fires it and drains 30 from Green; the ✛ marks it as a placement spell, so a second aim step will follow.
+      </div>
+      <div class="sub">
+        Release inside the dashed cancel zone (anywhere off the menu) = cancel — no energy spent. A simple <strong>tap</strong> on the reservoir (no drag) fires that color's highest currently-affordable tier — here, Stone Wall — as the casual-flow shortcut. The Memorize (✨) button is unaffected by this gesture; it only commits the buffered word into mana.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+
+    <div class="legend-item">
+      <h3>① Word Buffer (12 slots)</h3>
+      <p><strong>F · L · A · M · E</strong> spelled with red blocks → charging Red. Slots show drag-handle dots (top), a hovered slot reveals an × destroy button with tooltip, and one slot is lifted to demonstrate the drag state. Empty slots stay visible so the 12-slot cap is always legible.</p>
+    </div>
+
+    <div class="legend-item">
+      <h3>② Energy Reservoirs (color-blind safe)</h3>
+      <p>Each reservoir is labelled by <strong>icon + color + name</strong> (🔥 / 🌿 / ❄️) so the three streams are distinguishable without color. Tick marks at <strong>T1·10 / T2·30 / T3·80</strong> with cap at <strong>160</strong>. Unlocked tiers glow gold; locked spells are dimmed in the roster strip below.</p>
+    </div>
+
+    <div class="legend-item">
+      <h3>③ Memorize (commit button)</h3>
+      <p>Icon-only ✨ button next to the buffer. <strong>Tap</strong> validates the buffered word against the dictionary. <strong>Valid</strong> → the word's energy transmutes into the matching color reservoirs (value-weighted), buffer clears. <strong>Invalid</strong> → fizzle: button shakes, buffer flashes red, letters preserved so the player can correct. <em>No spell fires from this action.</em></p>
+    </div>
+
+    <div class="legend-item">
+      <h3>④ Cast (reservoir-driven)</h3>
+      <p>Each color's reservoir is the cast surface for that color. <strong>Tap a reservoir</strong> = fire its highest currently-affordable tier. <strong>Drag from a reservoir</strong> = open a vertical menu listing <em>all that color's affordable tiers</em> (Spark/Fireball/Inferno for red), with locked tiers greyed; release on the desired tier to fire it. Release outside the menu cancels. See the <em>Reservoir-cast active</em> variant panel for the active state.</p>
+    </div>
+
+  </div>
+
+<!--
+==================================================================
+ASSUMPTIONS MADE BY THE MOCKUP — flag/confirm at review
+==================================================================
+
+These choices weren't fully specified in project_game_concept.md and
+should be reviewed by the parent session before locking in:
+
+1. Memorize / Cast split (revised 2026-05-13): commit and cast are
+   now two distinct actions on distinct surfaces.
+     - Memorize button: icon-only ✨ next to the buffer. Validates
+       the word, deposits energy into reservoirs on valid, fizzles
+       on invalid (letters preserved). No spell fires.
+     - Reservoirs are the cast surface: tap = highest affordable
+       tier of that color; drag from reservoir = list of all that
+       color's affordable tiers (locked tiers greyed); release on
+       entry = fire. The active state is shown in the new
+       "Reservoir-cast active" annotation panel.
+   Supersedes the earlier single-CAST-button drag pattern.
+
+1a. The ✨ glyph on the Memorize button is a placeholder. Production
+    should use an illustrated icon in the kid-fantasy aesthetic
+    (sparkle / swirl / vortex) — anything that reads as "absorb"
+    rather than "fire."
+
+1b. Drag-state demoed against the GREEN reservoir to illustrate the
+    locked-tier visual (Green=35 → Mend T1 + Stone Wall T2 affordable;
+    Sanctuary T3 locked). Picking Stone Wall also flags the open
+    question of how placement-mode spells should be marked in the
+    menu — the ✛ glyph is a quick placeholder.
+
+1c. Cancel-zone visual treatment (dashed border + "release outside
+    cancel" microlabel) is a placeholder. Production should adopt
+    whatever the studio's standard "cancel drag" affordance is so
+    this gesture matches other drag interactions consistently.
+
+1d. Resting-state reservoirs each show a small "TAP · DRAG ⟵ TO
+    CAST" microlabel + a subtle outer glow (when cast-ready, i.e.
+    when T1 or higher is affordable). The arrow points leftward
+    indicating the drag direction. The label uses a shimmer
+    animation to draw the eye without being distracting. Production
+    might replace with an illustrated finger/wand glyph + arrow.
+
+2. The color of the Memorize button background (red) mirrors the
+   *currently-charging color* — i.e., the buffer is all red, so the
+   button tints red. If the player switches to a different-color
+   buffer, the button should tint to match. Alternative: keep it
+   gold/neutral as a fixed-identity element.
+
+3. The reservoir "name" rows say "Damage / Heal & Walls / Utility"
+   as the primary label, with "Red Energy / Green Energy / Blue
+   Energy" as secondary. This privileges the *effect* over the
+   *color* for new-player legibility. Could be flipped.
+
+4. The buffer label "MIND BUFFER — 5 / 12" uses "Mind" as the
+   diegetic term, echoing "MIND FULL" from the memory. If a
+   different in-fiction term is preferred (e.g. "Spellbook",
+   "Cauldron", "Tome") swap it everywhere.
+
+5. The 12-slot buffer is shown as a single row. At touch-friendly
+   54×54 px slots with 8px gaps this fits at 1280-wide game view.
+   On narrower phones the slots may need to wrap to two rows of 6
+   or shrink — TBD with portrait-orientation pass.
+
+6. Icons used (🔥/🌿/❄️) are emoji placeholders. Production should
+   use SVG/illustrated icons in the same kid-fantasy style as the
+   blocks/wizard so they match aesthetically across platforms.
+
+7. Player health is shown as a number (75/100) with a red bar.
+   No mana/MP bar separately — the three energy reservoirs ARE
+   the mana system. Confirm there's no separate "wizard mana"
+   concept that would need its own indicator.
+
+8. The "Grumble-Kin — Level 1" boss HP bar is included in the
+   world preview area because (a) it conveys the per-level
+   monster context from the memory and (b) the player needs a
+   damage-feedback signal when casting damage spells.
+
+9. The hovered slot's tooltip says "double-tap to destroy" —
+   on touch devices this should adapt to "double-tap"; on
+   desktop, "double-click". The mockup uses the touch term per
+   the touch-first constraint.
+
+10. The "MIND FULL" annotation panel is rendered as a sibling
+    panel BELOW the main HUD frame rather than as an in-game
+    state overlay. The visual treatment of the buffer itself
+    (red border, red glow, banner above) is the in-game change;
+    the surrounding annotation frame is just review chrome.
+-->
+
+</body>
+</html>
