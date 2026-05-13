@@ -5,7 +5,7 @@ A Roblox third-person shooter template with camera, locomotion, weapon, and heal
 ## Starting a new project
 
 1. Use this repo as a GitHub template (or clone + reset git)
-2. Open `template.rbxl` in Roblox Studio
+2. Open `BrainFighter.rbxl` in Roblox Studio (or rename it to match your game)
 3. Install the Rojo plugin in Studio if not already installed
 4. Run `rojo serve` from the project root
 5. Connect Rojo from Studio (localhost:34872)
@@ -30,7 +30,7 @@ A Roblox third-person shooter template with camera, locomotion, weapon, and heal
 | **Networking** | `.meta.json` files | All RemoteEvents and BindableEvents |
 | **Utilities** | `src/utility/` | disconnectAndClear, lerp, safePlayerAdded, bindToInstanceDestroyed |
 
-### In template.rbxl (Studio-only)
+### In BrainFighter.rbxl (Studio-only)
 
 | Instance | Location | Description |
 |---|---|---|

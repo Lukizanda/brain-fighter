@@ -13,19 +13,19 @@ Project name: $ARGUMENTS
 ## Prerequisites
 
 Before running this skill:
-1. Open `template.rbxl` in Roblox Studio
+1. Open `BrainFighter.rbxl` in Roblox Studio
 2. Connect Rojo (`rojo serve`) and sync
 
 ## Steps
 
 ### Step 1: Verify template is loaded
 
-Check that the template.rbxl base instances exist:
+Check that the BrainFighter.rbxl base instances exist:
 - `game.ReplicatedStorage.Shared.Weapon.Templates.Blaster` (Tool)
 - `game.ReplicatedStorage.Shared.Weapon.Objects` (VFX folder)
 - `game.ReplicatedStorage.Shared.Weapon.ViewModels` (weapon models)
 
-If missing, warn the user to open template.rbxl first.
+If missing, warn the user to open BrainFighter.rbxl first.
 
 ### Step 2: Create LocomotionAnimations
 
