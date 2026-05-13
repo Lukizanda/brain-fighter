@@ -19,6 +19,10 @@ With both flags off the only registered mode is `NoOpMode` (`src/shared/GameMode
 
 Re-enable by flipping the flags — the FFA / TDM modules are unchanged and re-register automatically. See [[concepts/CombatFeatureGates]] (if added) or the inline comments in `src/shared/Core/GameConfig.luau` and `src/shared/GameMode/Modes/init.luau`.
 
+### SpawnLocation must be Neutral while teams are off
+
+`Workspace.Arena.SpawnZone.SpawnLocation` is currently set to `Neutral = true` (TeamColor `Bright red` is left as-is for documentation but ignored). When `TEAMS_ENABLED = false` no `Team` instances are created, so a non-Neutral team-locked SpawnLocation rejects every player — Roblox falls back to a default spawn and the player drops in the sky and falls to their death. Re-enabling teams without re-introducing per-team SpawnLocations is fine: a Neutral pad is also usable by any team via `SpawnManager.filterSpawnsForPlayer`. Re-introducing team-locked pads alongside the Neutral one is the right move if/when team spawning resumes.
+
 ## Files
 
 ```
