@@ -1,1 +1,1 @@
-{ "className": "RemoteEvent", "name": "GameStateChanged" }
+{ "className": "RemoteEvent" }
