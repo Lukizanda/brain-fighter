@@ -1,12 +1,23 @@
 ---
 type: system
-description: Game mode framework — RoundManager, ScoreTracker, SpawnManager, mode registry. FFA Deathmatch + TDM modes.
-updated: 2026-04-30
+description: Game mode framework — RoundManager, ScoreTracker, SpawnManager, mode registry. FFA Deathmatch + TDM modes (currently gated off; NoOpMode active).
+updated: 2026-05-13
 ---
 
 # GameMode System
 
 Round-based game modes share a common scaffold: a state-machine round, a per-player score tracker, a spawn manager, and a mode-specific definition. Each mode plugs into the registry under `src/shared/GameMode/`.
+
+## Current gating (2026-05-13)
+
+Brain Fighter is being repurposed as an educational shooter, so the inherited competitive modes are gated off via `GameConfig.luau`:
+
+- `TEAMS_ENABLED = false` — `TeamDeathmatch` not registered, `TeamService` is a no-op, team UI/nametag colours fall back to neutral.
+- `PLAYER_VS_PLAYER_ENABLED = false` — `FFADeathmatch` not registered, player-on-player damage rejected in `applyDamage` and `canPlayerDamageHumanoid`, aim assist ignores other players.
+
+With both flags off the only registered mode is `NoOpMode` (`src/shared/GameMode/Modes/NoOpMode.luau`): a 24-hour idle round with `scoreLimit = math.huge`, no team logic, no win condition. RoundManager enters `Active` once and stays there; GameStateGui's PostRound overlay never fires.
+
+Re-enable by flipping the flags — the FFA / TDM modules are unchanged and re-register automatically. See [[concepts/CombatFeatureGates]] (if added) or the inline comments in `src/shared/Core/GameConfig.luau` and `src/shared/GameMode/Modes/init.luau`.
 
 ## Files
 

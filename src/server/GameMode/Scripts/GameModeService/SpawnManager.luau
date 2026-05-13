@@ -20,6 +20,7 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
 local log = Logger.new("SpawnManager")
@@ -92,8 +93,12 @@ end
 -- Team. SpawnLocations honour their TeamColor / Neutral flags; tagged
 -- BaseParts can carry a "Team" attribute to opt into the same filter.
 -- Returns the original set unchanged when the player has no team
--- (FFA / pre-assignment).
+-- (FFA / pre-assignment) or when TEAMS_ENABLED is off (educational
+-- shooter build — every player draws from the neutral spawn pool).
 local function filterSpawnsForPlayer(spawns: { BasePart }, player: Player): { BasePart }
+	if not GameConfig.TEAMS_ENABLED then
+		return spawns
+	end
 	if not player.Team then
 		return spawns
 	end

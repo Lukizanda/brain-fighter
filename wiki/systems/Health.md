@@ -1,12 +1,21 @@
 ---
 type: system
-description: Damage pipeline — DamageTypes, hit zones, modifiers, HealthService.applyDamage, DeathHandler, friendly-fire block
-updated: 2026-04-30
+description: Damage pipeline — DamageTypes, hit zones, modifiers, HealthService.applyDamage, DeathHandler, friendly-fire block. PvP currently gated off.
+updated: 2026-05-13
 ---
 
 # Health System
 
 Damage flows through `HealthService.applyDamage` server-side. All damage callers (firearms, melee, death zone) go through this single entry point so modifiers, friendly-fire rules, and death tracking apply uniformly.
+
+## PvP gate (2026-05-13)
+
+Player-on-player damage is currently disabled at two layers:
+
+- `applyDamage.process` — early-returns `nil` when `GameConfig.PLAYER_VS_PLAYER_ENABLED` is false and both source and target are Players (and not the same Player). Self-damage (fall, environment), NPC-on-player, and player-on-NPC continue unaffected.
+- `canPlayerDamageHumanoid` — shot-validation predicate also rejects when the target is a Player and PvP is off. Used by `Blaster/validateTag` so projectile validation matches the server-side authority.
+
+Flip `GameConfig.PLAYER_VS_PLAYER_ENABLED = true` to restore. The friendly-fire branch below remains in place and resumes its role once PvP is on.
 
 ## Files
 

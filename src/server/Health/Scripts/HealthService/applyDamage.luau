@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local DamageTypes = require(ReplicatedStorage.Shared.Health.DamageTypes)
 local DamageModifierRegistry = require(ReplicatedStorage.Shared.Health.DamageModifierRegistry)
+local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
 local log = Logger.new("HealthService")
@@ -31,13 +32,28 @@ function applyDamage.process(request: DamageRequest): DamageResult?
 		return nil
 	end
 
+	-- PvP gate: when disabled, any player-on-player damage drops silently.
+	-- Self-damage (fall, environment) and NPC-on-player damage stay
+	-- enabled. Sits ahead of the team friendly-fire branch so the gate is
+	-- authoritative even if a future caller sets up teams without flipping
+	-- PLAYER_VS_PLAYER_ENABLED.
+	local sourcePlayer = request.sourcePlayer
+	if sourcePlayer and not GameConfig.PLAYER_VS_PLAYER_ENABLED then
+		local targetCharacter = targetHumanoid:FindFirstAncestorOfClass("Model")
+		local targetPlayer = targetCharacter and Players:GetPlayerFromCharacter(targetCharacter)
+		if targetPlayer and targetPlayer ~= sourcePlayer then
+			log:info(string.format("PvP blocked: %s -> %s (PLAYER_VS_PLAYER_ENABLED=false)",
+				sourcePlayer.Name, targetPlayer.Name))
+			return nil
+		end
+	end
+
 	-- Friendly-fire filter. Same-team player damage drops silently here so
 	-- the damage modifiers, score events, and death feedback never fire.
 	-- FFA modes leave both players Neutral, so the equality check below
 	-- never matches and FFA damage flows through untouched. Self-damage
 	-- (sourcePlayer == targetPlayer) is allowed — fall damage and similar
 	-- still kill you. Environment damage (sourcePlayer == nil) is allowed.
-	local sourcePlayer = request.sourcePlayer
 	if sourcePlayer and sourcePlayer.Team and not sourcePlayer.Neutral then
 		local targetCharacter = targetHumanoid:FindFirstAncestorOfClass("Model")
 		local targetPlayer = targetCharacter and Players:GetPlayerFromCharacter(targetCharacter)

@@ -21,6 +21,19 @@ local GameConfig = {
 	SHOW_EMOTES = true,            -- Emote menu
 
 	----------------------------------------------------------------------
+	-- Combat feature gates
+	----------------------------------------------------------------------
+	-- Brain Fighter is being repurposed as an educational shooter; the
+	-- inherited Archon team/PvP code is gated off rather than deleted so
+	-- a single flag flip restores it for testing or a future PvP mode.
+	-- Consumers across the damage, mode-registry, spawn, UI, and nametag
+	-- layers read these directly via require(...).TEAMS_ENABLED /
+	-- .PLAYER_VS_PLAYER_ENABLED.
+	----------------------------------------------------------------------
+	TEAMS_ENABLED = false,            -- Set true to restore Team Deathmatch mode + team UI + team-aware spawn/nametag/score logic.
+	PLAYER_VS_PLAYER_ENABLED = false, -- Set true to restore PvP damage. When false, players cannot damage other players; NPCs remain valid targets.
+
+	----------------------------------------------------------------------
 	-- Dev-only helpers (leave off in shipped builds)
 	----------------------------------------------------------------------
 	DEV_AUTO_EQUIP_TOOL = "", -- name of a Tool in StarterPack to auto-equip on spawn; "" or nil to disable

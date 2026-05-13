@@ -16,10 +16,19 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Teams = game:GetService("Teams")
 
+local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local HudLayoutManager = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
 local log = Logger.new("TeamScoreGui")
+
+-- Teams gate: this LocalScript auto-runs on every player join, so the
+-- only way to suppress the team-score HUD without deleting the file is
+-- to bail at the very top before any container or remote hook is built.
+if not GameConfig.TEAMS_ENABLED then
+	log:info("TEAMS_ENABLED=false — TeamScoreGui suppressed")
+	return
+end
 
 local player = Players.LocalPlayer
 local scoreUpdateRemote = ReplicatedStorage.Shared.GameMode.Remotes.ScoreUpdate

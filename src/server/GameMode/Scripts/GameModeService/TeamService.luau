@@ -22,6 +22,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Teams = game:GetService("Teams")
 
+local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
 local log = Logger.new("TeamService")
@@ -61,6 +62,15 @@ function TeamService.initialize()
 	if initialized then
 		return
 	end
+	-- Teams gate: when TEAMS_ENABLED is false, swallow the call. No Team
+	-- instances are created and every accessor below returns the neutral
+	-- defaults (nil team, empty list, no-op assignment). Re-enabling
+	-- TEAMS_ENABLED restores the normal init path.
+	if not GameConfig.TEAMS_ENABLED then
+		initialized = true
+		log:info("TEAMS_ENABLED=false — team service running as no-op")
+		return
+	end
 	for _, def in TEAM_DEFS do
 		teams[def.name] = findOrCreateTeam(def)
 	end
@@ -96,7 +106,11 @@ end
 
 -- Returns the team currently holding the fewest players. Tie → first
 -- registered team in TEAM_DEFS order, so the result is deterministic.
-function TeamService.getSmallestTeam(): Team
+-- Returns nil when TEAMS_ENABLED is off (no teams exist to balance).
+function TeamService.getSmallestTeam(): Team?
+	if not GameConfig.TEAMS_ENABLED then
+		return nil
+	end
 	local counts = TeamService.getTeamCounts()
 	local smallest: Team? = nil
 	local smallestCount = math.huge
@@ -107,14 +121,15 @@ function TeamService.getSmallestTeam(): Team
 			smallestCount = count
 		end
 	end
-	-- Guaranteed non-nil because TEAM_DEFS is non-empty and initialize()
-	-- has already populated `teams`. The cast keeps the type checker happy.
-	return smallest :: Team
+	return smallest
 end
 
 -- Place the player on a specific team by name. Returns nil if the
 -- team doesn't exist (logs a warning).
 function TeamService.setTeamForPlayer(player: Player, teamName: string): Team?
+	if not GameConfig.TEAMS_ENABLED then
+		return nil
+	end
 	local team = teams[teamName]
 	if not team then
 		log:warn(string.format("setTeamForPlayer: unknown team '%s'", teamName))
@@ -129,8 +144,14 @@ end
 -- The default auto-balance flow. New joiner lands on whichever team
 -- has fewer players (deterministic tie-break favours the first team
 -- in TEAM_DEFS order).
-function TeamService.assignToSmallestTeam(player: Player): Team
+function TeamService.assignToSmallestTeam(player: Player): Team?
+	if not GameConfig.TEAMS_ENABLED then
+		return nil
+	end
 	local team = TeamService.getSmallestTeam()
+	if not team then
+		return nil
+	end
 	player.Team = team
 	player.Neutral = false
 	log:info(string.format("%s auto-balanced → %s", player.Name, team.Name))

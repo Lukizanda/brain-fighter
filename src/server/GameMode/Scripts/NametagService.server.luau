@@ -14,6 +14,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
 local log = Logger.new("NametagService")
@@ -41,7 +42,10 @@ local function buildNametag(player: Player): BillboardGui
 	label.TextStrokeColor3 = Color3.new(0, 0, 0)
 	label.TextStrokeTransparency = 0.2
 	label.Text = player.Name
-	label.TextColor3 = if player.Team
+	-- Teams gate: when TEAMS_ENABLED is off the nametag stays neutral
+	-- coloured even if a Team was set externally. The explicit gate is
+	-- here so flipping the flag doesn't require re-spawning every player.
+	label.TextColor3 = if GameConfig.TEAMS_ENABLED and player.Team
 		then player.Team.TeamColor.Color
 		else NEUTRAL_COLOR
 	label.Parent = bbg

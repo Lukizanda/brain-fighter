@@ -1,4 +1,7 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 
 local function canPlayerDamageHumanoid(player: Player, taggedHumanoid: Humanoid): boolean
 	if taggedHumanoid.Health <= 0 then
@@ -10,6 +13,12 @@ local function canPlayerDamageHumanoid(player: Player, taggedHumanoid: Humanoid)
 	-- If the player tagged a non-player humanoid then allow damage
 	if not taggedPlayer then
 		return true
+	end
+
+	-- PvP gate: when disabled, players can never damage other players.
+	-- NPC targets (taggedPlayer == nil) are unaffected and remain damageable.
+	if not GameConfig.PLAYER_VS_PLAYER_ENABLED then
+		return false
 	end
 
 	if player.Neutral or taggedPlayer.Neutral then

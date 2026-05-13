@@ -1,12 +1,16 @@
 ---
 type: system
-description: Loadout system — Normal/Special slot model, RespawnPedestalManager, drop remote, cooldown overlay
-updated: 2026-04-30
+description: Loadout system — Normal/Special slot model, RespawnPedestalManager, drop remote, cooldown overlay. Team-aware spawn paths currently gated off.
+updated: 2026-05-13
 ---
 
 # Loadout System
 
 Players pick weapons from pedestals in the spawn room, carry up to 2 Normal weapons + 1 Special, and can drop their currently-equipped Tool to swap. Reserves reset per life (no carry hoarding).
+
+## Team-aware spawn gate (2026-05-13)
+
+With `GameConfig.TEAMS_ENABLED = false`, `SpawnManager.filterSpawnsForPlayer` short-circuits before reading per-team SpawnLocation TeamColor / Team-attribute filters, so every player draws from the full neutral spawn pool. `RespawnZoneService` is unchanged but naturally degrades: callers pass `player.Team` (now nil), and the zone filter treats nil as "match every zone", giving a single unified respawn zone. Re-enable by flipping `TEAMS_ENABLED`.
 
 ## Slot model
 

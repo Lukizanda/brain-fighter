@@ -2,8 +2,10 @@
 local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local AimAssistEnum = require(script.Parent.AimAssistEnum)
+local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 
 export type SelectTargetResult = {
 	instance: PVInstance?,
@@ -183,8 +185,11 @@ function TargetSelector:getAllTargetPoints(): { TargetEntry }
 		end
 	end
 
-	-- Process players
-	if localPlayer and self.targetPlayers then
+	-- Process players. PvP gate: when disabled, aim assist must not snap
+	-- to other players — they can't be damaged anyway, and a phantom
+	-- snap on a teammate misleads the reticle. NPC tag targets above are
+	-- unaffected.
+	if localPlayer and self.targetPlayers and GameConfig.PLAYER_VS_PLAYER_ENABLED then
 		local bones = self.playerBones
 
 		for _, player in Players:GetPlayers() do
