@@ -1,41 +1,61 @@
 ---
-type: status
-description: Input handler that consumes a clicked/shot letter-block and appends its (letter, color) to the WordBuffer. Phase 3 — not yet implemented.
+type: system
+description: Client input handler — left-click raycast consumes a LetterBlock and appends (letter, color) to the player's WordBuffer. Server validates and destroys the block.
 updated: 2026-05-14
 ---
 
-# BlockShoot — Phase 3 (pending)
+# BlockShoot
 
-> **Status: not yet implemented.** This page is a forward declaration so the planning references resolve. Scheduled for Phase 3 per [[design/build-plan]] (after [[systems/LetterBlock]] template).
+The input handler that turns "player clicked a floating letter block" into a `(letter, color)` tile in the player's [[systems/WordBuffer]]. Client-authoritative for append (the player's own buffer is local state); server-authoritative for block destruction (shared resource).
 
-The input handler that turns "player aimed at a letter block and clicked" into a `(letter, color)` tile appended to the player's [[systems/WordBuffer]]. It owns:
+## Files
 
-- Hit detection on tagged `LetterBlock` Models (raycast or `Touched` — TBD during implementation).
-- Reading `Block.Letter` and `Block.Color` attributes off the hit Model.
-- Calling `:append(letter, color)` on the player's WordBuffer.
-- Destroying the consumed block.
-- Subscribing to [[systems/MindFullManager]]'s `mindFull` / `mindFreed` signals to gate input (no shoot when the mind is full; restored when the buffer drains).
+- `src/shared/BlockShoot/init.luau` — shared helpers: `findLetterBlock` (ancestor traversal), `readBlock` (attribute reader), `MAX_RAYCAST_DISTANCE` constant.
+- `src/shared/BlockShoot/Remotes/ConsumeBlock.model.json` — RemoteEvent for client→server block destruction.
+- `src/client/BlockShootBoot.client.luau` — LocalScript: wires `UserInputService.InputBegan` → raycast → consume → fire remote.
+- `src/server/BlockShoot/BlockShootService.server.luau` — server handler: validates block is tagged, destroys it (triggers BlockSpawner auto-refill).
+- `src/client/PlayerSession.luau` — ModuleScript: lazy-creates and caches the player's WordBuffer + MindFullManager + EnergyReservoirs.
 
-## Inputs (planned)
+## Flow
 
-- Mouse click + crosshair raycast (desktop), tap (mobile).
-- The `Workspace.LetterBlock` collection — every block tags itself via `CollectionService` (see [[systems/LetterBlock]]).
-- `MindFullManager` `mindFull` / `mindFreed` BindableEvents.
+1. Player left-clicks.
+2. `BlockShootBoot` checks `MindFullManager:isMindFull()` — blocks input when buffer is at 12/12.
+3. Raycast from camera through mouse position, excluding the player's character.
+4. If the hit instance is inside a tagged `LetterBlock` Model (ancestor walk via `findLetterBlock`), read `Block.Letter` + `Block.Color` attributes.
+5. `WordBuffer:append(letter, color)` on the local session buffer.
+6. Fire `ConsumeBlock` remote to the server with the block Model reference.
+7. Server validates (Instance? Model? tagged?) and calls `block:Destroy()`.
+8. The `CollectionService` removed signal triggers [[systems/BlockSpawner]]'s auto-refill to maintain target count.
 
-## Outputs (planned)
+## MindFull gate
 
-- `WordBuffer:append(letter, color)` per successful hit.
-- `block:Destroy()` after a successful consume.
-- Diegetic fizzle feedback when input is gated by `mindFull` (greyed crosshair, "buffer full" SFX).
+When the buffer hits 12/12, [[systems/MindFullManager]] fires `mindFull`. BlockShootBoot simply polls `:isMindFull()` on each click — no signal wiring needed because the check is cheap and the gate is checked exactly once per input event. When the player removes tiles or memorizes a word, the buffer shrinks and `:isMindFull()` returns false, re-enabling input.
 
-## Open questions
+## PlayerSession
 
-- Hit detection model: raycast (consistent with [[systems/Weapon]] firearms) vs `ProximityPrompt` (cheaper but UX is different). Probably raycast, to match the rest of the shoot stack.
-- Cooldown: per-block, per-input, or none? Likely none — `mindFull` is the natural rate-limit.
+`PlayerSession.luau` is a client ModuleScript that lazy-creates and caches the player's per-session state:
+
+| Field | Type | Notes |
+|---|---|---|
+| `wordBuffer` | `WordBuffer` | 12-slot buffer |
+| `mindFullManager` | `MindFullManager` | Transition watcher over the buffer |
+| `energyReservoirs` | `EnergyReservoirs` | 3-color energy store (for Phase 4 MemorizeAction + CastAction wiring) |
+
+Any client system that needs player state calls `PlayerSession.get()` rather than constructing its own. Phase 4 HUD scripts will require the same module.
+
+## Security
+
+The server handler validates every remote payload:
+- `typeof(block) == "Instance"` — rejects non-Instance garbage.
+- `block:IsA("Model")` — rejects arbitrary instances.
+- `CollectionService:HasTag(block, "LetterBlock")` — rejects untagged models.
+
+No rate-limiting for Phase 3 (PvE single-player). For multiplayer, add a per-player cooldown or claimed-set to prevent double-consume races.
 
 ## See also
 
-- [[design/build-plan]] — Phase 3 sequence.
 - [[systems/LetterBlock]] — the entity BlockShoot consumes.
-- [[systems/WordBuffer]] — the destination for consumed tiles.
-- [[systems/MindFullManager]] — input gate.
+- [[systems/BlockSpawner]] — auto-refills when blocks are destroyed.
+- [[systems/WordBuffer]] — destination for consumed tiles.
+- [[systems/MindFullManager]] — input gate when buffer is full.
+- [[design/gameplay-loop]] — "Buffer & input" section.
