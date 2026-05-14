@@ -8,21 +8,46 @@ updated: 2026-05-14
 
 The in-world entity the player shoots to spell words. A small Model with a `Cube` BasePart, six SurfaceGuis (one glyph per face), and a colored ParticleEmitter. Two attributes drive everything: `Block.Letter` (the glyph) and `Block.Color` (`"red" | "green" | "blue"`). Spawned by the upcoming [[systems/BlockShoot|BlockSpawner]] / [[design/build-plan|Phase 3]] pipeline.
 
-## Status (2026-05-14)
+## Anatomy
 
-NIM-11 is **in progress**. The disk side shipped in commit `606bd5c`:
+`ReplicatedStorage.Shared.LetterBlocks.Template` is the canonical Model every block is cloned from:
 
-- Spawn API + visual-state pipeline (`src/shared/LetterBlocks/init.luau`)
-- Template Model declaration with `ignoreUnknownInstances = true` (`src/shared/LetterBlocks/Template/init.meta.json`)
-- Client-side bob + Y-rotation animator (`src/client/LetterBlockAnimator.client.luau`)
+```
+Template (Model)         ← src/shared/LetterBlocks/Template/init.meta.json (Rojo)
+└── Cube (Part)          ← MCP-managed (persisted in BrainFighter.rbxl)
+    ├── Face_Front       ← SurfaceGui + TextLabel "Letter"
+    ├── Face_Back        ← SurfaceGui + TextLabel "Letter"
+    ├── Face_Top         ← SurfaceGui + TextLabel "Letter"
+    ├── Face_Bottom      ← SurfaceGui + TextLabel "Letter"
+    ├── Face_Left        ← SurfaceGui + TextLabel "Letter"
+    ├── Face_Right       ← SurfaceGui + TextLabel "Letter"
+    └── Mana (ParticleEmitter)
+```
 
-The MCP-managed children of the Template — the `Cube` BasePart, six SurfaceGuis with TextLabels (one per cube face), and the colored ParticleEmitter — **are not yet attached**. They will be added in Studio with `ignoreUnknownInstances` keeping them safe through Rojo sync. NIM-11 stays in-progress until those children land and a playtest confirms a spawned block reads correctly.
+The Cube + its 6 SurfaceGuis + ParticleEmitter are MCP-managed: they were created via `execute_luau` in Studio, persist in `BrainFighter.rbxl`, and survive Rojo sync because `Template/init.meta.json` sets `ignoreUnknownInstances: true` (see [[concepts/ModelJsonInstances]]).
+
+Why a single Part instead of a multi-part Model? The cube IS the block — no rig, no socketed accessories. One Part is the cheapest possible representation, and SurfaceGuis live on it directly (no Adornee plumbing needed when the GUI's parent is the BasePart it adorns).
+
+The Cube properties: `Size = 4×4×4`, `Anchored = true`, `CanCollide = false`, `CanTouch = false`, `CanQuery = true` (raycasts hit it — BlockShoot relies on this), `Massless = true`, `Material = Plastic`, `TopSurface/BottomSurface = Smooth`. `Template.PrimaryPart = Cube` so `Template:PivotTo(...)` (used by `spawn`) targets the visible body.
 
 ## Files
 
 - `src/shared/LetterBlocks/init.luau` — module: spawn / applyVisualState / constants.
-- `src/shared/LetterBlocks/Template/init.meta.json` — Template Model, `ignoreUnknownInstances`, default attributes.
+- `src/shared/LetterBlocks/Template/init.meta.json` — Template Model, `ignoreUnknownInstances`, default attributes (`Block.Letter = "A"`, `Block.Color = "red"`).
 - `src/client/LetterBlockAnimator.client.luau` — CollectionService Heartbeat loop: bob 0.5 studs / 1.5 s period, Y-axis rotation 6 deg/s, per-block phase offset.
+- `BrainFighter.rbxl` (not under Rojo) — holds the MCP-created Cube + SurfaceGuis + ParticleEmitter children of `Template`. Saving the `.rbxl` is what persists them.
+
+## Behavioural verification (2026-05-14 playtest)
+
+Spawned a block at `(0, 12, 0)` via MCP `execute_luau`, sampled `block:GetPivot()` at three timestamps:
+
+| t (s) | Y position | Yaw |
+|---|---|---|
+| 0.0 | 12.000 | 0° |
+| 0.5 | 12.046 | 3° |
+| 1.0 | 12.408 | 6° |
+
+Yaw advances at exactly **6°/s**, matching `ROTATION_DEGREES_PER_SECOND`. Y bobs sinusoidally around the spawn baseline — the first 1 s captured climbs from `12.000` toward the wave's peak at `12 + 0.5 = 12.500`. Edit-mode spot check earlier confirmed the cube tint, the 6 face SurfaceGuis with white-stroked letters, and the PrimaryPart wiring read correctly across red/green/blue colors.
 
 ## API
 

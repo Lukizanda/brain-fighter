@@ -31,7 +31,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/SpellExecutor]] — Phase 2 effect runner; dispatches `damage`/`heal`/`freeze` (real) and `shield`/`wall`/`buff` (stubs) against caster/target
 - [[systems/MindFullManager]] — Phase 2 transition watcher over WordBuffer: rising-edge `mindFull` / falling-edge `mindFreed` signals for the shoot gate + HUD indicator
 - [[systems/CastAction]] — Phase 2 cast pipeline: `tapReservoir` (highest affordable) / `castSpecific` (chosen tier); drains reservoir, refunds on executor failure
-- [[systems/LetterBlock]] — Phase 3 entity: floating block prefab with `Block.Letter` + `Block.Color` attributes; spawn API, color tints, CollectionService tag for the client animator. NIM-11 in progress (disk skeleton landed; MCP-side children pending)
+- [[systems/LetterBlock]] — Phase 3 entity: floating block prefab with `Block.Letter` + `Block.Color` attributes; chunky 4×4×4 cube with 6-face SurfaceGui letter glyph + colored ParticleEmitter; CollectionService tag drives the client bob/rotation animator (6°/s, sinusoidal bob)
 - [[systems/BlockShoot]] — Phase 3 input handler that consumes a hit LetterBlock and appends `(letter, color)` to WordBuffer. Forward-declared; not yet implemented.
 
 ## Concepts (recurring patterns)
