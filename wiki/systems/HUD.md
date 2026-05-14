@@ -1,7 +1,7 @@
 ---
 type: system
-description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, WeaponRolodex, BuffTray, reticle, settings menu. TeamScoreGui currently gated off.
-updated: 2026-05-13
+description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, WeaponRolodex, BuffTray, reticle, settings menu, and 5 Phase 4 gameplay widgets (BufferDisplay, ReservoirBars, MemorizeButton, SpellMenu, MindFullIndicator).
+updated: 2026-05-14
 ---
 
 # HUD System
@@ -28,6 +28,17 @@ src/shared/Hud/
   TouchControlConfig.luau
   SettingsMenuBuilder.luau
   SettingsMenuConfig.luau
+  -- Phase 4 gameplay widgets:
+  BufferDisplayBuilder.luau       — letter-tile row from WordBuffer.tiles()
+  BufferDisplayConfig.luau
+  ReservoirBarsBuilder.luau       — R/G/B energy bars (reuses AttributeBarBuilder)
+  ReservoirBarsConfig.luau
+  MemorizeButtonBuilder.luau      — Memorize action button (calls MemorizeAction.tryMemorize)
+  MemorizeButtonConfig.luau
+  SpellMenuBuilder.luau           — 3-color spell cast panel (tap → CastAction.tapReservoir)
+  SpellMenuConfig.luau
+  MindFullIndicatorBuilder.luau   — warning banner when WordBuffer is full
+  MindFullIndicatorConfig.luau
 
 src/client/PlayerHud/
   init.client.luau                — entry point, mounts all HUD elements
@@ -40,7 +51,25 @@ src/client/UI/
   DamageFeedbackGui.client.luau   — directional damage indicators
   DeathScreenGui.client.luau      — death overlay
   SettingsMenuGui.client.luau     — settings menu mount
+  -- Phase 4 gameplay widgets:
+  BufferDisplayGui.client.luau    — BottomCenter; wired to wordBuffer.changed
+  ReservoirBarsGui.client.luau    — BottomLeft; wired to energyReservoirs.changed
+  MemorizeButtonGui.client.luau   — BottomCenter; fires tryMemorize on click
+  SpellMenuGui.client.luau        — BottomRight; fires tapReservoir on color tap
+  MindFullIndicatorGui.client.luau — TopCenter; shows/hides on mindFull/mindFreed
 ```
+
+## Phase 4 gameplay widgets
+
+All five read state through `PlayerSession.get()` and subscribe to signals from the session objects.
+
+| Widget | Region | Signal source | Action |
+|---|---|---|---|
+| BufferDisplay | BottomCenter | `wordBuffer.changed` | display tiles |
+| ReservoirBars | BottomLeft | `energyReservoirs.changed` | show R/G/B energy |
+| MemorizeButton | BottomCenter | `wordBuffer.changed` | `MemorizeAction.tryMemorize` |
+| SpellMenu | BottomRight | `energyReservoirs.changed` | `CastAction.tapReservoir` |
+| MindFullIndicator | TopCenter | `mindFull` / `mindFreed` | show/hide warning |
 
 ## Adapter pattern (attribute bars)
 
