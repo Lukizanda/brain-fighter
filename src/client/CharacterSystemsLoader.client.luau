@@ -17,7 +17,10 @@ StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.EmotesMenu, GameConfig.SHOW_EMOTES
 
 log:info("Starting initialization...")
 
-CameraManager.initialize()
-LocomotionManager.initialize(CameraManager.getCameraController())
-
-log:info("Initialization complete")
+if GameConfig.TPS_CHARACTER_ENABLED then
+	CameraManager.initialize()
+	LocomotionManager.initialize(CameraManager.getCameraController())
+	log:info("Initialization complete (TPS character stack active)")
+else
+	log:info("TPS character disabled — default Roblox PlayerModule (free-look camera + AutoRotate character) in effect")
+end

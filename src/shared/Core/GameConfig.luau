@@ -34,6 +34,18 @@ local GameConfig = {
 	PLAYER_VS_PLAYER_ENABLED = false, -- Set true to restore PvP damage. When false, players cannot damage other players; NPCs remain valid targets.
 
 	----------------------------------------------------------------------
+	-- Character system gates
+	----------------------------------------------------------------------
+	-- Brain Fighter uses default Roblox third-person camera + AutoRotate
+	-- character (platformer-style). The inherited TPS template's
+	-- camera-locked body orientation + Motor6D upper-body tracking +
+	-- weapon-aim camera modes are gated behind this flag — leave OFF for
+	-- Brain Fighter, flip ON to restore the TPS feel for testing or a
+	-- future mode.
+	----------------------------------------------------------------------
+	TPS_CHARACTER_ENABLED = false,    -- When true, CameraManager + LocomotionManager initialize and apply the TPS body-lock + camera-aim stack. When false, default Roblox PlayerModule handles camera + locomotion.
+
+	----------------------------------------------------------------------
 	-- Dev-only helpers (leave off in shipped builds)
 	----------------------------------------------------------------------
 	DEV_AUTO_EQUIP_TOOL = "", -- name of a Tool in StarterPack to auto-equip on spawn; "" or nil to disable
