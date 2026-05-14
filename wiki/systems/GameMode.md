@@ -17,7 +17,7 @@ Brain Fighter is being repurposed as an educational shooter, so the inherited co
 
 With both flags off the only registered mode is `NoOpMode` (`src/shared/GameMode/Modes/NoOpMode.luau`): a 24-hour idle round with `scoreLimit = math.huge`, no team logic, no win condition. RoundManager enters `Active` once and stays there; GameStateGui's PostRound overlay never fires.
 
-Re-enable by flipping the flags — the FFA / TDM modules are unchanged and re-register automatically. See [[concepts/CombatFeatureGates]] (if added) or the inline comments in `src/shared/Core/GameConfig.luau` and `src/shared/GameMode/Modes/init.luau`.
+Re-enable by flipping the flags — the FFA / TDM modules are unchanged and re-register automatically. See the inline comments in `src/shared/Core/GameConfig.luau` and `src/shared/GameMode/Modes/init.luau`.
 
 ### SpawnLocation must be Neutral while teams are off
 

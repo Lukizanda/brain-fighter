@@ -1,7 +1,7 @@
 ---
 type: system
 description: Weapon system — firearms (handgun, rifle, blaster) and melee (sword) with shared state-machine, hit detection, and effects layers
-updated: 2026-04-30
+updated: 2026-05-14
 ---
 
 # Weapon System
@@ -32,7 +32,7 @@ src/shared/Weapon/
 src/server/
   Firearm/Scripts/             — per-weapon validation (validateShootArguments, validateTag, AccessoryFiltering)
   Weapon/MeleeSwingService.server.luau  — authoritative melee cooldown + sanity validation
-  Spawner/WeaponSpawnerManager.server.luau  — legacy ground spawners (greybox uses RespawnPedestalManager instead)
+  Loadout/RespawnPedestalManager.server.luau  — pedestal-spawner used by the greybox arena (see [[systems/Loadout]])
 ```
 
 ## Authority models

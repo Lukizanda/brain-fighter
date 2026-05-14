@@ -63,7 +63,7 @@ This means a `.changed` fire reliably indicates an *actual* numerical change, so
 
 ## Dependencies
 
-- [[systems/Logger|Logger]] (`src/shared/Core/Logger.luau`) — diagnostic warn before erroring on unknown-color.
+- `Logger` (`src/shared/Core/Logger.luau`) — diagnostic warn before erroring on unknown-color.
 
 No Roblox-instance dependencies beyond the internal `BindableEvent`. No knowledge of tiers, spells, words, or HUD — those live in [[systems/SpellRegistry]] (planned), [[systems/MemorizeAction]] (planned), and the eventual `HUD: ReservoirBars` builder.
 
