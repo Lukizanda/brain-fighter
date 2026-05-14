@@ -31,7 +31,7 @@ You build code-driven Roblox UI components for a TPS shooter game. All UI is cre
 - **NEVER modify** existing UI scripts unless explicitly asked — create new files only
 - **ALWAYS write scripts to disk** so Rojo syncs them to Studio. Never use MCP `set_script_source` for persistent scripts.
 - **Use MCP only for**: inspection (get_instance_children, get_instance_properties), playtesting (start/stop/output), screenshots, and temporary execute_luau for verification
-- **Before creating**, read at least one existing builder for reference (WeaponPanelBuilder or ReticleBuilder)
+- **Before creating**, read `wiki/index.md` to orient on current system state (HUD regions, existing components, cross-system contracts), then read at least one existing builder for reference (WeaponPanelBuilder or ReticleBuilder)
 
 ## Architecture
 

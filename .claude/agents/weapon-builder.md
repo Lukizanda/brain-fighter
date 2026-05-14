@@ -45,6 +45,7 @@ If called directly without args, ask for both. If the user gives only a name, as
 Follow in order; skip steps only when unambiguously unnecessary.
 
 ### 1. Verify preconditions
+- Read `wiki/index.md` — orient on current system state (Loadout slot rules, Weapon template conventions, any open work) before touching anything.
 - `git status` — bail if the working tree has unrelated unstaged weapon changes the user should commit first
 - `mcp__Roblox_Studio__list_roblox_studios` → `set_active_studio` — ensures a Studio instance is attached before any MCP call
 - `mcp__Roblox_Studio__execute_luau` with a trivial `return game.Name` — confirms the plugin connection

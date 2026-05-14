@@ -1,6 +1,7 @@
 # Roblox Game Development — Core Rules
 
 ## Project Wiki
+- **Read `wiki/index.md` at the start of every non-trivial task** — it's 50 lines and tells you what systems exist, what's already built, and where to look. Prevents duplicating work and catching stale assumptions before they compound.
 - **Read [`wiki/WIKI.md`](wiki/WIKI.md) when working on system architecture, game design, or anything cross-system.** It's the project's living shared brain — system pages, design notes, decisions, and status snapshots, all cross-linked. Update relevant pages after meaningful changes (an "ingest"); see WIKI.md for the operations contract.
 
 ## Project Stack
@@ -51,6 +52,25 @@
 2. Start playtest via MCP → wait → read output via MCP → iterate.
 3. Log state transitions immediately, per-frame data throttled.
 
+## Code Style
+- **Type annotations**: add Luau type annotations to all function signatures (parameters + return types). Use `export type` for types shared across modules. Never use `--!nocheck` — fix the type issue instead.
+- **Cleanup pattern**: every controller/system that allocates resources must have `:destroy()` and `:disable()`. `:disable()` is reversible (pause); `:destroy()` calls `:disable()` then clears all state (permanent teardown).
+
+## Test Suite Hygiene
+- After triggering `workspace:SetAttribute("RunTests", "<suite>")` and the suite reports `[AUTORUN DONE]`, **immediately clear it**: `workspace:SetAttribute("RunTests", nil)`. Do not ask — just do it.
+- The attribute persists in the `.rbxl` and silently re-fires the autorunner on every subsequent playtest, contaminating non-test sessions with test fixtures.
+- `TestResult_*` and `TestRunSummary` attributes are runtime-only on the playtest VM and clear on play-stop — only `RunTests` needs explicit nil.
+
+## Studio DataModel Mutations
+- Any `execute_luau` call that creates, destroys, reparents, or renames Studio instances must be wrapped in a `ChangeHistoryService` waypoint so the user can Ctrl+Z the whole operation atomically.
+  ```lua
+  local ok, recording = pcall(function() return ChangeHistoryService:TryBeginRecording("label") end)
+  -- do the work
+  if recording then ChangeHistoryService:FinishRecording(recording, Enum.FinishRecordingOperation.Commit) end
+  ```
+- Read-only inspections (GetChildren, properties) don't need waypoints.
+- When replacing a Part that has WeldConstraints pointing to it, **explicitly re-wire `Part0`/`Part1` to the replacement** before destroying the old Part — the WeldConstraint reference doesn't move with a reparent and will go nil on destroy, silently breaking the weld.
+
 ## Project Structure
 ```
 src/
@@ -73,6 +93,10 @@ src/
 - Weapon-specific scripts get `Weapon` prefix if their name is otherwise generic (e.g., `WeaponGuiController`, `WeaponAnimationController`, `WeaponTouchInputController`).
 - Character-level systems live in `shared/Character/` without prefix.
 - Generic utilities (like `InputCategorizer`) should not be under Weapon/.
+- **Script type suffixes**: `.client.luau` = LocalScript, `.server.luau` = Script, no suffix = ModuleScript.
+- **Casing by role**: PascalCase for classes/controllers/systems (`WeaponStateMachine.luau`); camelCase for utilities and effects (`castRays.luau`, `impactEffect.luau`).
+- **Folders**: lowercase for top-level distribution (`client/`, `server/`, `shared/`); PascalCase for domain folders (`Character/`, `Weapon/`).
+- **Meta files**: `init.meta.json` for folder container properties; `<Name>.meta.json` alongside scripts that need child instances.
 
 ## No Magic Numbers
 - Never use unexplained numeric or string literals in logic. Declare a named constant in the appropriate `*Constants.luau` file.
@@ -80,3 +104,9 @@ src/
 
 ## Single Ownership Rule
 - One system should own each Motor6D / property. If two scripts write to the same Motor6D.C0 or Humanoid.AutoRotate, they will fight. Merge them into one controller.
+
+## Wiki Maintenance
+- After every commit **and** after any significant in-chat architectural decision, proactively audit `wiki/` for stale references before declaring done. Don't wait for the user to ask.
+- Steps: grep `wiki/` for renamed symbols/retired concepts → update affected system/concept/design pages → append an ingest entry to `wiki/log.md` → bump `updated:` frontmatter on changed pages.
+- Don't rewrite history — old `log.md` entries and decision rationales referencing now-retired terms stay as-is.
+- Bundle wiki updates into the same commit where possible; separate follow-up commit if the original was already pushed.

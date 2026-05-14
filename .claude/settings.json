@@ -67,7 +67,12 @@
       "Bash(tasklist:*)",
       "Bash(./tools/:*)",
       "Bash(tools/:*)",
-      "Bash(wait:*)"
+      "Bash(wait:*)",
+      "mcp__nimbalyst-mcp__capture_editor_screenshot",
+      "mcp__nimbalyst-mcp__get_session_edited_files",
+      "mcp__nimbalyst-mcp__tracker_get",
+      "mcp__nimbalyst-mcp__tracker_list",
+      "mcp__nimbalyst-session-naming__update_session_meta"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [

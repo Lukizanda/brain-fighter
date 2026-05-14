@@ -83,6 +83,14 @@ Reload state lives in two places that must stay in sync. Server is authoritative
 - `Ammo.performReload(tool)` (shared module) transfers `min(needed, reserve)` rounds — used both by server `validateReload`/reload handler and by the client's `FirearmController:startReload` predicted callback. Both sides MUST run the same math; otherwise an empty-reserve reload silently rejects on server while the client jumps to a full magazine, and every subsequent shot fails `validateShot(ammo<=0)` server-side. See [[concepts/ClientServerPredictionParity]].
 - `WeaponController:canReload()` (client) requires `reserve > 0`, mirroring server `validateReload`. Don't kick off optimistic predictions the server is going to reject.
 
+## Template rename order — Studio first, then disk
+
+When renaming a weapon template (or any Rojo-synced Tool with MCP-created children), rename in Studio **first** — `Tool.Name = "NewName"` preserves all children — then update the disk folder name and `init.meta.json`. Doing the disk rename first causes Rojo to destroy the old-name Tool and create a fresh empty one, taking all MCP-only children (Handle MeshPart, Animations, Sounds, Haptics, Model) with it. `ignoreUnknownInstances: true` does not protect children when their parent is replaced by a rename.
+
+Symptoms: the new Tool only has `Scripts` as a child while siblings have 4+; pedestals warn "Template not found" or spawn invisible/handleless weapons. Recovery: revert from `.rbxl` backup, redo in the right order.
+
+Same logic applies to ViewModels, GUI templates, animation rigs — anything with MCP-only children needs the Studio rename to precede the disk rename.
+
 ## Important gotchas
 
 - **`.client.luau` in `src/shared/`** is dead code — Roblox doesn't auto-run LocalScripts in ReplicatedStorage. Templates parented to Tools work because the Tool moves to the Player's Backpack/Character. But standalone shared LocalScripts must live in `src/client/`. `ShotReplication.client.luau` lived in shared from project setup until 2026-04-30 — remote shot FX never replicated until it was moved. See [[concepts/LocalScriptPlacement]].

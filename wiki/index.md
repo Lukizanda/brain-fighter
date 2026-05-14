@@ -32,7 +32,9 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/MindFullManager]] — Phase 2 transition watcher over WordBuffer: rising-edge `mindFull` / falling-edge `mindFreed` signals for the shoot gate + HUD indicator
 - [[systems/CastAction]] — Phase 2 cast pipeline: `tapReservoir` (highest affordable) / `castSpecific` (chosen tier); drains reservoir, refunds on executor failure
 - [[systems/LetterBlock]] — Phase 3 entity: floating block prefab with `Block.Letter` + `Block.Color` attributes; chunky 4×4×4 cube with 6-face SurfaceGui letter glyph + colored ParticleEmitter; CollectionService tag drives the client bob/rotation animator (6°/s, sinusoidal bob)
-- [[systems/BlockShoot]] — Phase 3 input handler that consumes a hit LetterBlock and appends `(letter, color)` to WordBuffer. Forward-declared; not yet implemented.
+- [[systems/BlockSpawner]] — Phase 3 server-side populator: Scrabble-weighted letter picks, configurable color weights, auto-refill via CollectionService removed signal; maintains ~24 blocks in a 40x8x40 arena box
+- [[systems/BlockShoot]] — Phase 3 input handler: left-click raycast consumes a LetterBlock, appends `(letter, color)` to WordBuffer; MindFull gate blocks input at 12/12; server validates + destroys block
+- [[systems/BossAdapter]] — Phase 3 MVP Boss target: static Humanoid-bearing Model that SpellExecutor can damage; `defeated` signal for level completion; auto-respawn via BossService
 
 ## Concepts (recurring patterns)
 
@@ -46,6 +48,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[concepts/ServerLogicTestHarness]] — gated `.server.luau` drivers for testing server-only logic when MCP only gives client-side execute_luau
 - [[concepts/ValidateBeforeShip]] — a fix is not done until you've observed it working; build a deterministic repro before pushing
 - [[concepts/RobloxOpenCloudAuth]] — Open Cloud "Invalid API Key" 401 with a previously-working key → regenerate from the dashboard, paste new value into `.env`, move on
+- [[concepts/RemoteVisualDebugging]] — 5-layer diagnostic checklist for "works for me, not for other clients" multiplayer visual bugs
 
 ## Decisions
 

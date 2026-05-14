@@ -39,7 +39,28 @@ Notably:
 - **`RespawnZoneService`** not built — needed to gate drop UX on "player is in their respawn zone".
 - **Drop UX** — drop key binding + zone-gated client validation.
 
+## Inventory tracking gotchas
+
+These are Roblox engine behaviors that have bitten `LoadoutService` and `PickupStacker` — all four are now handled canonically in those files.
+
+### Backpack.ChildAdded fires on every equip-swap, not just fresh pickups
+
+`Humanoid:EquipTool(other)` is implemented as an atomic unequip-then-equip pair. The previously-equipped tool moves Character → Backpack, firing `Backpack.ChildAdded` for it. **Any handler wired to `Backpack.ChildAdded` must be idempotent** — if the same Tool instance is already registered, early-return. Use `table.find(order, tool)` or `map[tool]`. Non-idempotent handlers re-register the unequipped tool as a fresh pickup, triggering cap-eviction or duplicate-claim destruction on every Tab-cycle. Symptom: "weapons disappear when I cycle them."
+
+### Pedestal pickups bypass Backpack.ChildAdded entirely
+
+When a Tool sits in Workspace and a player's character touches it, Roblox auto-parents the Tool **directly to Character** — `Backpack.ChildAdded` never fires. Any server-side inventory tracking must hook **both** `Backpack.ChildAdded` and `Character.ChildAdded`. The handler should be idempotent so the duplicate fire from the swap path is a no-op. Single-player testing with `tool.Parent = backpack` dev scripts exercises only the Backpack path and masks this.
+
+### Player.Backpack is replaced on character load
+
+`Player.Backpack` is destroyed and recreated when the character spawns. Any `backpack.ChildAdded:Connect(...)` made at `PlayerAdded` time binds to the original container, which then gets destroyed, silently disconnecting the signal. **Re-hook `Backpack.ChildAdded` on every `CharacterAdded`**, plus use a `{ [Backpack]: true }` dedup set so repeat hooks on the same container are no-ops. See `hookBackpack` + `watchPlayer` pattern in `LoadoutService.server.luau` and `PickupStacker.server.luau`.
+
+### Client-side AncestryChanged sees a nil-parent intermediate during equip swaps
+
+On the **client**, replicated parent changes for `EquipTool` arrive in two stages — the tool passes through `Parent = nil` between Character and Backpack. `AncestryChanged` fires for each stage, so a handler that immediately checks `tool.Parent` against an expected set can false-positive on the nil intermediate and treat a normal equip-swap as a "drop." Fix: wrap the parent check in `task.defer(function() ... end)` so it runs after the frame's ancestry transitions settle. **Server-side AncestryChanged does NOT exhibit this race** — synchronous parent checks are safe there.
+
 ## Cross-references
 
 - Per-weapon templates → [[systems/Weapon]]
-- Ammo behavior on pickup → `Ammo.performReload` and `PickupStacker` (see project memory `feedback_backpack_lifecycle.md` for the latent bug)
+- Ammo behavior on pickup → `Ammo.performReload` and `PickupStacker`
+- Loadout regression tests → `src/shared/Tests/Suites/Multiplayer/pickupstacker_survives_respawn.luau`
