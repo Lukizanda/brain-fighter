@@ -105,6 +105,30 @@ src/
 ## Single Ownership Rule
 - One system should own each Motor6D / property. If two scripts write to the same Motor6D.C0 or Humanoid.AutoRotate, they will fight. Merge them into one controller.
 
+## Token Budget & Session Discipline
+
+### Parallel Session Cap
+- **Never spawn more than 3 concurrent subagent/Nimbalyst sessions at once.** More than 3 parallel sessions multiplies token cost without proportional throughput gain.
+- **Prefer sequential over parallel for small module builds** (<150 lines each). Serial is cheaper; parallel is only worth it when modules are large and truly independent.
+- **No redundant planning/context-only sessions.** Context-gathering belongs in the parent planner — never spin up a dedicated session just to read files and relay a summary.
+
+### Ollama Pre-flight
+- **Before any session that will read 3+ files or any file >200 lines**, verify Ollama is reachable: run `ollama list`. If unreachable, the global Ollama recovery flow applies.
+- **In spawned subagent sessions**, use `ask_ollama.py` for all file Q&A and wiki reads. Fresh subagent contexts have no cache, so direct reads are always full price.
+
+### Wiki Reads in Subagents
+- Delegate `wiki/index.md` and `wiki/WIKI.md` reads to `ask_ollama.py` in any spawned session — never use direct Read for these in a fresh context.
+- Example: `uv run C:/Users/admin/.claude/tools/ask_ollama.py --file wiki/index.md "What systems are in Phase 3?"`
+
+### Session Lifecycle
+- **Mark sessions `complete` and close them** as soon as the deliverable is done. Do not leave sessions in `validating` while iterating.
+- **Cap playtest iterations at 2 per session** before escalating to the user with a diagnosis. Repeated playtest loops in a single session are a major token drain.
+- **No wiki updates inside parallel build sessions.** Defer all `wiki/log.md` and system-page updates to a single follow-up session, or bundle them into the commit session.
+
+### Scope Discipline for Spawned Sessions
+- Every spawned session must have an explicit scope: which file(s) it owns, what it must not touch, and a clear done condition.
+- If a spawned session discovers work outside its declared scope, it must stop and report — never expand scope autonomously.
+
 ## Wiki Maintenance
 - After every commit **and** after any significant in-chat architectural decision, proactively audit `wiki/` for stale references before declaring done. Don't wait for the user to ask.
 - Steps: grep `wiki/` for renamed symbols/retired concepts → update affected system/concept/design pages → append an ingest entry to `wiki/log.md` → bump `updated:` frontmatter on changed pages.
