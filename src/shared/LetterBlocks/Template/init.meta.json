@@ -1,0 +1,12 @@
+{
+  "className": "Model",
+  "ignoreUnknownInstances": true,
+  "properties": {
+    "Attributes": {
+      "Attributes": {
+        "Block.Letter": { "String": "A" },
+        "Block.Color": { "String": "red" }
+      }
+    }
+  }
+}
