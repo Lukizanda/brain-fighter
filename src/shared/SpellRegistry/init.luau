@@ -1,0 +1,201 @@
+--!strict
+
+----------------------------------------------------------------------
+-- SpellRegistry
+----------------------------------------------------------------------
+-- Pure-Luau config layer for the 9 prototype spells (R/G/B × T1/T2/T3).
+-- Source of truth for spell name, color, tier, cost, targeting mode, and
+-- the effectSpec stub that SpellExecutor will interpret.
+--
+-- The roster and tier thresholds are pinned to wiki/design/gameplay-loop.md
+-- § "Spell roster (prototype)" and § "Spell tier thresholds". If those
+-- numbers move in the design doc, this module is what changes — every
+-- other system reads through getSpell/listAffordableSpells.
+--
+-- The effectSpec table is intentionally a discriminator-keyed stub —
+-- SpellExecutor (Phase 2) owns interpretation. Extra fields are passed
+-- through as-is so adding a new spell here doesn't require executor
+-- changes for shape, only for behavior.
+----------------------------------------------------------------------
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+
+local log = Logger.new("SpellRegistry")
+
+local SpellRegistry = {}
+
+export type Color = "red" | "green" | "blue"
+export type TargetingMode = "auto" | "placement"
+
+export type EffectSpec = {
+	kind: string,
+	[string]: any,
+}
+
+export type Spec = {
+	name: string,
+	color: Color,
+	tier: number,
+	cost: number,
+	targetingMode: TargetingMode,
+	effectSpec: EffectSpec,
+}
+
+-- Pinned from gameplay-loop.md § Spell tier thresholds. Cast cost equals
+-- the threshold (drain == threshold by design).
+local TIER_COSTS: { number } = { 10, 30, 80 }
+local NUM_TIERS = #TIER_COSTS
+
+local VALID_COLORS: { [string]: true } = {
+	red = true,
+	green = true,
+	blue = true,
+}
+
+-- Per-color, tier-indexed spell table. Pinned to gameplay-loop.md
+-- § Spell roster (prototype). effectSpec is a STUB — SpellExecutor owns
+-- interpretation. Keep shapes uniform per `kind` so the executor can
+-- dispatch on `kind` alone.
+local SPELLS: { [Color]: { Spec } } = {
+	red = {
+		{
+			name = "Spark",
+			color = "red",
+			tier = 1,
+			cost = TIER_COSTS[1],
+			targetingMode = "auto",
+			effectSpec = { kind = "damage", fractionOfMaxHP = 0.05 },
+		},
+		{
+			name = "Fireball",
+			color = "red",
+			tier = 2,
+			cost = TIER_COSTS[2],
+			targetingMode = "auto",
+			effectSpec = { kind = "damage", fractionOfMaxHP = 0.20 },
+		},
+		{
+			name = "Inferno",
+			color = "red",
+			tier = 3,
+			cost = TIER_COSTS[3],
+			targetingMode = "auto",
+			effectSpec = { kind = "damage", fractionOfMaxHP = 0.50 },
+		},
+	},
+	green = {
+		{
+			name = "Mend",
+			color = "green",
+			tier = 1,
+			cost = TIER_COSTS[1],
+			targetingMode = "auto",
+			effectSpec = { kind = "heal", fractionOfMaxHP = 0.15 },
+		},
+		{
+			name = "Stone Wall",
+			color = "green",
+			tier = 2,
+			cost = TIER_COSTS[2],
+			targetingMode = "placement",
+			effectSpec = { kind = "wall", durationSec = 6 },
+		},
+		{
+			name = "Sanctuary",
+			color = "green",
+			tier = 3,
+			cost = TIER_COSTS[3],
+			targetingMode = "auto",
+			effectSpec = {
+				kind = "heal",
+				fractionOfMaxHP = 1.0,
+				buffSpec = { kind = "shield", durationSec = 10 },
+			},
+		},
+	},
+	blue = {
+		{
+			name = "Frost Nip",
+			color = "blue",
+			tier = 1,
+			cost = TIER_COSTS[1],
+			targetingMode = "auto",
+			effectSpec = { kind = "freeze", durationSec = 1 },
+		},
+		{
+			name = "Shield",
+			color = "blue",
+			tier = 2,
+			cost = TIER_COSTS[2],
+			targetingMode = "auto",
+			effectSpec = { kind = "shield", durationSec = 5 },
+		},
+		{
+			name = "Stasis",
+			color = "blue",
+			tier = 3,
+			cost = TIER_COSTS[3],
+			targetingMode = "auto",
+			effectSpec = { kind = "freeze", durationSec = 5, damageAmpMultiplier = 2.0 },
+		},
+	},
+}
+
+local function assertValidColor(color: string, fnName: string)
+	if not VALID_COLORS[color] then
+		error(
+			string.format(
+				"SpellRegistry.%s: invalid color %q (expected 'red', 'green', or 'blue')",
+				fnName,
+				tostring(color)
+			),
+			3
+		)
+	end
+end
+
+local function assertValidTier(tier: number, fnName: string)
+	if tier ~= 1 and tier ~= 2 and tier ~= 3 then
+		error(
+			string.format(
+				"SpellRegistry.%s: invalid tier %s (expected 1, 2, or 3)",
+				fnName,
+				tostring(tier)
+			),
+			3
+		)
+	end
+end
+
+-- Returns the Spec for the given color/tier. Errors on invalid args so
+-- callers can't silently pull nil and propagate it into the executor.
+function SpellRegistry.getSpell(color: Color, tier: number): Spec
+	assertValidColor(color, "getSpell")
+	assertValidTier(tier, "getSpell")
+	return SPELLS[color][tier]
+end
+
+-- Returns specs of the given color whose cost <= energy, sorted by tier
+-- ascending. Used by the cast-menu HUD to render the affordable list
+-- for a single color reservoir.
+function SpellRegistry.listAffordableSpells(color: Color, energy: number): { Spec }
+	assertValidColor(color, "listAffordableSpells")
+	local affordable: { Spec } = {}
+	for _, spec in SPELLS[color] do
+		if spec.cost <= energy then
+			table.insert(affordable, spec)
+		end
+	end
+	-- SPELLS is declared in tier order so insertion is already ascending,
+	-- but sort explicitly so the API contract doesn't rely on table layout.
+	table.sort(affordable, function(a, b)
+		return a.tier < b.tier
+	end)
+	return affordable
+end
+
+log:info(string.format("Loaded — %d colors × %d tiers", 3, NUM_TIERS))
+
+return SpellRegistry

@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-05-13
+updated: 2026-05-14
 ---
 
 # Wiki Index
@@ -11,6 +11,7 @@ Start here. See [[WIKI]] for conventions and operations.
 ## Design
 
 - [[design/gameplay-loop]] — canonical core loop: aim → shoot letter blocks → buffer/arrange → cast color-typed spells; tuning, spell roster, worked examples
+- [[design/build-plan]] — phased build plan with parallel/sequential dependencies; one tracker per system
 - [[design/ArtDirection]] — lowpoly / chunky / oversized sci-fi proportions; greybox-first level building
 
 ## Systems
@@ -23,6 +24,9 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/Loadout]] — Normal/Special slot model, RespawnPedestalManager, drop remote
 - [[systems/GameMode]] — RoundManager, ScoreTracker, mode registry (FFA, TDM)
 - [[systems/Tests]] — TestRunner + suites for NPC/Melee, MCP-driven harness
+- [[systems/EnergyEconomy]] — Phase 1 pure-Luau module: word → per-color mana (Scrabble values × length tiers, floor-reconciled color splits)
+- [[systems/EnergyReservoirs]] — Phase 1 pure-Luau state container: three per-color energy bars, cap 160, `.changed(color)` BindableEvent signal
+- [[systems/Dictionary]] — Phase 1 pure-Luau word lookup; case-insensitive `isWord`, ~4.1k bootstrap K-12 entries; SCOWL upgrade path documented
 
 ## Concepts (recurring patterns)
 
