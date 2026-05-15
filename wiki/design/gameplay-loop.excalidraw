@@ -859,7 +859,7 @@
       "containerId": "57mPYa2hRIns80XerDLJd",
       "originalText": "Wizard (Player)",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "text",
@@ -895,7 +895,7 @@
       "containerId": "6-QsRrKK0qQ6nEo4gv78y",
       "originalText": "Floating Letter Blocks (random, color-coded)",
       "lineHeight": 1.25,
-      "baseline": 43
+      "baseline": 46
     },
     {
       "type": "text",
@@ -931,7 +931,7 @@
       "containerId": "OiVkkYGoSOcI1omULW5Mo",
       "originalText": "Monster (Level Boss)",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "text",
@@ -967,7 +967,7 @@
       "containerId": "WUgsu30fqQpdb5qGrn2fs",
       "originalText": "Aim & Shoot a Block",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "text",
@@ -1003,7 +1003,7 @@
       "containerId": "Zi7mgm34DTESU1IAlT3kA",
       "originalText": "Word Buffer  [ F L A M _ ]",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "text",
@@ -1039,7 +1039,7 @@
       "containerId": "JSZRRStetdw3mTfLz9SNg",
       "originalText": "Press Cast Button",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "text",
@@ -1075,7 +1075,7 @@
       "containerId": "_dQ4VRzpDxKRzxKl_oa0G",
       "originalText": "User can rearrange letters, or double click/tap to destroy",
       "lineHeight": 1.25,
-      "baseline": 68
+      "baseline": 71
     },
     {
       "type": "text",
@@ -1111,7 +1111,7 @@
       "containerId": "Ma0M9EZjDEakVEXzf359L",
       "originalText": "Invalid → Clear Buffer",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "text",
@@ -1147,7 +1147,7 @@
       "containerId": "ZThU978zvgX_yXuAN37uq",
       "originalText": "Word Validator",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "text",
@@ -1183,7 +1183,7 @@
       "containerId": "RhnLvJk8dXe5g6p6hRQPI",
       "originalText": "Dictionary (curated ~10-30k words)",
       "lineHeight": 1.25,
-      "baseline": 43
+      "baseline": 46
     },
     {
       "type": "text",
@@ -1219,7 +1219,7 @@
       "containerId": "_Ye6V-M_DfIspKxlgyu0N",
       "originalText": "Compute Energy (Scrabble values × length multiplier)",
       "lineHeight": 1.25,
-      "baseline": 43
+      "baseline": 46
     },
     {
       "type": "text",
@@ -1255,7 +1255,7 @@
       "containerId": "slKIVJSALM9sjeGHO_Iux",
       "originalText": "Red Reservoir — Damage",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "text",
@@ -1291,7 +1291,7 @@
       "containerId": "t8R68FksvLZZFK6KdxbmM",
       "originalText": "Green Reservoir — Heal / Walls",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "text",
@@ -1327,7 +1327,7 @@
       "containerId": "a5TSQ-nCiAho1-ltNusig",
       "originalText": "Blue Reservoir — Utility (Freeze / Shield)",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "text",
@@ -1363,7 +1363,7 @@
       "containerId": "wiggCyhNaKioP6fEMK8lz",
       "originalText": "Threshold Met?  (T1=10  T2=30  T3=80)",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "text",
@@ -1399,7 +1399,7 @@
       "containerId": "14WQTUwNZ3wbvm9EocEQI",
       "originalText": "Cast Spell (tier of available energy)",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "text",
@@ -1435,7 +1435,7 @@
       "containerId": "EJeW3P7-Lis8dld_zCPn6",
       "originalText": "Effect Applied to Monster",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "text",
@@ -1471,7 +1471,7 @@
       "containerId": "6o5uY9NkJcLWNprsdARD9",
       "originalText": "Block Spawner (constrained-random)",
       "lineHeight": 1.25,
-      "baseline": 43
+      "baseline": 46
     },
     {
       "type": "text",
@@ -1507,7 +1507,7 @@
       "containerId": "--ghZZziVPloQdd0c9Mv-",
       "originalText": "Reroll Blocks (player fallback)",
       "lineHeight": 1.25,
-      "baseline": 18
+      "baseline": 21
     },
     {
       "type": "arrow",
@@ -2657,7 +2657,7 @@
   "appState": {
     "viewBackgroundColor": "#ffffff",
     "scrollX": 911.0992063492057,
-    "scrollY": 160.75396825396808,
+    "scrollY": -5.91269841269866,
     "zoom": {
       "value": 0.6000000000000001
     }
