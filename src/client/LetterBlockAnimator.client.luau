@@ -10,12 +10,17 @@
 -- unison.
 ----------------------------------------------------------------------
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
+
+local NEAR_THRESHOLD_STUDS = 60
+local FAR_THRESHOLD_STUDS  = 150
+local N_BUCKETS             = 4
 
 local BOB_AMPLITUDE_STUDS = 0.5
 local BOB_PERIOD_SECONDS = 1.5
@@ -31,6 +36,7 @@ type State = {
 	basePosition: Vector3,
 	phaseOffset: number,
 	rotation: number,
+	bucket: number,
 }
 
 local trackedBlocks: { [Model]: State } = {}
@@ -42,6 +48,7 @@ local function track(block: Instance)
 		basePosition = block:GetPivot().Position,
 		phaseOffset = (os.clock() * 1.7) % BOB_PERIOD_SECONDS,
 		rotation = 0,
+		bucket = math.random(0, N_BUCKETS - 1),
 	}
 end
 
@@ -57,15 +64,41 @@ end
 CollectionService:GetInstanceAddedSignal(LetterBlocks.TAG):Connect(track)
 CollectionService:GetInstanceRemovedSignal(LetterBlocks.TAG):Connect(untrack)
 
+local frameCount = 0
+
 RunService.Heartbeat:Connect(function(dt)
+	frameCount = (frameCount + 1) % N_BUCKETS
+
+	local character = Players.LocalPlayer.Character
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	local playerPos: Vector3? = if hrp then (hrp :: BasePart).Position else nil
+
 	local now = os.clock()
 	for block, state in pairs(trackedBlocks) do
 		if block.Parent then
 			state.rotation = (state.rotation + ROTATION_RADIANS_PER_SECOND * dt) % TAU
-			local bobOffset = math.sin((now + state.phaseOffset) * BOB_FREQUENCY) * BOB_AMPLITUDE_STUDS
-			local newCFrame = CFrame.new(state.basePosition + Vector3.new(0, bobOffset, 0))
-				* CFrame.Angles(0, state.rotation, 0)
-			block:PivotTo(newCFrame)
+
+			local shouldUpdate: boolean
+			if playerPos then
+				local dist = (state.basePosition - playerPos).Magnitude
+				if dist > FAR_THRESHOLD_STUDS then
+					shouldUpdate = false
+				elseif dist > NEAR_THRESHOLD_STUDS then
+					shouldUpdate = state.bucket == frameCount
+				else
+					shouldUpdate = true
+				end
+			else
+				shouldUpdate = true
+			end
+
+			if shouldUpdate then
+				local bobOffset = math.sin((now + state.phaseOffset) * BOB_FREQUENCY) * BOB_AMPLITUDE_STUDS
+				block:PivotTo(
+					CFrame.new(state.basePosition + Vector3.new(0, bobOffset, 0))
+					* CFrame.Angles(0, state.rotation, 0)
+				)
+			end
 		else
 			trackedBlocks[block] = nil
 		end
