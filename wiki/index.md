@@ -54,3 +54,7 @@ Start here. See [[WIKI]] for conventions and operations.
 ## Decisions
 
 - [[decisions/HybridMeleeHitDetection]] — client detects, server sanity-validates (2026-04-17)
+
+## Ideas Scrapbook
+
+- [[ideas]] — raw ideas and playtest observations; not committed to build
