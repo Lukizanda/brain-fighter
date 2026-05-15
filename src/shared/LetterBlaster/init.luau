@@ -56,6 +56,8 @@ function LetterBlaster:_onActivated()
 	self._lastFired = now
 
 	if self._session.mindFullManager:isMindFull() then
+		local fizzleSound = self._tool:FindFirstChild(LetterBlasterConfig.FIZZLE_SOUND_NAME) :: Sound?
+		if fizzleSound then fizzleSound:Play() end
 		log:info("blocked: mind is full")
 		return
 	end
@@ -108,6 +110,8 @@ function LetterBlaster:_onActivated()
 
 	local appended = self._session.wordBuffer:append(letter, color)
 	if not appended then
+		local fizzleSound = self._tool:FindFirstChild(LetterBlasterConfig.FIZZLE_SOUND_NAME) :: Sound?
+		if fizzleSound then fizzleSound:Play() end
 		log:info(string.format("buffer rejected '%s' (%s)", letter, color))
 		return
 	end
