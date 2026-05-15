@@ -26,7 +26,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/Tests]] — TestRunner + suites for NPC/Melee, MCP-driven harness
 - [[systems/EnergyEconomy]] — Phase 1 pure-Luau module: word → per-color mana (Scrabble values × length tiers, floor-reconciled color splits)
 - [[systems/EnergyReservoirs]] — Phase 1 pure-Luau state container: three per-color energy bars, cap 160, `.changed(color)` BindableEvent signal
-- [[systems/Dictionary]] — Phase 1 pure-Luau word lookup; case-insensitive `isWord`, ~4.1k bootstrap K-12 entries; SCOWL upgrade path documented
+- [[systems/Dictionary]] — Phase 1 pure-Luau word lookup; case-insensitive `isWord`, ~79.5k words (SCOWL 60); 26 per-letter sub-modules background-preloaded at game start
 - [[systems/MemorizeAction]] — Phase 2 action: validate buffered word → split per-color energy into reservoirs + clear buffer; fizzle on empty/invalid (buffer preserved)
 - [[systems/SpellExecutor]] — Phase 2 effect runner; dispatches `damage`/`heal`/`freeze` (real) and `shield`/`wall`/`buff` (stubs) against caster/target
 - [[systems/MindFullManager]] — Phase 2 transition watcher over WordBuffer: rising-edge `mindFull` / falling-edge `mindFreed` signals for the shoot gate + HUD indicator

@@ -24,7 +24,7 @@ Pure Luau modules. Zero Roblox-instance dependencies. All five built in parallel
 
 | Module | API surface | Notes |
 |---|---|---|
-| **Dictionary** | `isWord(s)`, `getStats()` | Hashtable lookup. Bootstrap with ~500–1000 K-12 words; later swap to curated 10–30k SCOWL list. |
+| **Dictionary** | `isWord(s)`, `getStats()` | Hashtable lookup. 26 per-letter sub-modules from SCOWL 60 (~79.5k words); background-preloaded at game start. |
 | **EnergyEconomy** | `letterValue(c)`, `lengthMultiplier(len)`, `computeWordEnergy(word)`, `splitByColor(tiles)` | Scrabble values × length tiers. Sanity-checked against the worked examples in `gameplay-loop.md`. |
 | **SpellRegistry** | `getSpell(color, tier)`, `listAffordableSpells(color, energy)` | Config for 9 spells (R/G/B × T1/T2/T3) — cost, targetingMode, effectSpec. |
 | **WordBuffer** | `new(cap)`, `:append(letter,color)`, `:remove(idx)`, `:reorder(from,to)`, `:clear()`, `:asWord()`, `:colorBag()`, `:isFull()`, `.changed` | 12-slot state + changed signal. |
