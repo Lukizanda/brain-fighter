@@ -1,0 +1,10 @@
+{
+  "className": "Tool",
+  "ignoreUnknownInstances": true,
+  "properties": {
+    "Name": "Spelling Staff",
+    "RequiresHandle": true,
+    "CanBeDropped": false,
+    "ToolTip": "Spelling Staff"
+  }
+}
