@@ -2,8 +2,9 @@
 ----------------------------------------------------------------------
 -- ReservoirBarsGui
 ----------------------------------------------------------------------
--- Mounts the R/G/B energy bars at BottomLeft, wired to the local
--- player's EnergyReservoirs. Updates whenever any reservoir changes.
+-- Mounts the R/G/B energy bars at BottomRight (above SpellMenu),
+-- wired to the local player's EnergyReservoirs. Updates whenever
+-- any reservoir changes.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,7 +19,8 @@ local log = Logger.new("ReservoirBarsGui")
 local session = PlayerSession.get()
 local bars = ReservoirBarsBuilder.build()
 
-HudLayoutManager:register("BottomLeft", bars.gui)
+bars.gui.LayoutOrder = 1
+HudLayoutManager:register("BottomRight", bars.gui)
 
 -- Render initial state
 bars:setEnergy(session.energyReservoirs:snapshot())

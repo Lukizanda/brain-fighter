@@ -34,7 +34,11 @@ layout.Padding = UDim.new(0, 8)
 layout.SortOrder = Enum.SortOrder.LayoutOrder
 layout.Parent = container
 
-local display = BufferDisplayBuilder.build()
+local display = BufferDisplayBuilder.build({
+	onReorder = function(fromIdx: number, toIdx: number)
+		session.wordBuffer:reorder(fromIdx, toIdx)
+	end,
+})
 local btn = MemorizeButtonBuilder.build()
 
 display.gui.LayoutOrder = 1

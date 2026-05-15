@@ -98,11 +98,30 @@ Replace the bare `BlockShootBoot` click handler with a dedicated weapon Tool.
 
 **Deleted:** `src/client/BlockShootBoot.client.luau`
 
+## Phase 4.7 — Letter Slot Reorder
+
+Add drag-to-reorder and tap-to-swap interactions to the BufferDisplay letter tiles. The backend `WordBuffer:reorder(fromIdx, toIdx)` already exists and is unit-tested — this phase is purely UI input wiring.
+
+| Item | Detail |
+|---|---|
+| **Drag-to-reorder** | `DragDetector` (or `InputBegan`/`InputChanged`/`InputEnded`) on each tile cell; ghost tile follows pointer; drop calls `session.wordBuffer:reorder(fromIdx, toIdx)` |
+| **Tap-to-swap** | Tap selects a source tile (highlight); second tap on a different tile swaps the two indices; tapping the same tile or an empty tile cancels selection |
+| **Visual feedback** | Selected tile gets a highlight border; drag ghost is a semi-transparent copy of the tile; both modes snap-animate on drop via `TweenService` |
+| **Input routing** | Works on both mouse and touch; `UserInputService.TouchEnabled` decides gesture threshold |
+| **Scope** | Changes confined to `BufferDisplayBuilder.luau` (adds input handlers to each tile frame) and its boot wiring in `GameplayHudGui.client.luau` |
+
+**Backend:** `src/shared/WordBuffer/init.luau` `:reorder(from, to)` — already implemented, no changes needed.
+
+**Files to modify:**
+- `src/shared/Hud/BufferDisplayBuilder.luau` — main input handler work
+- `src/client/UI/GameplayHudGui.client.luau` (or equivalent boot script) — wire `session.wordBuffer` into tile event callbacks
+
 ## Phase 5 — Polish
 
 Tuning passes (energy curve, spawn density, tier thresholds), audio cues, particle effects, tutorial copy, accessibility passes.
 
 ## Plan changelog
 
+- **2026-05-15**: added Phase 4.7 (letter slot drag/tap-to-swap reorder).
 - **2026-05-15**: added Phase 4.5 (bug sprint) and Phase 4.6 (LetterBlaster Tool) between Phase 4 and Phase 5.
 - **2026-05-14**: initial plan written; 18 trackers created; Phase 1 spawn batch (Dictionary, EnergyEconomy, SpellRegistry) kicked off.

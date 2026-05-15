@@ -48,6 +48,16 @@ function HudLayoutManager:_init()
 		region.ZIndex = config.ZIndex
 		region.Parent = screenGui
 
+		if (config :: any).stackVertical then
+			local layout = Instance.new("UIListLayout")
+			layout.FillDirection = Enum.FillDirection.Vertical
+			layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+			layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+			layout.SortOrder = Enum.SortOrder.LayoutOrder
+			layout.Padding = UDim.new(0, 8)
+			layout.Parent = region
+		end
+
 		self._regions[regionName] = region
 	end
 

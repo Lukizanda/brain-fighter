@@ -83,10 +83,12 @@ function LetterBlaster:_onActivated()
 	local letter, color = BlockShoot.readBlock(block)
 	if not letter or not color then return end
 
-	-- Laser blast from Handle toward the block.
+	-- Laser blast from Muzzle attachment (crook) toward the block.
 	local handle = self._tool:FindFirstChild("Handle") :: BasePart?
 	if handle then
-		laserBeamEffect(handle.Position, block:GetPivot().Position)
+		local muzzle = handle:FindFirstChild("Muzzle") :: Attachment?
+		local origin = if muzzle then muzzle.WorldPosition else handle.Position
+		laserBeamEffect(origin, block:GetPivot().Position)
 	end
 
 	local appended = self._session.wordBuffer:append(letter, color)

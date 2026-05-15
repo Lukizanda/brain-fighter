@@ -29,17 +29,6 @@
 - For TPS shooter characters: lock the whole body to camera yaw via AlignOrientation, use Motor6D manipulation (Waist/Neck/Shoulders) for upper body fine-tracking.
 - **Don't hardcode Motor6D parent paths** — R15 rigs vary. Search by Motor6D name across `character:GetDescendants()`.
 
-## Animation System
-- Animation priority hierarchy: Core (lowest) < Idle < Movement < Action (highest).
-- Locomotion animations go in `ReplicatedStorage.Shared.LocomotionAnimations` as Animation instances (not synced by Rojo — create via MCP).
-- Name animations to match MovementState: `Forward`, `Backward`, `StrafeLeft`, `StrafeRight`.
-- Set `track.Priority = Enum.AnimationPriority.Movement` and `track.Looped = true` for locomotion.
-
-## Render Step Priorities
-- `RenderPriority.Character.Value + 1` for locomotion (runs after Humanoid movement processing).
-- `RenderPriority.Camera.Value + 1` for camera (runs after Roblox's default camera step).
-- Higher priority number = runs later = gets the final say.
-
 ## Debugging Pattern
 1. Use `Logger` module from `ReplicatedStorage.Shared.Core.Logger` — never raw `print`/`warn`.
    ```lua

@@ -20,6 +20,7 @@ local HudConstants = {
 			Size = UDim2.new(0, 300, 0, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
 			ZIndex = 1,
+			stackVertical = true, -- stacks children with UIListLayout (BottomRight holds mana bars + spell menu)
 		},
 		BottomCenter = {
 			Position = UDim2.new(0.5, 0, 1, -20),

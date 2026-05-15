@@ -7,8 +7,8 @@
 -- wiki/design/gameplay-loop.md step 5). Validates the buffered word
 -- against the dictionary; on success transmutes its value-weighted
 -- per-color energy into the reservoirs and clears the buffer. On
--- failure the buffer is preserved so the player can correct typos
--- without retyping.
+-- failure (invalid word) the buffer is also cleared — letters are
+-- consumed regardless so the player must re-collect and try again.
 --
 -- This module is the seam between four Phase 1 modules — it does no
 -- state of its own:
@@ -48,7 +48,7 @@ local MemorizeAction = {}
 -- On `buffer:size() == 0`        → `{ ok = false, reason = "empty" }`,
 --                                    no state mutation.
 -- On `not Dictionary.isWord(...)` → `{ ok = false, reason = "invalid" }`,
---                                    buffer preserved for typo correction.
+--                                    buffer cleared (letters destroyed).
 -- Otherwise: split the buffered tiles into per-color energy via
 -- EnergyEconomy.splitByColor (floor-reconciled so the per-color sums
 -- equal the whole-word energy), add each (color, amount) to the
@@ -73,6 +73,7 @@ function MemorizeAction.tryMemorize(
 	local word = buffer:asWord()
 	if not Dictionary.isWord(word) then
 		log:info("memorize fizzle — invalid word", word)
+		buffer:clear()
 		return { ok = false, reason = "invalid" }
 	end
 
