@@ -46,7 +46,7 @@ local function track(block: Instance)
 	if trackedBlocks[block] then return end
 	trackedBlocks[block] = {
 		basePosition = block:GetPivot().Position,
-		phaseOffset = (os.clock() * 1.7) % BOB_PERIOD_SECONDS,
+		phaseOffset = math.random() * BOB_PERIOD_SECONDS,
 		rotation = 0,
 		bucket = math.random(0, N_BUCKETS - 1),
 	}
