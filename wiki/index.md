@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-05-14
+updated: 2026-05-15
 ---
 
 # Wiki Index
@@ -33,8 +33,9 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/CastAction]] — Phase 2 cast pipeline: `tapReservoir` (highest affordable) / `castSpecific` (chosen tier); drains reservoir, refunds on executor failure
 - [[systems/LetterBlock]] — Phase 3 entity: floating block prefab with `Block.Letter` + `Block.Color` attributes; chunky 4×4×4 cube with 6-face SurfaceGui letter glyph + colored ParticleEmitter; CollectionService tag drives the client bob/rotation animator (6°/s, sinusoidal bob)
 - [[systems/BlockSpawner]] — Phase 3 server-side populator: Scrabble-weighted letter picks, configurable color weights, auto-refill via CollectionService removed signal; maintains ~24 blocks in a 40x8x40 arena box
-- [[systems/BlockShoot]] — Phase 3 input handler: left-click raycast consumes a LetterBlock, appends `(letter, color)` to WordBuffer; MindFull gate blocks input at 12/12; server validates + destroys block
+- [[systems/BlockShoot]] — shared helpers + server handler for block consumption; client input now handled by LetterBlaster (Phase 4.6)
 - [[systems/BossAdapter]] — Phase 3 MVP Boss target: static Humanoid-bearing Model that SpellExecutor can damage; `defeated` signal for level completion; auto-respawn via BossService
+- [[systems/LetterBlaster]] — Phase 4.6 weapon Tool: Tool.Activated → cooldown gate → raycast → consume; reticle via ReticleBuilder; FireSound/HitSound; replaces BlockShootBoot
 
 ## Concepts (recurring patterns)
 

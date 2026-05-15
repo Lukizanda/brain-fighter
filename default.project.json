@@ -21,6 +21,10 @@
       }
     }, 
 
+    "StarterPack": {
+      "$path": "src/StarterPack"
+    },
+
     "StarterPlayer": {
       "StarterPlayerScripts": {
         "Client": {

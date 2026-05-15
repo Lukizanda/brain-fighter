@@ -1,20 +1,21 @@
 ---
 type: system
-description: Client input handler — left-click raycast consumes a LetterBlock and appends (letter, color) to the player's WordBuffer. Server validates and destroys the block.
-updated: 2026-05-14
+description: Shared helpers and server handler for block consumption. Client input is handled by LetterBlaster (Phase 4.6) — see [[systems/LetterBlaster]].
+updated: 2026-05-15
 ---
 
 # BlockShoot
 
-The input handler that turns "player clicked a floating letter block" into a `(letter, color)` tile in the player's [[systems/WordBuffer]]. Client-authoritative for append (the player's own buffer is local state); server-authoritative for block destruction (shared resource).
+Shared library and server handler for the letter-block consume pipeline. The client-side input wiring (Phase 3: `BlockShootBoot`) was replaced in Phase 4.6 by the [[systems/LetterBlaster]] Tool — see that page for the current input flow. This page covers the shared helpers and server handler, which are unchanged.
 
 ## Files
 
 - `src/shared/BlockShoot/init.luau` — shared helpers: `findLetterBlock` (ancestor traversal), `readBlock` (attribute reader), `MAX_RAYCAST_DISTANCE` constant.
 - `src/shared/BlockShoot/Remotes/ConsumeBlock.model.json` — RemoteEvent for client→server block destruction.
-- `src/client/BlockShootBoot.client.luau` — LocalScript: wires `UserInputService.InputBegan` → raycast → consume → fire remote.
 - `src/server/BlockShoot/BlockShootService.server.luau` — server handler: validates block is tagged, destroys it (triggers BlockSpawner auto-refill).
 - `src/client/PlayerSession.luau` — ModuleScript: lazy-creates and caches the player's WordBuffer + MindFullManager + EnergyReservoirs.
+
+> **Phase 4.6:** `src/client/BlockShootBoot.client.luau` was deleted. The `ConsumeBlock` remote is now fired by [[systems/LetterBlaster]].
 
 ## Flow
 

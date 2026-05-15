@@ -48,7 +48,7 @@ local GameConfig = {
 	----------------------------------------------------------------------
 	-- Dev-only helpers (leave off in shipped builds)
 	----------------------------------------------------------------------
-	DEV_AUTO_EQUIP_TOOL = "", -- name of a Tool in StarterPack to auto-equip on spawn; "" or nil to disable
+	DEV_AUTO_EQUIP_TOOL = "LetterBlaster", -- name of a Tool in StarterPack to auto-equip on spawn; "" or nil to disable
 	DEV_SMOKE_KILLFEED = false, -- when true, loop-fires 3 synthetic KillFeed events (normal kill / self-elim / env kill) so the UI can be verified without real combat
 	DEV_BOT_COUNT = 0, -- number of stationary enemy-team bots to spawn for solo TDM tuning (0 disables); bots respawn via DeathHandler and credit kills via ScoreTracker.recordBotKill
 	DEV_SIMULATE_LOADOUT_CYCLING = false, -- when true, server-side script spawns 2 tools in the player's Backpack, cycles them via humanoid:EquipTool, and writes the result to workspace.LoadoutCycleSimResult — used to repro / regression-test the LoadoutService re-entry guard without relying on real pedestal pickups (which can't be MCP-driven)
