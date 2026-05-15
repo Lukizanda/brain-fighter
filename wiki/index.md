@@ -36,6 +36,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/BlockShoot]] — shared helpers + server handler for block consumption; client input now handled by LetterBlaster (Phase 4.6)
 - [[systems/BossAdapter]] — Phase 3 MVP Boss target: static Humanoid-bearing Model that SpellExecutor can damage; `defeated` signal for level completion; auto-respawn via BossService
 - [[systems/LetterBlaster]] — Phase 4.6 weapon Tool: Tool.Activated → cooldown gate → raycast → consume; reticle via ReticleBuilder; FireSound/HitSound; replaces BlockShootBoot
+- [[systems/AudioSFX]] — Sound effect inventory, two-backend overview (Sound vs AudioPlayer), wiring patterns, placeholder locations, gap priority list
 - [[systems/Tutorial]] — Phase 5 guided first-play sequence: shoot → buffer → memorize → cast → boss hit; step machine, overlay builder, skip flag (planning)
 - [[systems/VisualEffects]] — Phase 5 VFX plan: world spell cast/impact particles, UI feedback tweens, per-color (R/G/B) theming; VfxService + VfxConfig architecture (planning)
 
