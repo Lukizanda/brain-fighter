@@ -19,7 +19,7 @@ local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
 local log = Logger.new("Dictionary.tests")
 
-local MIN_WORD_COUNT = 500
+local MIN_WORD_COUNT = 70000
 
 local function expect(label: string, actual: any, expected: any)
 	if actual ~= expected then
@@ -43,6 +43,10 @@ expect("isWord('FLAME')", Dictionary.isWord("FLAME"), true)
 expect("isWord('LIGHTNING')", Dictionary.isWord("LIGHTNING"), true)
 expect("isWord('DRAGON')", Dictionary.isWord("DRAGON"), true)
 expect("isWord('ROCK')", Dictionary.isWord("ROCK"), true)
+
+-- isWord — gap-regression words (previously missing from bootstrap list)
+expect("isWord('tout')", Dictionary.isWord("tout"), true)
+expect("isWord('colour')", Dictionary.isWord("colour"), true)
 
 -- isWord — rejects non-words and bad input
 expect("isWord('XYZQQ')", Dictionary.isWord("XYZQQ"), false)

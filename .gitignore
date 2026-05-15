@@ -18,6 +18,11 @@ sourcemap.json
 # Python bytecode cache from tools/
 __pycache__/
 
+# SCOWL word list source files and generated offensive blocklist — download once,
+# not committed. Re-run tools/generate_wordlist.py after cloning.
+tools/scowl/
+tools/wordlists/
+
 # Obsidian vault — per-machine view state. App / appearance / core-plugins
 # are versioned for plugin + theme parity across machines; graph.json,
 # workspace pane layout, and search cache are user-local and drift on

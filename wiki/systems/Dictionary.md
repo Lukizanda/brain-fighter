@@ -1,7 +1,7 @@
 ---
 type: system
-description: Word lookup module that validates the buffered word during Memorize. O(1) hashtable, ~4.1k K-12 bootstrap entries; planned upgrade path to a curated 10–30k SCOWL list.
-updated: 2026-05-14
+description: Word lookup module that validates the buffered word during Memorize. O(1) hashtable, ~79.5k words from SCOWL size 60; 26 per-letter sub-modules background-preloaded at game start.
+updated: 2026-05-15
 ---
 
 # Dictionary
@@ -12,9 +12,10 @@ Phase 1 foundation module ([[design/build-plan]]) — sibling to [[systems/Energ
 
 ## Files
 
-- `src/shared/Dictionary/init.luau` — public API (isWord, getStats); requires WordList; logs `Dictionary loaded N words` on require via `Logger.new("Dictionary")`
-- `src/shared/Dictionary/WordList.luau` — lowercase `{[word]=true}` hashtable; **~4.1k entries** at first commit (verified via playtest 2026-05-14)
+- `src/shared/Dictionary/init.luau` — public API (isWord, getStats); background-preloads 26 per-letter modules via `task.defer` at game start; logs `Dictionary preload complete — N words` when done
+- `src/shared/Dictionary/words/{a..z}.luau` — 26 auto-generated ModuleScripts; each returns a packed newline-delimited string of words starting with that letter (SCOWL size 60)
 - `src/shared/Dictionary/__tests.luau` — smoke tests; runs assertions on require, logs `[TEST PASS]` line on success
+- `tools/generate_wordlist.py` — offline parser: reads SCOWL source files, filters, writes the 26 `.luau` files
 
 ## API
 
@@ -22,40 +23,89 @@ Phase 1 foundation module ([[design/build-plan]]) — sibling to [[systems/Energ
 local Dictionary = require(ReplicatedStorage.Shared.Dictionary)
 
 Dictionary.isWord(s: string) -> boolean
--- Case-insensitive lookup. Lowercases input, checks hashtable.
+-- Case-insensitive lookup. Lowercases input, checks per-letter hashtable.
 -- Returns false for non-string input or empty string.
 
 Dictionary.getStats() -> { wordCount: number, byLength: { [number]: number } }
 -- Cached on first call. byLength[n] = number of words of length n.
+-- Forces synchronous load of any letters not yet preloaded.
 ```
 
-## Bootstrap scope
+## Architecture
 
-The first-prototype word list was hand-curated covering K-12 vocabulary the gameplay loop assumes. Composition (length histogram from `getStats().byLength` at first commit, total ≈ 4159):
+### Background preload
 
-| Length | Count | What it contains |
-|---|---|---|
-| 2 | 25 | Most common everyday words (`am`, `at`, `be`, `to`, `it`, …) — deliberately not the Scrabble-only short words (no `qi`, `za`, `aa`). |
-| 3 | 209 | Animals, body parts, actions, simple objects, weather, descriptors, numbers, food. |
-| 4 | 527 | Everyday words with a step up — animals, household, common verbs, fantasy starters (`fire`, `cast`, `fang`, `rune`). |
-| 5 | 525 | Nature, fantasy/spell vocab (`flame`, `frost`, `storm`), common verbs and adjectives, common nouns. |
-| 6 | 568 | Same as 5, denser fantasy + verbs (`dragon`, `wizard`, `shield`, `summon`). |
-| 7 | 487 | T2 payoff range; fantasy + literary + general K-12 (`lightning`, `mystery`). |
-| 8 | 678 | T2/T3 payoff; fantasy + general (`fireball`, `enchanter`, `mountain`). |
-| 9 | 613 | T3 payoff; fantasy + general (`character`, `archangel`). |
-| 10 | 328 | T3-payoff range. |
-| 11 | 133 | T3 payoff (incl. pinned `earthquakes`). |
-| 12 | 39 | T3 payoff (incl. pinned `characterize`). |
-| 13–14 | 27 | Showcase / occasional payoff. |
+At require time, `init.luau` fires a `task.defer` that loads all 26 letter sub-modules one at a time with a `task.wait()` between each to spread the work across frames. Completes in < 1 second. By the time a player can type and submit a word via MemorizeAction (several seconds of UI interaction), all 26 buckets are cached.
 
-The bootstrap target in [[design/build-plan]] was 500–1000 entries; the first commit ran ~4× over because organic K-12 categorization across 14 length bins compounded faster than expected. Larger-than-target is functionally fine (Memorize fails closed only on explicitly missing words; bigger list = fewer false negatives), but the curation discipline weakens at this size — some less-common entries likely slipped in. The trade-off is logged here so the SCOWL replacement (below) can reset both the size budget and the content quality bar at once.
+`ensureLoaded(letter)` is called synchronously inside `isWord` as a safety fallback. In normal play this is always a no-op (the preload has already finished). If `isWord` is somehow called before preload reaches that letter, it loads synchronously — acceptable for the first call of a given letter, never repeated.
 
-Curation rules in effect:
+### Per-letter modules
 
-- Lowercase only — `Dictionary.isWord` lowercases input before lookup.
-- No obscure / archaic / offensive entries.
-- No 2-letter Scrabble-only words.
-- Common K-12 fantasy / spell vocabulary is over-represented relative to a general dictionary so the spelling layer feels themed.
+Each `words/{letter}.luau` returns a Luau long-string literal with words newline-delimited:
+```lua
+return [[
+abandon
+ability
+...
+azure
+]]
+```
+
+Parsed at load time with `packed:gmatch("[^\n]+")` into a `{[string]: boolean}` hashtable. Long-string format avoids escape-sequence overhead — measurably faster to parse than equivalent individual string literals.
+
+### Offline parser
+
+`tools/generate_wordlist.py` is not run at runtime. One-time setup per developer machine:
+
+```bash
+# Download SCOWL (one-time)
+curl -L "https://sourceforge.net/projects/wordlist/files/SCOWL/2020.12.07/scowl-2020.12.07.tar.gz/download" -o tools/scowl/scowl.tar.gz
+tar -xzf tools/scowl/scowl.tar.gz -C tools/scowl --strip-components=1
+
+# Re-generate word files
+uv run tools/generate_wordlist.py          # default: size 60 ≈ 79.5k words
+uv run tools/generate_wordlist.py --size 50  # smaller list if needed
+```
+
+`tools/scowl/` and `tools/wordlists/` are gitignored. Only the generated `src/shared/Dictionary/words/*.luau` files are committed.
+
+**Locale coverage**: English + American + British + British-z spellings (e.g. both `color` and `colour`, both `organize` and `organise`).  
+**Filters applied**: contractions, proper nouns, words ≤ 2 letters (except allowlist: `am an as at be by do go he if in is it me my no of on or ok so to up us we`), offensive word blocklist (`tools/wordlists/offensive.txt`), non-alpha characters.
+
+To resize: change `--size` and commit the regenerated `words/*.luau` files. No Luau code changes needed.
+
+## Word count (SCOWL size 60, 2026-05-15)
+
+Total: **79,504 words**
+
+| Letter | Count |
+|---|---|
+| a | 4,412 |
+| b | 4,654 |
+| c | 7,725 |
+| d | 5,092 |
+| e | 3,197 |
+| f | 3,398 |
+| g | 2,555 |
+| h | 2,857 |
+| i | 3,239 |
+| j | 685 |
+| k | 561 |
+| l | 2,354 |
+| m | 4,155 |
+| n | 1,665 |
+| o | 2,061 |
+| p | 6,371 |
+| q | 381 |
+| r | 4,956 |
+| s | 9,193 |
+| t | 4,050 |
+| u | 2,234 |
+| v | 1,198 |
+| w | 2,130 |
+| x | 18 |
+| y | 229 |
+| z | 134 |
 
 ## Worked-example coverage
 
@@ -67,17 +117,17 @@ Every word from the [[design/gameplay-loop|gameplay-loop]] worked-examples table
 | `fireball`, `lightning` | 8, 9 | T2 reach via length multiplier |
 | `earthquakes`, `characterize` | 11, 12 | T3 single-cast payoff |
 
-If any of those words drops out of the list, the design's worked examples stop matching runtime — flag it.
-
 ## Verification
 
 `__tests.luau` runs assertions on require:
 
 - `Dictionary.isWord("FIRE" | "fire" | "Fire")` → `true` (case-insensitive)
 - `Dictionary.isWord("FLAME" | "LIGHTNING" | "DRAGON" | "ROCK")` → `true`
+- `Dictionary.isWord("tout")` → `true` (gap-regression pin, 2026-05-15)
+- `Dictionary.isWord("colour")` → `true` (British spelling pin, 2026-05-15)
 - `Dictionary.isWord("XYZQQ")` → `false`
 - `Dictionary.isWord("")` → `false`
-- `Dictionary.getStats().wordCount > 500`
+- `Dictionary.getStats().wordCount > 70000`
 - `Dictionary.getStats().byLength` is a table
 
 Run via MCP `execute_luau` during a playtest:
@@ -88,17 +138,11 @@ require(game.ReplicatedStorage.Shared.Dictionary.__tests)
 
 A passing run logs `[Dictionary.tests] [TEST PASS] Dictionary smoke tests — N words loaded`.
 
-## Upgrade path: SCOWL
+## Gap log
 
-The bootstrap list is intentionally small. The intended replacement is a curated subset of the [SCOWL](http://wordlist.aspell.net/) project — likely SCOWL size 35–50 (covers ~10–30k common English words). Steps:
-
-1. Generate a candidate list from SCOWL with the chosen size threshold.
-2. Filter: drop words ≤ 2 letters except a small allowlist; drop archaic/obscure; drop offensive (use a content filter list); optionally drop proper nouns.
-3. Lowercase, dedupe, sort.
-4. Write the result to `WordList.luau` with the same `{[word]=true}` shape.
-5. The Dictionary API does not change — only the data file.
-
-Tiering by level (e.g. easier vocabulary at lower levels) is a future direction noted in [[design/gameplay-loop]] under the Dictionary decision and is **not** baked into the API yet.
+| Date | Gap word | Root cause | Resolution |
+|---|---|---|---|
+| 2026-05-15 | `tout` | ~90 missing common words in 4.1k bootstrap list | Replaced bootstrap list with SCOWL 60 (79.5k words) |
 
 ## Cross-references
 
