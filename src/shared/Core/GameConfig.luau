@@ -60,8 +60,16 @@ local GameConfig = {
 	-- parts are summed; total count = density × total_volume / 1000.
 	-- Default 2 ≈ 26 blocks in the 40×8×40 reference arena.
 	----------------------------------------------------------------------
-	BLOCK_SPAWN_DENSITY = 0.1,
+	BLOCK_SPAWN_DENSITY = 0.4,
 	BLOCK_MIN_SPACING = 4,            -- minimum studs between block centers; 0 disables
+
+	----------------------------------------------------------------------
+	-- Default camera behavior (applies when TPS_CHARACTER_ENABLED = false)
+	----------------------------------------------------------------------
+	-- When false: right-click toggles between mouse-locked and free-cursor
+	--   (Roblox CameraToggle mode). When true: right-click held to rotate only
+	--   (Classic mode). Has no effect when TPS_CHARACTER_ENABLED = true.
+	CAMERA_TOGGLE_DISABLED = true,
 
 	----------------------------------------------------------------------
 	-- Locomotion

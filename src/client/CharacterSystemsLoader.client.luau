@@ -1,4 +1,5 @@
 local StarterGui = game:GetService("StarterGui")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
@@ -22,5 +23,13 @@ if GameConfig.TPS_CHARACTER_ENABLED then
 	LocomotionManager.initialize(CameraManager.getCameraController())
 	log:info("Initialization complete (TPS character stack active)")
 else
+	-- Apply default-camera behavior from GameConfig
+	if GameConfig.CAMERA_TOGGLE_DISABLED then
+		Players.LocalPlayer.DevComputerCameraMovementMode = Enum.DevComputerCameraMovementMode.Classic
+		log:info("CameraToggle disabled — right-click hold-to-rotate (Classic) mode active")
+	else
+		Players.LocalPlayer.DevComputerCameraMovementMode = Enum.DevComputerCameraMovementMode.CameraToggle
+		log:info("CameraToggle enabled — right-click toggles mouse lock")
+	end
 	log:info("TPS character disabled — default Roblox PlayerModule (free-look camera + AutoRotate character) in effect")
 end
