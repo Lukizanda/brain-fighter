@@ -38,6 +38,9 @@ local display = BufferDisplayBuilder.build({
 	onReorder = function(fromIdx: number, toIdx: number)
 		session.wordBuffer:reorder(fromIdx, toIdx)
 	end,
+	onRemove = function(idx: number)
+		session.wordBuffer:remove(idx)
+	end,
 })
 local btn = MemorizeButtonBuilder.build()
 

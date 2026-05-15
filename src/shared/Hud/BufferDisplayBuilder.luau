@@ -41,6 +41,7 @@ export type Tile = { letter: string, color: string }
 
 export type BuildOptions = {
 	onReorder: ((fromIdx: number, toIdx: number) -> ())?,
+	onRemove: ((idx: number) -> ())?,
 }
 
 export type Handle = {
@@ -80,6 +81,7 @@ end
 
 function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 	local onReorder = options and options.onReorder or nil
+	local onRemove = options and options.onRemove or nil
 
 	local cap = Defaults.CAP
 	local cellWidth = Defaults.TILE_SIZE
@@ -329,8 +331,12 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 				setSelectionHighlight(tappedIdx)
 				log:info(string.format("Selected cell %d", tappedIdx))
 			elseif selectedIdx == tappedIdx then
+				local removeIdx = selectedIdx :: number
 				cancelAll()
-				log:info("Cancelled selection")
+				if onRemove then
+					onRemove(removeIdx)
+					log:info(string.format("Tap destroy cell %d", removeIdx))
+				end
 			else
 				local fromSel = selectedIdx :: number
 				cancelAll()
