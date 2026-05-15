@@ -66,17 +66,23 @@ local ALPHABET = {
 }
 
 local FULL_REVOLUTION_RADIANS = math.pi * 2
+local MAX_SPAWN_ATTEMPTS = 20
 
 ----------------------------------------------------------------------
 -- Types
 ----------------------------------------------------------------------
 
+export type BoxDef = { boxMin: Vector3, boxMax: Vector3 }
+
 export type Opts = {
 	targetCount: number?,
+	density: number?,
+	boxes: { BoxDef }?,
 	boxMin: Vector3?,
 	boxMax: Vector3?,
 	colorWeights: { red: number?, green: number?, blue: number? }?,
 	parent: Instance?,
+	minSpacing: number?,  -- minimum studs between block centers; 0 disables
 }
 
 ----------------------------------------------------------------------
@@ -86,8 +92,7 @@ export type Opts = {
 local running = false
 local resolvedOpts = {
 	targetCount = DEFAULT_TARGET_COUNT,
-	boxMin = DEFAULT_BOX_MIN,
-	boxMax = DEFAULT_BOX_MAX,
+	minSpacing = 0,
 	colorWeights = {
 		red = DEFAULT_COLOR_WEIGHT,
 		green = DEFAULT_COLOR_WEIGHT,
@@ -95,6 +100,8 @@ local resolvedOpts = {
 	},
 	parent = workspace :: Instance,
 }
+
+local resolvedBoxes: { BoxDef } = { { boxMin = DEFAULT_BOX_MIN, boxMax = DEFAULT_BOX_MAX } }
 
 -- Set keyed by Model: lookup is O(1) so the removed-signal handler
 -- can tell "one of ours?" in constant time. getActiveBlocks()
@@ -111,6 +118,12 @@ type LetterCumEntry = { letter: string, threshold: number }
 local letterCumulative: { LetterCumEntry } = {}
 local letterTotal = 0
 
+-- Cumulative box-volume table — rebuilt in start(); volume-weighted
+-- so each cubic stud has equal probability of spawning a block.
+type BoxCumEntry = { box: BoxDef, threshold: number }
+local boxCumulative: { BoxCumEntry } = {}
+local boxVolumeTotal = 0
+
 ----------------------------------------------------------------------
 -- Pickers
 ----------------------------------------------------------------------
@@ -123,6 +136,19 @@ local function buildLetterTable()
 		if weight > 0 then
 			letterTotal += weight
 			table.insert(letterCumulative, { letter = letter, threshold = letterTotal })
+		end
+	end
+end
+
+local function buildBoxTable()
+	boxCumulative = {}
+	boxVolumeTotal = 0
+	for _, box in ipairs(resolvedBoxes) do
+		local size = box.boxMax - box.boxMin
+		local vol = math.abs(size.X * size.Y * size.Z)
+		if vol > 0 then
+			boxVolumeTotal += vol
+			table.insert(boxCumulative, { box = box, threshold = boxVolumeTotal })
 		end
 	end
 end
@@ -161,7 +187,17 @@ local function pickColor(): string
 end
 
 local function pickPosition(): Vector3
-	local minV, maxV = resolvedOpts.boxMin, resolvedOpts.boxMax
+	-- Volume-weighted box selection: roll against cumulative volume thresholds
+	-- so each cubic stud across all boxes has equal spawn probability.
+	local roll = math.random() * boxVolumeTotal
+	local chosen = boxCumulative[#boxCumulative].box
+	for _, entry in ipairs(boxCumulative) do
+		if roll <= entry.threshold then
+			chosen = entry.box
+			break
+		end
+	end
+	local minV, maxV = chosen.boxMin, chosen.boxMax
 	return Vector3.new(
 		minV.X + math.random() * (maxV.X - minV.X),
 		minV.Y + math.random() * (maxV.Y - minV.Y),
@@ -183,7 +219,24 @@ end
 ----------------------------------------------------------------------
 
 local function spawnOne(): Model
-	local block = LetterBlocks.spawn(pickLetter(), pickColor(), pickCFrame(), resolvedOpts.parent)
+	local cf = pickCFrame()
+	local minDist = resolvedOpts.minSpacing
+	if minDist > 0 then
+		for _ = 1, MAX_SPAWN_ATTEMPTS do
+			local clear = true
+			for block in active do
+				if (cf.Position - block:GetPivot().Position).Magnitude < minDist then
+					clear = false
+					break
+				end
+			end
+			if clear then
+				break
+			end
+			cf = pickCFrame()
+		end
+	end
+	local block = LetterBlocks.spawn(pickLetter(), pickColor(), cf, resolvedOpts.parent)
 	active[block] = true
 	activeCount += 1
 	return block
@@ -210,9 +263,30 @@ end
 
 local function applyOpts(userOpts: Opts?)
 	local u = userOpts or {}
-	resolvedOpts.targetCount = u.targetCount or DEFAULT_TARGET_COUNT
-	resolvedOpts.boxMin = u.boxMin or DEFAULT_BOX_MIN
-	resolvedOpts.boxMax = u.boxMax or DEFAULT_BOX_MAX
+
+	-- Resolve boxes: prefer explicit array, fall back to single-box shorthand.
+	if u.boxes and #u.boxes > 0 then
+		resolvedBoxes = u.boxes
+	else
+		resolvedBoxes = { {
+			boxMin = u.boxMin or DEFAULT_BOX_MIN,
+			boxMax = u.boxMax or DEFAULT_BOX_MAX,
+		} }
+	end
+
+	-- Resolve target count: explicit > density-computed > hardcoded default.
+	if u.targetCount then
+		resolvedOpts.targetCount = u.targetCount
+	elseif u.density and u.density > 0 then
+		local totalVol = 0
+		for _, box in ipairs(resolvedBoxes) do
+			local size = box.boxMax - box.boxMin
+			totalVol += math.abs(size.X * size.Y * size.Z)
+		end
+		resolvedOpts.targetCount = math.max(1, math.round(u.density * totalVol / 1000))
+	else
+		resolvedOpts.targetCount = DEFAULT_TARGET_COUNT
+	end
 
 	-- Partial colorWeights tables fill unset keys from the default.
 	-- Using ~= nil (not `or`) so an explicit zero is honoured —
@@ -225,6 +299,7 @@ local function applyOpts(userOpts: Opts?)
 	}
 
 	resolvedOpts.parent = u.parent or workspace
+	resolvedOpts.minSpacing = u.minSpacing or 0
 end
 
 ----------------------------------------------------------------------
@@ -246,6 +321,7 @@ function BlockSpawner.start(userOpts: Opts?)
 
 	applyOpts(userOpts)
 	buildLetterTable()
+	buildBoxTable()
 
 	-- Hook consumption BEFORE the initial fill so any destroys
 	-- triggered mid-fill (rare, but a rapid test could do it) still

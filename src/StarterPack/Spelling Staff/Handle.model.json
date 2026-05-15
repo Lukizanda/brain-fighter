@@ -1,3 +1,7 @@
 {
-  "className": "MeshPart"
+  "className": "MeshPart",
+  "properties": {
+    "MeshId": { "ContentId": "rbxassetid://114722779815277" },
+    "Size": { "Vector3": [0.893013, 5.7549, 0.467625] }
+  }
 }

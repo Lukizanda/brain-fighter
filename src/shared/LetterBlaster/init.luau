@@ -50,16 +50,21 @@ end
 function LetterBlaster:_onActivated()
 	local now = os.clock()
 	if now - self._lastFired < LetterBlasterConfig.COOLDOWN then
+		log:infoThrottled("cooldown", 1, "on cooldown — skipping")
 		return
 	end
 	self._lastFired = now
 
 	if self._session.mindFullManager:isMindFull() then
+		log:info("blocked: mind is full")
 		return
 	end
 
 	local camera = workspace.CurrentCamera
-	if not camera then return end
+	if not camera then
+		log:warn("no CurrentCamera")
+		return
+	end
 
 	local character = Players.LocalPlayer.Character
 	local params = RaycastParams.new()
@@ -75,13 +80,23 @@ function LetterBlaster:_onActivated()
 	local fireSound = self._tool:FindFirstChild(LetterBlasterConfig.FIRE_SOUND_NAME) :: Sound?
 	if fireSound then fireSound:Play() end
 
-	if not result then return end
+	if not result then
+		log:info("raycast miss — nothing in crosshair within range")
+		return
+	end
+	log:info(string.format("hit '%s' (%.1f studs)", result.Instance:GetFullName(), result.Distance))
 
 	local block = BlockShoot.findLetterBlock(result.Instance)
-	if not block then return end
+	if not block then
+		log:info(string.format("'%s' has no LetterBlock ancestor", result.Instance.Name))
+		return
+	end
 
 	local letter, color = BlockShoot.readBlock(block)
-	if not letter or not color then return end
+	if not letter or not color then
+		log:warn(string.format("block '%s' missing Letter/Color attrs", block.Name))
+		return
+	end
 
 	-- Laser blast from Muzzle attachment (crook) toward the block.
 	local handle = self._tool:FindFirstChild("Handle") :: BasePart?
@@ -92,7 +107,10 @@ function LetterBlaster:_onActivated()
 	end
 
 	local appended = self._session.wordBuffer:append(letter, color)
-	if not appended then return end
+	if not appended then
+		log:info(string.format("buffer rejected '%s' (%s)", letter, color))
+		return
+	end
 
 	consumeRemote:FireServer(block)
 	log:info(string.format("consumed %s (%s)", letter, color))

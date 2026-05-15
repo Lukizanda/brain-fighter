@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server-side letter-block populator — maintains a target count of floating LetterBlocks in the arena with Scrabble-weighted letter distribution and configurable color weights.
-updated: 2026-05-14
+updated: 2026-05-16
 ---
 
 # BlockSpawner
@@ -28,18 +28,35 @@ Server-side populator that keeps a target count of [[systems/LetterBlock|LetterB
 ### Opts type
 
 ```luau
+type BoxDef = { boxMin: Vector3, boxMax: Vector3 }
+
 type Opts = {
-    targetCount: number?,        -- default 24
-    boxMin: Vector3?,            -- default (-20, 8, -20)
-    boxMax: Vector3?,            -- default (20, 16, 20)
+    -- Target count: explicit > density-computed > hardcoded default (24)
+    targetCount: number?,        -- explicit override; ignores density
+    density: number?,            -- blocks per 1000 cubic studs (see GameConfig.BLOCK_SPAWN_DENSITY)
+
+    -- Spawn volumes: prefer boxes array; fall back to single-box shorthand
+    boxes: { BoxDef }?,          -- multiple regions; volume-weighted distribution
+    boxMin: Vector3?,            -- single-box shorthand, default (-20, 8, -20)
+    boxMax: Vector3?,            -- single-box shorthand, default (20, 16, 20)
+
     colorWeights: {              -- default uniform (1, 1, 1)
         red: number?,
         green: number?,
         blue: number?,
     }?,
     parent: Instance?,           -- default workspace
+    minSpacing: number?,         -- minimum studs between block centers; 0 disables (see GameConfig.BLOCK_MIN_SPACING)
 }
 ```
+
+## Studio setup
+
+Tag any `BasePart` in Workspace with the `BlockSpawnVolume` CollectionService tag to define a spawn region. You can have as many tagged parts as you want — all are active simultaneously.
+
+**Circular boss arena example**: place 4–8 rectangular parts arranged in a ring around the boss, each tagged `BlockSpawnVolume`. Blocks will distribute across them weighted by volume, so equal-sized parts produce equal density.
+
+Density is controlled by `GameConfig.BLOCK_SPAWN_DENSITY` (default 2 = ~26 blocks in the 40×8×40 reference arena). The total block count auto-adjusts as you add or resize volumes.
 
 ## Design decisions
 
@@ -65,9 +82,11 @@ Each block spawns with a random initial Y-axis rotation so a cluster doesn't loo
 
 | Parameter | Default | Source |
 |---|---|---|
-| Target count | 24 | gameplay-loop § Spawner |
-| Arena box | 40×8×40 studs, Y 8–16 | gameplay-loop § Spawner |
+| Target count | density-computed (≈26 at default density) | `GameConfig.BLOCK_SPAWN_DENSITY` |
+| Density | 2 blocks per 1000 studs³ | `GameConfig.BLOCK_SPAWN_DENSITY` |
+| Arena box | 40×8×40 studs, Y 8–16 (reference) | `BlockSpawnVolume` tagged parts |
 | Color weights | uniform (1, 1, 1) | gameplay-loop § Spawner |
+| Min spacing | 4 studs between block centers | `GameConfig.BLOCK_MIN_SPACING` |
 
 ## Consumers
 

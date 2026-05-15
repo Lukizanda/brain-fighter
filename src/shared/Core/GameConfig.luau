@@ -54,6 +54,16 @@ local GameConfig = {
 	DEV_SIMULATE_LOADOUT_CYCLING = false, -- when true, server-side script spawns 2 tools in the player's Backpack, cycles them via humanoid:EquipTool, and writes the result to workspace.LoadoutCycleSimResult — used to repro / regression-test the LoadoutService re-entry guard without relying on real pedestal pickups (which can't be MCP-driven)
 
 	----------------------------------------------------------------------
+	-- Block Spawner
+	----------------------------------------------------------------------
+	-- Blocks per 1000 cubic studs of spawn volume. All BlockSpawnVolume
+	-- parts are summed; total count = density × total_volume / 1000.
+	-- Default 2 ≈ 26 blocks in the 40×8×40 reference arena.
+	----------------------------------------------------------------------
+	BLOCK_SPAWN_DENSITY = 0.1,
+	BLOCK_MIN_SPACING = 4,            -- minimum studs between block centers; 0 disables
+
+	----------------------------------------------------------------------
 	-- Locomotion
 	----------------------------------------------------------------------
 	BACKWARD_SPEED_MULTIPLIER = 0.7,         -- 70% speed when walking backward
