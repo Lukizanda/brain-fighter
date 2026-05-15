@@ -8,6 +8,7 @@
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local SoundService      = game:GetService("SoundService")
 
 local Logger                = require(ReplicatedStorage.Shared.Core.Logger)
 local HudLayoutManager      = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
@@ -17,6 +18,11 @@ local MemorizeAction        = require(ReplicatedStorage.Shared.MemorizeAction)
 local PlayerSession         = require(script.Parent.Parent.PlayerSession)
 
 local log = Logger.new("GameplayHudGui")
+
+local fizzleSound = Instance.new("Sound")
+fizzleSound.SoundId = "rbxassetid://0" -- TODO: replace with fizzle SFX asset ID
+fizzleSound.Volume = 1
+fizzleSound.Parent = SoundService
 
 local session = PlayerSession.get()
 
@@ -67,6 +73,7 @@ btn.activated:Connect(function()
 	if result.ok then
 		log:info("Memorized:", result.word)
 	else
+		fizzleSound:Play()
 		log:info("Memorize fizzle:", result.reason)
 	end
 end)
