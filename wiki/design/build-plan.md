@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-05-14
+updated: 2026-05-15
 ---
 
 # Build Plan
@@ -70,10 +70,39 @@ Five HUD pieces. Each builds against an already-shipped state module and runs in
 
 **Parallel strategy:** spawn five sessions once their backing modules are stable. Each session lands a builder under `src/shared/Hud/`.
 
+## Phase 4.5 — Bug Fix Sprint
+
+Play-test all current features end-to-end. Fix bugs as found, one session per bug.
+Phase complete when the current feature set (Phase 1–4) feels stable during play.
+
+No predetermined list — issues are raised by the user after playtesting.
+
+## Phase 4.6 — LetterBlaster Tool
+
+Replace the bare `BlockShootBoot` click handler with a dedicated weapon Tool.
+
+| Item | Detail |
+|---|---|
+| **Tool placement** | `StarterPack` via MCP — auto-equips on spawn |
+| **Input** | `Tool.Activated` replaces raw `UserInputService.InputBegan` |
+| **Reticle** | Reuse `ReticleBuilder.build()` in a full-screen ScreenGui |
+| **Rate of fire** | 0.25s cooldown (`os.clock` gate on `Tool.Activated`) |
+| **Sounds** | `FireSound` on shot, `HitSound` + hitmarker on confirmed consume |
+| **Model** | Handle MeshPart in `StarterPack.LetterBlaster` (placeholder neon cyan) |
+| **Server** | `BlockShootService.server.luau` unchanged |
+
+**New files:**
+- `src/shared/LetterBlaster/init.luau` — controller (mount/fire/reticle/sound)
+- `src/shared/LetterBlaster/LetterBlasterConfig.luau` — tuning constants
+- `src/client/LetterBlasterBoot.client.luau` — mounts controller on CharacterAdded
+
+**Deleted:** `src/client/BlockShootBoot.client.luau`
+
 ## Phase 5 — Polish
 
 Tuning passes (energy curve, spawn density, tier thresholds), audio cues, particle effects, tutorial copy, accessibility passes.
 
 ## Plan changelog
 
+- **2026-05-15**: added Phase 4.5 (bug sprint) and Phase 4.6 (LetterBlaster Tool) between Phase 4 and Phase 5.
 - **2026-05-14**: initial plan written; 18 trackers created; Phase 1 spawn batch (Dictionary, EnergyEconomy, SpellRegistry) kicked off.
