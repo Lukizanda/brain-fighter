@@ -32,13 +32,13 @@ return {
 			return false, string.format("Boss HP unchanged: %.1f (expected less than %d)", hp, TEST_HP)
 		end
 
-		local expectedDamage = ctx.spell.effectSpec.fractionOfMaxHP * TEST_HP
+		local expectedDamage = ctx.spell.skill.onImpact[1].fractionOfMaxHP * TEST_HP
 		local actualDamage = TEST_HP - hp
 		local delta = math.abs(actualDamage - expectedDamage)
 		if delta > 0.1 then
 			return false, string.format(
 				"damage mismatch: expected %.1f, got %.1f (spell=%s, fraction=%.2f)",
-				expectedDamage, actualDamage, ctx.spell.name, ctx.spell.effectSpec.fractionOfMaxHP
+				expectedDamage, actualDamage, ctx.spell.name, ctx.spell.skill.onImpact[1].fractionOfMaxHP
 			)
 		end
 

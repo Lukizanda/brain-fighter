@@ -78,17 +78,23 @@ local function makeDummy(initialHealth: number?, walkSpeed: number?): (Model, Hu
 end
 
 local function makeSpec(kind: string, params: { [string]: any }, name: string?): SpellRegistry.Spec
-	local effectSpec: { [string]: any } = { kind = kind }
+	local specName = name or string.format("Test%s", kind)
+	local onImpactEntry: { [string]: any } = { kind = kind }
 	for k, v in params do
-		effectSpec[k] = v
+		onImpactEntry[k] = v
 	end
 	return {
-		name = name or string.format("Test%s", kind),
-		color = "red" :: any,
-		tier = 1,
-		cost = 10,
+		name          = specName,
+		color         = "red" :: any,
+		tier          = 1,
+		cost          = 10,
 		targetingMode = "auto" :: any,
-		effectSpec = effectSpec :: any,
+		skill         = {
+			name           = specName,
+			delivery       = "instant",
+			deliveryParams = {},
+			onImpact       = { onImpactEntry :: any },
+		} :: any,
 	}
 end
 
