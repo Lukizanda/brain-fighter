@@ -6,7 +6,7 @@ updated: 2026-05-18
 
 # SpellRegistry
 
-Config-only module for the spell roster. Owns the per-spell name, color, tier, cost, targeting mode, and a `skill: SkillSpec` that `DeliveryRegistry` / `EffectRegistry` consume. (Prior to the Skills pipeline refactor, this field was `effectSpec: EffectSpec` — the shape changed in commit `03b6080`.)
+Config-only module for the spell roster. Owns the per-spell name, color, tier, cost, targeting mode, and a `skill: SkillSpec` that `SkillDelivery` / `SkillEffects` consume. (Prior to the Skills pipeline refactor, this field was `effectSpec: EffectSpec` — the shape changed in commit `03b6080`.)
 
 The roster is **pinned** to [[design/gameplay-loop]] § "Spell roster (prototype)" and § "Spell tier thresholds". If those numbers move in the design doc, this module is the single thing that changes — every other system reads through `getSpell` / `listAffordableSpells`.
 
@@ -46,7 +46,7 @@ export type Spec = {
 }
 ```
 
-`skill.onImpact` is a list of `EffectSpec` entries. `skill.delivery` selects a `DeliveryRegistry` handler (`"instant"`, `"projectile"`, `"aoe"`, `"world_spawn"`). Adding a new spell here only requires defining the `skill` shape — no executor changes needed.
+`skill.onImpact` is a list of `EffectSpec` entries. `skill.delivery` selects a `SkillDelivery` handler (`"instant"`, `"projectile"`, `"aoe"`, `"world_spawn"`). Adding a new spell here only requires defining the `skill` shape — no executor changes needed.
 
 ## Tier thresholds
 

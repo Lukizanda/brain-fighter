@@ -16,7 +16,7 @@ Supersedes [[systems/BossAdapter]] (Phase 3 static Model). The `src/server/BossA
 
 | File | Purpose |
 |---|---|
-| `src/shared/Boss/BossConfig.luau` | All numeric constants + data-driven `PhaseSpec` array |
+| `src/shared/Boss/BossConfig.luau` | `BOSS_TYPES` registry + `DEFAULT_TYPE`; per-type vitals, phases, and per-skill params |
 | `src/shared/Boss/BossTypes.luau` | `BossBlackboard` type (superset of `NPCTypes.Blackboard`) |
 | `src/shared/Boss/BossEvents/BossHealthChanged.model.json` | RemoteEvent — fires `(currentHP, maxHP, phaseIndex)` on HP change (throttled 0.1s) |
 | `src/shared/Boss/BossEvents/BossPhaseChanged.model.json` | RemoteEvent — fires `phaseIndex` (0 = defeated/no boss) |
@@ -29,10 +29,10 @@ Supersedes [[systems/BossAdapter]] (Phase 3 static Model). The `src/server/BossA
 | `src/server/Boss/BossService.server.luau` | Top-level lifecycle: spawn, Heartbeat tick loop, death, respawn |
 | `src/server/Boss/Scripts/BossSpawner.luau` | Builds the Boss Model from the Patroller rig at 3× scale |
 | `src/server/Boss/Scripts/BossController.luau` | Per-boss orchestrator: StateMachine + Perception + BossPhaseManager |
-| `src/server/Boss/Scripts/BossStates.luau` | Five state definitions passed to `StateMachine.new()`; Attack dispatches via `DeliveryRegistry.deliver` |
+| `src/server/Boss/Scripts/BossStates.luau` | Five state definitions passed to `StateMachine.new()`; Attack dispatches via `SkillDelivery.deliver` |
 | `src/server/Boss/Scripts/BossPhaseManager.luau` | Monitors HP thresholds; fires `onPhaseChanged` callback on transition |
-| `src/shared/Skills/DeliveryRegistry.luau` | Delivery handlers (`instant`, `projectile`, `aoe`, `world_spawn`) — boss and player spells share this |
-| `src/shared/Skills/EffectRegistry.luau` | Effect handlers (`damage`, `heal`, `freeze`, stubs) — all damage application lives here |
+| `src/shared/Skills/SkillDelivery.luau` | Delivery handlers (`instant`, `projectile`, `aoe`, `world_spawn`) — boss and player spells share this |
+| `src/shared/Skills/SkillEffects.luau` | Effect handlers (`damage`, `heal`, `freeze`, stubs) — all damage application lives here |
 | `src/shared/Skills/SkillTypes.luau` | Pure Luau types: `SkillSpec`, `EffectSpec`, `DeliveryCtx` |
 
 ### Client (StarterPlayerScripts)
@@ -107,21 +107,21 @@ Cooldown ──(timer + no player)───────────→ Idle
 | `currentPhaseSpec` | PhaseSpec | Resolved spec for active phase |
 | `selectedAttack` | string? | Chosen in AttackPrep.onEnter |
 | `attackWindupStart` | number? | os.clock() stamp for windup check |
-| `attackComplete` | boolean | Set via `ctx.onComplete` callback fired by DeliveryRegistry |
+| `attackComplete` | boolean | Set via `ctx.onComplete` callback fired by SkillDelivery |
 | `cooldownStart` | number | os.clock() stamp for cooldown check |
 | `destroyedParts` | { [string]: boolean } | Scaffold for future part destruction |
 
 ## Attack Types
 
-All server-authoritative (`applyDamage.process` with `sourcePlayer = nil`):
+Implementations live in [[systems/SkillPipeline|SkillDelivery]] (`handlers.projectile`, `handlers.aoe`); boss-specific tuning lives in `BossConfig.BOSS_TYPES[type].skills`. All damage flows through `applyDamage.process` with `sourcePlayer = nil` (set via `EffectSpec.useApplyDamage = true`).
 
-### FireballVolley
+### FireballVolley (`delivery = "projectile"`)
 
-3 Part projectiles in spread. Each is `CanCollide = false` with a `LinearVelocity` constraint — Touched doesn't fire so hit detection is a per-Heartbeat proximity check (`≤ 3 studs`). 0.15 s stagger between projectiles; `attackComplete` set after all are in flight. Damage: **15 HP**.
+3 Part projectiles in spread. Each is `CanCollide = false` with a `LinearVelocity` constraint — Touched doesn't fire so hit detection is a per-Heartbeat proximity check (`≤ 3 studs`). 0.15 s stagger between projectiles; `attackComplete` set via `ctx.onComplete` after all are in flight. Brain's tuning: `count=3`, `speed=40`, damage `15 HP` (`onImpact = [{kind="damage", amount=15, useApplyDamage=true}]`).
 
-### GroundSlam
+### GroundSlam (`delivery = "aoe"`)
 
-0.8 s windup delay, then AOE within 12 studs. Spawns a flat Cylinder shockwave visual (Neon yellow, Debris 0.5 s). All players in radius take damage and receive an upward `ApplyImpulse`. `attackComplete` set after 1.2 s total. Damage: **25 HP**.
+0.8 s windup delay, then AOE within 12 studs. Spawns a flat Cylinder shockwave visual (Neon yellow, Debris 0.5 s). All humanoids in radius take damage and receive a knockup. `attackComplete` set via `ctx.onComplete` after total cycle. Brain's tuning: `radius=12`, `onImpact = [{kind="damage", amount=25, useApplyDamage=true}, {kind="knockup", force=...}]` — multi-effect composition.
 
 ## Client HUD
 
@@ -148,29 +148,28 @@ No changes needed in other systems:
 5. `humanoid.HealthChanged` fires `BossHealthChanged` (throttled 0.1 s).
 6. `humanoid.Died` → disconnect Heartbeat, destroy controller, fire defeat events (phaseIndex=0), destroy Model after 1 s, respawn after `BossConfig.RESPAWN_DELAY_SEC` (5 s).
 
-## Key Constants (BossConfig)
+## Key Tuning (BossConfig.BOSS_TYPES.Brain)
 
-| Constant | Value |
-|---|---|
-| MAX_HEALTH | 1500 |
-| BODY_SCALE | 3 |
-| RESPAWN_DELAY_SEC | 5 |
-| DETECTION_RANGE | 80 studs |
-| ATTACK_RANGE | 30 studs |
-| ATTACK_WINDUP_SEC | 0.5 s |
-| FIREBALL_DAMAGE | 15 HP |
-| FIREBALL_SPEED | 30 studs/s |
-| FIREBALL_SPREAD_COUNT | 3 |
-| FIREBALL_PROXIMITY_RADIUS | 3 studs |
-| GROUNDSLAM_DAMAGE | 25 HP |
-| GROUNDSLAM_RADIUS | 12 studs |
-| GROUNDSLAM_KNOCKUP | (config value × mass) |
+All boss constants are now per-type in `BossConfig.BOSS_TYPES[<name>]`. Brain's defaults:
+
+| Field | Value | Path |
+|---|---|---|
+| maxHealth | 1500 | `BOSS_TYPES.Brain.maxHealth` |
+| bodyScale | 3 | `BOSS_TYPES.Brain.bodyScale` |
+| respawnDelaySec | 5 | `BOSS_TYPES.Brain.respawnDelaySec` |
+| detectionRange | 80 studs | `BOSS_TYPES.Brain.detectionRange` |
+| attackRange | 30 studs | `BOSS_TYPES.Brain.attackRange` |
+| attackWindupSec | 0.5 s | `BOSS_TYPES.Brain.attackWindupSec` |
+| FireballVolley count / speed / damage | 3 / 40 / 15 HP | `BOSS_TYPES.Brain.skills.FireballVolley.deliveryParams` + `.onImpact[1].amount` |
+| GroundSlam radius / damage / knockup | 12 / 25 HP / 60 | `BOSS_TYPES.Brain.skills.GroundSlam.deliveryParams` + `.onImpact[*]` |
+
+Add a new boss type by adding another entry to `BOSS_TYPES`; switch the active boss by setting `workspace.BossPoint:SetAttribute("BossType", "<name>")`. Falls back to `BossConfig.DEFAULT_TYPE` when unset.
 
 ## Future Work
 
 - **Destructible parts** (separate planning session) — ShieldPart and LeftArmCore are present on the model but have no health pools or interaction yet; `destroyedParts` blackboard field is the scaffold.
-- **Multi-phase behavior** — add entries to `BossConfig.PHASES`; BossPhaseManager and BossController handle the rest without code changes.
-- **Additional attacks** — `LetterThrow` (Phase 2+), `SummonMinions` (Phase 3+) planned; add to `BossAttacks.luau` and list in the relevant `PhaseSpec.availableAttacks`.
+- **Multi-phase behavior** — add entries to `BossConfig.BOSS_TYPES[<name>].phases`; BossPhaseManager and BossController handle the rest without code changes.
+- **Additional attacks** — `LetterThrow`, `SummonMinions` planned; add a new entry to `BOSS_TYPES[<name>].skills` (referencing an existing `delivery` handler in [[systems/SkillPipeline|SkillDelivery]] or adding a new one) and list it in the relevant `PhaseSpec.availableAttacks`.
 - **Round integration** — wire `BossPhaseChanged(0)` into [[systems/GameMode]] RoundManager for level-completion detection.
 
 ## See also

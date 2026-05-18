@@ -5,7 +5,7 @@
 ----------------------------------------------------------------------
 -- Pure-Luau config layer for the spell roster (R/G/B × T1/T2/T3 + T4).
 -- Source of truth for spell name, color, tier, cost, targeting mode,
--- and the SkillSpec that DeliveryRegistry/EffectRegistry interpret.
+-- and the SkillSpec that SkillDelivery/SkillEffects interpret.
 --
 -- The roster and tier thresholds are pinned to
 -- wiki/design/gameplay-loop.md § "Spell roster (prototype)" and
@@ -15,7 +15,7 @@
 --
 -- The skill table is pure data — delivery kind, per-kind params, and
 -- onImpact effects. No behavior lives here; SpellExecutor delegates
--- to DeliveryRegistry which delegates to EffectRegistry.
+-- to SkillDelivery which delegates to SkillEffects.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

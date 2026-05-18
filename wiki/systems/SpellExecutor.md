@@ -1,12 +1,12 @@
 ---
 type: system
-description: Thin origin-resolver that delegates spell casting to DeliveryRegistry (delivery) and EffectRegistry (effects). All damage/heal/freeze/stub logic lives in src/shared/Skills/.
+description: Thin origin-resolver that delegates spell casting to SkillDelivery (delivery) and SkillEffects (effects). All damage/heal/freeze/stub logic lives in src/shared/Skills/.
 updated: 2026-05-18
 ---
 
 # SpellExecutor
 
-The runtime side of the spell roster. Given a [[systems/SpellRegistry|Spec]] plus a caster and a target, resolves the origin `CFrame` (Tip attachment → Handle → HumanoidRootPart) and delegates to `DeliveryRegistry.deliver(spec.skill, ctx)`. **All effect and delivery logic lives in `src/shared/Skills/`** — SpellExecutor is now a thin adapter. Boss attacks go through the same `DeliveryRegistry` path. See [[design/build-plan|build-plan]] Phase 2 and the Skills pipeline ingest in `wiki/log.md`.
+The runtime side of the spell roster. Given a [[systems/SpellRegistry|Spec]] plus a caster and a target, resolves the origin `CFrame` (Tip attachment → Handle → HumanoidRootPart) and delegates to `SkillDelivery.deliver(spec.skill, ctx)`. **All effect and delivery logic lives in `src/shared/Skills/`** — SpellExecutor is now a thin adapter. Boss attacks go through the same `SkillDelivery` path. See [[design/build-plan|build-plan]] Phase 2 and the Skills pipeline ingest in `wiki/log.md`.
 
 The module is otherwise pure — the only per-cast state it keeps is a per-Humanoid freeze table so back-to-back freezes don't clobber the saved `WalkSpeed`. The caller (eventually [[systems/CastAction]]) owns cast cost, dictionary validation, and targeting UX; SpellExecutor trusts the Spec.
 
@@ -15,8 +15,8 @@ The module is otherwise pure — the only per-cast state it keeps is a per-Human
 - `src/shared/SpellExecutor/init.luau` — thin adapter: origin resolution + `DeliveryCtx` construction
 - `src/shared/SpellExecutor/__tests.luau` — pure-Luau smoke tests (`runAll() -> (passed, failed)`)
 - `src/shared/Skills/SkillTypes.luau` — types: `SkillSpec`, `EffectSpec`, `DeliveryCtx`
-- `src/shared/Skills/EffectRegistry.luau` — effect handlers: `damage`, `heal`, `freeze`, stubs
-- `src/shared/Skills/DeliveryRegistry.luau` — delivery handlers: `instant`, `projectile`, `aoe`, `world_spawn`
+- `src/shared/Skills/SkillEffects.luau` — effect handlers: `damage`, `heal`, `freeze`, stubs
+- `src/shared/Skills/SkillDelivery.luau` — delivery handlers: `instant`, `projectile`, `aoe`, `world_spawn`
 
 ## API
 
@@ -50,7 +50,7 @@ SpellExecutor.cast(
 
 ## Dispatch — full table
 
-See `EffectRegistry.luau` for the implementation. `SpellExecutor` no longer contains any dispatch logic.
+See `SkillEffects.luau` for the implementation. `SpellExecutor` no longer contains any dispatch logic.
 
 | `kind` | Behaviour | Reads from `onImpact` entry |
 |---|---|---|

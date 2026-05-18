@@ -4,11 +4,11 @@
 -- SpellExecutor
 ----------------------------------------------------------------------
 -- Resolves the caster's origin CFrame and dispatches to
--- DeliveryRegistry.deliver(spec.skill, ctx).
+-- SkillDelivery.deliver(spec.skill, ctx).
 --
--- All spell effect logic now lives in EffectRegistry (damage, heal,
+-- All spell effect logic now lives in SkillEffects (damage, heal,
 -- freeze, knockup, shield stubs). All delivery logic lives in
--- DeliveryRegistry (instant, projectile, aoe, world_spawn). This
+-- SkillDelivery (instant, projectile, aoe, world_spawn). This
 -- module is a thin adapter: origin resolution + ctx construction.
 --
 -- Origin resolution order:
@@ -19,11 +19,11 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local DeliveryRegistry = require(ReplicatedStorage.Shared.Skills.DeliveryRegistry)
+local SkillDelivery = require(ReplicatedStorage.Shared.Skills.SkillDelivery)
 local SkillTypes       = require(ReplicatedStorage.Shared.Skills.SkillTypes)
 local SpellRegistry    = require(ReplicatedStorage.Shared.SpellRegistry)
 
-export type CastResult = DeliveryRegistry.Result
+export type CastResult = SkillDelivery.Result
 
 ----------------------------------------------------------------------
 -- Origin resolution
@@ -84,7 +84,7 @@ function SpellExecutor.cast(
 		source = source,
 	}
 
-	return DeliveryRegistry.deliver(spec.skill, ctx)
+	return SkillDelivery.deliver(spec.skill, ctx)
 end
 
 return SpellExecutor

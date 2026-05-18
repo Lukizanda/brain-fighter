@@ -1,7 +1,7 @@
 --!strict
 
 ----------------------------------------------------------------------
--- DeliveryRegistry
+-- SkillDelivery
 ----------------------------------------------------------------------
 -- Pure delivery handlers for the unified skill pipeline.
 -- Each handler: (skill, ctx) → Result
@@ -28,7 +28,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService    = game:GetService("RunService")
 
 local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
-local EffectRegistry = require(ReplicatedStorage.Shared.Skills.EffectRegistry)
+local SkillEffects = require(ReplicatedStorage.Shared.Skills.SkillEffects)
 local SkillTypes     = require(ReplicatedStorage.Shared.Skills.SkillTypes)
 
 type SkillSpec   = SkillTypes.SkillSpec
@@ -36,7 +36,7 @@ type DeliveryCtx = SkillTypes.DeliveryCtx
 
 export type Result = { ok: boolean, reason: string? }
 
-local log = Logger.new("DeliveryRegistry")
+local log = Logger.new("SkillDelivery")
 
 ----------------------------------------------------------------------
 -- Helpers
@@ -44,10 +44,10 @@ local log = Logger.new("DeliveryRegistry")
 
 -- Apply every onImpact effect spec to hitTarget.
 -- Returns the first failure encountered, or { ok = true } if all succeed.
-local function applyImpactEffects(skill: SkillSpec, hitTarget: any, source: any?): EffectRegistry.Result
-	local firstFailure: EffectRegistry.Result? = nil
+local function applyImpactEffects(skill: SkillSpec, hitTarget: any, source: any?): SkillEffects.Result
+	local firstFailure: SkillEffects.Result? = nil
 	for _, effectSpec in skill.onImpact do
-		local result = EffectRegistry.apply(effectSpec, hitTarget, source)
+		local result = SkillEffects.apply(effectSpec, hitTarget, source)
 		if not result.ok and firstFailure == nil then
 			firstFailure = result
 		end
@@ -77,9 +77,9 @@ end
 -- Delivery handlers
 ----------------------------------------------------------------------
 
-local DeliveryRegistry = {}
+local SkillDelivery = {}
 
-DeliveryRegistry.handlers = {
+SkillDelivery.handlers = {
 
 	-- "instant": apply onImpact immediately to ctx.target.
 	-- Used by Spark, Fireball, Inferno, Mend, Frost Nip, Stasis, Shield, Sanctuary.
@@ -265,8 +265,8 @@ DeliveryRegistry.handlers = {
 -- Public API
 ----------------------------------------------------------------------
 
-function DeliveryRegistry.deliver(skill: SkillSpec, ctx: DeliveryCtx): Result
-	local handler = DeliveryRegistry.handlers[skill.delivery]
+function SkillDelivery.deliver(skill: SkillSpec, ctx: DeliveryCtx): Result
+	local handler = SkillDelivery.handlers[skill.delivery]
 	if not handler then
 		log:warn(("unknown delivery kind: %s (skill=%s)"):format(
 			tostring(skill.delivery), skill.name
@@ -277,4 +277,4 @@ function DeliveryRegistry.deliver(skill: SkillSpec, ctx: DeliveryCtx): Result
 	return handler(skill, ctx)
 end
 
-return DeliveryRegistry
+return SkillDelivery

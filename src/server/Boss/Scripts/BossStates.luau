@@ -26,7 +26,7 @@ local ReplicatedStorage   = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local BossTypes        = require(ReplicatedStorage.Shared.Boss.BossTypes)
-local DeliveryRegistry = require(ReplicatedStorage.Shared.Skills.DeliveryRegistry)
+local SkillDelivery = require(ReplicatedStorage.Shared.Skills.SkillDelivery)
 local NPCTypes         = require(ReplicatedStorage.Shared.NPC.NPCTypes)
 local Logger           = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillTypes       = require(ReplicatedStorage.Shared.Skills.SkillTypes)
@@ -165,11 +165,11 @@ local AttackState: StateDefinition = {
 				bbany.attackComplete = true
 			end,
 		}
-		DeliveryRegistry.deliver(skill, ctx)
+		SkillDelivery.deliver(skill, ctx)
 	end,
 
 	update = function(_bb)
-		-- DeliveryRegistry handlers are async; attackComplete is set via ctx.onComplete.
+		-- SkillDelivery handlers are async; attackComplete is set via ctx.onComplete.
 	end,
 }
 

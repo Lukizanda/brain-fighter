@@ -1,7 +1,7 @@
 --!strict
 
 ----------------------------------------------------------------------
--- EffectRegistry
+-- SkillEffects
 ----------------------------------------------------------------------
 -- Pure effect handlers for the unified skill pipeline.
 -- Each handler: (spec, target, source?) → Result
@@ -31,7 +31,7 @@ type EffectSpec = SkillTypes.EffectSpec
 
 export type Result = { ok: boolean, reason: string? }
 
-local log = Logger.new("EffectRegistry")
+local log = Logger.new("SkillEffects")
 
 -- Server-only; nil on client. Boss attacks use applyDamage.process;
 -- player spells use direct Health writes (client-authoritative).
@@ -62,9 +62,9 @@ end
 -- Handlers
 ----------------------------------------------------------------------
 
-local EffectRegistry = {}
+local SkillEffects = {}
 
-EffectRegistry.handlers = {
+SkillEffects.handlers = {
 
 	damage = function(spec: EffectSpec, target: any, source: any): Result
 		local h = resolveHumanoid(target)
@@ -158,8 +158,8 @@ EffectRegistry.handlers = {
 -- Public API
 ----------------------------------------------------------------------
 
-function EffectRegistry.apply(spec: EffectSpec, target: any, source: any?): Result
-	local handler = EffectRegistry.handlers[spec.kind]
+function SkillEffects.apply(spec: EffectSpec, target: any, source: any?): Result
+	local handler = SkillEffects.handlers[spec.kind]
 	if not handler then
 		log:warn(("unknown effect kind: %s"):format(tostring(spec.kind)))
 		return { ok = false, reason = "unknown effect kind: " .. tostring(spec.kind) }
@@ -167,4 +167,4 @@ function EffectRegistry.apply(spec: EffectSpec, target: any, source: any?): Resu
 	return handler(spec, target, source)
 end
 
-return EffectRegistry
+return SkillEffects

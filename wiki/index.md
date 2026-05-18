@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-05-15
+updated: 2026-05-18
 ---
 
 # Wiki Index
@@ -34,7 +34,9 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/LetterBlock]] — Phase 3 entity: floating block prefab with `Block.Letter` + `Block.Color` attributes; chunky 4×4×4 cube with 6-face SurfaceGui letter glyph + colored ParticleEmitter; CollectionService tag drives the client bob/rotation animator (6°/s, sinusoidal bob)
 - [[systems/BlockSpawner]] — Phase 3 server-side populator: Scrabble-weighted letter picks, configurable color weights, auto-refill via CollectionService removed signal; maintains ~24 blocks in a 40x8x40 arena box
 - [[systems/BlockShoot]] — shared helpers + server handler for block consumption; client input now handled by LetterBlaster (Phase 4.6)
-- [[systems/BossAdapter]] — Phase 3 MVP Boss target: static Humanoid-bearing Model that SpellExecutor can damage; `defeated` signal for level completion; auto-respawn via BossService
+- [[systems/Boss]] — Full boss system: 3× scaled R15 rig, AI state machine (Idle/Patrol/AttackPrep/Attack/Cooldown), phase scaffolding, FireballVolley + GroundSlam attacks, BossHudGui health bar
+- [[systems/BossAdapter]] — Phase 3 MVP (superseded): static Humanoid-bearing Model; disabled once the full Boss system landed
+- [[systems/SkillPipeline]] — Unified `SkillSpec` + `SkillEffects` + `SkillDelivery` shared by player spells and boss attacks; pure data-driven dispatch, multi-effect `onImpact` arrays, reserved hooks for VFX/SFX/status-effects
 - [[systems/LetterBlaster]] — Phase 4.6 weapon Tool: Tool.Activated → cooldown gate → raycast → consume; reticle via ReticleBuilder; FireSound/HitSound; replaces BlockShootBoot
 - [[systems/AudioSFX]] — Sound effect inventory, two-backend overview (Sound vs AudioPlayer), wiring patterns, placeholder locations, gap priority list
 - [[systems/Tutorial]] — Phase 5 guided first-play sequence: shoot → buffer → memorize → cast → boss hit; step machine, overlay builder, skip flag (planning)

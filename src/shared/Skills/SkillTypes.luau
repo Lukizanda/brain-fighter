@@ -5,7 +5,7 @@
 ----------------------------------------------------------------------
 -- Pure data types for the unified skill pipeline.
 -- No behavior, no context-specific fields. Used by SpellRegistry,
--- BossConfig, EffectRegistry, DeliveryRegistry, SpellExecutor,
+-- BossConfig, SkillEffects, SkillDelivery, SpellExecutor,
 -- and BossStates.
 ----------------------------------------------------------------------
 
