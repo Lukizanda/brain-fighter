@@ -1,6 +1,6 @@
 ---
 type: system
-description: Thin origin-resolver that delegates spell casting to SkillDelivery (delivery) and SkillEffects (effects). All damage/heal/freeze/stub logic lives in src/shared/Skills/.
+description: Thin origin-resolver that delegates spell casting to SkillDelivery (delivery) and SkillEffects (effects). All damage/heal/freeze/stub logic lives in src/shared/Skills/. Damage against server-owned targets (boss, NPCs) must run server-side — SpellCastService relays client casts via RemoteEvent.
 updated: 2026-05-18
 ---
 
@@ -100,4 +100,9 @@ Test dummies are `Instance.new("Model")` with a child `Humanoid` parented to `sc
 - Pinned design → [[design/gameplay-loop]] § "Spell roster (prototype)", § "Targeting", § "Spell economy"
 - Eventual caller → [[systems/CastAction]] (Phase 2 — pending; wires reservoir drain + executor invocation)
 - Damage path comparison → [[systems/Health]] (uses `HealthService.applyDamage` for player/NPC hits; SpellExecutor writes `Humanoid.Health` directly for now since spells don't need hit-zone classification or damage modifiers)
+- Server relay → `src/server/SpellCastService.server.luau` — receives `SpellCastServer` RemoteEvent from `SpellMenuGui`, re-executes `SpellExecutor.cast` server-side so boss/NPC HP writes actually stick (client writes don't replicate for server-owned Humanoids)
 - Build plan → [[design/build-plan]] (Phase 2 — action systems)
+
+## Client/server boundary
+
+`SpellExecutor.cast` runs wherever it is required — client for VFX/energy, server for real HP writes. `Humanoid.Health` writes from a LocalScript **do not replicate** for server-owned characters (boss, NPCs). `SpellCastService` closes this: `SpellMenuGui` fires `SpellCastServer` (RemoteEvent at `ReplicatedStorage.Shared.SpellCast.Remotes.SpellCastServer`) after every successful non-self cast; the service validates and calls `SpellExecutor.cast` server-side. Green (self-heal) spells skip the relay — the player owns their own character so local Health writes do replicate.
