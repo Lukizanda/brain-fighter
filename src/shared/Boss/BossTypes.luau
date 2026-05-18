@@ -24,6 +24,8 @@ export type BossTypeSpec = {
 	name: string,
 	maxHealth: number,
 	bodyScale: number,
+	rigName: string?,
+	hipHeight: number?,
 	respawnDelaySec: number,
 	detectionRange: number,
 	attackRange: number,

@@ -72,17 +72,25 @@ end
 
 -- ---------------------------------------------------------------
 -- Internal: add billboard HP label above the boss head.
+-- Falls back to HumanoidRootPart with a taller offset when the
+-- rig has no "Head" part (e.g. BossBrain custom rigs).
 -- ---------------------------------------------------------------
 local function addBillboard(boss: Model)
-	local head = boss:FindFirstChild("Head")
-	if not head or not head:IsA("BasePart") then
+	local anchor = boss:FindFirstChild("Head")
+	local offset = Vector3.new(0, 5, 0)
+	if not anchor or not anchor:IsA("BasePart") then
+		anchor = boss:FindFirstChild("HumanoidRootPart")
+		offset = Vector3.new(0, 9, 0)
+	end
+	if not anchor or not anchor:IsA("BasePart") then
 		return
 	end
+	local head = anchor
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name        = "BossLabel"
 	billboard.Size        = UDim2.new(0, 220, 0, 55)
-	billboard.StudsOffset = Vector3.new(0, 5, 0)
+	billboard.StudsOffset = offset
 	billboard.AlwaysOnTop = false
 
 	local bg = Instance.new("Frame")
@@ -115,9 +123,10 @@ function BossSpawner.spawn(bossPoint: BasePart, typeSpec: BossTypeSpec): Model?
 		return nil
 	end
 
-	local template = rigs:FindFirstChild("Patroller")
+	local rigName = typeSpec.rigName or "Patroller"
+	local template = rigs:FindFirstChild(rigName)
 	if not template or not template:IsA("Model") then
-		log:warn("Patroller rig not found in AIWorldData.Rigs")
+		log:warn("Rig '" .. rigName .. "' not found in AIWorldData.Rigs")
 		return nil
 	end
 
@@ -127,7 +136,7 @@ function BossSpawner.spawn(bossPoint: BasePart, typeSpec: BossTypeSpec): Model?
 	-- ── Humanoid setup ──────────────────────────────────────────
 	local humanoid = boss:FindFirstChildOfClass("Humanoid")
 	if not humanoid then
-		log:warn("Patroller rig has no Humanoid")
+		log:warn(rigName .. " rig has no Humanoid")
 		boss:Destroy()
 		return nil
 	end
@@ -157,17 +166,24 @@ function BossSpawner.spawn(bossPoint: BasePart, typeSpec: BossTypeSpec): Model?
 		end
 	end
 
-	-- ── Color all visible parts ─────────────────────────────────
+	-- Override HipHeight after scale bake-in (custom rigs set this to control hover height)
+	if typeSpec.hipHeight then
+		humanoid.HipHeight = typeSpec.hipHeight
+	end
+
+	-- ── Color all visible parts (skip HRP and KeepColor-marked parts) ─
 	for _, desc in boss:GetDescendants() do
-		if desc:IsA("BasePart") and desc.Name ~= "HumanoidRootPart" then
+		if desc:IsA("BasePart") and desc.Name ~= "HumanoidRootPart"
+			and not desc:GetAttribute("KeepColor") then
 			desc.BrickColor = phase1.bodyColor
 			desc.Material   = Enum.Material.SmoothPlastic
 		end
 	end
 
-	-- ── Welded visual parts (placeholders for future part system) ─
+	-- ── Welded visual parts — only for Patroller-based rigs ─────────
+	-- Custom rigs (e.g. BossBrain) define their own visual parts in the template.
 	local hrp = boss:FindFirstChild("HumanoidRootPart")
-	if hrp and hrp:IsA("BasePart") then
+	if hrp and hrp:IsA("BasePart") and not typeSpec.rigName then
 		addWeldedPart(boss, hrp :: BasePart, {
 			name         = "ShieldPart",
 			size         = Vector3.new(8, 10, 0.5),
