@@ -66,11 +66,31 @@ function ReservoirBarsBuilder.build(): Handle
 
 	local handle = { gui = container } :: Handle
 
+	local lastEnergy: { [string]: number } = { red = 0, green = 0, blue = 0 }
+
 	function handle:setEnergy(snapshot: Snapshot)
 		for _, spec in Defaults.BARS do
 			local key = COLOR_KEY[spec.name]
-			local energy = (snapshot :: any)[key] or 0
-			bars[spec.name]:setValue(energy, Defaults.MAX_ENERGY)
+			local energy: number = (snapshot :: any)[key] or 0
+			local prev: number = (lastEnergy :: any)[key] or 0
+			local delta = energy - prev
+			local bar = bars[spec.name]
+
+			bar:setValue(energy, Defaults.MAX_ENERGY)
+
+			if delta >= AttributeBarConfig.GAIN_SWEEP_DELTA_MIN then
+				bar:playGainSweep()
+			elseif delta <= -AttributeBarConfig.DRAIN_DELTA_MIN then
+				bar:playDrainRipple()
+			end
+
+			if energy >= Defaults.MAX_ENERGY and prev < Defaults.MAX_ENERGY then
+				bar:setCapGlow(true)
+			elseif energy < Defaults.MAX_ENERGY and prev >= Defaults.MAX_ENERGY then
+				bar:setCapGlow(false)
+			end
+
+			;(lastEnergy :: any)[key] = energy
 		end
 	end
 

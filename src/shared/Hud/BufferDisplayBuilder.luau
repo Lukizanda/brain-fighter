@@ -36,6 +36,7 @@ local SELECTION_STROKE_NAME = "SelectionStroke"
 local SELECTION_STROKE_COLOR = Color3.fromRGB(255, 215, 0)
 local SELECTION_STROKE_THICKNESS = 2
 local SNAP_FLASH_DURATION = 0.18
+local PULSE_STROKE_NAME = "MindFullPulseStroke"
 
 export type Tile = { letter: string, color: string }
 
@@ -47,6 +48,10 @@ export type BuildOptions = {
 export type Handle = {
 	gui: Frame,
 	setTiles: (self: Handle, tiles: { Tile }) -> (),
+	popTile: (self: Handle, idx: number) -> (),
+	setMindFullPulse: (self: Handle, active: boolean) -> (),
+	playMemorizeOk: (self: Handle) -> (),
+	playMemorizeFail: (self: Handle) -> (),
 	destroy: (self: Handle) -> (),
 }
 
@@ -120,6 +125,7 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 	local isDragging = false
 	local dragGhost: Frame? = nil
 	local connections: { RBXScriptConnection } = {}
+	local pulseStrokeTweens: { Tween } = {}
 
 	-- ── Helpers ───────────────────────────────────────────────────
 
@@ -386,8 +392,99 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 		end
 	end
 
+	function handle:popTile(idx: number)
+		local cell = cells[idx]
+		if not cell then return end
+		local scaleInst = cell:FindFirstChildOfClass("UIScale")
+		if not scaleInst then
+			scaleInst = Instance.new("UIScale")
+			scaleInst.Parent = cell
+		end
+		scaleInst.Scale = Defaults.POP_SCALE
+		TweenService:Create(scaleInst, Defaults.POP_TWEEN, { Scale = 1 }):Play()
+	end
+
+	function handle:setMindFullPulse(active: boolean)
+		for _, t in pulseStrokeTweens do
+			t:Cancel()
+		end
+		table.clear(pulseStrokeTweens)
+		for i = 1, cap do
+			local s = cells[i]:FindFirstChild(PULSE_STROKE_NAME)
+			if active then
+				if not s then
+					local newStroke = Instance.new("UIStroke")
+					newStroke.Name = PULSE_STROKE_NAME
+					newStroke.Color = Defaults.PULSE_STROKE_COLOR
+					newStroke.Parent = cells[i]
+					s = newStroke
+				end
+				local t = TweenService:Create(s :: UIStroke, Defaults.PULSE_TWEEN, { Transparency = 0.5 })
+				t:Play()
+				table.insert(pulseStrokeTweens, t)
+			elseif s then
+				s:Destroy()
+			end
+		end
+	end
+
+	function handle:playMemorizeOk()
+		for i = 1, cap do
+			if currentTiles[i] then
+				TweenService:Create(cells[i], Defaults.MEMORIZE_FADE, { BackgroundTransparency = 1 }):Play()
+				TweenService:Create(labels[i], Defaults.MEMORIZE_FADE, { TextTransparency = 1 }):Play()
+			end
+		end
+		task.delay(Defaults.MEMORIZE_FADE.Time, function()
+			if not container.Parent then return end
+			handle:setTiles({})
+			for i = 1, cap do
+				labels[i].TextTransparency = 0
+			end
+		end)
+	end
+
+	function handle:playMemorizeFail()
+		for i = 1, cap do
+			if currentTiles[i] then
+				local origColor = cells[i].BackgroundColor3
+				TweenService:Create(cells[i], Defaults.REJECT_TWEEN, { BackgroundColor3 = Defaults.REJECT_COLOR }):Play()
+				task.delay(Defaults.REJECT_TWEEN.Time, function()
+					if cells[i] and cells[i].Parent then
+						TweenService:Create(cells[i], Defaults.REJECT_TWEEN, { BackgroundColor3 = origColor }):Play()
+					end
+				end)
+			end
+		end
+		local origPos = container.Position
+		local shakeStep = Defaults.SHAKE_DURATION_SEC / (Defaults.SHAKE_CYCLES * 2)
+		task.spawn(function()
+			for _ = 1, Defaults.SHAKE_CYCLES do
+				if not container.Parent then return end
+				container.Position = UDim2.new(
+					origPos.X.Scale, origPos.X.Offset + Defaults.SHAKE_OFFSET_PX,
+					origPos.Y.Scale, origPos.Y.Offset
+				)
+				task.wait(shakeStep)
+				if not container.Parent then return end
+				container.Position = UDim2.new(
+					origPos.X.Scale, origPos.X.Offset - Defaults.SHAKE_OFFSET_PX,
+					origPos.Y.Scale, origPos.Y.Offset
+				)
+				task.wait(shakeStep)
+			end
+			if container.Parent then
+				container.Position = origPos
+			end
+		end)
+	end
+
 	function handle:destroy()
 		cancelAll()
+		for _, t in pulseStrokeTweens do
+			t:Cancel()
+		end
+		table.clear(pulseStrokeTweens)
 		for _, conn in connections do
 			conn:Disconnect()
 		end

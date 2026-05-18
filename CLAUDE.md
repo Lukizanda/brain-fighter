@@ -22,6 +22,8 @@
 - **Before creating or modifying a script on disk**, check if the target instance in Studio has **child objects** (GUI templates, Sounds, Animations, RemoteEvents) using `get_instance_children`. If it does, ensure the parent's `.meta.json` has `"ignoreUnknownInstances": true` — otherwise Rojo will delete those children on sync.
 - **When pulling from another machine**, always compare disk files vs Studio sources before syncing. Studio may have been edited directly and contain newer code than the repo.
 - **Pre-commit hook validates `.meta.json` / `.model.json` files** for the silent-fail traps (children-array in meta, missing className in model, etc). Enable per clone via `git config core.hooksPath .githooks`. See `wiki/concepts/RojoJsonValidator.md`.
+- **`init.model.json` inside a folder creates a CHILD named "init"** — it does NOT define the folder's class. To make a folder represent a non-script class (e.g. MeshPart, Tool), use `init.meta.json` with `"className"` set instead. Example: `Handle/init.meta.json` with `{ "className": "MeshPart", "ignoreUnknownInstances": true, "properties": { ... } }`.
+- **Any folder-based instance with Studio-side children not tracked on disk** (mesh children, attachments, SurfaceAppearance, sounds) must have `"ignoreUnknownInstances": true` in its `init.meta.json` — otherwise Rojo will delete them on every sync.
 
 ## Character & Physics
 - **Never set HumanoidRootPart.CFrame directly** to control orientation — the physics engine overrides it. Use `AlignOrientation` constraints with `RigidityEnabled = true` instead.

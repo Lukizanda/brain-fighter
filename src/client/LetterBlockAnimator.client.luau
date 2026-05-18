@@ -52,8 +52,11 @@ local function track(block: Instance)
 	}
 end
 
-local function untrack(block: Instance)
+local function onRemoved(block: Instance)
 	if not block:IsA("Model") then return end
+	local state = trackedBlocks[block]
+	if not state then return end
+	-- Phase C: spawn collect-pop emitter at state.basePosition here.
 	trackedBlocks[block] = nil
 end
 
@@ -62,7 +65,7 @@ for _, block in ipairs(CollectionService:GetTagged(LetterBlocks.TAG)) do
 end
 
 CollectionService:GetInstanceAddedSignal(LetterBlocks.TAG):Connect(track)
-CollectionService:GetInstanceRemovedSignal(LetterBlocks.TAG):Connect(untrack)
+CollectionService:GetInstanceRemovedSignal(LetterBlocks.TAG):Connect(onRemoved)
 
 local frameCount = 0
 

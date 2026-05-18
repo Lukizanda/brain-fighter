@@ -35,6 +35,9 @@ export type Handle = {
 	gui: Frame,
 	setValue: (self: Handle, current: number, max: number) -> (),
 	setColor: (self: Handle, c: Color3) -> (),
+	playGainSweep: (self: Handle) -> (),
+	playDrainRipple: (self: Handle) -> (),
+	setCapGlow: (self: Handle, active: boolean) -> (),
 	destroy: (self: Handle) -> (),
 }
 
@@ -143,6 +146,9 @@ function AttributeBarBuilder.build(config: Config): Handle
 
 	-- Mutable handle state
 	local lastTweens: { Tween } = {}
+	local lastFraction = 0
+	local capGlowTween: Tween? = nil
+	local CAP_GLOW_STROKE_NAME = "CapGlowStroke"
 
 	local function cancelTweens()
 		for _, t in lastTweens do
@@ -158,6 +164,7 @@ function AttributeBarBuilder.build(config: Config): Handle
 	function handle:setValue(current: number, max: number)
 		local safeMax = math.max(max, 1)
 		local fraction = math.clamp(current / safeMax, 0, 1)
+		lastFraction = fraction
 
 		local fillTween = TweenService:Create(fill, Defaults.FILL_TWEEN,
 			{ Size = UDim2.new(fraction, 0, 1, 0) })
@@ -185,8 +192,89 @@ function AttributeBarBuilder.build(config: Config): Handle
 		fill.BackgroundColor3 = c
 	end
 
+	function handle:playGainSweep()
+		local overlay = Instance.new("Frame")
+		overlay.Name = "GainSweepOverlay"
+		overlay.Size = UDim2.new(0, 2, 1, 0)
+		overlay.Position = UDim2.new(0, 0, 0, 0)
+		overlay.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		overlay.BackgroundTransparency = 0.5
+		overlay.BorderSizePixel = 0
+		overlay.ZIndex = fill.ZIndex + 1
+		overlay.Parent = track
+		local sweepTween = TweenService:Create(overlay, Defaults.GAIN_SWEEP_TWEEN, {
+			Size = UDim2.new(lastFraction, 0, 1, 0),
+		})
+		sweepTween:Play()
+		sweepTween.Completed:Connect(function(status: Enum.TweenStatus)
+			if status == Enum.TweenStatus.Cancelled then return end
+			if not overlay.Parent then return end
+			local fadeTween = TweenService:Create(overlay, Defaults.GAIN_SWEEP_FADE, { BackgroundTransparency = 1 })
+			fadeTween:Play()
+			fadeTween.Completed:Connect(function()
+				if overlay.Parent then overlay:Destroy() end
+			end)
+		end)
+	end
+
+	function handle:playDrainRipple()
+		for i = 0, Defaults.DRAIN_RIPPLE_COUNT - 1 do
+			task.delay(i * Defaults.DRAIN_RIPPLE_STAGGER, function()
+				if not fill.Parent then return end
+				local ring = Instance.new("Frame")
+				ring.Name = "DrainRipple"
+				ring.Size = UDim2.new(0, 8, 0, 8)
+				ring.AnchorPoint = Vector2.new(0.5, 0.5)
+				ring.Position = UDim2.new(lastFraction, 0, 0.5, 0)
+				ring.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				ring.BackgroundTransparency = 0.3
+				ring.BorderSizePixel = 0
+				local corner = Instance.new("UICorner")
+				corner.CornerRadius = UDim.new(0.5, 0)
+				corner.Parent = ring
+				ring.Parent = track
+				local rippleTween = TweenService:Create(ring, Defaults.DRAIN_RIPPLE_TWEEN, {
+					Size = UDim2.new(0, 24, 0, 24),
+					BackgroundTransparency = 1,
+				})
+				rippleTween:Play()
+				rippleTween.Completed:Connect(function()
+					if ring.Parent then ring:Destroy() end
+				end)
+			end)
+		end
+	end
+
+	function handle:setCapGlow(active: boolean)
+		if capGlowTween then
+			capGlowTween:Cancel()
+			capGlowTween = nil
+		end
+		local stroke = track:FindFirstChild(CAP_GLOW_STROKE_NAME)
+		if active then
+			if not stroke then
+				local newStroke = Instance.new("UIStroke")
+				newStroke.Name = CAP_GLOW_STROKE_NAME
+				newStroke.Color = config.color
+				newStroke.Thickness = Defaults.CAP_STROKE_MIN
+				newStroke.Parent = track
+				stroke = newStroke
+			end
+			capGlowTween = TweenService:Create(stroke :: UIStroke, Defaults.CAP_GLOW_TWEEN, {
+				Thickness = Defaults.CAP_STROKE_MAX,
+			})
+			capGlowTween:Play()
+		elseif stroke then
+			stroke:Destroy()
+		end
+	end
+
 	function handle:destroy()
 		cancelTweens()
+		if capGlowTween then
+			capGlowTween:Cancel()
+			capGlowTween = nil
+		end
 		container:Destroy()
 	end
 

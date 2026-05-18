@@ -39,6 +39,18 @@ local AttributeBarConfig = {
 	-- Low-value flash (optional): pulse the fill when value crosses these thresholds
 	LOW_THRESHOLD = 0.25, -- fraction below which the color shifts to critical
 	MID_THRESHOLD = 0.5, -- fraction below which the color shifts to warning
+
+	-- UI VFX tweens (Section 3.2)
+	GAIN_SWEEP_TWEEN     = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	GAIN_SWEEP_FADE      = TweenInfo.new(0.20, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	GAIN_SWEEP_DELTA_MIN = 8,
+	DRAIN_RIPPLE_TWEEN   = TweenInfo.new(0.30, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
+	DRAIN_RIPPLE_COUNT   = 3,
+	DRAIN_RIPPLE_STAGGER = 0.08,
+	DRAIN_DELTA_MIN      = 10,
+	CAP_GLOW_TWEEN       = TweenInfo.new(0.80, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+	CAP_STROKE_MIN       = 1,
+	CAP_STROKE_MAX       = 3,
 }
 
 return AttributeBarConfig

@@ -31,6 +31,18 @@ local BufferDisplayConfig = {
 	-- Empty-slot dot
 	EMPTY_TEXT               = "·",
 	EMPTY_TEXT_COLOR         = Color3.fromRGB(120, 120, 140),
+
+	-- UI VFX tweens (Section 3.1)
+	POP_TWEEN          = TweenInfo.new(0.10, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	POP_SCALE          = 1.20,
+	PULSE_TWEEN        = TweenInfo.new(0.60, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+	PULSE_STROKE_COLOR = Color3.fromRGB(255, 215, 0),
+	MEMORIZE_FADE      = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	SHAKE_OFFSET_PX    = 4,
+	SHAKE_CYCLES       = 3,
+	SHAKE_DURATION_SEC = 0.18,
+	REJECT_COLOR       = Color3.fromRGB(220, 60, 60),
+	REJECT_TWEEN       = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 }
 
 return BufferDisplayConfig

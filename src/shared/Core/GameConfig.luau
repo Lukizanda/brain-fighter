@@ -62,6 +62,7 @@ local GameConfig = {
 	----------------------------------------------------------------------
 	BLOCK_SPAWN_DENSITY = 0.4,
 	BLOCK_MIN_SPACING = 4,            -- minimum studs between block centers; 0 disables
+	BLOCK_SCALE = 1.0,                -- uniform scale multiplier on the 4×4×4 template (e.g. 0.5 = 2 studs, 2 = 8 studs); increase BLOCK_MIN_SPACING proportionally when scaling up
 
 	----------------------------------------------------------------------
 	-- Default camera behavior (applies when TPS_CHARACTER_ENABLED = false)

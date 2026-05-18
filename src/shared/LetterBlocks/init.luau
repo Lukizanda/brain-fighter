@@ -12,6 +12,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 
+local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
 local TAG = "LetterBlock"
@@ -74,6 +75,9 @@ function LetterBlocks.spawn(letter: string, color: string, cframe: CFrame, paren
 	block:SetAttribute(LETTER_ATTRIBUTE, letter:upper():sub(1, 1))
 	block:SetAttribute(COLOR_ATTRIBUTE, color)
 	applyVisualState(block)
+	if GameConfig.BLOCK_SCALE ~= 1 then
+		block:ScaleTo(GameConfig.BLOCK_SCALE)
+	end
 	block:PivotTo(cframe)
 	CollectionService:AddTag(block, TAG)
 	block.Parent = parent or workspace

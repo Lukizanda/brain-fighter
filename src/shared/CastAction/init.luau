@@ -60,6 +60,11 @@ export type CastResult = {
 
 local CastAction = {}
 
+-- Fires on the casting client's VM after every successful cast.
+-- Server VM creates the same BindableEvent but no listener connects there.
+local _spellResolvedBindable = Instance.new("BindableEvent")
+CastAction.spellResolved = _spellResolvedBindable.Event :: RBXScriptSignal
+
 local function fail(reason: string): CastResult
 	return { ok = false, reason = reason }
 end
@@ -107,6 +112,7 @@ local function drainAndCast(
 	local executorResult = SpellExecutor.cast(spec, caster, target)
 	if executorResult.ok then
 		log:info(string.format("cast ok — %s (color=%s tier=%d cost=%d)", spec.name, spec.color, spec.tier, spec.cost))
+		_spellResolvedBindable:Fire(spec, caster, target)
 		return success(spec)
 	end
 

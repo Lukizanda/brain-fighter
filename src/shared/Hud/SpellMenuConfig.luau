@@ -32,6 +32,13 @@ local SpellMenuConfig = {
 
 	NO_SPELL_TEXT  = "—",
 	COST_FORMAT    = "%d / 160",
+
+	-- UI VFX tweens (Section 3.3)
+	AFFORD_BOUNCE_TWEEN = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	AFFORD_BOUNCE_SCALE = 1.08,
+	FIRED_FLASH_TWEEN   = TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	FIRED_DIM_COLOR     = Color3.fromRGB(80, 80, 90),
+	FIRED_DIM_TWEEN     = TweenInfo.new(0.40, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 }
 
 return SpellMenuConfig
