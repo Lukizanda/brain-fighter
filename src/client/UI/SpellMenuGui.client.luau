@@ -18,6 +18,8 @@ local CastAction        = require(ReplicatedStorage.Shared.CastAction)
 local NPCConstants      = require(ReplicatedStorage.Shared.NPC.NPCConstants)
 local PlayerSession     = require(script.Parent.Parent.PlayerSession)
 
+local spellCastRemote = ReplicatedStorage.Shared.SpellCast.Remotes.SpellCastServer :: RemoteEvent
+
 local log = Logger.new("SpellMenuGui")
 
 -- Max range for auto-targeting. Spells won't lock onto anything farther than this.
@@ -107,6 +109,11 @@ menu.castRequested:Connect(function(color: string)
 		target
 	)
 	if result.ok then
+		-- Relay to server so damage applies to the server-owned Humanoid.
+		-- Client Health writes on server-created NPCs/boss don't replicate.
+		if target and result.cast then
+			spellCastRemote:FireServer(result.cast.color, result.cast.tier, target)
+		end
 		log:info(string.format("Cast: %s -> %s", result.cast and result.cast.name or "?",
 			target and target.Name or "self"))
 	else
