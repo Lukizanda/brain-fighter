@@ -140,11 +140,20 @@ function BossSpawner.spawn(bossPoint: BasePart, typeSpec: BossTypeSpec): Model?
 	humanoid.JumpPower           = 0
 	humanoid.BreakJointsOnDeath  = false
 
-	local scaleNames = { "BodyHeightScale", "BodyWidthScale", "BodyDepthScale" }
-	for _, scaleName in scaleNames do
+	-- Apply scale then destroy the NumberValues immediately. Roblox's character
+	-- scaling system keeps HipHeight = scale × baseHipHeight (e.g. 6 at 3×), but the
+	-- rig's physical foot geometry doesn't match that height, so the physics engine
+	-- fights a large vertical error that absorbs all motor force and prevents movement.
+	-- Destroying the NumberValues after the scale is baked in lets HipHeight settle at
+	-- the rig's natural value (~2) rather than being locked at 6.
+	local allScaleNames = { "BodyHeightScale", "BodyWidthScale", "BodyDepthScale", "BodyProportionScale", "HeadScale" }
+	for _, scaleName in allScaleNames do
 		local sv = humanoid:FindFirstChild(scaleName)
 		if sv and sv:IsA("NumberValue") then
-			sv.Value = typeSpec.bodyScale
+			if scaleName == "BodyHeightScale" or scaleName == "BodyWidthScale" or scaleName == "BodyDepthScale" then
+				sv.Value = typeSpec.bodyScale
+			end
+			sv:Destroy()
 		end
 	end
 

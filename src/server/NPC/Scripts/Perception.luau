@@ -96,7 +96,8 @@ function Perception.update(bb: Blackboard)
 		end
 
 		local distance = (hrp.Position - npcPos).Magnitude
-		if distance < nearestDistance and distance <= NPCConstants.DETECTION_RANGE then
+		local perceptionRange = (bb :: any).perceptionRange or NPCConstants.DETECTION_RANGE
+		if distance < nearestDistance and distance <= perceptionRange then
 			nearestDistance = distance
 			nearestPlayer = player
 			nearestHumanoid = hum

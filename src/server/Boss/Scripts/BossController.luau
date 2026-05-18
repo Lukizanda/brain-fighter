@@ -88,6 +88,7 @@ function BossController.new(
 		lastShotTime         = 0,
 		animations           = {},
 		-- ── Boss-specific fields ────────────────────────────────
+		perceptionRange      = typeSpec.detectionRange,
 		bossTypeSpec         = typeSpec,
 		currentPhaseIndex    = 1,
 		currentPhaseSpec     = typeSpec.phases[1],
