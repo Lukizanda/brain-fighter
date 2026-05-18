@@ -490,8 +490,8 @@ Sound throttling: the same `SpellVfxEvent` triggers cast sound. If two casts wit
 Ordered so each step is independently testable; **bold** items are blocking for the next step.
 
 ### Phase A — Foundation
-1. **Create `src/shared/Vfx/VfxConfig.luau`** with the schema in §1 and the four palette entries (`COLORS.red/.green/.blue`). Empty `EFFECTS` table to start.
-2. **Create `src/shared/Vfx/Remotes/SpellVfxEvent.model.json`** (Rojo-versioned RemoteEvent stub).
+1. ~~**Create `src/shared/Vfx/VfxConfig.luau`**~~ **Done** — config stub with full `COLORS` palette (R/G/B), `PERF` guardrails, and empty `EFFECTS` table.
+2. ~~**Create `src/shared/Vfx/Remotes/SpellVfxEvent.model.json`**~~ **Done** — Rojo-versioned RemoteEvent stub exists at `src/shared/Vfx/Remotes/`. (Also covered by Phase B B0.)
 3. **Create `src/shared/Vfx/init.luau`** — module barrel exporting `Config = VfxConfig`, `resolveCastId`, `resolveImpactId`, and a typed `getRemote()` helper.
 4. **Create `ReplicatedStorage.VfxTemplates`** Folder + the initial templates (`BurstSmall`, `BurstLarge`, `RingRipple`, `ImpactBurst`, `ShockwaveRing`, `ChannelBeam`). Templates live on disk under `src/shared/Vfx/Templates/` as `.model.json` (`ParticleEmitter`, `Beam`). Color/rate set to "neutral white"; runtime patches the color.
 

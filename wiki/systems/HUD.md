@@ -1,7 +1,7 @@
 ---
 type: system
 description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, WeaponRolodex, BuffTray, reticle, settings menu, and 5 Phase 4 gameplay widgets (BufferDisplay, ReservoirBars, MemorizeButton, SpellMenu, MindFullIndicator).
-updated: 2026-05-14
+updated: 2026-05-18
 ---
 
 # HUD System
@@ -57,6 +57,7 @@ src/client/UI/
   MemorizeButtonGui.client.luau   — BottomCenter; fires tryMemorize on click
   SpellMenuGui.client.luau        — BottomRight; fires tapReservoir on color tap
   MindFullIndicatorGui.client.luau — TopCenter; shows/hides on mindFull/mindFreed
+  BossHudGui.client.luau          — TopCenter; boss health bar + phase label; hidden until a boss spawns
 ```
 
 ## Phase 4 gameplay widgets
