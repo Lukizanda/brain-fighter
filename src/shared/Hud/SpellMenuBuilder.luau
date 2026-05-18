@@ -1,23 +1,29 @@
 ----------------------------------------------------------------------
 -- SpellMenuBuilder
 ----------------------------------------------------------------------
--- Three-button spell cast panel (red / green / blue). Each button
--- shows the highest affordable spell and current energy. Tap fires
--- `castRequested` with the color; the client script owns the
--- CastAction call so it can supply the live caster reference.
+-- Three spell cast buttons (red / green / blue). Each button contains
+-- a layered gradient fill that rises bottom-to-top as mana accumulates,
+-- replacing the separate ReservoirBars component.
+--
+-- Panel layers (back to front):
+--   FillBase  — always-visible dim bg (the "empty" container look)
+--   FillClip  — clips FillBar to rounded bounds (ClipsDescendants)
+--     FillBar — solid gradient, height = energy fraction, animated
+--   ColorLabel / SpellLabel — text overlays (ZIndex above fill)
+--   TextButton — tap detection (fires castEvent + shows energy popup)
 --
 -- Returned handle:
 --   .gui                 Frame to register with HudLayoutManager
 --   .castRequested       RBXScriptSignal<color: string>
---   :setReservoirs(snap) refresh affordability + spell name labels
+--   :setReservoirs(snap) refresh fill height + spell name labels
 --   :destroy()           clean up
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
-local Defaults       = require(ReplicatedStorage.Shared.Hud.SpellMenuConfig)
-local SpellRegistry  = require(ReplicatedStorage.Shared.SpellRegistry)
+local Defaults      = require(ReplicatedStorage.Shared.Hud.SpellMenuConfig)
+local SpellRegistry = require(ReplicatedStorage.Shared.SpellRegistry)
 
 export type Snapshot = { red: number, green: number, blue: number }
 
@@ -31,6 +37,14 @@ export type Handle = {
 }
 
 local COLOR_ORDER = { "red", "green", "blue" }
+
+local function lightenColor(c: Color3, amount: number): Color3
+	return Color3.fromRGB(
+		math.clamp(math.round(c.R * 255 + amount), 0, 255),
+		math.clamp(math.round(c.G * 255 + amount), 0, 255),
+		math.clamp(math.round(c.B * 255 + amount), 0, 255)
+	)
+end
 
 local SpellMenuBuilder = {}
 
@@ -52,44 +66,78 @@ function SpellMenuBuilder.build(): Handle
 	local castEvent = Instance.new("BindableEvent")
 	castEvent.Name = "SpellMenuCast"
 
-	-- Per-color UI references
-	local panels: { [string]: Frame }        = {}
+	local panels: { [string]: Frame }    = {}
+	local fillBases: { [string]: Frame } = {}
+	local fillBars: { [string]: Frame }  = {}
 	local spellLabels: { [string]: TextLabel } = {}
-	local costLabels: { [string]: TextLabel }  = {}
+	local currentEnergy: { [string]: number }  = { red = 0, green = 0, blue = 0 }
 
 	for i, color in COLOR_ORDER do
 		local spec = Defaults.COLORS[color]
+		local bgColor = spec.bg
+		local lightColor = lightenColor(bgColor, 55)
 
+		-- Outer panel — transparent container so fill layers compose cleanly
 		local panel = Instance.new("Frame")
 		panel.Name = "Panel_" .. color
 		panel.LayoutOrder = i
 		panel.Size = UDim2.new(0, Defaults.BUTTON_WIDTH, 0, Defaults.BUTTON_HEIGHT)
-		panel.BackgroundColor3 = spec.bg
-		panel.BackgroundTransparency = Defaults.DISABLED_TRANSPARENCY
+		panel.BackgroundTransparency = 1
 		panel.BorderSizePixel = 0
 
-		local panelCorner = Instance.new("UICorner")
-		panelCorner.CornerRadius = UDim.new(0, Defaults.CORNER_RADIUS)
-		panelCorner.Parent = panel
+		-- FillBase: always-visible dim layer — conveys the "empty" shape
+		local fillBase = Instance.new("Frame")
+		fillBase.Name = "FillBase"
+		fillBase.Size = UDim2.new(1, 0, 1, 0)
+		fillBase.BackgroundColor3 = bgColor
+		fillBase.BackgroundTransparency = Defaults.FILL_BASE_TRANSPARENCY
+		fillBase.BorderSizePixel = 0
+		fillBase.ZIndex = 1
+		fillBase.Parent = panel
 
-		-- Invisible TextButton covering the whole panel for tap detection
-		local btn = Instance.new("TextButton")
-		btn.Size = UDim2.new(1, 0, 1, 0)
-		btn.BackgroundTransparency = 1
-		btn.Text = ""
-		btn.AutoButtonColor = false
-		btn.Parent = panel
+		local baseCorner = Instance.new("UICorner")
+		baseCorner.CornerRadius = UDim.new(0, Defaults.CORNER_RADIUS)
+		baseCorner.Parent = fillBase
 
-		local capturedColor = color
-		btn.MouseButton1Click:Connect(function()
-			castEvent:Fire(capturedColor)
-		end)
+		-- FillClip: clips FillBar to the rounded panel shape
+		local fillClip = Instance.new("Frame")
+		fillClip.Name = "FillClip"
+		fillClip.Size = UDim2.new(1, 0, 1, 0)
+		fillClip.BackgroundTransparency = 1
+		fillClip.BorderSizePixel = 0
+		fillClip.ClipsDescendants = true
+		fillClip.ZIndex = 2
+		fillClip.Parent = panel
 
-		-- Color label (top)
+		local clipCorner = Instance.new("UICorner")
+		clipCorner.CornerRadius = UDim.new(0, Defaults.CORNER_RADIUS)
+		clipCorner.Parent = fillClip
+
+		-- FillBar: solid gradient anchored to bottom, height tweens with mana
+		local fillBar = Instance.new("Frame")
+		fillBar.Name = "FillBar"
+		fillBar.AnchorPoint = Vector2.new(0, 1)
+		fillBar.Position = UDim2.new(0, 0, 1, 0)
+		fillBar.Size = UDim2.new(1, 0, 0, 0)
+		fillBar.BackgroundColor3 = bgColor
+		fillBar.BorderSizePixel = 0
+		fillBar.ZIndex = 2
+		fillBar.Parent = fillClip
+
+		-- Rotation=270: key 0 = bottom (solid), key 1 = top (lighter)
+		local gradient = Instance.new("UIGradient")
+		gradient.Rotation = 270
+		gradient.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, bgColor),
+			ColorSequenceKeypoint.new(1, lightColor),
+		})
+		gradient.Parent = fillBar
+
+		-- Color label: "RED" / "GREEN" / "BLUE"
 		local colorLabel = Instance.new("TextLabel")
 		colorLabel.Name = "ColorLabel"
-		colorLabel.Size = UDim2.new(1, 0, 0, 16)
-		colorLabel.Position = UDim2.new(0, 0, 0, 4)
+		colorLabel.Size = UDim2.new(1, 0, 0, 18)
+		colorLabel.Position = UDim2.new(0, 0, 0, 6)
 		colorLabel.BackgroundTransparency = 1
 		colorLabel.Font = Defaults.LABEL_FONT
 		colorLabel.TextSize = Defaults.LABEL_SIZE
@@ -97,13 +145,14 @@ function SpellMenuBuilder.build(): Handle
 		colorLabel.TextStrokeTransparency = Defaults.TEXT_STROKE
 		colorLabel.Text = spec.label
 		colorLabel.TextXAlignment = Enum.TextXAlignment.Center
+		colorLabel.ZIndex = 4
 		colorLabel.Parent = panel
 
-		-- Spell name label (middle)
+		-- Spell name label (vertically centered)
 		local spellLabel = Instance.new("TextLabel")
 		spellLabel.Name = "SpellLabel"
-		spellLabel.Size = UDim2.new(1, -4, 0, 16)
-		spellLabel.Position = UDim2.new(0, 2, 0, 22)
+		spellLabel.Size = UDim2.new(1, -4, 0, 18)
+		spellLabel.Position = UDim2.new(0, 2, 0.5, -9)
 		spellLabel.BackgroundTransparency = 1
 		spellLabel.Font = Defaults.SPELL_FONT
 		spellLabel.TextSize = Defaults.SPELL_SIZE
@@ -112,30 +161,72 @@ function SpellMenuBuilder.build(): Handle
 		spellLabel.Text = Defaults.NO_SPELL_TEXT
 		spellLabel.TextXAlignment = Enum.TextXAlignment.Center
 		spellLabel.TextWrapped = true
+		spellLabel.ZIndex = 4
 		spellLabel.Parent = panel
 
-		-- Cost/energy label (bottom)
-		local costLabel = Instance.new("TextLabel")
-		costLabel.Name = "CostLabel"
-		costLabel.Size = UDim2.new(1, 0, 0, 14)
-		costLabel.Position = UDim2.new(0, 0, 1, -16)
-		costLabel.BackgroundTransparency = 1
-		costLabel.Font = Defaults.COST_FONT
-		costLabel.TextSize = Defaults.COST_SIZE
-		costLabel.TextColor3 = Defaults.DIM_COLOR
-		costLabel.TextStrokeTransparency = 1
-		costLabel.Text = "0 / 160"
-		costLabel.TextXAlignment = Enum.TextXAlignment.Center
-		costLabel.Parent = panel
+		-- TextButton: full-size tap target (highest ZIndex in panel)
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(1, 0, 1, 0)
+		btn.BackgroundTransparency = 1
+		btn.Text = ""
+		btn.AutoButtonColor = false
+		btn.ZIndex = 10
+		btn.Parent = panel
+
+		local capturedColor = color
+		btn.MouseButton1Click:Connect(function()
+			local energy = currentEnergy[capturedColor] or 0
+
+			-- Energy popup floats above the button
+			local popup = Instance.new("Frame")
+			popup.Name = "EnergyPopup"
+			popup.AnchorPoint = Vector2.new(0.5, 1)
+			popup.Position = UDim2.new(0.5, 0, 0, -4)
+			popup.Size = UDim2.new(0, 72, 0, 22)
+			popup.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
+			popup.BackgroundTransparency = 0.15
+			popup.BorderSizePixel = 0
+			popup.ZIndex = 20
+			popup.Parent = panel
+
+			local popupCorner = Instance.new("UICorner")
+			popupCorner.CornerRadius = UDim.new(0, 4)
+			popupCorner.Parent = popup
+
+			local popupLabel = Instance.new("TextLabel")
+			popupLabel.Size = UDim2.new(1, 0, 1, 0)
+			popupLabel.BackgroundTransparency = 1
+			popupLabel.Font = Defaults.POPUP_FONT
+			popupLabel.TextSize = Defaults.POPUP_SIZE
+			popupLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+			popupLabel.Text = string.format("%d / %d", energy, Defaults.FILL_MAX)
+			popupLabel.TextXAlignment = Enum.TextXAlignment.Center
+			popupLabel.ZIndex = 21
+			popupLabel.Parent = popup
+
+			task.delay(Defaults.POPUP_DURATION, function()
+				if not popup.Parent then return end
+				local fadeFrame = TweenService:Create(popup, Defaults.POPUP_FADE_TWEEN, { BackgroundTransparency = 1 })
+				local fadeText = TweenService:Create(popupLabel, Defaults.POPUP_FADE_TWEEN, { TextTransparency = 1 })
+				fadeFrame:Play()
+				fadeText:Play()
+				fadeFrame.Completed:Connect(function()
+					if popup.Parent then popup:Destroy() end
+				end)
+			end)
+
+			castEvent:Fire(capturedColor)
+		end)
 
 		panel.Parent = container
-		panels[color] = panel
+		panels[color]     = panel
+		fillBases[color]  = fillBase
+		fillBars[color]   = fillBar
 		spellLabels[color] = spellLabel
-		costLabels[color] = costLabel
 	end
 
 	local handle = {
-		gui          = container,
+		gui           = container,
 		castRequested = castEvent.Event,
 	} :: Handle
 
@@ -145,6 +236,15 @@ function SpellMenuBuilder.build(): Handle
 	function handle:setReservoirs(snapshot: Snapshot)
 		for _, color in COLOR_ORDER do
 			local energy = (snapshot :: any)[color] or 0
+			currentEnergy[color] = energy
+
+			local fraction = math.clamp(energy / Defaults.FILL_MAX, 0, 1)
+			local fillTween = TweenService:Create(fillBars[color], Defaults.FILL_TWEEN, {
+				Size = UDim2.new(1, 0, fraction, 0),
+			})
+			fillTween:Play()
+			table.insert(vfxTweens, fillTween)
+
 			local affordable = SpellRegistry.listAffordableSpells(
 				color :: SpellRegistry.Color,
 				energy
@@ -152,25 +252,13 @@ function SpellMenuBuilder.build(): Handle
 			local canCast = #affordable > 0
 			local topSpell = if canCast then affordable[#affordable] else nil
 
-			if canCast then
-				if not wasAffordable[color] then
-					handle:playAffordBounce(color)
-				else
-					panels[color].BackgroundTransparency = Defaults.ACTIVE_TRANSPARENCY
-				end
-			else
-				panels[color].BackgroundTransparency = Defaults.DISABLED_TRANSPARENCY
+			if canCast and not wasAffordable[color] then
+				handle:playAffordBounce(color)
 			end
 			wasAffordable[color] = canCast
 
-			spellLabels[color].Text = if topSpell
-				then topSpell.name
-				else Defaults.NO_SPELL_TEXT
-			spellLabels[color].TextColor3 = if canCast
-				then Defaults.TEXT_COLOR
-				else Defaults.DIM_COLOR
-
-			costLabels[color].Text = string.format("%d", energy)
+			spellLabels[color].Text = if topSpell then topSpell.name else Defaults.NO_SPELL_TEXT
+			spellLabels[color].TextColor3 = if canCast then Defaults.TEXT_COLOR else Defaults.DIM_COLOR
 		end
 	end
 
@@ -192,15 +280,13 @@ function SpellMenuBuilder.build(): Handle
 			t2:Play()
 			table.insert(vfxTweens, t2)
 		end)
-		local t3 = TweenService:Create(panel, Defaults.AFFORD_BOUNCE_TWEEN, {
-			BackgroundTransparency = Defaults.ACTIVE_TRANSPARENCY,
-		})
-		t3:Play()
-		table.insert(vfxTweens, t3)
 	end
 
 	function handle:playFiredFlash(color: string)
 		local panel = panels[color]
+		local base = fillBases[color]
+
+		-- White flash overlay
 		local overlay = Instance.new("Frame")
 		overlay.Name = "FiredFlash"
 		overlay.Size = UDim2.new(1, 0, 1, 0)
@@ -218,14 +304,16 @@ function SpellMenuBuilder.build(): Handle
 		flashTween.Completed:Connect(function()
 			if overlay.Parent then overlay:Destroy() end
 		end)
-		local origColor = panel.BackgroundColor3
-		local dimTween = TweenService:Create(panel, Defaults.FIRED_DIM_TWEEN, { BackgroundColor3 = Defaults.FIRED_DIM_COLOR })
+
+		-- Dim the FillBase briefly then recover (replaces old BackgroundColor3 tween)
+		local origTransp = base.BackgroundTransparency
+		local dimTween = TweenService:Create(base, Defaults.FIRED_DIM_TWEEN, { BackgroundTransparency = 0.05 })
 		dimTween:Play()
 		table.insert(vfxTweens, dimTween)
 		dimTween.Completed:Connect(function(status: Enum.TweenStatus)
 			if status == Enum.TweenStatus.Cancelled then return end
-			if not panel.Parent then return end
-			local recoverTween = TweenService:Create(panel, Defaults.FIRED_DIM_TWEEN, { BackgroundColor3 = origColor })
+			if not base.Parent then return end
+			local recoverTween = TweenService:Create(base, Defaults.FIRED_DIM_TWEEN, { BackgroundTransparency = origTransp })
 			recoverTween:Play()
 			table.insert(vfxTweens, recoverTween)
 		end)
