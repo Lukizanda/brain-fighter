@@ -16,9 +16,10 @@
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
-local BossTypes = require(ReplicatedStorage.Shared.Boss.BossTypes)
-local NPCTypes  = require(ReplicatedStorage.Shared.NPC.NPCTypes)
-local Logger    = require(ReplicatedStorage.Shared.Core.Logger)
+local BossTypes  = require(ReplicatedStorage.Shared.Boss.BossTypes)
+local NPCTypes   = require(ReplicatedStorage.Shared.NPC.NPCTypes)
+local Logger     = require(ReplicatedStorage.Shared.Core.Logger)
+local SkillTypes = require(ReplicatedStorage.Shared.Skills.SkillTypes)
 
 local Perception   = require(ServerScriptService.Server.NPC.Scripts.Perception)
 local StateMachine = require(ServerScriptService.Server.NPC.Scripts.StateMachine)
@@ -98,6 +99,26 @@ function BossController.new(
 		attackComplete       = false,
 		cooldownStart        = 0,
 	}
+
+	-- Load per-skill windup animations into bb.animations["windup_<skillName>"]
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		animator = Instance.new("Animator")
+		animator.Parent = humanoid
+	end
+	for skillName, skill: SkillTypes.SkillSpec in typeSpec.skills do
+		if skill.windupAnimId then
+			local anim = Instance.new("Animation")
+			anim.AnimationId = skill.windupAnimId
+			local ok, track = pcall(function() return animator:LoadAnimation(anim) end)
+			if ok and track then
+				bb.animations["windup_" .. skillName] = track
+				log:info(string.format("Loaded windup anim for '%s'", skillName))
+			else
+				log:warn(string.format("Failed to load windup anim for '%s': %s", skillName, tostring(track)))
+			end
+		end
+	end
 
 	local states, transitions = BossStates.build()
 	local decision = StateMachine.new(states, transitions, BossStates.State.Idle)

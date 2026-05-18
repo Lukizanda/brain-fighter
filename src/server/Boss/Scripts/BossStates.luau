@@ -26,10 +26,12 @@ local ReplicatedStorage   = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local BossTypes        = require(ReplicatedStorage.Shared.Boss.BossTypes)
-local SkillDelivery = require(ReplicatedStorage.Shared.Skills.SkillDelivery)
+local SkillDelivery    = require(ReplicatedStorage.Shared.Skills.SkillDelivery)
 local NPCTypes         = require(ReplicatedStorage.Shared.NPC.NPCTypes)
 local Logger           = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillTypes       = require(ReplicatedStorage.Shared.Skills.SkillTypes)
+
+local BossEventsFolder = ReplicatedStorage.Shared.Boss.BossEvents
 
 local Actions = require(ServerScriptService.Server.NPC.Scripts.Actions)
 
@@ -112,18 +114,61 @@ local AttackPrepState: StateDefinition = {
 		bbany.attackWindupStart = os.clock()
 		bbany.attackComplete    = false
 
-		-- Pick a random attack from the current phase's available set
+		-- Pick a random attack from the current phase's available set,
+		-- excluding any skill whose minRange exceeds the current distance.
 		local phaseSpec = bbany.currentPhaseSpec
-		if phaseSpec and #phaseSpec.availableAttacks > 0 then
-			bbany.selectedAttack = phaseSpec.availableAttacks[
-				math.random(1, #phaseSpec.availableAttacks)
-			]
+		local bossbbPrep = bbany :: BB
+		local dist = bb.distanceToNearest
+		local candidates: { string } = {}
+		if phaseSpec then
+			for _, attackName in phaseSpec.availableAttacks do
+				local skill: SkillTypes.SkillSpec? = bossbbPrep.bossTypeSpec.skills[attackName]
+				if skill and (not skill.minRange or dist <= skill.minRange) then
+					table.insert(candidates, attackName)
+				end
+			end
+		end
+		if #candidates > 0 then
+			bbany.selectedAttack = candidates[math.random(1, #candidates)]
 		else
-			-- Fallback: nothing available — mark done immediately
+			-- No eligible attack at this range — skip
 			bbany.selectedAttack = nil
 		end
 
 		Actions.StopMoving(bb)
+
+		-- Broadcast telegraph VFX to all clients and play windup animation
+		local selectedAtk: string? = bbany.selectedAttack
+		if selectedAtk then
+			local bossbb = bbany :: BB
+			local skill: SkillTypes.SkillSpec? = bossbb.bossTypeSpec.skills[selectedAtk]
+			if skill then
+				if skill.windupVfx then
+					local windupEventInst = BossEventsFolder:FindFirstChild("BossWindupEvent")
+					if windupEventInst then
+						local totalDuration: number = bossbb.bossTypeSpec.attackWindupSec
+						local aoeRadius: number? = nil
+						if skill.delivery == "aoe" then
+							totalDuration = totalDuration + ((skill.deliveryParams.windupSec or 0) :: number)
+							aoeRadius = skill.deliveryParams.radius :: number
+						end
+						local windupEvent = windupEventInst :: RemoteEvent
+						windupEvent:FireAllClients(bossbb.npc, skill.windupVfx, totalDuration, aoeRadius)
+					else
+						log:warn("BossWindupEvent not in BossEvents — sync Rojo to enable windup VFX")
+					end
+				end
+
+				local track = bossbb.animations["windup_" .. selectedAtk]
+				if track then
+					local t = track :: any
+					t.Priority = Enum.AnimationPriority.Action
+					t.Looped   = false
+					t:Play(0.1)
+				end
+			end
+		end
+
 		log:info(string.format("%s: AttackPrep → will use '%s'",
 			bb.npc.Name, tostring((bbany :: any).selectedAttack)))
 	end,
@@ -153,6 +198,13 @@ local AttackState: StateDefinition = {
 			log:warn("Unknown attack:", attack, "— skipping")
 			bbany.attackComplete = true
 			return
+		end
+
+		-- Stop windup animation now that the attack is firing
+		local windupTrack = bossbb.animations["windup_" .. attack]
+		if windupTrack then
+			local wt = windupTrack :: any
+			if wt.IsPlaying then wt:Stop(0.1) end
 		end
 
 		local hrp    = bossbb.humanoidRootPart
