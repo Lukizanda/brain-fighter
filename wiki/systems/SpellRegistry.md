@@ -1,12 +1,12 @@
 ---
 type: system
-description: Pure-Luau config layer for the 9 prototype spells (R/G/B × T1/T2/T3) — name, color, tier, cost, targeting mode, effectSpec stub. Single source of truth for the spell roster.
-updated: 2026-05-14
+description: Pure-Luau config layer for the spell roster (R/G/B × T1–T4) — name, color, tier, cost, targeting mode, skill:SkillSpec. Single source of truth consumed by SpellExecutor and the cast-menu HUD.
+updated: 2026-05-18
 ---
 
 # SpellRegistry
 
-Config-only module for the prototype 9-spell roster. Owns the per-spell name, color, tier, cost, targeting mode, and an `effectSpec` stub that downstream systems (SpellExecutor, the cast-menu HUD) consume.
+Config-only module for the spell roster. Owns the per-spell name, color, tier, cost, targeting mode, and a `skill: SkillSpec` that `DeliveryRegistry` / `EffectRegistry` consume. (Prior to the Skills pipeline refactor, this field was `effectSpec: EffectSpec` — the shape changed in commit `03b6080`.)
 
 The roster is **pinned** to [[design/gameplay-loop]] § "Spell roster (prototype)" and § "Spell tier thresholds". If those numbers move in the design doc, this module is the single thing that changes — every other system reads through `getSpell` / `listAffordableSpells`.
 
@@ -36,22 +36,17 @@ local options = SpellRegistry.listAffordableSpells("red", 35)
 export type Color = "red" | "green" | "blue"
 export type TargetingMode = "auto" | "placement"
 
-export type EffectSpec = {
-  kind: string,         -- discriminator: "damage" | "heal" | "wall" | "freeze" | "shield"
-  [string]: any,        -- kind-specific parameters
-}
-
 export type Spec = {
   name: string,
   color: Color,
-  tier: number,         -- 1 | 2 | 3
+  tier: number,         -- 1 | 2 | 3 | 4
   cost: number,         -- equals TIER_COSTS[tier] by design (drain == threshold)
   targetingMode: TargetingMode,
-  effectSpec: EffectSpec,
+  skill: SkillTypes.SkillSpec,  -- delivery + onImpact effects
 }
 ```
 
-`effectSpec` is intentionally a discriminator-keyed stub. [[systems/SpellExecutor|SpellExecutor]] (Phase 2) owns interpretation; extra fields are passed through as-is so adding a new spell here doesn't require executor changes for shape, only for behavior.
+`skill.onImpact` is a list of `EffectSpec` entries. `skill.delivery` selects a `DeliveryRegistry` handler (`"instant"`, `"projectile"`, `"aoe"`, `"world_spawn"`). Adding a new spell here only requires defining the `skill` shape — no executor changes needed.
 
 ## Tier thresholds
 
@@ -60,28 +55,30 @@ export type Spec = {
 | T1 | 10 |
 | T2 | 30 |
 | T3 | 80 |
+| T4 | 75 |
 
-Declared as `TIER_COSTS = { 10, 30, 80 }` in `init.luau`. Cost and drain are equal by design — see [[design/gameplay-loop]] § "Spell economy".
+Declared as `TIER_COSTS = { 10, 30, 80, 75 }` in `init.luau`. Cost and drain are equal by design — see [[design/gameplay-loop]] § "Spell economy".
 
-## The 9-spell roster
+## The 10-spell roster
 
-| Color | Tier | Name | Targeting | effectSpec |
-|---|---|---|---|---|
-| Red | T1 | Spark | `auto` | `{ kind = "damage", fractionOfMaxHP = 0.05 }` |
-| Red | T2 | Fireball | `auto` | `{ kind = "damage", fractionOfMaxHP = 0.20 }` |
-| Red | T3 | Inferno | `auto` | `{ kind = "damage", fractionOfMaxHP = 0.50 }` |
-| Green | T1 | Mend | `auto` | `{ kind = "heal", fractionOfMaxHP = 0.15 }` |
-| Green | T2 | Stone Wall | `placement` | `{ kind = "wall", durationSec = 6 }` |
-| Green | T3 | Sanctuary | `auto` | `{ kind = "heal", fractionOfMaxHP = 1.0, buffSpec = { kind = "shield", durationSec = 10 } }` |
-| Blue | T1 | Frost Nip | `auto` | `{ kind = "freeze", durationSec = 1 }` |
-| Blue | T2 | Shield | `auto` | `{ kind = "shield", durationSec = 5 }` |
-| Blue | T3 | Stasis | `auto` | `{ kind = "freeze", durationSec = 5, damageAmpMultiplier = 2.0 }` |
+| Color | Tier | Name | Targeting | Delivery | onImpact |
+|---|---|---|---|---|---|
+| Red | T1 | Spark | `auto` | `instant` | `damage fractionOfMaxHP=0.05` |
+| Red | T2 | Fireball | `auto` | `instant` | `damage fractionOfMaxHP=0.20` |
+| Red | T3 | Inferno | `auto` | `instant` | `damage fractionOfMaxHP=0.50` |
+| Red | T4 | Volley | `auto` | `projectile` | `damage amount=12` (3 projectiles) |
+| Green | T1 | Mend | `auto` | `instant` | `heal fractionOfMaxHP=0.15` |
+| Green | T2 | Stone Wall | `placement` | `world_spawn` | _(none)_ |
+| Green | T3 | Sanctuary | `auto` | `instant` | `heal 100% + shield 10s` |
+| Blue | T1 | Frost Nip | `auto` | `instant` | `freeze durationSec=1` |
+| Blue | T2 | Shield | `auto` | `instant` | `shield durationSec=5` |
+| Blue | T3 | Stasis | `auto` | `instant` | `freeze durationSec=5` |
 
 These numbers are first-prototype starting points. Tuning is expected — see [[design/gameplay-loop]] § "Playtest verification".
 
 ## Errors
 
-- `getSpell(color, tier)` — `error` if `color` is not `"red"|"green"|"blue"` or `tier` is not `1|2|3`.
+- `getSpell(color, tier)` — `error` if `color` is not `"red"|"green"|"blue"` or `tier` is not `1|2|3|4`.
 - `listAffordableSpells(color, energy)` — `error` if `color` is invalid. Any non-negative `energy` is accepted; below-T1 returns `{}`.
 
 ## Cross-references

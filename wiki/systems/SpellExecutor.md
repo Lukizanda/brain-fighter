@@ -1,19 +1,22 @@
 ---
 type: system
-description: Phase 2 effect runner — dispatches on a SpellRegistry Spec's effectSpec.kind to apply damage, heal, freeze (real) or shield/wall/buff (stubs) against a caster/target.
-updated: 2026-05-14
+description: Thin origin-resolver that delegates spell casting to DeliveryRegistry (delivery) and EffectRegistry (effects). All damage/heal/freeze/stub logic lives in src/shared/Skills/.
+updated: 2026-05-18
 ---
 
 # SpellExecutor
 
-The runtime side of the spell roster. Given a [[systems/SpellRegistry|Spec]] plus a caster and a target, dispatches on `spec.effectSpec.kind` and performs the corresponding world effect. **MVP scope:** `damage`, `heal`, `freeze` are real; `shield`, `wall`, `buff` are no-op stubs that log + return `ok=true` so every prototype spell in [[systems/SpellRegistry]] is *callable end-to-end* before the targeting/placement systems land. See [[design/build-plan|build-plan]] Phase 2.
+The runtime side of the spell roster. Given a [[systems/SpellRegistry|Spec]] plus a caster and a target, resolves the origin `CFrame` (Tip attachment → Handle → HumanoidRootPart) and delegates to `DeliveryRegistry.deliver(spec.skill, ctx)`. **All effect and delivery logic lives in `src/shared/Skills/`** — SpellExecutor is now a thin adapter. Boss attacks go through the same `DeliveryRegistry` path. See [[design/build-plan|build-plan]] Phase 2 and the Skills pipeline ingest in `wiki/log.md`.
 
 The module is otherwise pure — the only per-cast state it keeps is a per-Humanoid freeze table so back-to-back freezes don't clobber the saved `WalkSpeed`. The caller (eventually [[systems/CastAction]]) owns cast cost, dictionary validation, and targeting UX; SpellExecutor trusts the Spec.
 
 ## Files
 
-- `src/shared/SpellExecutor/init.luau` — module: dispatch table, effect handlers, freeze bookkeeping, public API
+- `src/shared/SpellExecutor/init.luau` — thin adapter: origin resolution + `DeliveryCtx` construction
 - `src/shared/SpellExecutor/__tests.luau` — pure-Luau smoke tests (`runAll() -> (passed, failed)`)
+- `src/shared/Skills/SkillTypes.luau` — types: `SkillSpec`, `EffectSpec`, `DeliveryCtx`
+- `src/shared/Skills/EffectRegistry.luau` — effect handlers: `damage`, `heal`, `freeze`, stubs
+- `src/shared/Skills/DeliveryRegistry.luau` — delivery handlers: `instant`, `projectile`, `aoe`, `world_spawn`
 
 ## API
 
@@ -32,9 +35,9 @@ SpellExecutor.cast(
 ): CastResult
 ```
 
-`caster` is the entity producing the spell (the wizard's character). `target` is what the spell affects — its expected shape depends on the spec:
+`caster` is the entity producing the spell (the wizard's character). `target` is what the spell affects — its expected shape depends on `spec.skill.onImpact[1].kind`:
 
-| `effectSpec.kind` | Expected `target` | Notes |
+| `kind` | Expected `target` | Notes |
 |---|---|---|
 | `damage` | `Humanoid` (or `Model` containing one) | Required. `nil` → `ok=false`. |
 | `heal` | `Humanoid` / `Model` / `nil` | `nil` falls back to the caster's Humanoid (self-heal). |
@@ -47,7 +50,9 @@ SpellExecutor.cast(
 
 ## Dispatch — full table
 
-| `kind` | Behaviour | Reads from `effectSpec` |
+See `EffectRegistry.luau` for the implementation. `SpellExecutor` no longer contains any dispatch logic.
+
+| `kind` | Behaviour | Reads from `onImpact` entry |
 |---|---|---|
 | `damage` | `target.Health -= fraction × target.MaxHealth`; clamp to ≥ 0 | `fractionOfMaxHP` |
 | `heal` | `target.Health += fraction × target.MaxHealth`; clamp to ≤ MaxHealth | `fractionOfMaxHP` |
