@@ -59,15 +59,31 @@ local S = BossStates.State
 -- Helpers
 -- ---------------------------------------------------------------
 
-local function faceTaret(bb: Blackboard)
-	local targetRootPart = (bb :: any).targetRootPart
+-- Degrees per second the boss rotates toward its target during windup.
+-- 180 = half-circle per second; fast enough to feel responsive but visibly smooth.
+local FACE_TURN_RATE = 180
+
+-- Smoothly rotates the boss HRP toward the target on the Y axis.
+-- Uses os.clock() internally so it works without dt from the state machine.
+local function faceTarget(bb: Blackboard)
+	local bbany = bb :: any
+	local targetRootPart = bbany.targetRootPart
 	if not targetRootPart or not targetRootPart.Parent then return end
+
+	local now = os.clock()
+	local dt  = now - ((bbany._faceLastTime or now) :: number)
+	bbany._faceLastTime = now
+
 	local npcPos    = bb.humanoidRootPart.Position
 	local targetPos = (targetRootPart :: BasePart).Position
 	local lookTarget = Vector3.new(targetPos.X, npcPos.Y, targetPos.Z)
-	if (lookTarget - npcPos).Magnitude > 0.5 then
-		bb.humanoidRootPart.CFrame = CFrame.lookAt(npcPos, lookTarget)
-	end
+	if (lookTarget - npcPos).Magnitude < 0.5 then return end
+
+	local currentCFrame = bb.humanoidRootPart.CFrame
+	local desiredCFrame = CFrame.lookAt(npcPos, lookTarget)
+	-- alpha scales with dt so turn speed is frame-rate-independent
+	local alpha = math.min(1, dt * (FACE_TURN_RATE / 90))
+	bb.humanoidRootPart.CFrame = currentCFrame:Lerp(desiredCFrame, alpha)
 end
 
 
@@ -82,8 +98,10 @@ local IdleState: StateDefinition = {
 		Actions.StopMoving(bb)
 	end,
 
-	update = function(_bb)
-		-- Stand still; transitions watch nearestPlayer.
+	update = function(bb)
+		if (bb :: any).bossTypeSpec and (bb :: any).bossTypeSpec.continuousFacing then
+			faceTarget(bb)
+		end
 	end,
 }
 
@@ -136,6 +154,8 @@ local AttackPrepState: StateDefinition = {
 		end
 
 		Actions.StopMoving(bb)
+		-- Reset face timer so the first faceTarget call computes dt=0 (no stale jump)
+		bbany._faceLastTime = nil
 
 		-- Broadcast telegraph VFX to all clients and play windup animation
 		local selectedAtk: string? = bbany.selectedAttack
@@ -175,7 +195,7 @@ local AttackPrepState: StateDefinition = {
 
 	update = function(bb)
 		-- Keep facing the player during the telegraph window
-		faceTaret(bb)
+		faceTarget(bb)
 	end,
 }
 
@@ -220,8 +240,11 @@ local AttackState: StateDefinition = {
 		SkillDelivery.deliver(skill, ctx)
 	end,
 
-	update = function(_bb)
+	update = function(bb)
 		-- SkillDelivery handlers are async; attackComplete is set via ctx.onComplete.
+		if (bb :: any).bossTypeSpec and (bb :: any).bossTypeSpec.continuousFacing then
+			faceTarget(bb)
+		end
 	end,
 }
 
@@ -233,8 +256,11 @@ local CooldownState: StateDefinition = {
 		Actions.StopMoving(bb)
 	end,
 
-	update = function(_bb)
+	update = function(bb)
 		-- Wait; transitions check the timer.
+		if (bb :: any).bossTypeSpec and (bb :: any).bossTypeSpec.continuousFacing then
+			faceTarget(bb)
+		end
 	end,
 }
 

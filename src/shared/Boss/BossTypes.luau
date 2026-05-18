@@ -30,6 +30,9 @@ export type BossTypeSpec = {
 	detectionRange: number,
 	attackRange: number,
 	attackWindupSec: number,
+	-- When true the boss smoothly rotates toward its target in all non-moving states.
+	-- When false (default) facing only happens during AttackPrep (windup telegraph).
+	continuousFacing: boolean?,
 	skills: { [string]: SkillTypes.SkillSpec },
 	phases: { PhaseSpec },
 }

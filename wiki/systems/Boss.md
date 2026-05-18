@@ -101,6 +101,8 @@ Cooldown ──(timer + player out of range)─→ Patrol
 Cooldown ──(timer + no player)───────────→ Idle
 ```
 
+**Facing behavior:** `AttackPrep` always smoothly rotates the boss toward its target (180 °/s lerp, frame-rate-independent). When `BossTypeSpec.continuousFacing = true`, the same smooth rotation runs in Idle, Attack, and Cooldown as well. Patrol is excluded — the Humanoid pathfinding system owns facing during movement. The turn rate constant (`FACE_TURN_RATE`) lives at the top of `BossStates.luau`.
+
 **Key BossBlackboard fields** (beyond NPCTypes.Blackboard):
 
 | Field | Type | Purpose |
@@ -164,6 +166,7 @@ All boss constants are now per-type in `BossConfig.BOSS_TYPES[<name>]`. Brain's 
 | detectionRange | 160 studs | `BOSS_TYPES.Brain.detectionRange` |
 | attackRange | 100 studs | `BOSS_TYPES.Brain.attackRange` |
 | attackWindupSec | 0.5 s | `BOSS_TYPES.Brain.attackWindupSec` |
+| continuousFacing | true | `BOSS_TYPES.Brain.continuousFacing` — boss tracks player in all non-moving states; `false`/nil = AttackPrep only |
 | FireballVolley count / speed / damage | 3 / 30 / 15 HP | `BOSS_TYPES.Brain.skills.FireballVolley.deliveryParams` + `.onImpact[1].amount` |
 | GroundSlam radius / damage / knockup | 22 / 25 HP / 60 | `BOSS_TYPES.Brain.skills.GroundSlam.deliveryParams` + `.onImpact[*]` |
 
