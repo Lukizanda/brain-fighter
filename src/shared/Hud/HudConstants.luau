@@ -17,7 +17,7 @@ local HudConstants = {
 		BottomRight = {
 			Position = UDim2.new(1, -20, 1, -20),
 			AnchorPoint = Vector2.new(1, 1),
-			Size = UDim2.new(0, 300, 0, 0),
+			Size = UDim2.new(0, 320, 0, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
 			ZIndex = 1,
 			stackVertical = true, -- stacks children with UIListLayout (BottomRight holds mana bars + spell menu)
@@ -28,6 +28,8 @@ local HudConstants = {
 			Size = UDim2.new(0, 400, 0, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
 			ZIndex = 1,
+			stackVertical = true,
+			stackHorizontalAlign = Enum.HorizontalAlignment.Center,
 		},
 		TopCenter = {
 			Position = UDim2.new(0.5, 0, 0, 8),
@@ -54,7 +56,7 @@ local HudConstants = {
 	-- UIScale reference height: all pixel values in HUD configs are authored at this height.
 	-- _updateScale() in HudLayoutManager derives Scale = viewportY / REFERENCE_HEIGHT.
 	REFERENCE_HEIGHT = 1080,
-	MIN_SCALE = 0.5,
+	MIN_SCALE = 0.35,
 	HUD_DISPLAY_ORDER = 10,
 	OVERLAY_DISPLAY_ORDER = 20,
 	HEALTH_REGION = "BottomLeft",

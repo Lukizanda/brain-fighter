@@ -8,8 +8,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local EnergyReservoirs = require(ReplicatedStorage.Shared.EnergyReservoirs)
 
 local SpellMenuConfig = {
-	BUTTON_WIDTH  = 90,
-	BUTTON_HEIGHT = 80,
+	BUTTON_WIDTH  = 100,
+	BUTTON_HEIGHT = 100,
 	BUTTON_GAP    = 6,
 	CORNER_RADIUS = 5,
 

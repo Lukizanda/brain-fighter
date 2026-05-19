@@ -60,7 +60,7 @@ function AttributeBarBuilder.build(config: Config): Handle
 
 	-- Container: bar + overlaid label/numeric. We size the container to include
 	-- a small strip above the bar for text, so the bar stays `height` tall.
-	local textStripHeight = if (showLabel or showNumeric) then 16 else 0
+	local textStripHeight = if showLabel then 16 else 0
 	local container = Instance.new("Frame")
 	container.Name = "AttributeBar_" .. config.name
 	container.Size = UDim2.new(0, width, 0, height + textStripHeight)
@@ -130,18 +130,19 @@ function AttributeBarBuilder.build(config: Config): Handle
 	if showNumeric then
 		numericText = Instance.new("TextLabel")
 		numericText.Name = "Numeric"
-		numericText.AnchorPoint = Vector2.new(1, 1)
-		numericText.Position = UDim2.new(1, -2, 1, -height - 2)
-		numericText.Size = UDim2.new(0.5, 0, 0, 14)
+		numericText.AnchorPoint = Vector2.new(1, 0.5)
+		numericText.Position = UDim2.new(1, -6, 0.5, 0)
+		numericText.Size = UDim2.new(0.5, 0, 1, 0)
 		numericText.BackgroundTransparency = 1
 		numericText.Font = Defaults.TEXT_FONT
 		numericText.TextSize = Defaults.TEXT_SIZE
 		numericText.TextColor3 = Defaults.TEXT_COLOR
 		numericText.TextStrokeTransparency = Defaults.TEXT_STROKE_TRANSPARENCY
 		numericText.TextXAlignment = Enum.TextXAlignment.Right
-		numericText.TextYAlignment = Enum.TextYAlignment.Bottom
+		numericText.TextYAlignment = Enum.TextYAlignment.Center
+		numericText.ZIndex = fill.ZIndex + 1
 		numericText.Text = "0"
-		numericText.Parent = container
+		numericText.Parent = track
 	end
 
 	-- Mutable handle state

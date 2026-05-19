@@ -35,18 +35,17 @@ local function ensureStackContainer(): Frame
 		return stackContainer
 	end
 
-	-- Dedicated container so we don't force a UIListLayout onto the shared
-	-- region (other HUD elements may want to position differently there).
 	local frame = Instance.new("Frame")
 	frame.Name = "PlayerAttributeStack"
-	frame.Size = UDim2.new(0, AttributeBarConfig.BAR_WIDTH, 0, 0)
+	frame.Size = UDim2.new(0, 400, 0, 0)
 	frame.AutomaticSize = Enum.AutomaticSize.Y
 	frame.BackgroundTransparency = 1
 	frame.BorderSizePixel = 0
+	frame.LayoutOrder = 2
 
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Vertical
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	-- Bottom-up stacking: first bar in config ends up at the bottom, matching
 	-- "Health is the most critical; put it closest to the player's eye"
 	layout.VerticalAlignment = Enum.VerticalAlignment.Bottom

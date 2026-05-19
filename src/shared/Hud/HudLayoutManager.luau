@@ -52,7 +52,7 @@ function HudLayoutManager:_init()
 			local layout = Instance.new("UIListLayout")
 			layout.FillDirection = Enum.FillDirection.Vertical
 			layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-			layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+			layout.HorizontalAlignment = (config :: any).stackHorizontalAlign or Enum.HorizontalAlignment.Right
 			layout.SortOrder = Enum.SortOrder.LayoutOrder
 			layout.Padding = UDim.new(0, 8)
 			layout.Parent = region

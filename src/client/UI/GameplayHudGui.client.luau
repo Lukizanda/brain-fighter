@@ -2,9 +2,12 @@
 ----------------------------------------------------------------------
 -- GameplayHudGui
 ----------------------------------------------------------------------
--- Mounts BufferDisplay (tile row) and MemorizeButton in a shared
--- vertical-stack container at BottomCenter, avoiding the overlap that
--- results from two independent register() calls into the same region.
+-- Mounts BufferDisplay (tile row) and MemorizeButton directly into
+-- BottomCenter. BottomCenter's UIListLayout (VerticalAlignment.Bottom,
+-- higher LO = lower on screen) controls the stacking:
+--   LO=1  letter tiles   (top of cluster)
+--   LO=2  health bar     (registered by PlayerHud/init.client.luau)
+--   LO=3  ABSORB button  (closest to screen edge / thumb zone)
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -27,21 +30,6 @@ fizzleSound.Parent = SoundService
 
 local session = PlayerSession.get()
 
-local container = Instance.new("Frame")
-container.Name = "GameplayHud"
-container.Size = UDim2.new(0, 400, 0, 0)
-container.AutomaticSize = Enum.AutomaticSize.Y
-container.BackgroundTransparency = 1
-container.LayoutOrder = 2
-
-local layout = Instance.new("UIListLayout")
-layout.FillDirection = Enum.FillDirection.Vertical
-layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-layout.Padding = UDim.new(0, 8)
-layout.SortOrder = Enum.SortOrder.LayoutOrder
-layout.Parent = container
-
 local display = BufferDisplayBuilder.build({
 	onReorder = function(fromIdx: number, toIdx: number)
 		session.wordBuffer:reorder(fromIdx, toIdx)
@@ -52,13 +40,13 @@ local display = BufferDisplayBuilder.build({
 })
 local btn = MemorizeButtonBuilder.build()
 
-display.gui.LayoutOrder = 2
-btn.gui.LayoutOrder = 1
+-- LO=1 → tiles at top; LO=3 → ABSORB at bottom. Health bar (LO=2) is
+-- registered between them by PlayerHud/init.client.luau.
+display.gui.LayoutOrder = 1
+btn.gui.LayoutOrder = 3
 
-display.gui.Parent = container
-btn.gui.Parent = container
-
-HudLayoutManager:register("BottomCenter", container)
+HudLayoutManager:register("BottomCenter", display.gui)
+HudLayoutManager:register("BottomCenter", btn.gui)
 
 local function onBufferChanged()
 	local tiles = session.wordBuffer:tiles()

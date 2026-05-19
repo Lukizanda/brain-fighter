@@ -7,14 +7,14 @@
 
 local AttributeBarConfig = {
 	-- Geometry (pixels)
-	BAR_WIDTH = 220,
-	BAR_HEIGHT = 12,
-	BAR_SPACING = 6, -- vertical gap between stacked bars
-	CORNER_RADIUS = 3,
+	BAR_WIDTH = 360,
+	BAR_HEIGHT = 36,
+	BAR_SPACING = 10, -- vertical gap between stacked bars
+	CORNER_RADIUS = 5,
 
 	-- Background + border
 	BACKGROUND_COLOR = Color3.fromRGB(22, 22, 26),
-	BACKGROUND_TRANSPARENCY = 0.1,
+	BACKGROUND_TRANSPARENCY = 0.15,
 
 	-- Delayed "damage" bar that lags behind the live value for a moment
 	-- (visual cue: "you just lost X"). Fade controlled by DAMAGE_LAG_SECONDS.
@@ -23,7 +23,7 @@ local AttributeBarConfig = {
 
 	-- Label (attribute name)
 	LABEL_FONT = Enum.Font.GothamBold,
-	LABEL_SIZE = 11,
+	LABEL_SIZE = 12,
 	LABEL_COLOR = Color3.fromRGB(215, 215, 225),
 	LABEL_STROKE_TRANSPARENCY = 0.6,
 

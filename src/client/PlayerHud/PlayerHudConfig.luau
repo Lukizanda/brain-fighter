@@ -26,7 +26,7 @@ export type BarEntry = {
 }
 
 local PlayerHudConfig = {
-	region = "BottomLeft", -- HudLayoutManager region; bars stack vertically here
+	region = "BottomCenter", -- HudLayoutManager region; bars stack vertically here
 
 	-- Order matters: first entry = highest on screen (furthest from eye).
 	-- Keep critical bars (Health) at the bottom, less-urgent above visually,
