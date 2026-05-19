@@ -26,6 +26,7 @@ local RunService        = game:GetService("RunService")
 local DamageTypes = require(ReplicatedStorage.Shared.Health.DamageTypes)
 local Logger      = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillTypes  = require(ReplicatedStorage.Shared.Skills.SkillTypes)
+local FreezeVfx   = require(ReplicatedStorage.Shared.Skills.FreezeVfx)
 
 type EffectSpec = SkillTypes.EffectSpec
 
@@ -103,16 +104,29 @@ SkillEffects.handlers = {
 		local now = os.clock()
 		local state = _freezeState[h]
 		if state then
-			-- Extend the freeze without resetting the saved WalkSpeed
-			state.restoreAt = math.max(state.restoreAt, now + duration)
+			-- Extend the freeze; reschedule cleanup only if the deadline moved
+			local extended = math.max(state.restoreAt, now + duration)
+			if extended > state.restoreAt then
+				state.restoreAt = extended
+				task.delay(extended - now, function()
+					local s = _freezeState[h]
+					if s and os.clock() >= s.restoreAt - 0.01 then
+						if h.Parent then h.WalkSpeed = s.originalSpeed end
+						FreezeVfx.stop(h)
+						_freezeState[h] = nil
+					end
+				end)
+			end
 		else
 			state = { originalSpeed = h.WalkSpeed, restoreAt = now + duration }
 			_freezeState[h] = state
 			h.WalkSpeed = 0
+			FreezeVfx.start(h, duration)
 			task.delay(duration, function()
 				local s = _freezeState[h]
 				if s and os.clock() >= s.restoreAt - 0.01 then
 					if h.Parent then h.WalkSpeed = s.originalSpeed end
+					FreezeVfx.stop(h)
 					_freezeState[h] = nil
 				end
 			end)
