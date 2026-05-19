@@ -1,7 +1,7 @@
 ---
 type: system
-description: Per-character systems — locomotion controller, camera controller, character systems loader. Single-owner Motor6D + AlignOrientation pattern. Gated behind GameConfig.TPS_CHARACTER_ENABLED (default off for Brain Fighter).
-updated: 2026-05-13
+description: Per-character systems — locomotion controller, camera controller, character systems loader, dash/roll. Single-owner Motor6D + AlignOrientation pattern. TPS stack gated behind GameConfig.TPS_CHARACTER_ENABLED (default off for Brain Fighter).
+updated: 2026-05-19
 ---
 
 # Character System
@@ -40,6 +40,27 @@ Higher priority number = runs later = gets the final say.
 ## Movement states
 
 `LocomotionController` reads movement direction relative to camera yaw and selects an animation by name: `Forward`, `Backward`, `StrafeLeft`, `StrafeRight`. Animation instances must be named exactly that. Priority `Movement`, `Looped = true`.
+
+## Dash / Roll (DashController)
+
+Works regardless of `TPS_CHARACTER_ENABLED` — runs on top of the default Roblox PlayerModule.
+
+| Action | Trigger | Behaviour |
+|---|---|---|
+| Roll | LeftShift, grounded | 60 studs/sec Quart/In decel over 0.35 s; 0.55 s total cooldown |
+| Dash | LeftShift, airborne | 60 studs/sec constant for 0.2 s; once per airtime (resets on land) |
+
+**Key implementation notes:**
+
+- Uses `BodyVelocity` with `MaxForce = Vector3.new(math.huge, 0, math.huge)`. Y = 0 so gravity and floor contact are unaffected. The `math.huge` XZ force is required — the default PlayerModule actively decelerates the character when no WASD is held, and `LinearVelocity` or smaller BodyVelocity forces cannot overcome it.
+- Direction is computed from `hrp.CFrame.LookVector` flattened to XZ in world space. Using `RelativeTo.Attachment0` with `VelocityConstraintMode.Plane` caused upward movement because `PlaneVelocity.Y` maps to the attachment's local Y axis (world-up with default attachment orientation).
+- Animations loaded from `ReplicatedStorage.Shared.DashAnimations` (Dash, Roll). Sounds from `ReplicatedStorage.Shared.DashSounds`. VFX template from `ReplicatedStorage.Shared.DashEffects.DashParticles`. **These instances live only in the `.rbxl` — re-create via MCP after a fresh place open.**
+- All timing and speed constants live in `GameConfig.DASH`.
+
+### Files
+
+- `src/shared/Character/DashController.luau` — core module; `new(character)` / `enable()` / `disable()` / `destroy()`
+- `src/client/DashManager.client.luau` — LocalScript; boots DashController per character, handles respawn
 
 ## Cross-references
 
