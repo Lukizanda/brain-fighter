@@ -67,16 +67,88 @@ export type PerfConfig = {
 
 local VfxConfig = {}
 
-VfxConfig.COLORS: { red: ColorPalette, green: ColorPalette, blue: ColorPalette } = {
+VfxConfig.COLORS = {
 	red   = { primary = Color3.fromHex("#FF3030"), glow = Color3.fromHex("#FF8080"), accent = Color3.fromHex("#FFB060") },
 	green = { primary = Color3.fromHex("#30FF60"), glow = Color3.fromHex("#80FFB0"), accent = Color3.fromHex("#FFFFFF") },
 	blue  = { primary = Color3.fromHex("#3080FF"), glow = Color3.fromHex("#80C0FF"), accent = Color3.fromHex("#80FFFF") },
 }
 
--- Populated in Phase C (VfxController implementation).
-VfxConfig.EFFECTS: { [string]: EffectSpec } = {}
+local C = VfxConfig.COLORS
 
-VfxConfig.PERF: PerfConfig = {
+VfxConfig.EFFECTS = {
+	cast_red_t1 = {
+		emitters = {
+			{
+				template     = "BurstSmall",
+				color        = C.red,
+				emitCount    = 14,
+				lifetime     = NumberRange.new(0.20, 0.32),
+				size         = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.35),
+					NumberSequenceKeypoint.new(0.4, 0.55),
+					NumberSequenceKeypoint.new(1.0, 0.0),
+				}),
+				speed        = NumberRange.new(6, 10),
+				spreadAngle  = Vector2.new(35, 35),
+				rotation     = NumberRange.new(-180, 180),
+				transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.0),
+					NumberSequenceKeypoint.new(1.0, 1.0),
+				}),
+			},
+		},
+		sound            = { soundId = "rbxassetid://0", volume = 0.8, pitchRange = NumberRange.new(0.95, 1.10) },
+		totalDurationSec = 0.45,
+		anchor           = "casterStaffTip",
+	},
+
+	cast_red_t2 = {
+		emitters = {
+			{
+				template     = "BurstMedium",
+				color        = C.red,
+				emitCount    = 30,
+				lifetime     = NumberRange.new(0.30, 0.55),
+				size         = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.5),
+					NumberSequenceKeypoint.new(0.4, 0.8),
+					NumberSequenceKeypoint.new(1.0, 0.0),
+				}),
+				speed        = NumberRange.new(10, 18),
+				spreadAngle  = Vector2.new(50, 50),
+				rotation     = NumberRange.new(-180, 180),
+				transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.0),
+					NumberSequenceKeypoint.new(1.0, 1.0),
+				}),
+			},
+		},
+		sound            = { soundId = "rbxassetid://0", volume = 1.0, pitchRange = NumberRange.new(0.90, 1.05) },
+		totalDurationSec = 0.60,
+		anchor           = "casterStaffTip",
+	},
+
+	impact_damage = {
+		emitters = {
+			{
+				template    = "ImpactBurst",
+				emitCount   = 22,
+				lifetime    = NumberRange.new(0.30, 0.55),
+				size        = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.5),
+					NumberSequenceKeypoint.new(1.0, 0.0),
+				}),
+				speed       = NumberRange.new(10, 18),
+				spreadAngle = Vector2.new(180, 180),
+			},
+		},
+		sound            = { soundId = "rbxassetid://0", volume = 0.85, pitchRange = NumberRange.new(0.92, 1.08) },
+		totalDurationSec = 0.65,
+		anchor           = "targetHumanoidRootPart",
+	},
+}
+
+VfxConfig.PERF = {
 	maxEmitters      = 32,
 	maxBeams         = 6,
 	maxLights        = 2,

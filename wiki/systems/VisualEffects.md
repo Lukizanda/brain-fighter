@@ -1,8 +1,8 @@
 ---
 type: system
 description: Visual effects plan — particle effects for spell casts/impacts, UI feedback animations, and per-color theming across all VFX
-status: planning
-updated: 2026-05-18
+status: partial
+updated: 2026-05-19
 ---
 
 # Visual Effects
@@ -503,16 +503,9 @@ Ordered so each step is independently testable; **bold** items are blocking for 
 5. **Edit `src/shared/CastAction/init.luau`** **Done** — `CastAction.spellResolved: RBXScriptSignal` is a module-level BindableEvent. Fired in `drainAndCast` after `SpellExecutor.cast` succeeds. **Client-side-only meaningful**: server VM creates the same BindableEvent but `VfxBroadcastService` does NOT connect to it — the broadcast is triggered by the client's `BroadcastSpellVfx:FireServer` call, not by the server-side signal.
 
 ### Phase C — World VFX client-side
-6. **Create `src/client/Vfx/VfxController.client.luau`** that:
-   - listens to `CastAction.spellResolved` for local cast VFX (frame-perfect) AND to `SpellVfxEvent.OnClientEvent` for remote casters.
-   - skips `SpellVfxEvent` when `payload.senderUserId == LocalPlayer.UserId`.
-   - after playing local VFX, fires `BroadcastSpellVfx:FireServer(payload)` to relay to other clients.
-   - resolves anchor → spawns cast emitters at `caster's tool Handle.Tip`.
-   - if `impactEffectId` set, spawns impact emitters at target anchor.
-   - implements the cleanup contract from §2.4 + the perf caps from §5.
-   - exposes `_G.PlayerVfx = controller` for debug.
-7. **`Tip` Attachment** — **Done (placeholder CFrame)**: `src/StarterPack/Spelling Staff/Handle/Tip.model.json` exists. Run `capture-grip`-style Studio pass to set exact CFrame after first Rojo sync.
-8. **Populate `VfxConfig.EFFECTS`** with all cast tiers (`cast_<color>_t1/2/3`) and all impact kinds (`impact_damage`, `impact_heal`, `impact_freeze`, `impact_shield`, `impact_wall`, `impact_buff`). Sound IDs initially `"rbxassetid://0"` — replaced by ArtDirection pass.
+6. ~~**Create `src/client/Vfx/VfxController.client.luau`**~~ **Done** — local-player path implemented: listens to `CastAction.spellResolved`, spawns cast emitters at `Handle.Tip` (fallback HRP), spawns impact emitters at target HRP. Remote-player path (`SpellVfxEvent.OnClientEvent` + `BroadcastSpellVfx:FireServer`) and `_G.PlayerVfx` debug handle deferred to Phase C step 2.
+7. ~~**`Tip` Attachment**~~ **Done** — `src/StarterPack/Spelling Staff/Handle/Tip.model.json` on disk (CFrame Y=2.877, half of Handle height 5.7549). Also created in Studio edit-mode DataModel via MCP so it persists until next Rojo sync.
+8. **Populate `VfxConfig.EFFECTS`** — **Partial**: `cast_red_t1`, `cast_red_t2`, `impact_damage` implemented. Remaining: green/blue tiers, `impact_heal`, `impact_freeze`, `impact_shield`, `impact_wall`, `impact_buff`. Sound IDs `"rbxassetid://0"` — replaced by ArtDirection pass. VfxTemplates (`BurstSmall`, `BurstMedium`, `ImpactBurst`) created in Studio via MCP (not Rojo-tracked; re-create after fresh place open).
 9. **Extend `src/client/LetterBlockAnimator.client.luau`** with the collect-pop emitter spawn (§2.5). The `onRemoved` handler already reads `state.basePosition` from cache — Phase C only needs to add the emitter clone + Debris call there.
 
 ### Phase D — UI VFX (parallelizable; each is independent of the other)

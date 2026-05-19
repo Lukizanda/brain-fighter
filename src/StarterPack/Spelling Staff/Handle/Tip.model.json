@@ -1,0 +1,7 @@
+{
+  "className": "Attachment",
+  "name": "Tip",
+  "properties": {
+    "CFrame": { "CFrame": [0, 2.877, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1] }
+  }
+}
