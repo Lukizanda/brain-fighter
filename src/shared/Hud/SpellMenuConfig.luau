@@ -4,6 +4,9 @@
 -- Default styling for the three-color spell cast panel.
 ----------------------------------------------------------------------
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local EnergyReservoirs = require(ReplicatedStorage.Shared.EnergyReservoirs)
+
 local SpellMenuConfig = {
 	BUTTON_WIDTH  = 90,
 	BUTTON_HEIGHT = 80,
@@ -20,7 +23,7 @@ local SpellMenuConfig = {
 	-- Fill: dim base layer (always-visible "empty" bg) and animated fill bar
 	FILL_BASE_TRANSPARENCY = 0.72,
 	FILL_TWEEN = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	FILL_MAX   = 160,
+	FILL_MAX   = EnergyReservoirs.CAP_PER_COLOR,
 
 	-- Text
 	LABEL_FONT  = Enum.Font.GothamBold,
