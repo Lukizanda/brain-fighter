@@ -51,8 +51,10 @@ local HudConstants = {
 			ZIndex = 2,
 		},
 	},
-	SMALL_SCREEN_THRESHOLD = 500,
-	SMALL_SCREEN_SCALE = 0.6,
+	-- UIScale reference height: all pixel values in HUD configs are authored at this height.
+	-- _updateScale() in HudLayoutManager derives Scale = viewportY / REFERENCE_HEIGHT.
+	REFERENCE_HEIGHT = 1080,
+	MIN_SCALE = 0.5,
 	HUD_DISPLAY_ORDER = 10,
 	OVERLAY_DISPLAY_ORDER = 20,
 	HEALTH_REGION = "BottomLeft",

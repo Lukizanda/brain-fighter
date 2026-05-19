@@ -57,7 +57,7 @@ local Constants = {
 	KEYBOARD_RELOAD_KEY_CODE = Enum.KeyCode.R,
 	GAMEPAD_RELOAD_KEY_CODE = Enum.KeyCode.ButtonX,
 
-	-- UI scaling moved to src/shared/Hud/HudConstants.luau (SMALL_SCREEN_THRESHOLD, SMALL_SCREEN_SCALE)
+	-- UI scaling lives in src/shared/Hud/HudConstants.luau (REFERENCE_HEIGHT, MIN_SCALE)
 
 	HITMARKER_SOUND_DELAY = 0.1,
 

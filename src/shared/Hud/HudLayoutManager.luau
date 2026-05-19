@@ -79,11 +79,9 @@ function HudLayoutManager:_updateScale()
 		return
 	end
 
-	local minDimension = math.min(gui.AbsoluteSize.X, gui.AbsoluteSize.Y)
-	local isSmall = minDimension < HudConstants.SMALL_SCREEN_THRESHOLD
-
 	if self._uiScale then
-		self._uiScale.Scale = if isSmall then HudConstants.SMALL_SCREEN_SCALE else 1
+		local scale = gui.AbsoluteSize.Y / HudConstants.REFERENCE_HEIGHT
+		self._uiScale.Scale = math.max(scale, HudConstants.MIN_SCALE)
 	end
 end
 
