@@ -1,6 +1,6 @@
 ---
 type: system
-description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, WeaponRolodex, BuffTray, reticle, settings menu, and 5 Phase 4 gameplay widgets (BufferDisplay, ReservoirBars, MemorizeButton, SpellMenu, MindFullIndicator).
+description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, WeaponRolodex, BuffTray, reticle, settings menu, and 5 Phase 4 gameplay widgets (BufferDisplay, SpellMenu with embedded mana fill, MemorizeButton, MindFullIndicator).
 updated: 2026-05-18
 ---
 
@@ -31,11 +31,11 @@ src/shared/Hud/
   -- Phase 4 gameplay widgets:
   BufferDisplayBuilder.luau       — letter-tile row from WordBuffer.tiles()
   BufferDisplayConfig.luau
-  ReservoirBarsBuilder.luau       — R/G/B energy bars (reuses AttributeBarBuilder)
-  ReservoirBarsConfig.luau
+  ReservoirBarsBuilder.luau       — [unused] R/G/B energy bars; superceded by SpellMenu fill
+  ReservoirBarsConfig.luau        — [unused]
   MemorizeButtonBuilder.luau      — Memorize action button (calls MemorizeAction.tryMemorize)
   MemorizeButtonConfig.luau
-  SpellMenuBuilder.luau           — 3-color spell cast panel (tap → CastAction.tapReservoir)
+  SpellMenuBuilder.luau           — 3-color spell panel; buttons fill with mana (bottom→top gradient); tap → CastAction.tapReservoir + energy popup
   SpellMenuConfig.luau
   MindFullIndicatorBuilder.luau   — warning banner when WordBuffer is full
   MindFullIndicatorConfig.luau
@@ -53,9 +53,8 @@ src/client/UI/
   SettingsMenuGui.client.luau     — settings menu mount
   -- Phase 4 gameplay widgets:
   BufferDisplayGui.client.luau    — BottomCenter; wired to wordBuffer.changed
-  ReservoirBarsGui.client.luau    — BottomLeft; wired to energyReservoirs.changed
   MemorizeButtonGui.client.luau   — BottomCenter; fires tryMemorize on click
-  SpellMenuGui.client.luau        — BottomRight; fires tapReservoir on color tap
+  SpellMenuGui.client.luau        — BottomRight; fires tapReservoir on color tap; drives fill via energyReservoirs.changed
   MindFullIndicatorGui.client.luau — TopCenter; shows/hides on mindFull/mindFreed
   BossHudGui.client.luau          — TopCenter; boss health bar + phase label; hidden until a boss spawns
 ```
@@ -67,9 +66,8 @@ All five read state through `PlayerSession.get()` and subscribe to signals from 
 | Widget | Region | Signal source | Action |
 |---|---|---|---|
 | BufferDisplay | BottomCenter | `wordBuffer.changed` | display tiles |
-| ReservoirBars | BottomLeft | `energyReservoirs.changed` | show R/G/B energy |
 | MemorizeButton | BottomCenter | `wordBuffer.changed` | `MemorizeAction.tryMemorize` |
-| SpellMenu | BottomRight | `energyReservoirs.changed` | `CastAction.tapReservoir` |
+| SpellMenu | BottomRight | `energyReservoirs.changed` | gradient fill + `CastAction.tapReservoir`; tap shows energy popup |
 | MindFullIndicator | TopCenter | `mindFull` / `mindFreed` | show/hide warning |
 
 ## Adapter pattern (attribute bars)
