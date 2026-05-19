@@ -151,6 +151,9 @@ taint
 tainted
 tainting
 taints
+taipei
+taiwan
+tajikistan
 take
 takeaway
 takeaways
@@ -201,6 +204,7 @@ tallied
 tallier
 talliers
 tallies
+tallinn
 tallish
 tallness
 tallow
@@ -322,6 +326,7 @@ tantamount
 tantra
 tantrum
 tantrums
+tanzania
 tap
 tapas
 tape
@@ -358,6 +363,7 @@ tarantella
 tarantellas
 tarantula
 tarantulas
+tarawa
 tardier
 tardiest
 tardily
@@ -428,6 +434,7 @@ taser
 tasered
 tasering
 tasers
+tashkent
 task
 taskbar
 tasked
@@ -564,6 +571,7 @@ taxonomy
 taxpayer
 taxpayers
 taxpaying
+tbilisi
 tea
 teabag
 teabags
@@ -709,6 +717,8 @@ teetotalers
 teetotalism
 teetotaller
 teetotallers
+tegucigalpa
+tehran
 tektite
 tektites
 telecast
@@ -1184,6 +1194,7 @@ texture
 textured
 textures
 texturing
+thailand
 thalami
 thalamus
 thalidomide
@@ -1378,6 +1389,7 @@ thimble
 thimbleful
 thimblefuls
 thimbles
+thimphu
 thin
 thine
 thing
@@ -1668,6 +1680,7 @@ thyroid
 thyroidal
 thyroids
 thyself
+tianjin
 tiara
 tiaras
 tibia
@@ -1952,6 +1965,7 @@ tirade
 tirades
 tiramisu
 tiramisus
+tirana
 tire
 tired
 tireder
@@ -2093,6 +2107,7 @@ toggle
 toggled
 toggles
 toggling
+togo
 togs
 toil
 toiled
@@ -2115,6 +2130,7 @@ tokenism
 tokens
 tokes
 toking
+tokyo
 told
 tole
 tolerable
@@ -2185,6 +2201,7 @@ toner
 toners
 tones
 tong
+tonga
 tonged
 tonging
 tongs
@@ -2329,6 +2346,7 @@ torments
 torn
 tornado
 tornadoes
+toronto
 torpedo
 torpedoed
 torpedoes
@@ -3306,6 +3324,7 @@ triply
 tripod
 tripodal
 tripods
+tripoli
 tripos
 tripped
 tripper
@@ -3688,6 +3707,8 @@ tungsten
 tunic
 tunics
 tuning
+tunis
+tunisia
 tunnel
 tunneled
 tunneler
@@ -3751,6 +3772,7 @@ turgidity
 turgidly
 turkey
 turkeys
+turkmenistan
 turmeric
 turmerics
 turmoil
@@ -3830,6 +3852,7 @@ tutting
 tuttis
 tutu
 tutus
+tuvalu
 tux
 tuxedo
 tuxedos

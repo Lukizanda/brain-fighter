@@ -21,7 +21,9 @@ __pycache__/
 # SCOWL word list source files and generated offensive blocklist — download once,
 # not committed. Re-run tools/generate_wordlist.py after cloning.
 tools/scowl/
-tools/wordlists/
+tools/wordlists/*
+# Exception: hand-curated supplement is version-controlled.
+!tools/wordlists/proper-names.txt
 
 # Obsidian vault — per-machine view state. App / appearance / core-plugins
 # are versioned for plugin + theme parity across machines; graph.json,

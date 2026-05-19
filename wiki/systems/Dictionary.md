@@ -1,7 +1,7 @@
 ---
 type: system
-description: Word lookup module that validates the buffered word during Memorize. O(1) hashtable, ~79.5k words from SCOWL size 60; 26 per-letter sub-modules background-preloaded at game start.
-updated: 2026-05-15
+description: Word lookup module that validates the buffered word during Memorize. O(1) hashtable, ~79.9k words from SCOWL size 60 + curated geographic supplement; 26 per-letter sub-modules background-preloaded at game start.
+updated: 2026-05-19
 ---
 
 # Dictionary
@@ -72,40 +72,42 @@ uv run tools/generate_wordlist.py --size 50  # smaller list if needed
 **Locale coverage**: English + American + British + British-z spellings (e.g. both `color` and `colour`, both `organize` and `organise`).  
 **Filters applied**: contractions, proper nouns, words ≤ 2 letters (except allowlist: `am an as at be by do go he if in is it me my no of on or ok so to up us we`), offensive word blocklist (`tools/wordlists/offensive.txt`), non-alpha characters.
 
+**Supplement**: after SCOWL filtering, words from `tools/wordlists/proper-names.txt` are merged in (minus any offensive matches). This adds ~400 single-word geographic names — countries, capitals, and major cities — that SCOWL's `-words` files omit. Multi-word names (New York, Buenos Aires) are intentionally excluded; they can't be spelled as a single play. Edit the supplement and re-run to add/remove entries.
+
 To resize: change `--size` and commit the regenerated `words/*.luau` files. No Luau code changes needed.
 
-## Word count (SCOWL size 60, 2026-05-15)
+## Word count (SCOWL size 60 + geographic supplement, 2026-05-19)
 
-Total: **79,504 words**
+Total: **79,896 words**
 
 | Letter | Count |
 |---|---|
-| a | 4,412 |
-| b | 4,654 |
-| c | 7,725 |
-| d | 5,092 |
-| e | 3,197 |
-| f | 3,398 |
-| g | 2,555 |
-| h | 2,857 |
-| i | 3,239 |
-| j | 685 |
-| k | 561 |
-| l | 2,354 |
-| m | 4,155 |
-| n | 1,665 |
-| o | 2,061 |
-| p | 6,371 |
-| q | 381 |
-| r | 4,956 |
-| s | 9,193 |
-| t | 4,050 |
-| u | 2,234 |
-| v | 1,198 |
-| w | 2,130 |
-| x | 18 |
-| y | 229 |
-| z | 134 |
+| a | 4,443 |
+| b | 4,698 |
+| c | 7,754 |
+| d | 5,110 |
+| e | 3,205 |
+| f | 3,406 |
+| g | 2,572 |
+| h | 2,868 |
+| i | 3,252 |
+| j | 693 |
+| k | 581 |
+| l | 2,377 |
+| m | 4,198 |
+| n | 1,686 |
+| o | 2,066 |
+| p | 6,390 |
+| q | 384 |
+| r | 4,967 |
+| s | 9,220 |
+| t | 4,074 |
+| u | 2,240 |
+| v | 1,210 |
+| w | 2,134 |
+| x | 19 |
+| y | 235 |
+| z | 140 |
 
 ## Worked-example coverage
 
@@ -143,6 +145,7 @@ A passing run logs `[Dictionary.tests] [TEST PASS] Dictionary smoke tests — N 
 | Date | Gap word | Root cause | Resolution |
 |---|---|---|---|
 | 2026-05-15 | `tout` | ~90 missing common words in 4.1k bootstrap list | Replaced bootstrap list with SCOWL 60 (79.5k words) |
+| 2026-05-19 | `cairo` | SCOWL `-words` files exclude proper nouns; `cairo` lives in `english-upper.50` | Added `tools/wordlists/proper-names.txt` supplement (~400 single-word geographic names); generator merges it after SCOWL filtering |
 
 ## Cross-references
 

@@ -143,3 +143,7 @@ Added `ROUND_TIMER_ENABLED` and `ROUND_COUNTDOWN_ENABLED` flags to `GameConfig.l
 ## [2026-05-19] ingest | Dash/roll mechanic added
 
 New `DashController` + `DashManager.client` add LeftShift dash/roll on top of the default Roblox PlayerModule (works regardless of TPS_CHARACTER_ENABLED). Grounded: roll burst 60 studs/sec Quart/In decel over 0.35 s, 0.55 s cooldown. Airborne: forward dash 60 studs/sec for 0.2 s, once per airtime. Two non-obvious findings: (1) `BodyVelocity.MaxForce` must be `math.huge` in XZ — the default PlayerModule actively decelerates at rest and overwhelms smaller forces. (2) `RelativeTo.Attachment0` with `PlaneVelocity` sent the character upward because the attachment Y axis is world-up; fixed by computing world-space forward from `LookVector` directly. Animation/sound/VFX assets live only in the .rbxl (re-create via MCP after fresh place open). Constants in `GameConfig.DASH`. `wiki/systems/Character.md` updated.
+
+## [2026-05-19] ingest | Geographic proper-names supplement added to Dictionary
+
+Added `tools/wordlists/proper-names.txt` — ~400 curated single-word geographic names (countries, capitals, major cities). `generate_wordlist.py` now merges this supplement after SCOWL filtering via a new `--supplement` flag. Word count increased from 79,504 → 79,896. Multi-word names (New York, Buenos Aires) intentionally excluded — can't be played as a single word. `wiki/systems/Dictionary.md` updated: supplement paragraph in Offline parser section, refreshed word count table, new gap-log entry.

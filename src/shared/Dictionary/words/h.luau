@@ -146,6 +146,7 @@ hairstyles
 hairstylist
 hairstylists
 hairy
+haiti
 haj
 hajj
 hajjes
@@ -403,6 +404,7 @@ hankie
 hankies
 hanks
 hanky
+hanoi
 hansom
 hansoms
 hap
@@ -432,6 +434,7 @@ harangue
 harangued
 harangues
 haranguing
+harare
 harass
 harassed
 harasser
@@ -706,6 +709,7 @@ haunting
 hauntingly
 haunts
 hauteur
+havana
 have
 haven
 havens
@@ -1144,6 +1148,7 @@ helplines
 helpmate
 helpmates
 helps
+helsinki
 helve
 helves
 hem
@@ -1550,6 +1555,7 @@ hireling
 hirelings
 hires
 hiring
+hiroshima
 hirsute
 hirsuteness
 his
@@ -1888,6 +1894,7 @@ homosexuality
 homosexuals
 honcho
 honchos
+honduras
 hone
 honed
 honer
@@ -2312,6 +2319,7 @@ housewives
 housework
 housing
 housings
+houston
 hove
 hovel
 hovels
@@ -2531,6 +2539,7 @@ hundredths
 hundredweight
 hundredweights
 hung
+hungary
 hunger
 hungered
 hungering
@@ -2650,6 +2659,7 @@ hybridized
 hybridizes
 hybridizing
 hybrids
+hyderabad
 hydra
 hydrangea
 hydrangeas

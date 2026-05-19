@@ -5,6 +5,7 @@ return [[
 kabbalah
 kaboom
 kabuki
+kabul
 kaddish
 kaddishes
 kaffeeklatch
@@ -22,15 +23,19 @@ kaleidoscopic
 kaleidoscopically
 kamikaze
 kamikazes
+kampala
 kana
+kandahar
 kangaroo
 kangaroos
 kanji
+kano
 kaolin
 kapok
 kappa
 kappas
 kaput
+karachi
 karakul
 karaoke
 karaokes
@@ -42,6 +47,7 @@ karmic
 kart
 karts
 katakana
+kathmandu
 katydid
 katydids
 kayak
@@ -52,6 +58,7 @@ kayo
 kayoed
 kayoing
 kayos
+kazakhstan
 kazoo
 kazoos
 kebab
@@ -96,6 +103,7 @@ kennels
 kenning
 keno
 kens
+kenya
 kepi
 kepis
 kept
@@ -166,6 +174,7 @@ khaki
 khakis
 khan
 khans
+khartoum
 khz
 kibble
 kibbled
@@ -222,6 +231,7 @@ kidskin
 kielbasa
 kielbasas
 kielbasi
+kigali
 kikes
 kill
 killdeer
@@ -323,6 +333,7 @@ kingpin
 kingpins
 kings
 kingship
+kingston
 kink
 kinked
 kinkier
@@ -333,6 +344,7 @@ kinking
 kinks
 kinky
 kinsfolk
+kinshasa
 kinship
 kinsman
 kinsmen
@@ -348,6 +360,7 @@ kippering
 kippers
 kipping
 kips
+kiribati
 kirsch
 kirsches
 kismet
@@ -522,6 +535,7 @@ kohlrabi
 kohlrabies
 kola
 kolas
+kolkata
 kook
 kookaburra
 kookaburras
@@ -555,12 +569,17 @@ kuchens
 kudos
 kudzu
 kudzus
+kumasi
 kumquat
 kumquats
+kuwait
 kvetch
 kvetched
 kvetcher
 kvetchers
 kvetches
 kvetching
+kyiv
+kyoto
+kyrgyzstan
 ]]

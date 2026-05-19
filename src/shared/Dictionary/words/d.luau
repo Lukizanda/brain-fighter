@@ -83,8 +83,10 @@ dais
 daises
 daisies
 daisy
+dakar
 dale
 dales
+dallas
 dalliance
 dalliances
 dallied
@@ -101,6 +103,7 @@ damageable
 damaged
 damages
 damaging
+damascus
 damask
 damasked
 damasking
@@ -191,6 +194,7 @@ dapple
 dappled
 dapples
 dappling
+dar
 dare
 dared
 daredevil
@@ -1154,6 +1158,7 @@ deleverages
 deleveraging
 delft
 delftware
+delhi
 deli
 deliberate
 deliberated
@@ -1495,6 +1500,7 @@ denims
 denitrification
 denizen
 denizens
+denmark
 denominate
 denominated
 denominates
@@ -1558,6 +1564,7 @@ denudes
 denuding
 denunciation
 denunciations
+denver
 deny
 denying
 deodorant
@@ -2276,6 +2283,7 @@ dexterous
 dexterously
 dexterousness
 dextrose
+dhaka
 dharma
 dhoti
 dhotis
@@ -3863,6 +3871,7 @@ dizzy
 dizzying
 djellaba
 djellabas
+djibouti
 do
 doable
 dob
@@ -3937,6 +3946,7 @@ dodgiest
 dodging
 dodgy
 dodo
+dodoma
 dodos
 doe
 doer
@@ -4002,6 +4012,7 @@ dogtrotted
 dogtrotting
 dogwood
 dogwoods
+doha
 doilies
 doily
 doing
@@ -4078,6 +4089,7 @@ domineering
 domineeringly
 domineers
 doming
+dominica
 dominion
 dominions
 domino
@@ -4234,6 +4246,7 @@ dottier
 dottiest
 dotting
 dotty
+douala
 double
 doubled
 doubleheader
@@ -4794,6 +4807,7 @@ dual
 dualism
 duality
 dub
+dubai
 dubbed
 dubber
 dubbers
@@ -4803,6 +4817,7 @@ dubiety
 dubious
 dubiously
 dubiousness
+dublin
 dubs
 ducal
 ducat
@@ -4983,10 +4998,12 @@ durable
 durably
 durance
 duration
+durban
 duress
 during
 durst
 durum
+dushanbe
 dusk
 duskier
 duskiest

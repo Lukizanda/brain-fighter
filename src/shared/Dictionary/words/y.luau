@@ -25,10 +25,12 @@ yammering
 yammers
 yams
 yang
+yangon
 yank
 yanked
 yanking
 yanks
+yaounde
 yap
 yapped
 yapping
@@ -108,6 +110,7 @@ yelp
 yelped
 yelping
 yelps
+yemen
 yen
 yens
 yeoman
@@ -116,6 +119,7 @@ yeomen
 yep
 yeps
 yer
+yerevan
 yes
 yeses
 yeshiva
@@ -172,6 +176,7 @@ yokel
 yokels
 yokes
 yoking
+yokohama
 yolk
 yolked
 yolks

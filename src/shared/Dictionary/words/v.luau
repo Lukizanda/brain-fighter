@@ -44,6 +44,7 @@ vacuum
 vacuumed
 vacuuming
 vacuums
+vaduz
 vagabond
 vagabondage
 vagabonded
@@ -111,6 +112,7 @@ validly
 validness
 valise
 valises
+valletta
 valley
 valleys
 valor
@@ -150,6 +152,7 @@ vampires
 vamps
 van
 vanadium
+vancouver
 vandal
 vandalise
 vandalised
@@ -185,6 +188,7 @@ vanquishing
 vans
 vantage
 vantages
+vanuatu
 vape
 vaped
 vapes
@@ -385,10 +389,12 @@ venerates
 venerating
 veneration
 venereal
+venezuela
 vengeance
 vengeful
 vengefully
 venial
+venice
 venireman
 veniremen
 venison
@@ -660,6 +666,7 @@ victimizing
 victimless
 victims
 victor
+victoria
 victories
 victorious
 victoriously
@@ -689,7 +696,10 @@ videotapes
 videotaping
 vie
 vied
+vienna
+vientiane
 vies
+vietnam
 view
 viewable
 viewed
@@ -751,6 +761,7 @@ villeinage
 villeins
 villi
 villus
+vilnius
 vim
 vinaigrette
 vincible

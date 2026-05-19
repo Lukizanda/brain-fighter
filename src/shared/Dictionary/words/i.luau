@@ -9,6 +9,7 @@ iambics
 iambs
 iambus
 iambuses
+ibadan
 ibex
 ibexes
 ibidem
@@ -28,6 +29,7 @@ icebreakers
 icecap
 icecaps
 iced
+iceland
 iceman
 icemen
 ices
@@ -1260,6 +1262,8 @@ indexer
 indexers
 indexes
 indexing
+india
+indianapolis
 indicate
 indicated
 indicates
@@ -1368,6 +1372,7 @@ indolent
 indolently
 indomitable
 indomitably
+indonesia
 indoor
 indoors
 indubitable
@@ -3005,6 +3010,8 @@ iota
 iotas
 ipecac
 ipecacs
+iran
+iraq
 irascibility
 irascible
 irascibly
@@ -3013,6 +3020,7 @@ irately
 irateness
 ire
 ireful
+ireland
 irenic
 irides
 iridescence
@@ -3141,6 +3149,7 @@ ischaemic
 ischemia
 ischemic
 isinglass
+islamabad
 island
 islander
 islanders
@@ -3178,6 +3187,7 @@ isotope
 isotopes
 isotopic
 isotropic
+israel
 issuance
 issue
 issued
@@ -3185,6 +3195,7 @@ issuer
 issuers
 issues
 issuing
+istanbul
 isthmian
 isthmus
 isthmuses
@@ -3201,6 +3212,7 @@ italicized
 italicizes
 italicizing
 italics
+italy
 itch
 itched
 itches

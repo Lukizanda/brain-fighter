@@ -1004,6 +1004,7 @@ figures
 figurine
 figurines
 figuring
+fiji
 filament
 filamentous
 filaments
@@ -1177,6 +1178,7 @@ fink
 finked
 finking
 finks
+finland
 finned
 finny
 fins
@@ -1789,6 +1791,7 @@ flops
 flora
 floral
 floras
+florence
 florescence
 florescent
 floret
@@ -2700,6 +2703,7 @@ framework
 frameworks
 framing
 franc
+france
 franchise
 franchised
 franchisee
@@ -2717,6 +2721,7 @@ frank
 franked
 franker
 frankest
+frankfurt
 frankfurter
 frankfurters
 frankincense
@@ -3156,6 +3161,7 @@ fugue
 fugues
 fuhrer
 fuhrers
+fukuoka
 fulcrum
 fulcrums
 fulfil
@@ -3210,6 +3216,7 @@ fumigators
 fuming
 fumy
 fun
+funafuti
 function
 functional
 functionalism

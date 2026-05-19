@@ -130,6 +130,7 @@ caiman
 caimans
 cairn
 cairns
+cairo
 caisson
 caissons
 caitiff
@@ -198,6 +199,7 @@ calendaring
 calendars
 calf
 calfskin
+calgary
 caliber
 calibers
 calibrate
@@ -306,6 +308,7 @@ cambers
 cambial
 cambium
 cambiums
+cambodia
 cambric
 camcorder
 camcorders
@@ -326,6 +329,7 @@ cameras
 camerawoman
 camerawomen
 camerawork
+cameroon
 camiknickers
 camisole
 camisoles
@@ -368,6 +372,7 @@ cams
 camshaft
 camshafts
 can
+canada
 canal
 canalisation
 canalise
@@ -385,6 +390,7 @@ canards
 canaries
 canary
 canasta
+canberra
 cancan
 cancans
 cancel
@@ -698,6 +704,7 @@ captured
 captures
 capturing
 car
+caracas
 carafe
 carafes
 caramel
@@ -1023,6 +1030,7 @@ caryatid
 caryatids
 casaba
 casabas
+casablanca
 cascade
 cascaded
 cascades
@@ -1671,6 +1679,7 @@ cesspools
 cetacean
 cetaceans
 ceteris
+chad
 chafe
 chafed
 chafes
@@ -1926,6 +1935,7 @@ charlatanry
 charlatans
 charlie
 charlies
+charlotte
 charm
 charmed
 charmer
@@ -2132,6 +2142,7 @@ chemotherapeutic
 chemotherapy
 chemurgy
 chenille
+chennai
 cheque
 chequebook
 chequebooks
@@ -2193,6 +2204,7 @@ chewy
 chi
 chiaroscuro
 chic
+chicago
 chicane
 chicaneries
 chicanery
@@ -2268,6 +2280,7 @@ childproofed
 childproofing
 childproofs
 children
+chile
 chili
 chilies
 chill
@@ -2374,6 +2387,7 @@ chiseller
 chisellers
 chiselling
 chisels
+chisinau
 chit
 chitchat
 chitchats
@@ -2457,6 +2471,7 @@ chomp
 chomped
 chomping
 chomps
+chongqing
 choose
 chooser
 choosers
@@ -3090,6 +3105,7 @@ clerked
 clerking
 clerks
 clerkship
+cleveland
 clever
 cleverer
 cleverest
@@ -3874,6 +3890,8 @@ collusion
 collusive
 cologne
 colognes
+colombia
+colombo
 colon
 colonel
 colonelcy
@@ -3985,6 +4003,7 @@ coltish
 colts
 columbine
 columbines
+columbus
 column
 columnar
 columned
@@ -4265,6 +4284,7 @@ commuters
 commutes
 commuting
 comorbidity
+comoros
 compact
 compacted
 compacter
@@ -4535,6 +4555,7 @@ comradely
 comrades
 comradeship
 con
+conakry
 concatenate
 concatenated
 concatenates
@@ -4971,6 +4992,7 @@ conglomerates
 conglomerating
 conglomeration
 conglomerations
+congo
 congrats
 congratulate
 congratulated
@@ -5804,6 +5826,7 @@ copacetic
 copay
 cope
 coped
+copenhagen
 copes
 copied
 copier
@@ -7004,6 +7027,7 @@ croakiest
 croaking
 croaks
 croaky
+croatia
 crochet
 crocheted
 crocheter
@@ -7297,6 +7321,7 @@ crystallographic
 crystallography
 crystals
 cub
+cuba
 cubbyhole
 cubbyholes
 cube
@@ -7486,6 +7511,7 @@ curiosity
 curious
 curiously
 curiousness
+curitiba
 curium
 curl
 curled
@@ -7709,6 +7735,7 @@ cynosure
 cynosures
 cypress
 cypresses
+cyprus
 cyst
 cystic
 cystitis
@@ -7727,4 +7754,5 @@ czarism
 czarist
 czarists
 czars
+czechia
 ]]

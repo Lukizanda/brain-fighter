@@ -131,7 +131,9 @@ lagniappe
 lagniappes
 lagoon
 lagoons
+lagos
 lags
+lahore
 laid
 lain
 lair
@@ -308,6 +310,7 @@ lanterns
 lanthanum
 lanyard
 lanyards
+laos
 lap
 laparoscopic
 laparoscopy
@@ -459,6 +462,7 @@ latticed
 lattices
 latticework
 latticeworks
+latvia
 laud
 laudable
 laudably
@@ -714,6 +718,7 @@ leavers
 leaves
 leaving
 leavings
+lebanon
 lech
 leched
 lecher
@@ -948,6 +953,7 @@ lesbianism
 lesbians
 lesion
 lesions
+lesotho
 less
 lessee
 lessees
@@ -1101,6 +1107,7 @@ liberating
 liberation
 liberator
 liberators
+liberia
 libertarian
 libertarians
 liberties
@@ -1120,6 +1127,8 @@ librettist
 librettists
 libretto
 librettos
+libreville
+libya
 lice
 licence
 licences
@@ -1151,6 +1160,7 @@ lido
 lidos
 lids
 lie
+liechtenstein
 lied
 lieder
 lief
@@ -1279,12 +1289,14 @@ lilacs
 lilies
 lilliputian
 lilo
+lilongwe
 lilos
 lilt
 lilted
 lilting
 lilts
 lily
+lima
 limb
 limber
 limbered
@@ -1486,6 +1498,7 @@ liquoring
 liquors
 lira
 lire
+lisbon
 lisle
 lisp
 lisped
@@ -1549,6 +1562,7 @@ lithographs
 lithography
 lithosphere
 lithospheres
+lithuania
 litigant
 litigants
 litigate
@@ -1605,6 +1619,7 @@ liver
 liveried
 liveries
 liverish
+liverpool
 livers
 liverwort
 liverworts
@@ -1621,6 +1636,7 @@ living
 livings
 lizard
 lizards
+ljubljana
 llama
 llamas
 llano
@@ -1847,6 +1863,8 @@ lollygag
 lollygagged
 lollygagging
 lollygags
+lome
+london
 lone
 lonelier
 loneliest
@@ -2105,6 +2123,7 @@ loyalties
 loyalty
 lozenge
 lozenges
+luanda
 luau
 luaus
 lubber
@@ -2273,6 +2292,7 @@ lurk
 lurked
 lurking
 lurks
+lusaka
 luscious
 lusciously
 lusciousness
@@ -2307,6 +2327,7 @@ lutenists
 lutes
 lutetium
 lux
+luxembourg
 luxuriance
 luxuriant
 luxuriantly
@@ -2343,6 +2364,7 @@ lynching
 lynchings
 lynx
 lynxes
+lyon
 lyre
 lyrebird
 lyrebirds

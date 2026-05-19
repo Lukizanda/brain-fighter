@@ -248,6 +248,7 @@ baggily
 bagginess
 bagging
 baggy
+baghdad
 bagpipe
 bagpiper
 bagpipers
@@ -256,6 +257,8 @@ bags
 baguette
 baguettes
 bah
+bahamas
+bahrain
 baht
 bahts
 bail
@@ -292,6 +295,7 @@ bakeshops
 baking
 baklava
 baksheesh
+baku
 balaclava
 balaclavas
 balalaika
@@ -408,6 +412,7 @@ baluster
 balusters
 balustrade
 balustrades
+bamako
 bamboo
 bamboos
 bamboozle
@@ -461,12 +466,16 @@ bane
 baneful
 banes
 bang
+bangalore
 banged
 banger
 banging
+bangkok
+bangladesh
 bangle
 bangles
 bangs
+bangui
 bani
 banish
 banished
@@ -479,6 +488,7 @@ banjo
 banjoist
 banjoists
 banjos
+banjul
 bank
 bankable
 bankbook
@@ -559,6 +569,7 @@ baptizing
 bar
 barb
 barbacoa
+barbados
 barbarian
 barbarianism
 barbarianisms
@@ -605,6 +616,7 @@ barbs
 barbwire
 barcarole
 barcaroles
+barcelona
 bard
 bardic
 bards
@@ -1364,8 +1376,10 @@ behoved
 behoves
 behoving
 beige
+beijing
 being
 beings
+beirut
 bejewel
 bejeweled
 bejeweling
@@ -1380,6 +1394,7 @@ belabour
 belaboured
 belabouring
 belabours
+belarus
 belated
 belatedly
 belay
@@ -1396,6 +1411,8 @@ beleaguering
 beleaguers
 belfries
 belfry
+belgium
+belgrade
 belie
 belied
 belief
@@ -1414,6 +1431,7 @@ belittled
 belittlement
 belittles
 belittling
+belize
 bell
 belladonna
 bellboy
@@ -1455,6 +1473,7 @@ bellybuttons
 bellyful
 bellyfuls
 bellying
+belmopan
 belong
 belonged
 belonging
@@ -1535,6 +1554,7 @@ benign
 benignant
 benignity
 benignly
+benin
 bent
 bentonite
 bents
@@ -1571,8 +1591,10 @@ beriberi
 berk
 berkelium
 berks
+berlin
 berm
 berms
+bern
 berried
 berries
 berry
@@ -1757,6 +1779,7 @@ beys
 bezel
 bezels
 bhaji
+bhutan
 biannual
 biannually
 bias
@@ -2079,6 +2102,7 @@ birdwatchers
 birdying
 biretta
 birettas
+birmingham
 birth
 birthday
 birthdays
@@ -2112,6 +2136,7 @@ bisexual
 bisexuality
 bisexually
 bisexuals
+bishkek
 bishop
 bishopric
 bishoprics
@@ -2849,6 +2874,7 @@ boggling
 boggy
 bogie
 bogies
+bogota
 bogs
 bogus
 bogyman
@@ -2885,6 +2911,7 @@ boles
 bolivar
 bolivares
 bolivars
+bolivia
 boll
 bollard
 bollards
@@ -3188,6 +3215,7 @@ bossiness
 bossing
 bossism
 bossy
+boston
 botanic
 botanical
 botanically
@@ -3210,6 +3238,7 @@ bothersome
 botnet
 botnets
 bots
+botswana
 bottle
 bottled
 bottleneck
@@ -3468,6 +3497,7 @@ brasher
 brashest
 brashly
 brashness
+brasilia
 brass
 brasserie
 brasseries
@@ -3480,6 +3510,7 @@ brassily
 brassiness
 brassy
 brat
+bratislava
 brats
 brattier
 brattiest
@@ -3528,7 +3559,9 @@ brazers
 brazes
 brazier
 braziers
+brazil
 brazing
+brazzaville
 breach
 breached
 breaches
@@ -3705,6 +3738,7 @@ bridged
 bridgehead
 bridgeheads
 bridges
+bridgetown
 bridgework
 bridging
 bridle
@@ -3783,6 +3817,7 @@ brioche
 brioches
 briquette
 briquettes
+brisbane
 brisk
 brisked
 brisker
@@ -3977,6 +4012,7 @@ brunch
 brunched
 brunches
 brunching
+brunei
 brunet
 brunets
 brunette
@@ -3997,6 +4033,7 @@ brusquely
 brusqueness
 brusquer
 brusquest
+brussels
 brutal
 brutalisation
 brutalise
@@ -4032,6 +4069,7 @@ buccaneer
 buccaneered
 buccaneering
 buccaneers
+bucharest
 buck
 buckaroo
 buckaroos
@@ -4070,6 +4108,7 @@ bucolic
 bucolically
 bucolics
 bud
+budapest
 budded
 buddies
 budding
@@ -4143,9 +4182,11 @@ buildup
 buildups
 built
 builtin
+bujumbura
 bulb
 bulbous
 bulbs
+bulgaria
 bulge
 bulged
 bulges
@@ -4457,9 +4498,11 @@ bursitis
 burst
 bursting
 bursts
+burundi
 bury
 burying
 bus
+busan
 busbies
 busboy
 busboys

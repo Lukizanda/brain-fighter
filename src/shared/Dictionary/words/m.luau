@@ -69,6 +69,7 @@ macros
 macroscopic
 macs
 mad
+madagascar
 madam
 madame
 madams
@@ -100,6 +101,7 @@ madrasas
 madrases
 madrassa
 madrassas
+madrid
 madrigal
 madrigals
 mads
@@ -323,8 +325,11 @@ malaria
 malarial
 malarkey
 malathion
+malawi
+malaysia
 malcontent
 malcontents
+maldives
 male
 malediction
 maledictions
@@ -347,6 +352,7 @@ malfunction
 malfunctioned
 malfunctioning
 malfunctions
+mali
 malice
 malicious
 maliciously
@@ -383,6 +389,7 @@ malodorous
 malpractice
 malpractices
 malt
+malta
 malted
 malteds
 maltier
@@ -439,9 +446,13 @@ managerial
 managers
 manages
 managing
+managua
+manama
 mananas
 manatee
 manatees
+manaus
+manchester
 mandala
 mandalas
 mandamus
@@ -647,6 +658,7 @@ mappers
 mapping
 mappings
 maps
+maputo
 mar
 marabou
 marabous
@@ -807,6 +819,7 @@ marrows
 marry
 marrying
 mars
+marseille
 marsh
 marshal
 marshaled
@@ -867,6 +880,7 @@ masculines
 masculinity
 maser
 masers
+maseru
 mash
 mashed
 masher
@@ -1086,6 +1100,8 @@ maunder
 maundered
 maundering
 maunders
+mauritania
+mauritius
 mausoleum
 mausoleums
 mauve
@@ -1148,6 +1164,7 @@ maze
 mazes
 mazurka
 mazurkas
+mbabane
 me
 mead
 meadow
@@ -1258,6 +1275,7 @@ meddlers
 meddles
 meddlesome
 meddling
+medellin
 media
 medial
 medially
@@ -1294,6 +1312,7 @@ medics
 medieval
 medievalist
 medievalists
+medina
 mediocre
 mediocrities
 mediocrity
@@ -1387,6 +1406,7 @@ melanges
 melanin
 melanoma
 melanomas
+melbourne
 meld
 melded
 melding
@@ -1838,10 +1858,12 @@ mewled
 mewling
 mewls
 mews
+mexico
 mezzanine
 mezzanines
 mezzo
 mezzos
+miami
 miaow
 miaowed
 miaowing
@@ -1910,6 +1932,7 @@ micrometers
 micrometre
 micrometres
 micron
+micronesia
 microns
 microorganism
 microorganisms
@@ -2032,6 +2055,7 @@ miking
 mil
 miladies
 milady
+milan
 milch
 mild
 milder
@@ -2299,6 +2323,7 @@ minivan
 minivans
 mink
 minks
+minneapolis
 minnesinger
 minnesingers
 minnow
@@ -2310,6 +2335,7 @@ minorities
 minority
 minors
 minoxidil
+minsk
 minster
 minsters
 minstrel
@@ -2937,6 +2963,7 @@ modulators
 module
 modules
 modulus
+mogadishu
 moggie
 moggy
 mogul
@@ -2991,6 +3018,7 @@ moldiest
 moldiness
 molding
 moldings
+moldova
 molds
 moldy
 mole
@@ -3036,6 +3064,7 @@ molting
 molts
 molybdenum
 mom
+mombasa
 moment
 momenta
 momentarily
@@ -3049,6 +3078,7 @@ momentum
 mommies
 mommy
 moms
+monaco
 monad
 monarch
 monarchic
@@ -3100,6 +3130,7 @@ mongered
 mongering
 mongers
 mongol
+mongolia
 mongolism
 mongoloid
 mongoloids
@@ -3218,6 +3249,7 @@ monotony
 monounsaturated
 monoxide
 monoxides
+monrovia
 monseigneur
 monsieur
 monsignor
@@ -3235,10 +3267,14 @@ monstrous
 monstrously
 montage
 montages
+montenegro
+monterrey
+montevideo
 month
 monthlies
 monthly
 months
+montreal
 monument
 monumental
 monumentally
@@ -3374,6 +3410,7 @@ mornings
 morns
 morocco
 moron
+moroni
 moronic
 moronically
 morons
@@ -3427,6 +3464,7 @@ mortuaries
 mortuary
 mosaic
 mosaics
+moscow
 mosey
 moseyed
 moseying
@@ -3663,6 +3701,7 @@ mowers
 mowing
 mows
 moxie
+mozambique
 mozzarella
 much
 mucilage
@@ -3856,6 +3895,7 @@ multivitamin
 multivitamins
 multiyear
 mum
+mumbai
 mumble
 mumbled
 mumbler
@@ -3885,6 +3925,7 @@ munchkin
 munchkins
 mundane
 mundanely
+munich
 municipal
 municipalities
 municipality
@@ -4101,6 +4142,7 @@ muzzles
 muzzling
 muzzy
 my
+myanmar
 mycologist
 mycologists
 mycology

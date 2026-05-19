@@ -43,6 +43,7 @@ jackpots
 jackrabbit
 jackrabbits
 jacks
+jacksonville
 jackstraw
 jackstraws
 jacquard
@@ -74,11 +75,13 @@ jailhouse
 jailhouses
 jailing
 jails
+jakarta
 jalopies
 jalopy
 jalousie
 jalousies
 jam
+jamaica
 jamb
 jambalaya
 jamboree
@@ -171,6 +174,7 @@ jealously
 jealousy
 jean
 jeans
+jeddah
 jeep
 jeeps
 jeer
@@ -235,6 +239,7 @@ jerrycan
 jerrycans
 jersey
 jerseys
+jerusalem
 jest
 jested
 jester
@@ -393,6 +398,7 @@ joggled
 joggles
 joggling
 jogs
+johannesburg
 john
 johnnies
 johnny
@@ -443,6 +449,7 @@ jolting
 jolts
 jonquil
 jonquils
+jordan
 josh
 joshed
 josher

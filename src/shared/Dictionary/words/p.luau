@@ -156,6 +156,7 @@ paisley
 paisleys
 pajama
 pajamas
+pakistan
 pal
 palace
 palaces
@@ -188,6 +189,7 @@ palatinate
 palatinates
 palatine
 palatines
+palau
 palaver
 palavered
 palavering
@@ -215,6 +217,7 @@ palette
 palettes
 palfrey
 palfreys
+palikir
 palimony
 palimpsest
 palimpsests
@@ -485,6 +488,7 @@ paragraph
 paragraphed
 paragraphing
 paragraphs
+paraguay
 parakeet
 parakeets
 paralegal
@@ -517,6 +521,7 @@ paralyzes
 paralyzing
 paralyzingly
 paramagnetic
+paramaribo
 paramecia
 paramecium
 paramedic
@@ -643,6 +648,7 @@ parimutuel
 parimutuels
 paring
 parings
+paris
 parish
 parishes
 parishioner
@@ -1901,6 +1907,7 @@ pertaining
 pertains
 perter
 pertest
+perth
 pertinacious
 pertinaciously
 pertinacity
@@ -1916,6 +1923,7 @@ perturbed
 perturbing
 perturbs
 pertussis
+peru
 peruke
 perukes
 perusal
@@ -2135,6 +2143,7 @@ phew
 phi
 phial
 phials
+philadelphia
 philander
 philandered
 philanderer
@@ -2155,6 +2164,7 @@ philharmonic
 philharmonics
 philippic
 philippics
+philippines
 philistine
 philistines
 philistinism
@@ -3351,6 +3361,7 @@ podcasting
 podcasts
 podded
 podding
+podgorica
 podiatrist
 podiatrists
 podiatry
@@ -3423,6 +3434,7 @@ pokiest
 poking
 poky
 pol
+poland
 polar
 polarisation
 polarise
@@ -3858,6 +3870,7 @@ portion
 portioned
 portioning
 portions
+portland
 portlier
 portliest
 portliness
@@ -3876,6 +3889,7 @@ portrayed
 portraying
 portrays
 ports
+portugal
 portulaca
 pose
 posed
@@ -4187,6 +4201,7 @@ pragmatics
 pragmatism
 pragmatist
 pragmatists
+prague
 prairie
 prairies
 praise
@@ -4807,6 +4822,7 @@ pretesting
 pretests
 pretext
 pretexts
+pretoria
 pretrial
 pretrials
 prettied
@@ -6089,6 +6105,7 @@ puncturing
 pundit
 punditry
 pundits
+pune
 pungency
 pungent
 pungently
@@ -6348,6 +6365,7 @@ pylons
 pylori
 pyloric
 pylorus
+pyongyang
 pyorrhea
 pyorrhoea
 pyramid

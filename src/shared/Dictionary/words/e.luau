@@ -212,6 +212,7 @@ ecstasy
 ecstatic
 ecstatically
 ecu
+ecuador
 ecumenical
 ecumenically
 ecumenicism
@@ -254,6 +255,7 @@ edifiers
 edifies
 edify
 edifying
+edinburgh
 edit
 editable
 edited
@@ -426,6 +428,7 @@ egress
 egresses
 egret
 egrets
+egypt
 eider
 eiderdown
 eiderdowns
@@ -1912,6 +1915,7 @@ ergonomics
 ergosterol
 ergot
 ergs
+eritrea
 ermine
 ermines
 erode
@@ -2086,6 +2090,7 @@ estimation
 estimations
 estimator
 estimators
+estonia
 estoppel
 estradiol
 estrange
@@ -2101,6 +2106,7 @@ estrus
 estruses
 estuaries
 estuary
+eswatini
 eta
 etas
 etch
@@ -2124,6 +2130,7 @@ ethic
 ethical
 ethically
 ethics
+ethiopia
 ethmoid
 ethnic
 ethnically

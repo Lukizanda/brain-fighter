@@ -45,6 +45,18 @@ LUAU_HEADER_TMPL = (
 )
 
 
+def load_supplement(path: Path) -> frozenset[str]:
+    if not path.exists():
+        return frozenset()
+    words: set[str] = set()
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        w = line.strip().lower()
+        if w and not w.startswith("#") and re.match(r"^[a-z]+$", w):
+            words.add(w)
+    print(f"Loaded {len(words)} supplement words from {path}", file=sys.stderr)
+    return frozenset(words)
+
+
 def load_offensive(path: Path) -> frozenset[str]:
     if not path.exists():
         print(f"Warning: offensive list not found at {path} — skipping filter", file=sys.stderr)
@@ -220,16 +232,25 @@ def main() -> None:
         "--offensive", default="tools/wordlists/offensive.txt",
         help="Path to offensive word blocklist (default: tools/wordlists/offensive.txt)",
     )
+    parser.add_argument(
+        "--supplement", default="tools/wordlists/proper-names.txt",
+        help="Path to curated supplement word list merged after SCOWL filtering "
+             "(default: tools/wordlists/proper-names.txt)",
+    )
     args = parser.parse_args()
 
     scowl_dir = Path(args.scowl_dir)
     out_dir = Path(args.out_dir)
     offensive_path = Path(args.offensive)
+    supplement_path = Path(args.supplement)
 
     offensive = load_offensive(offensive_path)
+    supplement = load_supplement(supplement_path)
     final_dir = _resolve_final_dir(scowl_dir)
     raw_words = collect_words(final_dir, args.size)
     filtered = filter_words(raw_words, offensive)
+    filtered |= supplement - offensive
+    print(f"After supplement: {len(filtered)} total words", file=sys.stderr)
     buckets = split_by_letter(filtered)
     write_luau_files(buckets, out_dir, args.size)
 

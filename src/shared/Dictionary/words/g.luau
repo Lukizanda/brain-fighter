@@ -22,6 +22,8 @@ gabfests
 gable
 gabled
 gables
+gabon
+gaborone
 gabs
 gad
 gadabout
@@ -139,6 +141,7 @@ galvanizes
 galvanizing
 galvanometer
 galvanometers
+gambia
 gambit
 gambits
 gamble
@@ -560,6 +563,7 @@ genetically
 geneticist
 geneticists
 genetics
+geneva
 genial
 geniality
 genially
@@ -671,6 +675,8 @@ geophysicists
 geophysics
 geopolitical
 geopolitics
+georgetown
+georgia
 geostationary
 geosynchronous
 geosyncline
@@ -688,6 +694,7 @@ geriatrics
 germ
 germane
 germanium
+germany
 germicidal
 germicide
 germicides
@@ -740,6 +747,7 @@ gewgaw
 gewgaws
 geyser
 geysers
+ghana
 ghastlier
 ghastliest
 ghastliness
@@ -1008,6 +1016,7 @@ glared
 glares
 glaring
 glaringly
+glasgow
 glasnost
 glass
 glassblower
@@ -1853,6 +1862,7 @@ greatness
 greats
 grebe
 grebes
+greece
 greed
 greedier
 greediest
@@ -1902,6 +1912,7 @@ gregariously
 gregariousness
 gremlin
 gremlins
+grenada
 grenade
 grenades
 grenadier
@@ -2230,6 +2241,8 @@ grunted
 grunting
 grunts
 guacamole
+guadalajara
+guangzhou
 guanine
 guano
 guarani
@@ -2262,8 +2275,10 @@ guardrooms
 guards
 guardsman
 guardsmen
+guatemala
 guava
 guavas
+guayaquil
 gubernatorial
 guerrilla
 guerrillas
@@ -2489,6 +2504,7 @@ guvnor
 guvnors
 guvs
 guy
+guyana
 guyed
 guying
 guys

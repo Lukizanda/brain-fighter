@@ -544,6 +544,7 @@ oligopolies
 oligopoly
 olive
 olives
+oman
 ombudsman
 ombudsmen
 omega
@@ -1016,6 +1017,7 @@ orthopedics
 orthopedist
 orthopedists
 orzo
+osaka
 oscillate
 oscillated
 oscillates
@@ -1035,6 +1037,7 @@ osculation
 osculations
 osier
 osiers
+oslo
 osmium
 osmosis
 osmotic
@@ -1076,6 +1079,7 @@ others
 otherwise
 otherworldly
 otiose
+ottawa
 otter
 otters
 ottoman

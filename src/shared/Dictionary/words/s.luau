@@ -276,6 +276,7 @@ salute
 saluted
 salutes
 saluting
+salvador
 salvage
 salvageable
 salvaged
@@ -299,6 +300,7 @@ same
 sameness
 sames
 samey
+samoa
 samosa
 samosas
 samovar
@@ -313,6 +315,7 @@ samples
 sampling
 samplings
 samurai
+sanaa
 sanatorium
 sanatoriums
 sanctification
@@ -423,6 +426,7 @@ sanity
 sank
 sans
 sanserif
+santiago
 sap
 sapience
 sapiens
@@ -439,6 +443,7 @@ sappier
 sappiest
 sappiness
 sapping
+sapporo
 sappy
 saprophyte
 saprophytes
@@ -1521,6 +1526,7 @@ seating
 seatmate
 seatmates
 seats
+seattle
 seawall
 seawalls
 seaward
@@ -1900,6 +1906,7 @@ sending
 sendoff
 sendoffs
 sends
+senegal
 senescence
 senescent
 senile
@@ -2000,6 +2007,7 @@ sentinel
 sentinels
 sentries
 sentry
+seoul
 sepal
 sepals
 separability
@@ -2076,6 +2084,7 @@ serapes
 seraph
 seraphic
 seraphs
+serbia
 sere
 serenade
 serenaded
@@ -2280,6 +2289,7 @@ sexual
 sexuality
 sexually
 sexy
+seychelles
 shabbier
 shabbiest
 shabbily
@@ -2567,6 +2577,7 @@ shelves
 shelving
 shenanigan
 shenanigans
+shenzhen
 shepherd
 shepherded
 shepherdess
@@ -3419,6 +3430,7 @@ sing
 singable
 singalong
 singalongs
+singapore
 singe
 singed
 singeing
@@ -4136,7 +4148,9 @@ slough
 sloughed
 sloughing
 sloughs
+slovakia
 sloven
+slovenia
 slovenlier
 slovenliest
 slovenliness
@@ -4813,6 +4827,7 @@ sods
 soever
 sofa
 sofas
+sofia
 soft
 softback
 softball
@@ -4973,6 +4988,7 @@ solver
 solvers
 solves
 solving
+somalia
 somatic
 somatosensory
 somber
@@ -5310,6 +5326,7 @@ spadices
 spading
 spadix
 spaghetti
+spain
 spake
 spam
 spammed
@@ -7001,6 +7018,7 @@ stockbroking
 stocked
 stockholder
 stockholders
+stockholm
 stockier
 stockiest
 stockily
@@ -8026,11 +8044,13 @@ suckles
 suckling
 sucklings
 sucks
+sucre
 sucrose
 suction
 suctioned
 suctioning
 suctions
+sudan
 sudden
 suddenly
 suddenness
@@ -8592,6 +8612,7 @@ surges
 surgical
 surgically
 surging
+suriname
 surlier
 surliest
 surliness
@@ -8711,6 +8732,7 @@ suture
 sutured
 sutures
 suturing
+suva
 suzerain
 suzerains
 suzerainty
@@ -8840,6 +8862,7 @@ sweatsuit
 sweatsuits
 sweaty
 swede
+sweden
 swedes
 sweep
 sweeper
@@ -8963,6 +8986,7 @@ switchers
 switches
 switching
 switchover
+switzerland
 swivel
 swiveled
 swiveling
@@ -9009,6 +9033,7 @@ sycophancy
 sycophant
 sycophantic
 sycophants
+sydney
 syllabic
 syllabicate
 syllabicated
@@ -9167,6 +9192,7 @@ synths
 syphilis
 syphilitic
 syphilitics
+syria
 syringe
 syringed
 syringes

@@ -326,6 +326,7 @@ warring
 warrior
 warriors
 wars
+warsaw
 warship
 warships
 wart
@@ -360,6 +361,7 @@ washier
 washiest
 washing
 washings
+washington
 washout
 washouts
 washrag
@@ -1390,6 +1392,7 @@ windfall
 windfalls
 windflower
 windflowers
+windhoek
 windier
 windiest
 windily

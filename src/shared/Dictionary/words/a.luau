@@ -92,6 +92,7 @@ abide
 abides
 abiding
 abidingly
+abidjan
 abilities
 ability
 abject
@@ -299,6 +300,7 @@ absurdities
 absurdity
 absurdly
 absurdness
+abuja
 abundance
 abundances
 abundant
@@ -479,6 +481,7 @@ accoutred
 accoutrements
 accoutres
 accoutring
+accra
 accredit
 accreditation
 accredited
@@ -1210,6 +1213,7 @@ affronted
 affronting
 affronts
 afghan
+afghanistan
 afghans
 aficionado
 aficionados
@@ -1404,6 +1408,7 @@ aha
 ahchoo
 ahead
 ahem
+ahmedabad
 ahoy
 aid
 aide
@@ -1539,6 +1544,7 @@ alas
 alb
 albacore
 albacores
+albania
 albatross
 albatrosses
 albeit
@@ -1583,6 +1589,7 @@ alerts
 ales
 alewife
 alewives
+alexandria
 alfalfa
 alfresco
 alga
@@ -1592,6 +1599,8 @@ algebra
 algebraic
 algebraically
 algebras
+algeria
+algiers
 algorithm
 algorithmic
 algorithms
@@ -2016,6 +2025,7 @@ amino
 amiss
 amitriptyline
 amity
+amman
 ammeter
 ammeters
 ammo
@@ -2119,6 +2129,7 @@ amputation
 amputations
 amputee
 amputees
+amsterdam
 amulet
 amulets
 amuse
@@ -2286,6 +2297,7 @@ andante
 andantes
 andiron
 andirons
+andorra
 androgen
 androgenic
 androgynous
@@ -2359,6 +2371,7 @@ anglophile
 anglophiles
 anglophone
 anglophones
+angola
 angora
 angoras
 angostura
@@ -2413,6 +2426,7 @@ anions
 anise
 aniseed
 anisette
+ankara
 ankh
 ankhs
 ankle
@@ -2547,6 +2561,7 @@ antagonize
 antagonized
 antagonizes
 antagonizing
+antananarivo
 antarctic
 ante
 anteater
@@ -2770,6 +2785,7 @@ ants
 antsier
 antsiest
 antsy
+antwerp
 anuses
 anvil
 anvils
@@ -2828,6 +2844,7 @@ aphoristic
 aphoristically
 aphrodisiac
 aphrodisiacs
+apia
 apiaries
 apiarist
 apiarists
@@ -3273,6 +3290,7 @@ arena
 arenas
 ares
 argent
+argentina
 arginine
 argon
 argosies
@@ -3332,6 +3350,7 @@ armbands
 armchair
 armchairs
 armed
+armenia
 armful
 armfuls
 armhole
@@ -3563,6 +3582,7 @@ ashcans
 ashed
 ashen
 ashes
+ashgabat
 ashier
 ashiest
 ashing
@@ -3588,6 +3608,7 @@ asking
 asks
 aslant
 asleep
+asmara
 asocial
 asp
 asparagus
@@ -3775,6 +3796,7 @@ assuredly
 assureds
 assures
 assuring
+astana
 astatine
 aster
 asterisk
@@ -3842,6 +3864,7 @@ astutely
 astuteness
 astuter
 astutest
+asuncion
 asunder
 asylum
 asylums
@@ -3870,6 +3893,7 @@ atheism
 atheist
 atheistic
 atheists
+athens
 atherosclerosis
 atherosclerotic
 athirst
@@ -3882,6 +3906,7 @@ athletics
 athwart
 atilt
 atishoo
+atlanta
 atlas
 atlases
 atmosphere
@@ -4036,6 +4061,7 @@ atypically
 aubergine
 aubergines
 auburn
+auckland
 auction
 auctioned
 auctioneer
@@ -4138,7 +4164,10 @@ austerer
 austerest
 austerities
 austerity
+austin
 austral
+australia
+austria
 authentic
 authentically
 authenticate
@@ -4410,6 +4439,7 @@ aye
 ayes
 azalea
 azaleas
+azerbaijan
 azimuth
 azimuths
 azure

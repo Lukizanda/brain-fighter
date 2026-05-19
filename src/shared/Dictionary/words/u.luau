@@ -10,6 +10,7 @@ udders
 ufologist
 ufologists
 ufology
+uganda
 ugh
 uglier
 ugliest
@@ -17,8 +18,10 @@ ugliness
 ugly
 ukase
 ukases
+ukraine
 ukulele
 ukuleles
+ulaanbaatar
 ulcer
 ulcerate
 ulcerated
@@ -2159,6 +2162,7 @@ urologists
 urology
 ursine
 urticaria
+uruguay
 us
 usability
 usable
@@ -2236,4 +2240,5 @@ uvular
 uvulars
 uvulas
 uxorious
+uzbekistan
 ]]
