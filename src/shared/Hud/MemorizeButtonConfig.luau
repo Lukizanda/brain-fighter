@@ -28,7 +28,7 @@ local MemorizeButtonConfig = {
 	TEXT_SIZE = 13,
 	TEXT_STROKE_TRANSPARENCY = 0.5,
 
-	LABEL_DEFAULT = "MEMORIZE",
+	LABEL_DEFAULT = "ABSORB",
 }
 
 return MemorizeButtonConfig

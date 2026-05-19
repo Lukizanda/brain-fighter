@@ -50,8 +50,8 @@ local display = BufferDisplayBuilder.build({
 })
 local btn = MemorizeButtonBuilder.build()
 
-display.gui.LayoutOrder = 1
-btn.gui.LayoutOrder = 2
+display.gui.LayoutOrder = 2
+btn.gui.LayoutOrder = 1
 
 display.gui.Parent = container
 btn.gui.Parent = container

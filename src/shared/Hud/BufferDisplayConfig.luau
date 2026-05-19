@@ -5,8 +5,9 @@
 ----------------------------------------------------------------------
 
 local BufferDisplayConfig = {
-	TILE_SIZE = 28,
-	TILE_GAP  = 4,
+	TILE_WIDTH  = 75,
+	TILE_HEIGHT = 75,
+	TILE_GAP    = 4,
 	CAP       = 12, -- max slots (must match WordBuffer DEFAULT_CAP)
 	CORNER_RADIUS = 3,
 

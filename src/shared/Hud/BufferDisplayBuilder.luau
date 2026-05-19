@@ -59,7 +59,7 @@ local BufferDisplayBuilder = {}
 
 local function makeTileCell(): (Frame, TextLabel)
 	local cell = Instance.new("Frame")
-	cell.Size = UDim2.new(0, Defaults.TILE_SIZE, 0, Defaults.TILE_SIZE)
+	cell.Size = UDim2.new(0, Defaults.TILE_WIDTH, 0, Defaults.TILE_HEIGHT)
 	cell.BackgroundColor3 = Defaults.EMPTY_COLOR
 	cell.BackgroundTransparency = Defaults.EMPTY_TRANSPARENCY
 	cell.BorderSizePixel = 0
@@ -89,13 +89,13 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 	local onRemove = options and options.onRemove or nil
 
 	local cap = Defaults.CAP
-	local cellWidth = Defaults.TILE_SIZE
+	local cellWidth = Defaults.TILE_WIDTH
 	local gap = Defaults.TILE_GAP
 	local totalWidth = cellWidth * cap + gap * (cap - 1)
 
 	local container = Instance.new("Frame")
 	container.Name = "BufferDisplay"
-	container.Size = UDim2.new(0, totalWidth, 0, Defaults.TILE_SIZE)
+	container.Size = UDim2.new(0, totalWidth, 0, Defaults.TILE_HEIGHT)
 	container.BackgroundTransparency = 1
 	container.BorderSizePixel = 0
 
@@ -193,7 +193,7 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 
 	-- Center the ghost on the cursor.
 	-- Ghost Position.Offset is in ScreenGui UI-space (pre-UIScale). The ghost's
-	-- visual half-width in screen pixels = TILE_SIZE * scale, so dividing through
+	-- visual half-size in screen pixels = TILE_W/H * scale, so dividing through
 	-- gives the clean form below, which avoids reading AbsoluteSize before the
 	-- first layout pass has rendered the ghost.
 	local function moveGhost(ghost: Frame, screenPos: Vector2)
@@ -202,8 +202,8 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 		local scale = if uiScaleObj then uiScaleObj.Scale else 1
 		local sgAbsPos = screenGui.AbsolutePosition
 		ghost.Position = UDim2.fromOffset(
-			(screenPos.X - sgAbsPos.X) / scale - Defaults.TILE_SIZE / 2,
-			(screenPos.Y - sgAbsPos.Y) / scale - Defaults.TILE_SIZE / 2
+			(screenPos.X - sgAbsPos.X) / scale - Defaults.TILE_WIDTH / 2,
+			(screenPos.Y - sgAbsPos.Y) / scale - Defaults.TILE_HEIGHT / 2
 		)
 	end
 
@@ -211,7 +211,7 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 		local src = cells[fromIdx]
 		local ghost = Instance.new("Frame")
 		ghost.Name = "DragGhost"
-		ghost.Size = UDim2.fromOffset(Defaults.TILE_SIZE, Defaults.TILE_SIZE)
+		ghost.Size = UDim2.fromOffset(Defaults.TILE_WIDTH, Defaults.TILE_HEIGHT)
 		ghost.BackgroundColor3 = src.BackgroundColor3
 		ghost.BackgroundTransparency = GHOST_TRANSPARENCY
 		ghost.BorderSizePixel = 0
