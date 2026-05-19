@@ -101,6 +101,7 @@ SkillDelivery.handlers = {
 		local lifetimeSec:    number  = params.lifetimeSec    or 3
 		local proximityRadius:number  = params.proximityRadius or 3
 		local staggerSec:     number  = params.staggerSec     or 0
+		local trackTarget:    boolean = params.trackTarget     or false
 		local color:          Color3  = params.color          or Color3.fromRGB(255, 120, 0)
 		local sizeRaw                 = params.size            or 1.5
 		local sizeVec: Vector3        = typeof(sizeRaw) == "Vector3"
@@ -121,9 +122,14 @@ SkillDelivery.handlers = {
 
 		for i = 1, count do
 			task.delay((i - 1) * staggerSec, function()
+				local currentTargetPos = (trackTarget and resolveTargetPosition(ctx.target))
+					or targetPos
+				local currentDir = (currentTargetPos and (currentTargetPos - muzzlePos).Unit)
+					or baseDir
+
 				local spreadYaw   = math.rad((math.random() * 2 - 1) * spreadDegrees)
 				local spreadPitch = math.rad((math.random() * 2 - 1) * spreadDegrees * 0.4)
-				local lookCF      = CFrame.lookAt(Vector3.zero, baseDir)
+				local lookCF      = CFrame.lookAt(Vector3.zero, currentDir)
 					* CFrame.Angles(spreadPitch, spreadYaw, 0)
 				local dir         = lookCF.LookVector
 
