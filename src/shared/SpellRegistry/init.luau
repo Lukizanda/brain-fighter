@@ -41,7 +41,7 @@ export type Spec = {
 
 -- Pinned from gameplay-loop.md § Spell tier thresholds.
 -- Cast cost equals the threshold (drain == threshold by design).
-local TIER_COSTS: { number } = { 10, 30, 80, 75 }
+local TIER_COSTS: { number } = { 5, 10, 20, 40 }
 local NUM_TIERS = #TIER_COSTS
 
 local VALID_COLORS: { [string]: true } = {

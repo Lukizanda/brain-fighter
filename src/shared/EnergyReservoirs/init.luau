@@ -40,7 +40,7 @@ local log = Logger.new("EnergyReservoirs")
 -- EARTHQUAKES (81) or CHARACTERIZE (84) but prevents indefinite stockpiling
 -- that would trivialize encounters. Sourced from `design/gameplay-loop.md`
 -- "Spell economy".
-local CAP_PER_COLOR = 160
+local CAP_PER_COLOR = 60
 
 -- Canonical color list. Used for `:snapshot()` order, validation, and
 -- per-color state initialization. If a new color is ever added, this is the
