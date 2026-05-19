@@ -146,6 +146,32 @@ VfxConfig.EFFECTS = {
 		totalDurationSec = 0.65,
 		anchor           = "targetHumanoidRootPart",
 	},
+
+	impact_heal = {
+		emitters = {
+			{
+				template     = "HealBurst",
+				color        = C.green,
+				emitCount    = 20,
+				lifetime     = NumberRange.new(0.5, 0.9),
+				size         = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.0),
+					NumberSequenceKeypoint.new(0.2, 0.5),
+					NumberSequenceKeypoint.new(1.0, 0.0),
+				}),
+				speed        = NumberRange.new(4, 10),
+				spreadAngle  = Vector2.new(160, 160),
+				rotation     = NumberRange.new(-180, 180),
+				transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.0),
+					NumberSequenceKeypoint.new(0.7, 0.1),
+					NumberSequenceKeypoint.new(1.0, 1.0),
+				}),
+			},
+		},
+		totalDurationSec = 0.95,
+		anchor           = "targetHumanoidRootPart",
+	},
 }
 
 VfxConfig.PERF = {

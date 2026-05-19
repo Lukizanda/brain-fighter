@@ -63,10 +63,12 @@ local function validatePayload(player: Player, payload: any): boolean
 		return false
 	end
 
-	-- Skip effectId check while VfxConfig.EFFECTS is empty (Phase A).
-	-- Once Phase C populates EFFECTS, this becomes a real gate.
-	if next(VfxConfig.EFFECTS) ~= nil and not VfxConfig.EFFECTS[payload.castEffectId] then
-		return false
+	-- castEffectId is optional (spells with no cast VFX omit it).
+	-- Only validate when present.
+	if payload.castEffectId ~= nil then
+		if next(VfxConfig.EFFECTS) ~= nil and not VfxConfig.EFFECTS[payload.castEffectId] then
+			return false
+		end
 	end
 
 	if payload.impactTarget ~= nil then

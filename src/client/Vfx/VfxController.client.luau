@@ -1,18 +1,18 @@
 --!strict
 
 ----------------------------------------------------------------------
--- VfxController (Phase C — local player)
+-- VfxController (Phase C — local + broadcast)
 ----------------------------------------------------------------------
 -- Listens to CastAction.spellResolved and spawns ParticleEmitter
 -- bursts at the caster's staff tip (cast VFX) and on the target's
 -- HumanoidRootPart (impact VFX).
 --
--- Remote broadcast to other clients (BroadcastSpellVfx / SpellVfxEvent)
--- is Phase C step 2 — not yet wired here.
+-- Also broadcasts via BroadcastSpellVfx so other clients see the
+-- effect, and receives SpellVfxEvent to play effects cast by others.
 ----------------------------------------------------------------------
 
-local Debris           = game:GetService("Debris")
-local Players          = game:GetService("Players")
+local Debris            = game:GetService("Debris")
+local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger     = require(ReplicatedStorage.Shared.Core.Logger)
@@ -21,6 +21,10 @@ local CastAction = require(ReplicatedStorage.Shared.CastAction)
 
 local log         = Logger.new("VfxController")
 local LocalPlayer = Players.LocalPlayer
+
+local Remotes           = ReplicatedStorage.Shared.Vfx.Remotes
+local BroadcastSpellVfx = Remotes:WaitForChild("BroadcastSpellVfx") :: RemoteEvent
+local SpellVfxEvent     = Remotes:WaitForChild("SpellVfxEvent")     :: RemoteEvent
 
 local VfxTemplates = ReplicatedStorage:WaitForChild("VfxTemplates", 10)
 
@@ -131,16 +135,35 @@ CastAction.spellResolved:Connect(function(
 
 	-- Impact VFX at target
 	local firstImpact = spec.skill and spec.skill.onImpact and spec.skill.onImpact[1]
-	if firstImpact and target then
-		local impactEffectId = VfxConfig.resolveImpactId(firstImpact.kind)
-		local impactEffect   = VfxConfig.EFFECTS[impactEffectId]
+	local impactEffectId: string? = firstImpact and VfxConfig.resolveImpactId(firstImpact.kind) or nil
+	local impactTargetRoot: BasePart? = if target then resolveTargetRoot(target) else nil
+	if impactEffectId and impactTargetRoot then
+		local impactEffect = VfxConfig.EFFECTS[impactEffectId]
 		if impactEffect then
-			local targetRoot = resolveTargetRoot(target)
-			if targetRoot then
-				spawnEffect(impactEffect, targetRoot)
-				log:infoThrottled("impact_vfx", 2, string.format("impact vfx: %s @ %s", impactEffectId, targetRoot.Name))
-			end
+			spawnEffect(impactEffect, impactTargetRoot)
+			log:infoThrottled("impact_vfx", 2, string.format("impact vfx: %s @ %s", impactEffectId, impactTargetRoot.Name))
 		end
+	end
+
+	-- Broadcast to other clients
+	local castEffectId = VfxConfig.resolveCastId(spec.color, spec.tier)
+	BroadcastSpellVfx:FireServer({
+		color          = spec.color,
+		tier           = spec.tier,
+		castEffectId   = if VfxConfig.EFFECTS[castEffectId] then castEffectId else nil,
+		impactEffectId = impactEffectId,
+		impactTarget   = impactTargetRoot,
+	})
+end)
+
+SpellVfxEvent.OnClientEvent:Connect(function(payload: any)
+	if payload.senderUserId == LocalPlayer.UserId then return end
+	if not payload.impactEffectId or not payload.impactTarget then return end
+	local impactEffect = VfxConfig.EFFECTS[payload.impactEffectId]
+	if not impactEffect then return end
+	local t = payload.impactTarget
+	if typeof(t) == "Instance" and t:IsA("BasePart") then
+		spawnEffect(impactEffect, t)
 	end
 end)
 
