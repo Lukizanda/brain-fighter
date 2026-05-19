@@ -18,7 +18,7 @@
 			print(color, reservoirs:get(color))
 		end)
 
-		reservoirs:add("red", 25)           -- caps at 160 per color
+		reservoirs:add("red", 25)           -- caps at CAP_PER_COLOR per color
 		reservoirs:canAfford("red", 10)     -- true
 		reservoirs:drain("red", 10)         -- returns true; bar -= 10
 		reservoirs:snapshot()               -- { red = 15, green = 0, blue = 0 }
