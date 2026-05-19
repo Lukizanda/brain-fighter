@@ -1,7 +1,7 @@
 ---
 type: system
 description: Game mode framework — RoundManager, ScoreTracker, SpawnManager, mode registry. FFA Deathmatch + TDM modes (currently gated off; NoOpMode active).
-updated: 2026-05-13
+updated: 2026-05-19
 ---
 
 # GameMode System
@@ -14,6 +14,8 @@ Brain Fighter is being repurposed as an educational shooter, so the inherited co
 
 - `TEAMS_ENABLED = false` — `TeamDeathmatch` not registered, `TeamService` is a no-op, team UI/nametag colours fall back to neutral.
 - `PLAYER_VS_PLAYER_ENABLED = false` — `FFADeathmatch` not registered, player-on-player damage rejected in `applyDamage` and `canPlayerDamageHumanoid`, aim assist ignores other players.
+- `ROUND_TIMER_ENABLED = false` — active rounds have no time limit; they end on score only. `RoundTimerGui` exits early (no "0:00" overlay). Flip true to restore the 5-minute cap + timer HUD.
+- `ROUND_COUNTDOWN_ENABLED = false` — `RoundManager.countdown()` returns immediately; the round goes live the moment minimum players are met. Flip true to restore the 10-second pre-round delay.
 
 With both flags off the only registered mode is `NoOpMode` (`src/shared/GameMode/Modes/NoOpMode.luau`): a 24-hour idle round with `scoreLimit = math.huge`, no team logic, no win condition. RoundManager enters `Active` once and stays there; GameStateGui's PostRound overlay never fires.
 
@@ -53,8 +55,8 @@ Active mode is read from `workspace:GetAttribute("ActiveGameMode")` (default: `F
 
 ```
 Waiting   — < min players, idle
-Countdown — start countdown, lock spawns
-Active    — gameplay; ScoreTracker accrues
+Countdown — pre-round delay (skipped when ROUND_COUNTDOWN_ENABLED = false)
+Active    — gameplay; ScoreTracker accrues; ends on score limit or time (time disabled when ROUND_TIMER_ENABLED = false)
 PostRound — winner overlay, auto-restart timer
 ```
 

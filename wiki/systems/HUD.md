@@ -57,6 +57,7 @@ src/client/UI/
   SpellMenuGui.client.luau        — BottomRight; fires tapReservoir on color tap; drives fill via energyReservoirs.changed
   MindFullIndicatorGui.client.luau — TopCenter; shows/hides on mindFull/mindFreed
   BossHudGui.client.luau          — TopCenter; boss health bar + phase label; hidden until a boss spawns
+  RoundTimerGui.client.luau       — TopCenter; round state + formatted timer; gated behind GameConfig.ROUND_TIMER_ENABLED (currently false)
 ```
 
 ## Phase 4 gameplay widgets
