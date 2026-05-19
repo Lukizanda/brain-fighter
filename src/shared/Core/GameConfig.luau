@@ -32,6 +32,8 @@ local GameConfig = {
 	----------------------------------------------------------------------
 	TEAMS_ENABLED = false,            -- Set true to restore Team Deathmatch mode + team UI + team-aware spawn/nametag/score logic.
 	PLAYER_VS_PLAYER_ENABLED = false, -- Set true to restore PvP damage. When false, players cannot damage other players; NPCs remain valid targets.
+	ROUND_TIMER_ENABLED = false,      -- When false, rounds have no time limit; win by score only. Set true to re-enable the 5-minute cap.
+	ROUND_COUNTDOWN_ENABLED = false,  -- When false, the pre-round 10-s countdown is skipped; round starts immediately. Set true to restore.
 
 	----------------------------------------------------------------------
 	-- Character system gates
@@ -44,6 +46,7 @@ local GameConfig = {
 	-- future mode.
 	----------------------------------------------------------------------
 	TPS_CHARACTER_ENABLED = false,    -- When true, CameraManager + LocomotionManager initialize and apply the TPS body-lock + camera-aim stack. When false, default Roblox PlayerModule handles camera + locomotion.
+	SHOW_WEAPON_ROLODEX = false,      -- When false, the weapon rolodex HUD is not built or registered. Flip true to restore.
 
 	----------------------------------------------------------------------
 	-- Dev-only helpers (leave off in shipped builds)
@@ -60,9 +63,9 @@ local GameConfig = {
 	-- parts are summed; total count = density × total_volume / 1000.
 	-- Default 2 ≈ 26 blocks in the 40×8×40 reference arena.
 	----------------------------------------------------------------------
-	BLOCK_SPAWN_DENSITY = 0.4,
+	BLOCK_SPAWN_DENSITY = 0.1,
 	BLOCK_MIN_SPACING = 4,            -- minimum studs between block centers; 0 disables
-	BLOCK_SCALE = 1.0,                -- uniform scale multiplier on the 4×4×4 template (e.g. 0.5 = 2 studs, 2 = 8 studs); increase BLOCK_MIN_SPACING proportionally when scaling up
+	BLOCK_SCALE = 1.5,                -- uniform scale multiplier on the 4×4×4 template (e.g. 0.5 = 2 studs, 2 = 8 studs); increase BLOCK_MIN_SPACING proportionally when scaling up
 
 	----------------------------------------------------------------------
 	-- Default camera behavior (applies when TPS_CHARACTER_ENABLED = false)
@@ -78,6 +81,20 @@ local GameConfig = {
 	BACKWARD_SPEED_MULTIPLIER = 0.7,         -- 70% speed when walking backward
 	FIRING_SPEED_MULTIPLIER = 0.8,           -- 80% speed when firing
 	BACKWARD_FIRING_SPEED_MULTIPLIER = 0.5,  -- 50% speed when firing and walking backward
+
+	----------------------------------------------------------------------
+	-- Dash / Roll
+	----------------------------------------------------------------------
+	DASH = {
+		KEY           = Enum.KeyCode.LeftShift,
+		DASH_SPEED    = 60,   -- studs/sec (airborne dash)
+		DASH_DURATION = 0.2,  -- seconds
+		ROLL_SPEED    = 60,   -- studs/sec (grounded roll, decelerates to 0)
+		ROLL_DURATION = 0.35, -- seconds
+		ROLL_COOLDOWN = 0.2,  -- seconds (wait after roll ends before next roll)
+		ANIM_FADE_TIME = 0.1,
+		VFX_DURATION  = 0.3,
+	},
 }
 
 return GameConfig
