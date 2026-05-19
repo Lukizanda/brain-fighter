@@ -20,6 +20,9 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
+local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
+if not GameConfig.SHOW_WEAPON_ROLODEX then return end
+
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local HudConstants = require(ReplicatedStorage.Shared.Hud.HudConstants)
 local HudLayoutManager = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)

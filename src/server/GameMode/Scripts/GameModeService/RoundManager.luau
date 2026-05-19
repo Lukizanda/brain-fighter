@@ -15,6 +15,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
 
 local log = Logger.new("RoundManager")
@@ -78,6 +79,11 @@ local function waitForPlayers()
 end
 
 local function countdown()
+	if not GameConfig.ROUND_COUNTDOWN_ENABLED then
+		log:info("Countdown disabled — skipping")
+		return
+	end
+
 	currentState = RoundState.Countdown
 	timeRemaining = GameModeConstants.COUNTDOWN_DURATION
 	log:info("Countdown:", timeRemaining, "seconds")
@@ -94,19 +100,24 @@ end
 local function activeRound()
 	currentState = RoundState.Active
 	local config = refs.modeDefinition.getConfig()
-	timeRemaining = config.timeLimit
+	timeRemaining = GameConfig.ROUND_TIMER_ENABLED and config.timeLimit or 0
 
 	-- Reset scores and notify
 	refs.scoreTracker.resetAll()
 	refs.modeDefinition.onRoundStart()
 	refs.roundStartedEvent:Fire()
 
-	log:info("Round started! Time limit:", timeRemaining, "Score limit:", config.scoreLimit)
+	log:info("Round started! Timer:", GameConfig.ROUND_TIMER_ENABLED and (timeRemaining .. "s") or "disabled",
+		"Score limit:", config.scoreLimit)
 	broadcastState()
 
-	while running and timeRemaining > 0 do
+	while running do
 		task.wait(1)
-		timeRemaining -= 1
+
+		if GameConfig.ROUND_TIMER_ENABLED then
+			timeRemaining -= 1
+			if timeRemaining <= 0 then break end
+		end
 
 		-- Check win condition each tick
 		local scores = refs.scoreTracker.getAllScores()
