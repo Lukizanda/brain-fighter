@@ -6,9 +6,11 @@
 -- specified here.
 ----------------------------------------------------------------------
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local EnergyReservoirs = require(ReplicatedStorage.Shared.EnergyReservoirs)
+
 local ReservoirBarsConfig = {
-	-- Max value shown on each bar (EnergyReservoirs.CAP_PER_COLOR)
-	MAX_ENERGY = 160,
+	MAX_ENERGY = EnergyReservoirs.CAP_PER_COLOR,
 
 	-- Per-color bar specs: passed to AttributeBarBuilder.build() as config
 	BARS = {
