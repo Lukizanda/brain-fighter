@@ -17,7 +17,6 @@ local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService      = game:GetService("TweenService")
 
-local HudLayoutManager = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
 local Logger           = require(ReplicatedStorage.Shared.Core.Logger)
 
 local bossEvents        = ReplicatedStorage.Shared.Boss.BossEvents
@@ -33,13 +32,25 @@ local BAR_TWEEN    = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirec
 -- GUI Construction
 -- ---------------------------------------------------------------
 
+-- Own ScreenGui so we can use IgnoreGuiInset=true and sit flush at the
+-- top of the screen where the round timer used to live.
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name           = "BossHudGui"
+screenGui.DisplayOrder   = 15
+screenGui.ResetOnSpawn   = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent         = Players.LocalPlayer:WaitForChild("PlayerGui")
+
 local container = Instance.new("Frame")
 container.Name               = "BossHud"
-container.Size               = UDim2.new(1, 0, 0, 68)
+container.Size               = UDim2.new(0.4, 0, 0, 68)
+container.Position           = UDim2.new(0.5, 0, 0, 8)
+container.AnchorPoint        = Vector2.new(0.5, 0)
 container.BackgroundColor3   = Color3.fromRGB(20, 0, 0)
 container.BackgroundTransparency = 0.35
 container.BorderSizePixel    = 0
 container.Visible            = false  -- hidden until boss spawns
+container.Parent             = screenGui
 
 -- Rounded corners
 local corner = Instance.new("UICorner")
@@ -102,11 +113,6 @@ barFill.Parent           = barBg
 local fillCorner = Instance.new("UICorner")
 fillCorner.CornerRadius = UDim.new(0, 4)
 fillCorner.Parent       = barFill
-
--- ---------------------------------------------------------------
--- Register with HudLayoutManager
--- ---------------------------------------------------------------
-HudLayoutManager:register("TopCenter", container)
 
 -- ---------------------------------------------------------------
 -- Update helpers

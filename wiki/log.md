@@ -132,6 +132,10 @@ Replaced the instant CFrame snap in `BossStates.faceTaret` with a frame-rate-ind
 `SpellMenuBuilder` rewritten: each 90×80 button now layers a dim `FillBase` (always visible, the "empty" look) and an animated `FillBar` (solid gradient, anchored to bottom, grows upward as mana accumulates). `UIGradient` Rotation=270 gives solid color at bottom → lighter at top. Tapping a button shows a `"128 / 160"` popup above it for 1.8 s then fades. `playAffordBounce` keeps the scale-bounce; `playFiredFlash` now dims `FillBase.BackgroundTransparency` instead of the old `BackgroundColor3` tween. `ReservoirBarsGui.client.luau` deleted — its role is absorbed. `SpellMenuConfig` gains `FILL_TWEEN`, `FILL_MAX`, `FILL_BASE_TRANSPARENCY`, popup constants; removes `ACTIVE/DISABLED_TRANSPARENCY`, `COST_*`, `FIRED_DIM_COLOR`. `wiki/systems/HUD.md` updated.
 
 
+## [2026-05-19] ingest | BossHudGui moved to absolute top of screen
+
+Removed BossHudGui from HudLayoutManager's TopCenter region. It now owns its own ScreenGui (IgnoreGuiInset=true, DisplayOrder=15) and positions itself at UDim2(0.5,0,0,8) — flush at the top where the round timer used to sit. Container width changed from 100% of TopCenter region to 0.4× screen to maintain the same visual size.
+
 ## [2026-05-19] ingest | Round timer + pre-round countdown disabled via config
 
 Added `ROUND_TIMER_ENABLED` and `ROUND_COUNTDOWN_ENABLED` flags to `GameConfig.luau` (both `false`). `RoundManager` now skips `countdown()` and runs an unbounded active-round loop when the flags are off — rounds end on score limit only. `RoundTimerGui` (previously Studio-only, now on disk at `src/client/UI/`) exits early when `ROUND_TIMER_ENABLED = false`, removing the "0:00" overlay. Flip either flag `true` to restore the corresponding behaviour without any other code changes. Updated `wiki/systems/GameMode.md` and `wiki/systems/HUD.md`.
