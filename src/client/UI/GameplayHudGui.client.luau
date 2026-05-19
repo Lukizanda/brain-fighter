@@ -15,6 +15,7 @@ local HudLayoutManager      = require(ReplicatedStorage.Shared.Hud.HudLayoutMana
 local BufferDisplayBuilder  = require(ReplicatedStorage.Shared.Hud.BufferDisplayBuilder)
 local MemorizeButtonBuilder = require(ReplicatedStorage.Shared.Hud.MemorizeButtonBuilder)
 local MemorizeAction        = require(ReplicatedStorage.Shared.MemorizeAction)
+local Dictionary            = require(ReplicatedStorage.Shared.Dictionary)
 local PlayerSession         = require(script.Parent.Parent.PlayerSession)
 
 local log = Logger.new("GameplayHudGui")
@@ -31,6 +32,7 @@ container.Name = "GameplayHud"
 container.Size = UDim2.new(0, 400, 0, 0)
 container.AutomaticSize = Enum.AutomaticSize.Y
 container.BackgroundTransparency = 1
+container.LayoutOrder = 2
 
 local layout = Instance.new("UIListLayout")
 layout.FillDirection = Enum.FillDirection.Vertical
@@ -61,7 +63,11 @@ HudLayoutManager:register("BottomCenter", container)
 local function onBufferChanged()
 	local tiles = session.wordBuffer:tiles()
 	display:setTiles(tiles)
-	btn:setEnabled(session.wordBuffer:size() > 0)
+	local size = session.wordBuffer:size()
+	local isValid = size > 0 and Dictionary.isWord(session.wordBuffer:asWord())
+	display:setValidWordGlow(isValid)
+	btn:setValidWord(isValid)
+	btn:setEnabled(size > 0)
 end
 onBufferChanged()
 

@@ -22,6 +22,7 @@ export type Handle = {
 	activated: RBXScriptSignal,
 	setEnabled: (self: Handle, enabled: boolean) -> (),
 	flashResult: (self: Handle, ok: boolean) -> (),
+	setValidWord: (self: Handle, active: boolean) -> (),
 	destroy: (self: Handle) -> (),
 }
 
@@ -56,6 +57,8 @@ function MemorizeButtonBuilder.build(): Handle
 
 	local enabled = false
 	local flashTween: Tween? = nil
+	local validScaleTween: Tween? = nil
+	local validStrokeTween: Tween? = nil
 
 	local function applyEnabledState()
 		if enabled then
@@ -97,8 +100,43 @@ function MemorizeButtonBuilder.build(): Handle
 		flashTween:Play()
 	end
 
+	function handle:setValidWord(active: boolean)
+		if validScaleTween then validScaleTween:Cancel() end
+		if validStrokeTween then validStrokeTween:Cancel() end
+		validScaleTween = nil
+		validStrokeTween = nil
+
+		local existingScale = container:FindFirstChildOfClass("UIScale")
+		local existingStroke = container:FindFirstChild(Defaults.VALID_STROKE_NAME)
+
+		if active then
+			local uiScale: UIScale = if existingScale then existingScale :: UIScale else Instance.new("UIScale")
+			if not existingScale then
+				uiScale.Scale = 1
+				uiScale.Parent = container
+			end
+			validScaleTween = TweenService:Create(uiScale, Defaults.VALID_SCALE_TWEEN, { Scale = Defaults.VALID_SCALE_MAX })
+			validScaleTween:Play()
+
+			local stroke: UIStroke = if existingStroke then existingStroke :: UIStroke else Instance.new("UIStroke")
+			if not existingStroke then
+				stroke.Name = Defaults.VALID_STROKE_NAME
+				stroke.Color = Defaults.VALID_STROKE_COLOR
+				stroke.Thickness = Defaults.VALID_STROKE_THICKNESS
+				stroke.Parent = container
+			end
+			validStrokeTween = TweenService:Create(stroke, Defaults.VALID_STROKE_PULSE_TWEEN, { Transparency = 0.5 })
+			validStrokeTween:Play()
+		else
+			if existingScale then existingScale:Destroy() end
+			if existingStroke then existingStroke:Destroy() end
+		end
+	end
+
 	function handle:destroy()
 		if flashTween then flashTween:Cancel() end
+		if validScaleTween then validScaleTween:Cancel() end
+		if validStrokeTween then validStrokeTween:Cancel() end
 		activatedEvent:Destroy()
 		container:Destroy()
 	end

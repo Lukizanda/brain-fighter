@@ -36,7 +36,8 @@ local SELECTION_STROKE_NAME = "SelectionStroke"
 local SELECTION_STROKE_COLOR = Color3.fromRGB(255, 215, 0)
 local SELECTION_STROKE_THICKNESS = 2
 local SNAP_FLASH_DURATION = 0.18
-local PULSE_STROKE_NAME = "MindFullPulseStroke"
+local PULSE_STROKE_NAME      = "MindFullPulseStroke"
+local VALID_WORD_STROKE_NAME = "ValidWordStroke"
 
 export type Tile = { letter: string, color: string }
 
@@ -50,6 +51,7 @@ export type Handle = {
 	setTiles: (self: Handle, tiles: { Tile }) -> (),
 	popTile: (self: Handle, idx: number) -> (),
 	setMindFullPulse: (self: Handle, active: boolean) -> (),
+	setValidWordGlow: (self: Handle, active: boolean) -> (),
 	playMemorizeOk: (self: Handle) -> (),
 	playMemorizeFail: (self: Handle) -> (),
 	destroy: (self: Handle) -> (),
@@ -126,6 +128,8 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 	local dragGhost: Frame? = nil
 	local connections: { RBXScriptConnection } = {}
 	local pulseStrokeTweens: { Tween } = {}
+	local validWordStrokeTweens: { Tween } = {}
+	local validWordColorTweens: { Tween } = {}
 
 	-- ── Helpers ───────────────────────────────────────────────────
 
@@ -428,6 +432,43 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 		end
 	end
 
+	function handle:setValidWordGlow(active: boolean)
+		for _, t in validWordStrokeTweens do t:Cancel() end
+		for _, t in validWordColorTweens do t:Cancel() end
+		table.clear(validWordStrokeTweens)
+		table.clear(validWordColorTweens)
+
+		for i = 1, cap do
+			local cell = cells[i]
+			local tile = currentTiles[i]
+			local naturalColor = if tile
+				then (Defaults.TILE_COLORS[tile.color] or Defaults.TILE_COLORS.blue)
+				else Defaults.EMPTY_COLOR
+			local targetColor = if active then Defaults.VALID_TILE_COLOR else naturalColor
+
+			local colorTween = TweenService:Create(cell, Defaults.VALID_WORD_COLOR_TWEEN, { BackgroundColor3 = targetColor })
+			colorTween:Play()
+			table.insert(validWordColorTweens, colorTween)
+
+			local s = cell:FindFirstChild(VALID_WORD_STROKE_NAME)
+			if active then
+				if not s then
+					local newStroke = Instance.new("UIStroke")
+					newStroke.Name = VALID_WORD_STROKE_NAME
+					newStroke.Color = Defaults.VALID_WORD_STROKE_COLOR
+					newStroke.Thickness = Defaults.VALID_WORD_STROKE_THICKNESS
+					newStroke.Parent = cell
+					s = newStroke
+				end
+				local strokeTween = TweenService:Create(s :: UIStroke, Defaults.VALID_WORD_STROKE_PULSE, { Transparency = 0.5 })
+				strokeTween:Play()
+				table.insert(validWordStrokeTweens, strokeTween)
+			elseif s then
+				s:Destroy()
+			end
+		end
+	end
+
 	function handle:playMemorizeOk()
 		for i = 1, cap do
 			if currentTiles[i] then
@@ -481,13 +522,13 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 
 	function handle:destroy()
 		cancelAll()
-		for _, t in pulseStrokeTweens do
-			t:Cancel()
-		end
+		for _, t in pulseStrokeTweens do t:Cancel() end
 		table.clear(pulseStrokeTweens)
-		for _, conn in connections do
-			conn:Disconnect()
-		end
+		for _, t in validWordStrokeTweens do t:Cancel() end
+		table.clear(validWordStrokeTweens)
+		for _, t in validWordColorTweens do t:Cancel() end
+		table.clear(validWordColorTweens)
+		for _, conn in connections do conn:Disconnect() end
 		table.clear(connections)
 		container:Destroy()
 	end

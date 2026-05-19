@@ -44,6 +44,14 @@ local BufferDisplayConfig = {
 	SHAKE_DURATION_SEC = 0.18,
 	REJECT_COLOR       = Color3.fromRGB(220, 60, 60),
 	REJECT_TWEEN       = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+
+	-- Valid-word glow (green tile shift + pulsing stroke)
+	VALID_TILE_COLOR            = Color3.fromRGB(80, 200, 100),
+	VALID_WORD_STROKE_NAME      = "ValidWordStroke",
+	VALID_WORD_STROKE_COLOR     = Color3.fromRGB(80, 215, 105),
+	VALID_WORD_STROKE_THICKNESS = 2,
+	VALID_WORD_COLOR_TWEEN      = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	VALID_WORD_STROKE_PULSE     = TweenInfo.new(0.60, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 }
 
 return BufferDisplayConfig
