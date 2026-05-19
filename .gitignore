@@ -42,3 +42,6 @@ whats-next.md
 # `.claude/settings.json` (versioned) holds the team-shared allowlist;
 # `.claude/settings.local.json` is each contributor's local additions.
 .claude/settings.local.json
+
+# Nimbalyst local-only data (session artifacts, playtest lock, etc.)
+nimbalyst-local/

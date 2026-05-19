@@ -43,6 +43,31 @@
 2. Start playtest via MCP → wait → read output via MCP → iterate.
 3. Log state transitions immediately, per-frame data throttled.
 
+## Playtest Lock
+
+Multiple sessions may attempt playtests concurrently, causing them to interfere with each other. Always acquire the lock before starting a playtest and release it after stopping.
+
+**Lock file**: `nimbalyst-local/playtest.lock.json` (gitignored, local-only)
+**TTL**: 10 minutes — a lock older than this is treated as stale and overridden.
+
+**Acquire** (run before any `start_stop_play` or MCP playtest start):
+```powershell
+$lockPath = "nimbalyst-local\playtest.lock.json"
+$existing = if (Test-Path $lockPath) { Get-Content $lockPath -Raw | ConvertFrom-Json } else { $null }
+if ($existing -and ((Get-Date) - [DateTime]$existing.startedAt).TotalMinutes -lt 10) {
+    throw "Playtest locked by '$($existing.session)' since $($existing.startedAt) — wait or check if that session is done."
+}
+New-Item -ItemType Directory -Path "nimbalyst-local" -Force | Out-Null
+@{ session = "YOUR_SESSION_NAME"; startedAt = (Get-Date -Format o) } | ConvertTo-Json | Set-Content $lockPath
+```
+
+**Release** (run after the playtest stops, or on any error/abort — always release):
+```powershell
+Remove-Item "nimbalyst-local\playtest.lock.json" -ErrorAction SilentlyContinue
+```
+
+Replace `YOUR_SESSION_NAME` with a short identifier for the current session's task (e.g. `"freeze-vfx"`, `"hud-absorb"`). If the acquire throws, do **not** start the playtest — report the conflict to the user instead.
+
 ## Code Style
 - **Type annotations**: add Luau type annotations to all function signatures (parameters + return types). Use `export type` for types shared across modules. Never use `--!nocheck` — fix the type issue instead.
 - **Cleanup pattern**: every controller/system that allocates resources must have `:destroy()` and `:disable()`. `:disable()` is reversible (pause); `:destroy()` calls `:disable()` then clears all state (permanent teardown).
