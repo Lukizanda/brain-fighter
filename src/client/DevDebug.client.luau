@@ -6,6 +6,10 @@
 --   [  append next letter of TEST_WORD cycling (default: "CATALOG")
 --   ]  trigger memorize action
 --   \  clear the buffer
+--   1  fill all reservoirs to T1 threshold (5)
+--   2  fill all reservoirs to T2 threshold (10)
+--   3  fill all reservoirs to T3 threshold (20)
+--   4  fill all reservoirs to T4 threshold (40)
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -20,9 +24,21 @@ local log = Logger.new("DevDebug")
 
 local TEST_WORD = "CATALOG"
 local TEST_COLORS = { "red", "green", "blue" }
+local TIER_ENERGY = { 5, 10, 20, 40 }
 local letterIdx = 1
 
 local session = PlayerSession.get()
+
+local function fillReservoirsToAmount(amount: number)
+	for _, color in TEST_COLORS do
+		local current = session.energyReservoirs:get(color)
+		if current > amount then
+			session.energyReservoirs:drain(color, current - amount)
+		elseif current < amount then
+			session.energyReservoirs:add(color, amount - current)
+		end
+	end
+end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
@@ -48,7 +64,20 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		session.wordBuffer:clear()
 		letterIdx = 1
 		log:info("buffer cleared")
+
+	elseif input.KeyCode == Enum.KeyCode.One then
+		fillReservoirsToAmount(TIER_ENERGY[1])
+		log:info(string.format("reservoirs set to T1 (%d each)", TIER_ENERGY[1]))
+	elseif input.KeyCode == Enum.KeyCode.Two then
+		fillReservoirsToAmount(TIER_ENERGY[2])
+		log:info(string.format("reservoirs set to T2 (%d each)", TIER_ENERGY[2]))
+	elseif input.KeyCode == Enum.KeyCode.Three then
+		fillReservoirsToAmount(TIER_ENERGY[3])
+		log:info(string.format("reservoirs set to T3 (%d each)", TIER_ENERGY[3]))
+	elseif input.KeyCode == Enum.KeyCode.Four then
+		fillReservoirsToAmount(TIER_ENERGY[4])
+		log:info(string.format("reservoirs set to T4 (%d each)", TIER_ENERGY[4]))
 	end
 end)
 
-log:info("ready — [=letter  ]=memorize  \\=clear  (cycling: " .. TEST_WORD .. ")")
+log:info("ready — [=letter  ]=memorize  \\=clear  1-4=fill mana T1-T4  (cycling: " .. TEST_WORD .. ")")
