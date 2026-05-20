@@ -441,17 +441,13 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 		for i = 1, cap do
 			local cell = cells[i]
 			local tile = currentTiles[i]
-			local naturalColor = if tile
-				then (Defaults.TILE_COLORS[tile.color] or Defaults.TILE_COLORS.blue)
-				else Defaults.EMPTY_COLOR
-			local targetColor = if active then Defaults.VALID_TILE_COLOR else naturalColor
 
-			local colorTween = TweenService:Create(cell, Defaults.VALID_WORD_COLOR_TWEEN, { BackgroundColor3 = targetColor })
-			colorTween:Play()
-			table.insert(validWordColorTweens, colorTween)
+			if active and tile then
+				local colorTween = TweenService:Create(cell, Defaults.VALID_WORD_COLOR_TWEEN, { BackgroundColor3 = Defaults.VALID_TILE_COLOR })
+				colorTween:Play()
+				table.insert(validWordColorTweens, colorTween)
 
-			local s = cell:FindFirstChild(VALID_WORD_STROKE_NAME)
-			if active then
+				local s = cell:FindFirstChild(VALID_WORD_STROKE_NAME)
 				if not s then
 					local newStroke = Instance.new("UIStroke")
 					newStroke.Name = VALID_WORD_STROKE_NAME
@@ -463,8 +459,16 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 				local strokeTween = TweenService:Create(s :: UIStroke, Defaults.VALID_WORD_STROKE_PULSE, { Transparency = 0.5 })
 				strokeTween:Play()
 				table.insert(validWordStrokeTweens, strokeTween)
-			elseif s then
-				s:Destroy()
+			elseif not active then
+				local naturalColor = if tile
+					then (Defaults.TILE_COLORS[tile.color] or Defaults.TILE_COLORS.blue)
+					else Defaults.EMPTY_COLOR
+				local colorTween = TweenService:Create(cell, Defaults.VALID_WORD_COLOR_TWEEN, { BackgroundColor3 = naturalColor })
+				colorTween:Play()
+				table.insert(validWordColorTweens, colorTween)
+
+				local s = cell:FindFirstChild(VALID_WORD_STROKE_NAME)
+				if s then s:Destroy() end
 			end
 		end
 	end

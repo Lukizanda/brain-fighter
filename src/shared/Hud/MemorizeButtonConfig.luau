@@ -34,7 +34,7 @@ local MemorizeButtonConfig = {
 	VALID_SCALE_MAX          = 1.04,
 	VALID_SCALE_TWEEN        = TweenInfo.new(0.80, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 	VALID_STROKE_NAME        = "ValidWordStroke",
-	VALID_STROKE_COLOR       = Color3.fromRGB(80, 215, 105),
+	VALID_STROKE_COLOR       = Color3.fromRGB(255, 215, 0),
 	VALID_STROKE_THICKNESS   = 2,
 	VALID_STROKE_PULSE_TWEEN = TweenInfo.new(0.60, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 }
