@@ -1,7 +1,7 @@
 ---
 type: system
 description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, WeaponRolodex, BuffTray, reticle, settings menu, and 5 Phase 4 gameplay widgets (BufferDisplay, SpellMenu with embedded mana fill, MemorizeButton, MindFullIndicator).
-updated: 2026-05-20
+updated: 2026-05-20 (stripped PlayerHud indirection)
 ---
 
 # HUD System
@@ -56,13 +56,8 @@ flowchart LR
     DFG["DamageFeedbackGui<br/>(directional indicator)"]:::modal
   end
 
-  subgraph PH["PlayerHud module (src/client/PlayerHud/)"]
-    PHUD["PlayerHud.build()<br/>PlayerHud.attachAdapters(char)"]:::coord
-    AB["AttributeBarBuilder<br/>(Health · Stamina · Shield)"]:::builder
-    AD["HealthAdapter · ShieldAdapter · StaminaAdapter"]:::coord
-  end
-
   subgraph BLD["Builders (src/shared/Hud/, pure modules)"]
+    ABB["AttributeBarBuilder"]:::builder
     BDB["BufferDisplayBuilder"]:::builder
     MBB["MemorizeButtonBuilder"]:::builder
     SMB["SpellMenuBuilder"]:::builder
@@ -75,13 +70,12 @@ flowchart LR
   end
 
   %% --- coordinator → builder ---
-  GHUD --> BDB & MBB & PHUD
+  GHUD --> BDB & MBB & ABB
   SMG --> SMB
   MFI --> MFB
   BTG --> BTB
   WRG --> WRB
   SMGUI --> STB
-  PHUD --> AB
 
   %% --- coordinator → HudLayoutManager region ---
   GHUD -- "register(BottomCenter, ×3)" --> BC
@@ -106,8 +100,7 @@ flowchart LR
   PS -- "wordBuffer.changed" --> GHUD
   PS -- "energyReservoirs.changed" --> SMG
   PS -- "mindFull / mindFreed" --> MFI
-  HUM -- "HealthChanged" --> AD
-  AD -- "setValue()" --> AB
+  HUM -- "HealthChanged" --> GHUD
   REM -- "OnClientEvent" --> KFG & TSG & LDC
   CFG -. "GameConfig gate" .-> TSG & RTG & WRG
 ```
@@ -117,7 +110,7 @@ Legend: blue = Coordinator LocalScript, orange = pure-module Builder, green = ga
 ## Single-ownership invariants (Phase 4.8 audit)
 
 - `GameplayHudGui` is the **sole stable BottomCenter coordinator**. `LoadoutDropClient` registers a transient toast stack at BottomCenter — documented exception.
-- Every Builder in `src/shared/Hud/` exposes `:destroy()` (11/11). Every Adapter in `src/client/PlayerHud/Adapters/` exposes `:destroy()` (3/3).
+- Every Builder in `src/shared/Hud/` exposes `:destroy()` (11/11). Health adapter connections are tracked inline in `GameplayHudGui` (`healthConnections` table, cleared on respawn).
 - All Builders are pure modules except `SettingsMenuBuilder` (reads `Players.LocalPlayer` — tracked in NIM-19).
 - Detailed findings: [[design/ui-architecture-review]].
 
@@ -154,14 +147,6 @@ src/shared/Hud/
   MindFullIndicatorBuilder.luau   — warning banner when WordBuffer is full
   MindFullIndicatorConfig.luau
 
-src/client/PlayerHud/
-  init.luau                       — ModuleScript; exports build(), attachAdapters(char), teardownAdapters()
-                                    Does NOT self-register — GameplayHudGui is the coordinator.
-  Adapters/
-    HealthAdapter.luau            — subscribes to Humanoid.HealthChanged → updates AttributeBar
-    ShieldAdapter.luau            (scaffold)
-    StaminaAdapter.luau           (scaffold)
-
 src/client/UI/
   GameplayHudGui.client.luau      — BottomCenter coordinator: single LAYOUT table owns tile/health/ABSORB
                                     stacking order; also owns CharacterAdded → adapter wiring
@@ -185,9 +170,9 @@ All five read state through `PlayerSession.get()` and subscribe to signals from 
 | SpellMenu | BottomRight | `energyReservoirs.changed` | gradient fill + `CastAction.tapReservoir`; tap shows energy popup |
 | MindFullIndicator | TopCenter | `mindFull` / `mindFreed` | show/hide warning |
 
-## Adapter pattern (attribute bars)
+## Health bar wiring
 
-Each attribute bar has an Adapter that subscribes to a game-state source and forwards updates to the bar. `HealthAdapter` listens to `Humanoid.HealthChanged`. Adding a new bar = new Builder Config entry + new Adapter.
+`GameplayHudGui` builds the health bar directly via `AttributeBarBuilder.build({name="Health", ...})` and maintains a `healthConnections` table of `RBXScriptConnection`s. On each `CharacterAdded` it disconnects old connections and re-subscribes to the new character's `Humanoid.HealthChanged` and `Humanoid.MaxHealthChanged`. No separate Adapter module.
 
 ## WeaponRolodex
 

@@ -129,7 +129,6 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 	local connections: { RBXScriptConnection } = {}
 	local pulseStrokeTweens: { Tween } = {}
 	local validWordStrokeTweens: { Tween } = {}
-	local validWordColorTweens: { Tween } = {}
 
 	-- ── Helpers ───────────────────────────────────────────────────
 
@@ -434,19 +433,13 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 
 	function handle:setValidWordGlow(active: boolean)
 		for _, t in validWordStrokeTweens do t:Cancel() end
-		for _, t in validWordColorTweens do t:Cancel() end
 		table.clear(validWordStrokeTweens)
-		table.clear(validWordColorTweens)
 
 		for i = 1, cap do
 			local cell = cells[i]
 			local tile = currentTiles[i]
 
 			if active and tile then
-				local colorTween = TweenService:Create(cell, Defaults.VALID_WORD_COLOR_TWEEN, { BackgroundColor3 = Defaults.VALID_TILE_COLOR })
-				colorTween:Play()
-				table.insert(validWordColorTweens, colorTween)
-
 				local s = cell:FindFirstChild(VALID_WORD_STROKE_NAME)
 				if not s then
 					local newStroke = Instance.new("UIStroke")
@@ -459,14 +452,7 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 				local strokeTween = TweenService:Create(s :: UIStroke, Defaults.VALID_WORD_STROKE_PULSE, { Transparency = 0.5 })
 				strokeTween:Play()
 				table.insert(validWordStrokeTweens, strokeTween)
-			elseif not active then
-				local naturalColor = if tile
-					then (Defaults.TILE_COLORS[tile.color] or Defaults.TILE_COLORS.blue)
-					else Defaults.EMPTY_COLOR
-				local colorTween = TweenService:Create(cell, Defaults.VALID_WORD_COLOR_TWEEN, { BackgroundColor3 = naturalColor })
-				colorTween:Play()
-				table.insert(validWordColorTweens, colorTween)
-
+			else
 				local s = cell:FindFirstChild(VALID_WORD_STROKE_NAME)
 				if s then s:Destroy() end
 			end
@@ -530,8 +516,6 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 		table.clear(pulseStrokeTweens)
 		for _, t in validWordStrokeTweens do t:Cancel() end
 		table.clear(validWordStrokeTweens)
-		for _, t in validWordColorTweens do t:Cancel() end
-		table.clear(validWordColorTweens)
 		for _, conn in connections do conn:Disconnect() end
 		table.clear(connections)
 		container:Destroy()
