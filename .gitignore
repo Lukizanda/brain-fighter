@@ -45,3 +45,6 @@ whats-next.md
 
 # Nimbalyst local-only data (session artifacts, playtest lock, etc.)
 nimbalyst-local/
+
+# Graphify generated outputs — rebuild with `graphify update .`
+graphify-out/
