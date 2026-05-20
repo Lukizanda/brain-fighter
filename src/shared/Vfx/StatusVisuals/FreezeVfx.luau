@@ -1,6 +1,24 @@
 --!strict
 
-local TweenService = game:GetService("TweenService")
+----------------------------------------------------------------------
+-- FreezeVfx — persistent status visual for the freeze effect.
+----------------------------------------------------------------------
+-- Lives in the "status visual" lane, separate from the burst-VFX path
+-- through VfxConfig + VfxController.spawnEffect. See
+-- wiki/systems/SkillPipeline.md § "VFX layers".
+--
+-- Burst-vs-persistent split: bursts are fire-and-forget particles
+-- (cast/impact). Status visuals are welded geometry that persists for
+-- the duration of an active status. They share the same color source
+-- (VfxConfig.COLORS) but use a different runtime because the
+-- ParticleEmitter pipeline doesn't carry "weld parts to limbs for N
+-- seconds" semantics.
+----------------------------------------------------------------------
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService      = game:GetService("TweenService")
+
+local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 
 local TARGET_PARTS: { string } = {
 	"Head", "UpperTorso", "LowerTorso",
@@ -9,7 +27,9 @@ local TARGET_PARTS: { string } = {
 }
 
 local OVERSIZE       = 1.5
-local ICE_COLOR      = Color3.fromRGB(128, 192, 255)
+-- VfxConfig.COLORS.blue.glow is #80C0FF == (128, 192, 255) — same hue as
+-- the previous hardcoded ICE_COLOR, now sourced from the single palette.
+local ICE_COLOR      = VfxConfig.COLORS.blue.glow
 local TRANSPARENCY   = 0.35
 local EXPAND_TIME    = 0.4
 local COLLAPSE_TIME  = 0.2

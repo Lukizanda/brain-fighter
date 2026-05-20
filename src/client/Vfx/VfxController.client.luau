@@ -11,13 +11,13 @@
 -- effect, and receives SpellVfxEvent to play effects cast by others.
 ----------------------------------------------------------------------
 
-local Debris            = game:GetService("Debris")
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Logger     = require(ReplicatedStorage.Shared.Core.Logger)
-local VfxConfig  = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
-local CastAction = require(ReplicatedStorage.Shared.CastAction)
+local Logger      = require(ReplicatedStorage.Shared.Core.Logger)
+local VfxConfig   = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
+local CastAction  = require(ReplicatedStorage.Shared.CastAction)
+local spawnEffect = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
 local log         = Logger.new("VfxController")
 local LocalPlayer = Players.LocalPlayer
@@ -26,60 +26,9 @@ local Remotes           = ReplicatedStorage.Shared.Vfx.Remotes
 local BroadcastSpellVfx = Remotes:WaitForChild("BroadcastSpellVfx") :: RemoteEvent
 local SpellVfxEvent     = Remotes:WaitForChild("SpellVfxEvent")     :: RemoteEvent
 
-local VfxTemplates = ReplicatedStorage:WaitForChild("VfxTemplates", 10)
-
 ----------------------------------------------------------------------
 -- Helpers
 ----------------------------------------------------------------------
-
-local function applyEmitterOverrides(emitter: ParticleEmitter, spec: VfxConfig.EmitterSpec)
-	if spec.color then
-		emitter.Color = ColorSequence.new(spec.color.primary)
-		emitter.LightEmission = 0.5
-	end
-	if spec.lifetime    then emitter.Lifetime    = spec.lifetime    end
-	if spec.size        then emitter.Size        = spec.size        end
-	if spec.speed       then emitter.Speed       = spec.speed       end
-	if spec.spreadAngle then emitter.SpreadAngle = spec.spreadAngle end
-	if spec.rotation    then emitter.Rotation    = spec.rotation    end
-	if spec.transparency then emitter.LightTransparency = 0 end -- keep as authored; transparency field is a hint
-end
-
-local function spawnEffect(effectSpec: VfxConfig.EffectSpec, anchorPart: BasePart | Attachment)
-	if not effectSpec.emitters then return end
-
-	local att = Instance.new("Attachment")
-	att.Parent = anchorPart
-	Debris:AddItem(att, effectSpec.totalDurationSec + 0.1)
-
-	for _, emitterSpec in effectSpec.emitters do
-		if not VfxTemplates then
-			log:warn("VfxTemplates not found — skipping emitter")
-			continue
-		end
-		local template = VfxTemplates:FindFirstChild(emitterSpec.template)
-		if not template or not template:IsA("ParticleEmitter") then
-			log:warn(string.format("template %q missing or wrong class — skipping", emitterSpec.template))
-			continue
-		end
-
-		local emitter = template:Clone() :: ParticleEmitter
-		applyEmitterOverrides(emitter, emitterSpec)
-		emitter.Parent = att
-
-		if emitterSpec.emitCount then
-			emitter.Enabled = false
-			emitter:Emit(emitterSpec.emitCount)
-			Debris:AddItem(emitter, effectSpec.totalDurationSec)
-		elseif emitterSpec.durationSec then
-			emitter.Enabled = true
-			task.delay(emitterSpec.durationSec, function()
-				if emitter.Parent then emitter.Enabled = false end
-			end)
-			Debris:AddItem(emitter, effectSpec.totalDurationSec)
-		end
-	end
-end
 
 -- Walk character → equipped Tool → Handle → Tip attachment.
 -- Falls back to HumanoidRootPart so VFX always fires somewhere.
@@ -112,6 +61,27 @@ local function resolveTargetRoot(target: any): BasePart?
 	return if hrp and hrp:IsA("BasePart") then hrp :: BasePart else nil
 end
 
+-- Resolve every renderable impact effect id for a skill (one per unique
+-- effect kind in `skill.onImpact`). Dedupes by kind so a hypothetical
+-- "damage + damage" entry doesn't double-emit. Returns ids that have a
+-- matching `VfxConfig.EFFECTS` entry; missing ones are silently dropped.
+local function resolveImpactEffectIds(skill: any): { string }
+	local ids: { string } = {}
+	if not (skill and skill.onImpact) then return ids end
+	local seen: { [string]: true } = {}
+	for _, entry in skill.onImpact do
+		local kind = entry.kind
+		if kind and not seen[kind] then
+			seen[kind] = true
+			local id = VfxConfig.resolveImpactId(kind)
+			if VfxConfig.EFFECTS[id] then
+				table.insert(ids, id)
+			end
+		end
+	end
+	return ids
+end
+
 ----------------------------------------------------------------------
 -- Main signal connection
 ----------------------------------------------------------------------
@@ -133,37 +103,53 @@ CastAction.spellResolved:Connect(function(
 		log:infoThrottled("cast_vfx", 2, string.format("cast vfx: %s @ %s", castEffectId, anchor.Name))
 	end
 
-	-- Impact VFX at target
-	local firstImpact = spec.skill and spec.skill.onImpact and spec.skill.onImpact[1]
-	local impactEffectId: string? = firstImpact and VfxConfig.resolveImpactId(firstImpact.kind) or nil
+	-- Impact VFX at target — one burst per unique effect kind on the skill.
 	local impactTargetRoot: BasePart? = if target then resolveTargetRoot(target) else nil
-	if impactEffectId and impactTargetRoot then
-		local impactEffect = VfxConfig.EFFECTS[impactEffectId]
-		if impactEffect then
-			spawnEffect(impactEffect, impactTargetRoot)
-			log:infoThrottled("impact_vfx", 2, string.format("impact vfx: %s @ %s", impactEffectId, impactTargetRoot.Name))
+	local impactEffectIds: { string } = resolveImpactEffectIds(spec.skill)
+	if impactTargetRoot then
+		for _, id in impactEffectIds do
+			spawnEffect(VfxConfig.EFFECTS[id], impactTargetRoot)
+			log:infoThrottled("impact_vfx_" .. id, 2, string.format("impact vfx: %s @ %s", id, impactTargetRoot.Name))
 		end
 	end
 
 	-- Broadcast to other clients
-	local castEffectId = VfxConfig.resolveCastId(spec.color, spec.tier)
 	BroadcastSpellVfx:FireServer({
-		color          = spec.color,
-		tier           = spec.tier,
-		castEffectId   = if VfxConfig.EFFECTS[castEffectId] then castEffectId else nil,
-		impactEffectId = impactEffectId,
-		impactTarget   = impactTargetRoot,
+		color           = spec.color,
+		tier            = spec.tier,
+		castEffectId    = if VfxConfig.EFFECTS[castEffectId] then castEffectId else nil,
+		impactEffectIds = impactEffectIds,
+		impactTarget    = impactTargetRoot,
 	})
 end)
 
 SpellVfxEvent.OnClientEvent:Connect(function(payload: any)
 	if payload.senderUserId == LocalPlayer.UserId then return end
-	if not payload.impactEffectId or not payload.impactTarget then return end
-	local impactEffect = VfxConfig.EFFECTS[payload.impactEffectId]
-	if not impactEffect then return end
-	local t = payload.impactTarget
-	if typeof(t) == "Instance" and t:IsA("BasePart") then
-		spawnEffect(impactEffect, t)
+
+	-- Cast burst at the sender's staff tip
+	if payload.castEffectId then
+		local castEffect = VfxConfig.EFFECTS[payload.castEffectId]
+		local senderPlayer = if typeof(payload.senderUserId) == "number"
+			then Players:GetPlayerByUserId(payload.senderUserId)
+			else nil
+		local senderChar = senderPlayer and senderPlayer.Character
+		if castEffect and senderChar then
+			local anchor = resolveStaffTip(senderChar)
+			spawnEffect(castEffect, anchor)
+		end
+	end
+
+	-- Impact bursts — one spawn per unique effect kind from the sender.
+	local impactTarget = payload.impactTarget
+	if impactTarget and typeof(impactTarget) == "Instance" and impactTarget:IsA("BasePart")
+		and typeof(payload.impactEffectIds) == "table"
+	then
+		for _, id in payload.impactEffectIds do
+			local impactEffect = VfxConfig.EFFECTS[id]
+			if impactEffect then
+				spawnEffect(impactEffect, impactTarget)
+			end
+		end
 	end
 end)
 

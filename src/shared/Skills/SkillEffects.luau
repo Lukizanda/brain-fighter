@@ -26,7 +26,7 @@ local RunService        = game:GetService("RunService")
 local DamageTypes = require(ReplicatedStorage.Shared.Health.DamageTypes)
 local Logger      = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillTypes  = require(ReplicatedStorage.Shared.Skills.SkillTypes)
-local FreezeVfx   = require(ReplicatedStorage.Shared.Skills.FreezeVfx)
+local FreezeVfx   = require(ReplicatedStorage.Shared.Vfx.StatusVisuals.FreezeVfx)
 
 type EffectSpec = SkillTypes.EffectSpec
 

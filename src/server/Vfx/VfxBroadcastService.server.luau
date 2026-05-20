@@ -26,7 +26,11 @@ local SpellVfxEvent     = Remotes.SpellVfxEvent     :: RemoteEvent
 local MAX_RATE_PER_SECOND = 4
 local VALID_COLORS = { red = true, green = true, blue = true }
 local MIN_TIER = 1
-local MAX_TIER = 3
+-- Tier 4 (Volley) is in the SpellRegistry roster.
+local MAX_TIER = 4
+-- Defensive cap. Today the registry tops out at ~3 unique kinds per skill
+-- (Sanctuary = heal + shield). Anything beyond suggests payload tampering.
+local MAX_IMPACT_EFFECT_IDS = 8
 
 -- Per-player sliding window: count + window end timestamp (os.clock seconds)
 local playerRates: { [number]: { count: number, resetAt: number } } = {}
@@ -68,6 +72,22 @@ local function validatePayload(player: Player, payload: any): boolean
 	if payload.castEffectId ~= nil then
 		if next(VfxConfig.EFFECTS) ~= nil and not VfxConfig.EFFECTS[payload.castEffectId] then
 			return false
+		end
+	end
+
+	-- impactEffectIds is an array of ids that must each resolve in EFFECTS.
+	-- Missing array is fine (skills with empty onImpact, e.g. Stone Wall).
+	if payload.impactEffectIds ~= nil then
+		if type(payload.impactEffectIds) ~= "table" then
+			return false
+		end
+		if #payload.impactEffectIds > MAX_IMPACT_EFFECT_IDS then
+			return false
+		end
+		for _, id in payload.impactEffectIds do
+			if type(id) ~= "string" or not VfxConfig.EFFECTS[id] then
+				return false
+			end
 		end
 	end
 

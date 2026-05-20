@@ -27,9 +27,11 @@ local Players       = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService    = game:GetService("RunService")
 
-local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
+local Logger       = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillEffects = require(ReplicatedStorage.Shared.Skills.SkillEffects)
-local SkillTypes     = require(ReplicatedStorage.Shared.Skills.SkillTypes)
+local SkillTypes   = require(ReplicatedStorage.Shared.Skills.SkillTypes)
+local VfxConfig    = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
+local spawnEffect  = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
 type SkillSpec   = SkillTypes.SkillSpec
 type DeliveryCtx = SkillTypes.DeliveryCtx
@@ -92,7 +94,9 @@ SkillDelivery.handlers = {
 	-- "projectile": spawn deliveryParams.count Parts flying toward ctx.target.
 	-- On each hit: applyImpactEffects. After last launch: ctx.onComplete().
 	-- deliveryParams: count, speed, spreadDegrees, lifetimeSec,
-	--                 proximityRadius, size, color, staggerSec
+	--                 proximityRadius, size, color, staggerSec,
+	--                 cosmeticEffectId (optional VfxConfig.EFFECTS key —
+	--                 attaches a trail/glow/sound burst to each Part).
 	projectile = function(skill: SkillSpec, ctx: DeliveryCtx): Result
 		local params = skill.deliveryParams
 		local count:          number  = params.count          or 1
@@ -103,6 +107,7 @@ SkillDelivery.handlers = {
 		local staggerSec:     number  = params.staggerSec     or 0
 		local trackTarget:    boolean = params.trackTarget     or false
 		local color:          Color3  = params.color          or Color3.fromRGB(255, 120, 0)
+		local cosmeticEffectId: string? = params.cosmeticEffectId
 		local sizeRaw                 = params.size            or 1.5
 		local sizeVec: Vector3        = typeof(sizeRaw) == "Vector3"
 			and (sizeRaw :: Vector3)
@@ -154,6 +159,15 @@ SkillDelivery.handlers = {
 
 				Debris:AddItem(projectile, lifetimeSec + 1)
 
+				-- Cosmetic layer: trail/glow/sound that travels with the Part.
+				-- Physics ownership stays here; visual layer lives in VfxConfig.
+				if cosmeticEffectId then
+					local cosmeticEffect = VfxConfig.EFFECTS[cosmeticEffectId]
+					if cosmeticEffect then
+						spawnEffect(cosmeticEffect, projectile)
+					end
+				end
+
 				local startTime  = os.clock()
 				local hitPlayers: { [Player]: boolean } = {}
 				local conn: RBXScriptConnection
@@ -202,12 +216,15 @@ SkillDelivery.handlers = {
 
 	-- "aoe": after deliveryParams.windupSec, scan ctx.aoeCenter (or origin.Position)
 	-- for all player humanoids within deliveryParams.radius; run onImpact on each.
-	-- deliveryParams: radius, windupSec, completeSec
+	-- deliveryParams: radius, windupSec, completeSec,
+	--                 cosmeticEffectId (optional VfxConfig.EFFECTS key —
+	--                 attached to the shockwave Part at impact).
 	aoe = function(skill: SkillSpec, ctx: DeliveryCtx): Result
 		local params       = skill.deliveryParams
 		local radius:       number = params.radius      or 12
 		local windupSec:    number = params.windupSec   or 0.5
 		local completeSec:  number = params.completeSec or 1.0
+		local cosmeticEffectId: string? = params.cosmeticEffectId
 
 		local center = ctx.aoeCenter or ctx.origin.Position
 		local source = ctx.source
@@ -231,6 +248,14 @@ SkillDelivery.handlers = {
 			shockwave.Transparency = 0.35
 			shockwave.Parent      = workspace
 			Debris:AddItem(shockwave, 0.5)
+
+			-- Cosmetic layer parallel to projectile branch (see above).
+			if cosmeticEffectId then
+				local cosmeticEffect = VfxConfig.EFFECTS[cosmeticEffectId]
+				if cosmeticEffect then
+					spawnEffect(cosmeticEffect, shockwave)
+				end
+			end
 
 			-- Apply onImpact to all players in radius
 			for _, player in Players:GetPlayers() do
