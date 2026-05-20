@@ -19,6 +19,7 @@ local Dictionary     = require(ReplicatedStorage.Shared.Dictionary)
 local log = Logger.new("DevDebug")
 
 local TEST_WORD = "CATALOG"
+local TEST_COLORS = { "red", "green", "blue" }
 local letterIdx = 1
 
 local session = PlayerSession.get()
@@ -29,9 +30,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if input.KeyCode == Enum.KeyCode.LeftBracket then
 		local letter = string.sub(TEST_WORD, letterIdx, letterIdx)
 		letterIdx = (letterIdx % #TEST_WORD) + 1
-		session.wordBuffer:append(letter, "blue")
+		local color = TEST_COLORS[math.random(1, #TEST_COLORS)]
+		session.wordBuffer:append(letter, color)
 		local word = session.wordBuffer:asWord()
-		log:info(string.format("append '%s' → '%s'  valid=%s", letter, word, tostring(Dictionary.isWord(word))))
+		log:info(string.format("append '%s' [%s] → '%s'  valid=%s", letter, color, word, tostring(Dictionary.isWord(word))))
 
 	elseif input.KeyCode == Enum.KeyCode.RightBracket then
 		local result = MemorizeAction.tryMemorize(session.wordBuffer, session.energyReservoirs)
