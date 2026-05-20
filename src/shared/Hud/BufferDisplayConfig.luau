@@ -51,33 +51,15 @@ local BufferDisplayConfig = {
 	VALID_WORD_STROKE_THICKNESS = 2,
 	VALID_WORD_STROKE_PULSE     = TweenInfo.new(0.60, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 
-	-- Tile sparkle (ViewportFrame + ParticleEmitter)
-	SPARKLE_VIEWPORT_HEIGHT = 160,
-	SPARKLE_CAMERA_DISTANCE = 5,
-	SPARKLE_CAMERA_FOV      = 60,
-	SPARKLE_PART_SIZE       = Vector3.new(8, 0.1, 0.1),
-	SPARKLE_RATE            = 6,
-	SPARKLE_SPEED           = NumberRange.new(0.5, 1.5),
-	SPARKLE_SPREAD          = Vector2.new(70, 30),
-	SPARKLE_LIFETIME        = NumberRange.new(0.8, 1.8),
-	SPARKLE_COLOR           = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 180, 255)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 225, 255)),
-	}),
-	SPARKLE_SIZE            = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.12),
-		NumberSequenceKeypoint.new(0.5, 0.08),
-		NumberSequenceKeypoint.new(1, 0),
-	}),
-	SPARKLE_TRANSPARENCY    = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.1),
-		NumberSequenceKeypoint.new(1, 1),
-	}),
-	SPARKLE_LIGHT_EMISSION  = 0.8,
-	SPARKLE_ACCELERATION    = Vector3.new(0, -0.3, 0),
-	SPARKLE_ROTATION        = NumberRange.new(-45, 45),
-	SPARKLE_ROTATION_SPEED  = NumberRange.new(-60, 60),
-	SPARKLE_ZINDEX          = 15,
+	-- Tile sparkle (TextLabel drift animation, no external assets)
+	SPARKLE_CHAR      = "*",
+	SPARKLE_COLOR     = Color3.fromRGB(130, 190, 255),
+	SPARKLE_TEXT_SIZE = 22,
+	SPARKLE_RATE      = 8,    -- labels per second
+	SPARKLE_DURATION  = 1.2,  -- seconds to drift + fade
+	SPARKLE_DRIFT     = 45,   -- pixels upward
+	SPARKLE_WOBBLE    = 20,   -- max horizontal drift pixels
+	SPARKLE_ZINDEX    = 15,
 }
 
 return BufferDisplayConfig

@@ -130,8 +130,8 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 	local connections: { RBXScriptConnection } = {}
 	local pulseStrokeTweens: { Tween } = {}
 	local validWordStrokeTweens: { Tween } = {}
-	local sparkleViewport: ViewportFrame? = nil
-	local sparkleEmitter: ParticleEmitter? = nil
+	local sparkleActive = false
+	local sparkleTask: thread? = nil
 
 	-- ── Helpers ───────────────────────────────────────────────────
 
@@ -462,76 +462,56 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 		end
 	end
 
+	local function spawnSparkleLabel()
+		local sg        = HudLayoutManager:getScreenGui()
+		local uiScaleObj = sg:FindFirstChildWhichIsA("UIScale")
+		local scale     = if uiScaleObj then uiScaleObj.Scale else 1
+		local sgAbsPos  = sg.AbsolutePosition
+		local tilePos   = container.AbsolutePosition
+		local tileSize  = container.AbsoluteSize
+
+		local screenX = tilePos.X + math.random(0, math.floor(tileSize.X))
+		local screenY = tilePos.Y + math.random(0, math.floor(tileSize.Y))
+		local uiX = (screenX - sgAbsPos.X) / scale
+		local uiY = (screenY - sgAbsPos.Y) / scale
+
+		local label = Instance.new("TextLabel")
+		label.Size                = UDim2.fromOffset(Defaults.SPARKLE_TEXT_SIZE, Defaults.SPARKLE_TEXT_SIZE)
+		label.AnchorPoint         = Vector2.new(0.5, 0.5)
+		label.Position            = UDim2.fromOffset(uiX, uiY)
+		label.BackgroundTransparency = 1
+		label.Text                = Defaults.SPARKLE_CHAR
+		label.TextColor3          = Defaults.SPARKLE_COLOR
+		label.TextSize            = Defaults.SPARKLE_TEXT_SIZE
+		label.Font                = Enum.Font.GothamBold
+		label.TextTransparency    = 0
+		label.ZIndex              = Defaults.SPARKLE_ZINDEX
+		label.Parent              = sg
+
+		local driftX = math.random(-Defaults.SPARKLE_WOBBLE, Defaults.SPARKLE_WOBBLE)
+		TweenService:Create(label, TweenInfo.new(Defaults.SPARKLE_DURATION, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Position         = UDim2.fromOffset(uiX + driftX, uiY - Defaults.SPARKLE_DRIFT),
+			TextTransparency = 1,
+		}):Play()
+
+		task.delay(Defaults.SPARKLE_DURATION, function()
+			if label.Parent then label:Destroy() end
+		end)
+	end
+
 	function handle:setSparkle(active: boolean)
-		if active then
-			if not sparkleViewport then
-				local sg = HudLayoutManager:getScreenGui()
-				local vp = Instance.new("ViewportFrame")
-				vp.Name = "TileSparkleViewport"
-				vp.BackgroundTransparency = 1
-				vp.ZIndex = Defaults.SPARKLE_ZINDEX
-				vp.Ambient = Color3.new(1, 1, 1)
-				vp.LightDirection = Vector3.new(0, -1, 0)
-
-				-- UIScale correction: AbsolutePosition/Size are in screen pixels;
-				-- ScreenGui offset coords are pre-scale (same pattern as moveGhost).
-				local uiScaleObj = sg:FindFirstChildWhichIsA("UIScale")
-				local scale      = if uiScaleObj then uiScaleObj.Scale else 1
-				local sgAbsPos   = sg.AbsolutePosition
-				local tileSize   = container.AbsoluteSize
-				local tilePos    = container.AbsolutePosition
-				local vpHeight   = Defaults.SPARKLE_VIEWPORT_HEIGHT
-				local uiW  = tileSize.X / scale
-				local uiH  = tileSize.Y / scale
-				local uiX  = (tilePos.X - sgAbsPos.X) / scale
-				local uiY  = (tilePos.Y - sgAbsPos.Y) / scale
-				vp.Size     = UDim2.fromOffset(uiW, vpHeight)
-				vp.Position = UDim2.fromOffset(uiX, uiY + uiH / 2 - vpHeight / 2)
-				vp.Parent   = sg
-
-				local world = Instance.new("WorldModel")
-				world.Parent = vp
-
-				local part = Instance.new("Part")
-				part.Size        = Defaults.SPARKLE_PART_SIZE
-				part.Transparency = 1
-				part.Anchored    = true
-				part.CanCollide  = false
-				part.CastShadow  = false
-				part.CFrame      = CFrame.new(0, 0, 0)
-				part.Parent      = world
-
-				local pe = Instance.new("ParticleEmitter")
-				pe.Color          = Defaults.SPARKLE_COLOR
-				pe.Size           = Defaults.SPARKLE_SIZE
-				pe.Transparency   = Defaults.SPARKLE_TRANSPARENCY
-				pe.LightEmission  = Defaults.SPARKLE_LIGHT_EMISSION
-				pe.Speed          = Defaults.SPARKLE_SPEED
-				pe.SpreadAngle    = Defaults.SPARKLE_SPREAD
-				pe.Lifetime       = Defaults.SPARKLE_LIFETIME
-				pe.Rate           = 0
-				pe.Acceleration   = Defaults.SPARKLE_ACCELERATION
-				pe.Rotation       = Defaults.SPARKLE_ROTATION
-				pe.RotSpeed       = Defaults.SPARKLE_ROTATION_SPEED
-				pe.Parent         = part
-				sparkleEmitter    = pe
-
-				local cam = Instance.new("Camera")
-				cam.CFrame      = CFrame.lookAt(
-					Vector3.new(0, 0, Defaults.SPARKLE_CAMERA_DISTANCE),
-					Vector3.new(0, 0, 0)
-				)
-				cam.FieldOfView = Defaults.SPARKLE_CAMERA_FOV
-				cam.Parent      = vp
-				vp.CurrentCamera = cam
-
-				sparkleViewport = vp
-			end
-			(sparkleEmitter :: ParticleEmitter).Rate = Defaults.SPARKLE_RATE
-		else
-			if sparkleEmitter then
-				sparkleEmitter.Rate = 0
-			end
+		sparkleActive = active
+		if active and not sparkleTask then
+			sparkleTask = task.spawn(function()
+				while sparkleActive do
+					spawnSparkleLabel()
+					task.wait(1 / Defaults.SPARKLE_RATE)
+				end
+				sparkleTask = nil
+			end)
+		elseif not active and sparkleTask then
+			task.cancel(sparkleTask)
+			sparkleTask = nil
 		end
 	end
 
@@ -594,10 +574,10 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 		table.clear(validWordStrokeTweens)
 		for _, conn in connections do conn:Disconnect() end
 		table.clear(connections)
-		if sparkleViewport then
-			sparkleViewport:Destroy()
-			sparkleViewport = nil
-			sparkleEmitter  = nil
+		sparkleActive = false
+		if sparkleTask then
+			task.cancel(sparkleTask)
+			sparkleTask = nil
 		end
 		container:Destroy()
 	end
