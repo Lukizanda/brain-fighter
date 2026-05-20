@@ -27,11 +27,12 @@ local Players       = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService    = game:GetService("RunService")
 
-local Logger       = require(ReplicatedStorage.Shared.Core.Logger)
-local SkillEffects = require(ReplicatedStorage.Shared.Skills.SkillEffects)
-local SkillTypes   = require(ReplicatedStorage.Shared.Skills.SkillTypes)
-local VfxConfig    = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
-local spawnEffect  = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
+local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
+local SkillEffects   = require(ReplicatedStorage.Shared.Skills.SkillEffects)
+local SkillInterrupt = require(ReplicatedStorage.Shared.Skills.SkillInterrupt)
+local SkillTypes     = require(ReplicatedStorage.Shared.Skills.SkillTypes)
+local VfxConfig      = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
+local spawnEffect    = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
 type SkillSpec   = SkillTypes.SkillSpec
 type DeliveryCtx = SkillTypes.DeliveryCtx
@@ -125,8 +126,14 @@ SkillDelivery.handlers = {
 		local source    = ctx.source
 		local onComplete = ctx.onComplete
 
+		-- Register a cancellation token tied to the caster so freeze (or any
+		-- future interrupt) can stop pending volley shots from launching.
+		-- In-flight projectiles are independent of the token by design.
+		local castToken = SkillInterrupt.begin(source)
+
 		for i = 1, count do
 			task.delay((i - 1) * staggerSec, function()
+				if castToken.cancelled then return end
 				local currentTargetPos = (trackTarget and resolveTargetPosition(ctx.target))
 					or targetPos
 				local currentDir = (currentTargetPos and (currentTargetPos - muzzlePos).Unit)
@@ -207,6 +214,7 @@ SkillDelivery.handlers = {
 
 		-- Mark complete after all projectiles are in flight
 		task.delay((count - 1) * staggerSec + 0.1, function()
+			SkillInterrupt.finish(source, castToken)
 			if onComplete then onComplete() end
 		end)
 
@@ -230,10 +238,16 @@ SkillDelivery.handlers = {
 		local source = ctx.source
 		local onComplete = ctx.onComplete
 
+		-- Token gates the windup task.delay so a frozen caster can't drop a
+		-- slam mid-telegraph. Mirrors the projectile branch — only future
+		-- scheduled work is blocked.
+		local castToken = SkillInterrupt.begin(source)
+
 		-- Capture center at fire-time (boss may have moved by windup end).
 		-- Callers that want to use the boss's position at impact should update
 		-- ctx.aoeCenter before calling. Capturing now matches historical behavior.
 		task.delay(windupSec, function()
+			if castToken.cancelled then return end
 			-- Visual shockwave ring on the ground plane
 			local shockwave = Instance.new("Part")
 			shockwave.Name        = "SkillShockwave"
@@ -274,6 +288,7 @@ SkillDelivery.handlers = {
 
 		-- Mark complete after total animation time
 		task.delay(completeSec, function()
+			SkillInterrupt.finish(source, castToken)
 			if onComplete then onComplete() end
 		end)
 

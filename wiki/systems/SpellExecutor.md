@@ -1,7 +1,7 @@
 ---
 type: system
 description: Thin origin-resolver that delegates spell casting to SkillDelivery (delivery) and SkillEffects (effects). All damage/heal/freeze/stub logic lives in src/shared/Skills/. Damage against server-owned targets (boss, NPCs) must run server-side — SpellCastService relays client casts via RemoteEvent.
-updated: 2026-05-18
+updated: 2026-05-20
 ---
 
 # SpellExecutor
@@ -56,7 +56,7 @@ See `SkillEffects.luau` for the implementation. `SpellExecutor` no longer contai
 |---|---|---|
 | `damage` | `target.Health -= fraction × target.MaxHealth`; clamp to ≥ 0 | `fractionOfMaxHP` |
 | `heal` | `target.Health += fraction × target.MaxHealth`; clamp to ≤ MaxHealth | `fractionOfMaxHP` |
-| `freeze` | Save `target.WalkSpeed`, set to 0; restore via `task.delay(durationSec, …)`. Re-freeze extends the existing freeze. | `durationSec` |
+| `freeze` | Save `target.WalkSpeed`, set to 0; restore via `task.delay(durationSec, …)`. Re-freeze extends the existing freeze. On the fresh-freeze branch: also calls `SkillInterrupt.cancelCastsBy(target)` to abort pending scheduled volley shots, and `SkillInterrupt.silence(target)` so any new casts started while frozen are born cancelled. | `durationSec` |
 | `shield` | **Stub.** `log:info("Shield stub — …")`. | — |
 | `wall` | **Stub.** `log:info("Wall stub — … at <pos>")`. | (target Vector3 logged) |
 | `buff` | **Stub.** `log:info("Buff stub — …")`. | — |
@@ -71,6 +71,16 @@ When a Humanoid is re-frozen while already frozen, the existing entry's expiry i
 The chosen "extend, don't replace" semantics is slightly richer than the build-plan's allowed "last-write-wins" shortcut. Cost is ~6 lines; benefit is that a Frost Nip → Stasis chain on the same target behaves intuitively (longer expiry wins) rather than potentially shortening the freeze.
 
 Internally the restore is a self-rescheduling `task.delay` closure: when it fires it compares `_freezeState[target]` against its captured state, and if expiry has been pushed forward, re-arms via `task.delay(remaining, …)`. If the Humanoid was destroyed in the meantime, the `Parent == nil` check skips the WalkSpeed write.
+
+## Freeze interrupts in-progress casts
+
+Freeze isn't just a movement debuff — fresh freezes interrupt the target's pending scheduled work. The mechanism lives in `src/shared/Skills/SkillInterrupt.luau`:
+
+- Async delivery handlers (`projectile`, `aoe`) call `SkillInterrupt.begin(ctx.source)` and gate each `task.delay` callback on `token.cancelled`. A `task.delay((count-1)*staggerSec + 0.1, …)` calls `SkillInterrupt.finish(source, token)` to clean up on natural completion.
+- `SkillEffects.handlers.freeze`, on the fresh-freeze branch only, calls `cancelCastsBy(target)` (flips every active token) and `silence(target)` (so any new `begin` for that humanoid returns a pre-cancelled token until the freeze expires).
+- The freeze-restore `task.delay` closure unwinds the silence via `SkillInterrupt.unsilence(target)`.
+
+In-flight projectiles already on `RunService.Heartbeat` are independent of the token — they keep flying. Only *scheduling* future work is blocked. Practical effect: a Stasis cast mid-FireballVolley stops the remaining staggered shots from launching, and any new FireballVolley the boss state machine starts during the freeze fires zero shots.
 
 ## Stub status (shield / wall / buff)
 

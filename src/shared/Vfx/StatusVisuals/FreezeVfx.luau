@@ -20,13 +20,14 @@ local TweenService      = game:GetService("TweenService")
 
 local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 
-local TARGET_PARTS: { string } = {
-	"Head", "UpperTorso", "LowerTorso",
-	"LeftUpperLeg", "RightUpperLeg",
-	"LeftUpperArm", "RightUpperArm",
-}
+-- Per-limb shards are emitted on every visible BasePart of the character.
+-- Rig-agnostic by design: R15 players, the Patroller-based bosses, and the
+-- custom BossBrain rig all share this path. The previous hardcoded R15 limb
+-- list silently produced zero shards on BossBrain (no "Head"/"UpperTorso"),
+-- which is why bosses looked un-encased.
+local MIN_PART_VOLUME = 0.5      -- studs³; filter out attachment-only stubs
 
-local OVERSIZE       = 1.5
+local OVERSIZE       = 1.7
 -- VfxConfig.COLORS.blue.glow is #80C0FF == (128, 192, 255) — same hue as
 -- the previous hardcoded ICE_COLOR, now sourced from the single palette.
 local ICE_COLOR      = VfxConfig.COLORS.blue.glow
@@ -63,9 +64,15 @@ function FreezeVfx.start(humanoid: Humanoid, _durationSec: number)
 
 	local parts: { Part } = {}
 
-	for _, name in TARGET_PARTS do
-		local limb = character:FindFirstChild(name) :: BasePart?
-		if not limb or not limb:IsA("BasePart") then continue end
+	for _, desc in (character :: Instance):GetDescendants() do
+		if not desc:IsA("BasePart") then continue end
+		local limb = desc :: BasePart
+		if limb.Name == "HumanoidRootPart" then continue end
+		-- Skip Accessory contents (hats, hair, handles) — they read as costume,
+		-- not body, and would litter the encasement with floating shards.
+		if limb:FindFirstAncestorOfClass("Accessory") then continue end
+		local sz = limb.Size
+		if sz.X * sz.Y * sz.Z < MIN_PART_VOLUME then continue end
 
 		local rx = (math.random() * 2 - 1) * ROT_RANGE_XZ
 		local ry = math.random() * math.pi * 2

@@ -23,10 +23,11 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
 
-local DamageTypes = require(ReplicatedStorage.Shared.Health.DamageTypes)
-local Logger      = require(ReplicatedStorage.Shared.Core.Logger)
-local SkillTypes  = require(ReplicatedStorage.Shared.Skills.SkillTypes)
-local FreezeVfx   = require(ReplicatedStorage.Shared.Vfx.StatusVisuals.FreezeVfx)
+local DamageTypes    = require(ReplicatedStorage.Shared.Health.DamageTypes)
+local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
+local SkillInterrupt = require(ReplicatedStorage.Shared.Skills.SkillInterrupt)
+local SkillTypes     = require(ReplicatedStorage.Shared.Skills.SkillTypes)
+local FreezeVfx      = require(ReplicatedStorage.Shared.Vfx.StatusVisuals.FreezeVfx)
 
 type EffectSpec = SkillTypes.EffectSpec
 
@@ -113,6 +114,7 @@ SkillEffects.handlers = {
 					if s and os.clock() >= s.restoreAt - 0.01 then
 						if h.Parent then h.WalkSpeed = s.originalSpeed end
 						FreezeVfx.stop(h)
+						SkillInterrupt.unsilence(target)
 						_freezeState[h] = nil
 					end
 				end)
@@ -121,12 +123,23 @@ SkillEffects.handlers = {
 			state = { originalSpeed = h.WalkSpeed, restoreAt = now + duration }
 			_freezeState[h] = state
 			h.WalkSpeed = 0
+			-- Fresh freeze interrupts the target's pending scheduled casts
+			-- (e.g. remaining shots of a FireballVolley stagger) AND silences
+			-- any new casts the target tries to start while frozen — without
+			-- silence, the boss state machine would just kick off another
+			-- FireballVolley on its next Attack tick. Already-launched
+			-- projectiles are independent and keep flying. Both ops are
+			-- skipped on the extend-freeze branch because the target was
+			-- already silenced when the first freeze landed.
+			SkillInterrupt.cancelCastsBy(target)
+			SkillInterrupt.silence(target)
 			FreezeVfx.start(h, duration)
 			task.delay(duration, function()
 				local s = _freezeState[h]
 				if s and os.clock() >= s.restoreAt - 0.01 then
 					if h.Parent then h.WalkSpeed = s.originalSpeed end
 					FreezeVfx.stop(h)
+					SkillInterrupt.unsilence(target)
 					_freezeState[h] = nil
 				end
 			end)
