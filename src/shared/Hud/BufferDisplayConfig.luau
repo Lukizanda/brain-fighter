@@ -53,7 +53,7 @@ local BufferDisplayConfig = {
 
 	-- Tile sparkle (TextLabel drift animation, no external assets)
 	SPARKLE_CHAR      = "*",
-	SPARKLE_COLOR     = Color3.fromRGB(130, 190, 255),
+	SPARKLE_COLOR     = Color3.fromRGB(255, 240, 130),
 	SPARKLE_TEXT_SIZE = 22,
 	SPARKLE_RATE      = 8,    -- labels per second
 	SPARKLE_DURATION  = 1.2,  -- seconds to drift + fade

@@ -463,15 +463,26 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 	end
 
 	local function spawnSparkleLabel()
+		local filledIndices: { number } = {}
+		for i = 1, cap do
+			if currentTiles[i] then
+				table.insert(filledIndices, i)
+			end
+		end
+		if #filledIndices == 0 then return end
+
 		local sg        = HudLayoutManager:getScreenGui()
 		local uiScaleObj = sg:FindFirstChildWhichIsA("UIScale")
 		local scale     = if uiScaleObj then uiScaleObj.Scale else 1
 		local sgAbsPos  = sg.AbsolutePosition
-		local tilePos   = container.AbsolutePosition
-		local tileSize  = container.AbsoluteSize
 
-		local screenX = tilePos.X + math.random(0, math.floor(tileSize.X))
-		local screenY = tilePos.Y + math.random(0, math.floor(tileSize.Y))
+		local cellIdx  = filledIndices[math.random(1, #filledIndices)]
+		local cell     = cells[cellIdx]
+		local cellPos  = cell.AbsolutePosition
+		local cellSize = cell.AbsoluteSize
+
+		local screenX = cellPos.X + math.random(0, math.floor(cellSize.X))
+		local screenY = cellPos.Y + math.random(0, math.floor(cellSize.Y))
 		local uiX = (screenX - sgAbsPos.X) / scale
 		local uiY = (screenY - sgAbsPos.Y) / scale
 
