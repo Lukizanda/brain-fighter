@@ -8,6 +8,120 @@ updated: 2026-05-20
 
 Every HUD element follows the [[concepts/BuilderConfigLayout]] pattern — a Builder constructs the GUI tree, a Config exposes tunable knobs, and `HudLayoutManager` places the result on screen. No `.rbxmx` GUI templates are checked into the repo.
 
+## System diagram
+
+The three layers: pure-module **Builders** in `src/shared/Hud/`, client-side **Coordinator LocalScripts** in `src/client/UI/` that build and register, and **game-state sources** (`PlayerSession`, `Humanoid`, server `RemoteEvent`s). `HudLayoutManager` owns the single `HudGui` ScreenGui and 6 named regions.
+
+```mermaid
+flowchart LR
+  classDef coord fill:#1e3a5f,stroke:#5a9fd4,color:#fff
+  classDef builder fill:#3a2f1e,stroke:#d4a05a,color:#fff
+  classDef state fill:#1e3a1e,stroke:#5fd45a,color:#fff
+  classDef region fill:#2a2a2a,stroke:#888,color:#fff
+  classDef modal fill:#3a1e3a,stroke:#d45ad4,color:#fff
+
+  subgraph SRC["Game state (src/shared/, src/client/PlayerSession.luau)"]
+    PS["PlayerSession.get()<br/>wordBuffer · energyReservoirs · mindFullManager"]:::state
+    HUM["Character.Humanoid<br/>HealthChanged"]:::state
+    REM["Server RemoteEvents<br/>KillFeed · ScoreUpdate · LoadoutDropRejected"]:::state
+    CFG["GameConfig flags<br/>TEAMS_ENABLED · ROUND_TIMER_ENABLED · SHOW_WEAPON_ROLODEX"]:::state
+  end
+
+  subgraph LM["HudLayoutManager (singleton, src/shared/Hud/HudLayoutManager.luau)"]
+    HM["HudGui ScreenGui<br/>UIScale = viewportY / 1080"]:::region
+    BC["BottomCenter<br/>(stackVertical)"]:::region
+    BR["BottomRight<br/>(stackVertical)"]:::region
+    BL["BottomLeft"]:::region
+    TC["TopCenter"]:::region
+    TR["TopRight"]:::region
+    CN["Center"]:::region
+    HM --> BC & BR & BL & TC & TR & CN
+  end
+
+  subgraph COORD["Coordinator LocalScripts (src/client/UI/, src/client/)"]
+    GHUD["GameplayHudGui<br/>sole BottomCenter coordinator<br/>LAYOUT { TILES, HEALTH, ABSORB }"]:::coord
+    SMG["SpellMenuGui"]:::coord
+    MFI["MindFullIndicatorGui"]:::coord
+    KFG["KillFeedGui"]:::coord
+    BTG["BuffTrayGui (scaffold)"]:::coord
+    TSG["TeamScoreGui<br/>(gated TEAMS_ENABLED)"]:::coord
+    RTG["RoundTimerGui<br/>(gated ROUND_TIMER_ENABLED)"]:::coord
+    WRG["WeaponRolodex<br/>(gated SHOW_WEAPON_ROLODEX)"]:::coord
+    LDC["LoadoutDropClient<br/>(toast stack)"]:::coord
+    BHG["BossHudGui<br/>(own ScreenGui)"]:::modal
+    SMGUI["SettingsMenuGui<br/>(modal overlay)"]:::modal
+    SBG["ScoreboardGui<br/>(Tab modal)"]:::modal
+    GSG["GameStateGui<br/>(end-of-round modal)"]:::modal
+    DSG["DeathScreenGui"]:::modal
+    DFG["DamageFeedbackGui<br/>(directional indicator)"]:::modal
+  end
+
+  subgraph PH["PlayerHud module (src/client/PlayerHud/)"]
+    PHUD["PlayerHud.build()<br/>PlayerHud.attachAdapters(char)"]:::coord
+    AB["AttributeBarBuilder<br/>(Health · Stamina · Shield)"]:::builder
+    AD["HealthAdapter · ShieldAdapter · StaminaAdapter"]:::coord
+  end
+
+  subgraph BLD["Builders (src/shared/Hud/, pure modules)"]
+    BDB["BufferDisplayBuilder"]:::builder
+    MBB["MemorizeButtonBuilder"]:::builder
+    SMB["SpellMenuBuilder"]:::builder
+    MFB["MindFullIndicatorBuilder"]:::builder
+    BTB["BuffTrayBuilder"]:::builder
+    WRB["WeaponRolodexBuilder"]:::builder
+    RTB["ReticleBuilder"]:::builder
+    TCB["TouchControlBuilder"]:::builder
+    STB["SettingsMenuBuilder<br/>(⚠ reads Players.LocalPlayer — NIM-19)"]:::builder
+  end
+
+  %% --- coordinator → builder ---
+  GHUD --> BDB & MBB & PHUD
+  SMG --> SMB
+  MFI --> MFB
+  BTG --> BTB
+  WRG --> WRB
+  SMGUI --> STB
+  PHUD --> AB
+
+  %% --- coordinator → HudLayoutManager region ---
+  GHUD -- "register(BottomCenter, ×3)" --> BC
+  SMG -- "register(BottomRight)" --> BR
+  MFI -- "register(TopCenter)" --> TC
+  KFG -- "register(TopRight)" --> TR
+  BTG -- "register(TopRight)" --> TR
+  TSG -- "register(TopCenter)" --> TC
+  RTG -- "register(TopCenter)" --> TC
+  WRG -- "register(BottomRight)" --> BR
+  LDC -- "register(BottomCenter, toast)" --> BC
+
+  %% --- modal / own-ScreenGui (bypass HudLayoutManager) ---
+  BHG -.->|own ScreenGui| HM
+  SMGUI -.->|own ScreenGui| HM
+  SBG -.->|own ScreenGui| HM
+  GSG -.->|own ScreenGui| HM
+  DSG -.->|own ScreenGui| HM
+  DFG -.->|own ScreenGui| HM
+
+  %% --- state → coordinator (signals) ---
+  PS -- "wordBuffer.changed" --> GHUD
+  PS -- "energyReservoirs.changed" --> SMG
+  PS -- "mindFull / mindFreed" --> MFI
+  HUM -- "HealthChanged" --> AD
+  AD -- "setValue()" --> AB
+  REM -- "OnClientEvent" --> KFG & TSG & LDC
+  CFG -. "GameConfig gate" .-> TSG & RTG & WRG
+```
+
+Legend: blue = Coordinator LocalScript, orange = pure-module Builder, green = game-state source, purple = modal/own-ScreenGui (bypasses HudLayoutManager), gray = layout region. Solid arrows = mount/register. Dashed arrows = own ScreenGui parented directly to `PlayerGui`.
+
+## Single-ownership invariants (Phase 4.8 audit)
+
+- `GameplayHudGui` is the **sole stable BottomCenter coordinator**. `LoadoutDropClient` registers a transient toast stack at BottomCenter — documented exception.
+- Every Builder in `src/shared/Hud/` exposes `:destroy()` (11/11). Every Adapter in `src/client/PlayerHud/Adapters/` exposes `:destroy()` (3/3).
+- All Builders are pure modules except `SettingsMenuBuilder` (reads `Players.LocalPlayer` — tracked in NIM-19).
+- Detailed findings: [[design/ui-architecture-review]].
+
+
 ## Team-score gate (2026-05-13)
 
 `src/client/UI/TeamScoreGui.client.luau` is a top-of-script bail when `GameConfig.TEAMS_ENABLED` is false — the LocalScript still auto-runs on join but exits before building the container or hooking remotes. `KillFeedGui` is left on (NPC kills still display); its team-tinted name colours fall back to `NEUTRAL_NAME_COLOR` naturally because every player is team-less while the gate is off.

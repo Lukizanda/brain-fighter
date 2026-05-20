@@ -23,9 +23,9 @@ local log = Logger.new("GameplayHudGui")
 
 -- BottomCenter stacking order (higher LO = lower on screen with VerticalAlignment.Bottom)
 local LAYOUT = {
-	TILES  = 1,   -- BufferDisplay  (letter tiles, topmost)
-	HEALTH = 2,   -- PlayerAttributeStack
-	ABSORB = 3,   -- MemorizeButton (closest to thumb zone)
+	TILES  = 2,   -- BufferDisplay  (letter tiles, topmost)
+	HEALTH = 3,   -- PlayerAttributeStack
+	ABSORB = 1,   -- MemorizeButton (closest to thumb zone)
 }
 
 local fizzleSound = Instance.new("Sound")
