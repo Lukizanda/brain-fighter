@@ -1,15 +1,12 @@
 --!strict
 ----------------------------------------------------------------------
--- GameplayHudGui
+-- GameplayHudGui  (BottomCenter coordinator)
 ----------------------------------------------------------------------
--- Mounts BufferDisplay (tile row) and MemorizeButton directly into
--- BottomCenter. BottomCenter's UIListLayout (VerticalAlignment.Bottom,
--- higher LO = lower on screen) controls the stacking:
---   LO=1  letter tiles   (top of cluster)
---   LO=2  health bar     (registered by PlayerHud/init.client.luau)
---   LO=3  ABSORB button  (closest to screen edge / thumb zone)
+-- Single source of truth for BottomCenter stacking order.
+-- Edit LAYOUT here to reorder the three elements.
 ----------------------------------------------------------------------
 
+local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService      = game:GetService("SoundService")
 
@@ -20,8 +17,16 @@ local MemorizeButtonBuilder = require(ReplicatedStorage.Shared.Hud.MemorizeButto
 local MemorizeAction        = require(ReplicatedStorage.Shared.MemorizeAction)
 local Dictionary            = require(ReplicatedStorage.Shared.Dictionary)
 local PlayerSession         = require(script.Parent.Parent.PlayerSession)
+local PlayerHud             = require(script.Parent.Parent.PlayerHud)
 
 local log = Logger.new("GameplayHudGui")
+
+-- BottomCenter stacking order (higher LO = lower on screen with VerticalAlignment.Bottom)
+local LAYOUT = {
+	TILES  = 1,   -- BufferDisplay  (letter tiles, topmost)
+	HEALTH = 2,   -- PlayerAttributeStack
+	ABSORB = 3,   -- MemorizeButton (closest to thumb zone)
+}
 
 local fizzleSound = Instance.new("Sound")
 fizzleSound.SoundId = "rbxassetid://0" -- TODO: replace with fizzle SFX asset ID
@@ -30,7 +35,7 @@ fizzleSound.Parent = SoundService
 
 local session = PlayerSession.get()
 
-local display = BufferDisplayBuilder.build({
+local display     = BufferDisplayBuilder.build({
 	onReorder = function(fromIdx: number, toIdx: number)
 		session.wordBuffer:reorder(fromIdx, toIdx)
 	end,
@@ -38,15 +43,23 @@ local display = BufferDisplayBuilder.build({
 		session.wordBuffer:remove(idx)
 	end,
 })
-local btn = MemorizeButtonBuilder.build()
+local healthStack = PlayerHud.build()
+local btn         = MemorizeButtonBuilder.build()
 
--- LO=1 → tiles at top; LO=3 → ABSORB at bottom. Health bar (LO=2) is
--- registered between them by PlayerHud/init.client.luau.
-display.gui.LayoutOrder = 1
-btn.gui.LayoutOrder = 3
+display.gui.LayoutOrder = LAYOUT.TILES
+healthStack.LayoutOrder = LAYOUT.HEALTH
+btn.gui.LayoutOrder     = LAYOUT.ABSORB
 
 HudLayoutManager:register("BottomCenter", display.gui)
+HudLayoutManager:register("BottomCenter", healthStack)
 HudLayoutManager:register("BottomCenter", btn.gui)
+
+-- CharacterAdded wiring (moved from PlayerHud/init.client.luau)
+local player = Players.LocalPlayer
+if player.Character then
+	PlayerHud.attachAdapters(player.Character)
+end
+player.CharacterAdded:Connect(PlayerHud.attachAdapters)
 
 local function onBufferChanged()
 	local tiles = session.wordBuffer:tiles()
@@ -73,7 +86,8 @@ btn.activated:Connect(function()
 end)
 
 _G.PlayerHud = _G.PlayerHud or {}
-_G.PlayerHud.BufferDisplay = display
-_G.PlayerHud.MemorizeButton = btn
+_G.PlayerHud.BufferDisplay   = display
+_G.PlayerHud.MemorizeButton  = btn
+_G.PlayerHud.AttributeStack  = healthStack
 
 log:info("Initialized")

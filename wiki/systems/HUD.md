@@ -1,7 +1,7 @@
 ---
 type: system
 description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, WeaponRolodex, BuffTray, reticle, settings menu, and 5 Phase 4 gameplay widgets (BufferDisplay, SpellMenu with embedded mana fill, MemorizeButton, MindFullIndicator).
-updated: 2026-05-18
+updated: 2026-05-20
 ---
 
 # HUD System
@@ -41,19 +41,19 @@ src/shared/Hud/
   MindFullIndicatorConfig.luau
 
 src/client/PlayerHud/
-  init.client.luau                — entry point, mounts all HUD elements
+  init.luau                       — ModuleScript; exports build(), attachAdapters(char), teardownAdapters()
+                                    Does NOT self-register — GameplayHudGui is the coordinator.
   Adapters/
     HealthAdapter.luau            — subscribes to Humanoid.HealthChanged → updates AttributeBar
     ShieldAdapter.luau            (scaffold)
     StaminaAdapter.luau           (scaffold)
 
 src/client/UI/
+  GameplayHudGui.client.luau      — BottomCenter coordinator: single LAYOUT table owns tile/health/ABSORB
+                                    stacking order; also owns CharacterAdded → adapter wiring
   DamageFeedbackGui.client.luau   — directional damage indicators
   DeathScreenGui.client.luau      — death overlay
   SettingsMenuGui.client.luau     — settings menu mount
-  -- Phase 4 gameplay widgets:
-  BufferDisplayGui.client.luau    — BottomCenter; wired to wordBuffer.changed
-  MemorizeButtonGui.client.luau   — BottomCenter; fires tryMemorize on click
   SpellMenuGui.client.luau        — BottomRight; fires tapReservoir on color tap; drives fill via energyReservoirs.changed
   MindFullIndicatorGui.client.luau — TopCenter; shows/hides on mindFull/mindFreed
   BossHudGui.client.luau          — own ScreenGui (IgnoreGuiInset=true, y=8); boss health bar + phase label; hidden until a boss spawns
