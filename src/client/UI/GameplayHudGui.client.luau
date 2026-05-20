@@ -92,6 +92,7 @@ local function onBufferChanged()
 	local size = session.wordBuffer:size()
 	local isValid = size > 0 and Dictionary.isWord(session.wordBuffer:asWord())
 	display:setValidWordGlow(isValid)
+	display:setSparkle(isValid)
 	btn:setValidWord(isValid)
 	btn:setEnabled(size > 0)
 end

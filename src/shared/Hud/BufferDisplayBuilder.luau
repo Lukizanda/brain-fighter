@@ -52,6 +52,7 @@ export type Handle = {
 	popTile: (self: Handle, idx: number) -> (),
 	setMindFullPulse: (self: Handle, active: boolean) -> (),
 	setValidWordGlow: (self: Handle, active: boolean) -> (),
+	setSparkle: (self: Handle, active: boolean) -> (),
 	playMemorizeOk: (self: Handle) -> (),
 	playMemorizeFail: (self: Handle) -> (),
 	destroy: (self: Handle) -> (),
@@ -129,6 +130,8 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 	local connections: { RBXScriptConnection } = {}
 	local pulseStrokeTweens: { Tween } = {}
 	local validWordStrokeTweens: { Tween } = {}
+	local sparkleViewport: ViewportFrame? = nil
+	local sparkleEmitter: ParticleEmitter? = nil
 
 	-- ── Helpers ───────────────────────────────────────────────────
 
@@ -459,6 +462,70 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 		end
 	end
 
+	function handle:setSparkle(active: boolean)
+		if active then
+			if not sparkleViewport then
+				local sg = HudLayoutManager:getScreenGui()
+				local vp = Instance.new("ViewportFrame")
+				vp.Name = "TileSparkleViewport"
+				vp.BackgroundTransparency = 1
+				vp.ZIndex = Defaults.SPARKLE_ZINDEX
+				vp.Ambient = Color3.new(1, 1, 1)
+				vp.LightDirection = Vector3.new(0, -1, 0)
+
+				local tileSize = container.AbsoluteSize
+				local tilePos  = container.AbsolutePosition
+				local vpHeight = Defaults.SPARKLE_VIEWPORT_HEIGHT
+				vp.Size     = UDim2.fromOffset(tileSize.X, vpHeight)
+				vp.Position = UDim2.fromOffset(tilePos.X, tilePos.Y - (vpHeight - tileSize.Y) / 2)
+				vp.Parent   = sg
+
+				local world = Instance.new("WorldModel")
+				world.Parent = vp
+
+				local part = Instance.new("Part")
+				part.Size        = Defaults.SPARKLE_PART_SIZE
+				part.Transparency = 1
+				part.Anchored    = true
+				part.CanCollide  = false
+				part.CastShadow  = false
+				part.CFrame      = CFrame.new(0, 0, 0)
+				part.Parent      = world
+
+				local pe = Instance.new("ParticleEmitter")
+				pe.Color          = Defaults.SPARKLE_COLOR
+				pe.Size           = Defaults.SPARKLE_SIZE
+				pe.Transparency   = Defaults.SPARKLE_TRANSPARENCY
+				pe.LightEmission  = Defaults.SPARKLE_LIGHT_EMISSION
+				pe.Speed          = Defaults.SPARKLE_SPEED
+				pe.SpreadAngle    = Defaults.SPARKLE_SPREAD
+				pe.Lifetime       = Defaults.SPARKLE_LIFETIME
+				pe.Rate           = 0
+				pe.Acceleration   = Defaults.SPARKLE_ACCELERATION
+				pe.Rotation       = Defaults.SPARKLE_ROTATION
+				pe.RotSpeed       = Defaults.SPARKLE_ROTATION_SPEED
+				pe.Parent         = part
+				sparkleEmitter    = pe
+
+				local cam = Instance.new("Camera")
+				cam.CFrame      = CFrame.lookAt(
+					Vector3.new(0, 0, Defaults.SPARKLE_CAMERA_DISTANCE),
+					Vector3.new(0, 0, 0)
+				)
+				cam.FieldOfView = Defaults.SPARKLE_CAMERA_FOV
+				cam.Parent      = vp
+				vp.CurrentCamera = cam
+
+				sparkleViewport = vp
+			end
+			(sparkleEmitter :: ParticleEmitter).Rate = Defaults.SPARKLE_RATE
+		else
+			if sparkleEmitter then
+				sparkleEmitter.Rate = 0
+			end
+		end
+	end
+
 	function handle:playMemorizeOk()
 		for i = 1, cap do
 			if currentTiles[i] then
@@ -518,6 +585,11 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 		table.clear(validWordStrokeTweens)
 		for _, conn in connections do conn:Disconnect() end
 		table.clear(connections)
+		if sparkleViewport then
+			sparkleViewport:Destroy()
+			sparkleViewport = nil
+			sparkleEmitter  = nil
+		end
 		container:Destroy()
 	end
 
