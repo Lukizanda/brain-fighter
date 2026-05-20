@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-05-15
+updated: 2026-05-20
 ---
 
 # Build Plan
@@ -116,12 +116,29 @@ Add drag-to-reorder and tap-to-swap interactions to the BufferDisplay letter til
 - `src/shared/Hud/BufferDisplayBuilder.luau` — main input handler work
 - `src/client/UI/GameplayHudGui.client.luau` (or equivalent boot script) — wire `session.wordBuffer` into tile event callbacks
 
+## Phase 4.8 — UI Architecture Review
+
+Before Phase 5 polish work, conduct a structured review of the client UI system for modularity, single-ownership, and software design quality. Scope: `src/client/UI/`, `src/client/PlayerHud/`, `src/shared/Hud/`.
+
+| Question | What to check |
+|---|---|
+| **Single ownership** | Any two scripts writing to the same Frame, LayoutOrder, or property? |
+| **Coordinator clarity** | Is `GameplayHudGui` the only BottomCenter coordinator, or do other scripts still self-register? |
+| **Builder/Config/Layout compliance** | Every HUD element built via a Builder? Config values all in `*Config.luau`? No magic numbers inline? |
+| **Lifecycle completeness** | Every controller/builder that holds connections have a `:destroy()` path? |
+| **Dead code** | Any scaffold files or `[unused]` entries still in `shared/Hud/` that should be deleted? |
+| **Coupling** | Do Builders depend on LocalScript globals (`_G`, `Players.LocalPlayer`)? Should be pure-module. |
+
+**Deliverable:** A short findings doc or tracker entries for any issues found, with a go/no-go on Phase 5 polish starting before the fixes land.
+
 ## Phase 5 — Polish
 
 Tuning passes (energy curve, spawn density, tier thresholds), audio cues, particle effects, tutorial copy, accessibility passes.
 
 ## Plan changelog
 
+- **2026-05-20**: added Phase 4.8 (UI architecture review) as a gate before Phase 5 polish.
+- **2026-05-20**: HUD coordinator refactor landed — `PlayerHud` is now a ModuleScript; `GameplayHudGui` is the sole BottomCenter coordinator with a single `LAYOUT` table.
 - **2026-05-15**: added Phase 4.7 (letter slot drag/tap-to-swap reorder).
 - **2026-05-15**: added Phase 4.5 (bug sprint) and Phase 4.6 (LetterBlaster Tool) between Phase 4 and Phase 5.
 - **2026-05-14**: initial plan written; 18 trackers created; Phase 1 spawn batch (Dictionary, EnergyEconomy, SpellRegistry) kicked off.
