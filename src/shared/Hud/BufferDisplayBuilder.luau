@@ -473,11 +473,20 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 				vp.Ambient = Color3.new(1, 1, 1)
 				vp.LightDirection = Vector3.new(0, -1, 0)
 
-				local tileSize = container.AbsoluteSize
-				local tilePos  = container.AbsolutePosition
-				local vpHeight = Defaults.SPARKLE_VIEWPORT_HEIGHT
-				vp.Size     = UDim2.fromOffset(tileSize.X, vpHeight)
-				vp.Position = UDim2.fromOffset(tilePos.X, tilePos.Y - (vpHeight - tileSize.Y) / 2)
+				-- UIScale correction: AbsolutePosition/Size are in screen pixels;
+				-- ScreenGui offset coords are pre-scale (same pattern as moveGhost).
+				local uiScaleObj = sg:FindFirstChildWhichIsA("UIScale")
+				local scale      = if uiScaleObj then uiScaleObj.Scale else 1
+				local sgAbsPos   = sg.AbsolutePosition
+				local tileSize   = container.AbsoluteSize
+				local tilePos    = container.AbsolutePosition
+				local vpHeight   = Defaults.SPARKLE_VIEWPORT_HEIGHT
+				local uiW  = tileSize.X / scale
+				local uiH  = tileSize.Y / scale
+				local uiX  = (tilePos.X - sgAbsPos.X) / scale
+				local uiY  = (tilePos.Y - sgAbsPos.Y) / scale
+				vp.Size     = UDim2.fromOffset(uiW, vpHeight)
+				vp.Position = UDim2.fromOffset(uiX, uiY + uiH / 2 - vpHeight / 2)
 				vp.Parent   = sg
 
 				local world = Instance.new("WorldModel")
