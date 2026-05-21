@@ -10,15 +10,18 @@
 --   2  fill all reservoirs to T2 threshold (10)
 --   3  fill all reservoirs to T3 threshold (20)
 --   4  fill all reservoirs to T4 threshold (40)
+--   M  toggle mobile-input override (forces InputCategorizer to "Touch"
+--       so touch-only HUD widgets like the dash button appear on desktop)
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService  = game:GetService("UserInputService")
 
-local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
-local PlayerSession  = require(script.Parent.PlayerSession)
-local MemorizeAction = require(ReplicatedStorage.Shared.MemorizeAction)
-local Dictionary     = require(ReplicatedStorage.Shared.Dictionary)
+local Logger            = require(ReplicatedStorage.Shared.Core.Logger)
+local PlayerSession     = require(script.Parent.PlayerSession)
+local MemorizeAction    = require(ReplicatedStorage.Shared.MemorizeAction)
+local Dictionary        = require(ReplicatedStorage.Shared.Dictionary)
+local InputCategorizer  = require(ReplicatedStorage.Shared.Core.InputCategorizer)
 
 local log = Logger.new("DevDebug")
 
@@ -77,7 +80,16 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	elseif input.KeyCode == Enum.KeyCode.Four then
 		fillReservoirsToAmount(TIER_ENERGY[4])
 		log:info(string.format("reservoirs set to T4 (%d each)", TIER_ENERGY[4]))
+
+	elseif input.KeyCode == Enum.KeyCode.M then
+		if InputCategorizer._debugOverride then
+			InputCategorizer.clearDebugOverride()
+			log:info("mobile override OFF — real input restored")
+		else
+			InputCategorizer.setDebugOverride(InputCategorizer.InputCategory.Touch)
+			log:info("mobile override ON — InputCategorizer now reports Touch")
+		end
 	end
 end)
 
-log:info("ready — [=letter  ]=memorize  \\=clear  1-4=fill mana T1-T4  (cycling: " .. TEST_WORD .. ")")
+log:info("ready — [=letter  ]=memorize  \\=clear  1-4=fill mana T1-T4  M=mobile-toggle  (cycling: " .. TEST_WORD .. ")")

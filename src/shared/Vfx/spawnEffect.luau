@@ -35,6 +35,7 @@ local function applyEmitterOverrides(emitter: ParticleEmitter, spec: VfxConfig.E
 	if spec.spreadAngle  then emitter.SpreadAngle  = spec.spreadAngle  end
 	if spec.rotation     then emitter.Rotation     = spec.rotation     end
 	if spec.transparency then emitter.Transparency = spec.transparency end
+	if spec.rate         then emitter.Rate         = spec.rate         end
 end
 
 local function spawnEffect(effectSpec: VfxConfig.EffectSpec, anchorPart: BasePart | Attachment)
@@ -42,6 +43,9 @@ local function spawnEffect(effectSpec: VfxConfig.EffectSpec, anchorPart: BasePar
 
 	local att = Instance.new("Attachment")
 	att.Parent = anchorPart
+	if effectSpec.upward then
+		att.WorldCFrame = CFrame.lookAt(att.WorldPosition, att.WorldPosition + Vector3.yAxis)
+	end
 	Debris:AddItem(att, effectSpec.totalDurationSec + 0.1)
 
 	for _, emitterSpec in effectSpec.emitters do

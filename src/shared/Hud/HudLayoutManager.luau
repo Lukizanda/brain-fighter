@@ -54,7 +54,7 @@ function HudLayoutManager:_init()
 			layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 			layout.HorizontalAlignment = (config :: any).stackHorizontalAlign or Enum.HorizontalAlignment.Right
 			layout.SortOrder = Enum.SortOrder.LayoutOrder
-			layout.Padding = UDim.new(0, 8)
+			layout.Padding = UDim.new(0, (config :: any).stackPadding or 8)
 			layout.Parent = region
 		end
 

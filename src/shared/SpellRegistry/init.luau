@@ -44,6 +44,24 @@ export type Spec = {
 local TIER_COSTS: { number } = { 5, 10, 20, 40 }
 local NUM_TIERS = #TIER_COSTS
 
+-- Red projectile tuning (Firebolt T1, Fireball T2). Inferno (T3) is
+-- instant and Volley (T4) has its own params block; their tuning lives
+-- in the spec literals below.
+local FIREBOLT_SPEED            = 80
+local FIREBOLT_LIFETIME_SEC     = 1.5
+local FIREBOLT_PROXIMITY_RADIUS = 3
+local FIREBOLT_SIZE             = 0.5
+local FIREBOLT_DAMAGE_FRAC      = 0.05
+local FIREBOLT_COLOR            = Color3.fromRGB(255, 140, 40)
+
+local FIREBALL_SPEED            = 55
+local FIREBALL_LIFETIME_SEC     = 2.0
+local FIREBALL_PROXIMITY_RADIUS = 3
+local FIREBALL_SIZE             = 1.0
+local FIREBALL_IMPACT_RADIUS    = 7
+local FIREBALL_DAMAGE_FRAC      = 0.20
+local FIREBALL_COLOR            = Color3.fromRGB(255, 90, 30)
+
 local VALID_COLORS: { [string]: true } = {
 	red   = true,
 	green = true,
@@ -56,16 +74,28 @@ local VALID_COLORS: { [string]: true } = {
 local SPELLS: { [Color]: { Spec } } = {
 	red = {
 		{
-			name          = "Spark",
+			name          = "Firebolt",
 			color         = "red",
 			tier          = 1,
 			cost          = TIER_COSTS[1],
 			targetingMode = "auto",
 			skill = {
-				name           = "Spark",
-				delivery       = "instant",
-				deliveryParams = {},
-				onImpact       = { { kind = "damage", fractionOfMaxHP = 0.05 } },
+				name     = "Firebolt",
+				delivery = "projectile",
+				deliveryParams = {
+					count            = 1,
+					speed            = FIREBOLT_SPEED,
+					spreadDegrees    = 0,
+					lifetimeSec      = FIREBOLT_LIFETIME_SEC,
+					proximityRadius  = FIREBOLT_PROXIMITY_RADIUS,
+					size             = FIREBOLT_SIZE,
+					color            = FIREBOLT_COLOR,
+					staggerSec       = 0,
+					trackTarget      = true,
+					cosmeticEffectId = "projectile_red_t1",
+					impactEffectId   = "impact_damage",
+				},
+				onImpact = { { kind = "damage", fractionOfMaxHP = FIREBOLT_DAMAGE_FRAC } },
 			},
 		},
 		{
@@ -75,10 +105,24 @@ local SPELLS: { [Color]: { Spec } } = {
 			cost          = TIER_COSTS[2],
 			targetingMode = "auto",
 			skill = {
-				name           = "Fireball",
-				delivery       = "instant",
-				deliveryParams = {},
-				onImpact       = { { kind = "damage", fractionOfMaxHP = 0.20 } },
+				name     = "Fireball",
+				delivery = "projectile",
+				deliveryParams = {
+					count            = 1,
+					speed            = FIREBALL_SPEED,
+					spreadDegrees    = 0,
+					lifetimeSec      = FIREBALL_LIFETIME_SEC,
+					proximityRadius  = FIREBALL_PROXIMITY_RADIUS,
+					size             = FIREBALL_SIZE,
+					color            = FIREBALL_COLOR,
+					staggerSec       = 0,
+					trackTarget      = true,
+					impactRadius     = FIREBALL_IMPACT_RADIUS,
+					impactColor      = FIREBALL_COLOR,
+					cosmeticEffectId = "projectile_red_t2",
+					impactEffectId   = "impact_damage",
+				},
+				onImpact = { { kind = "damage", fractionOfMaxHP = FIREBALL_DAMAGE_FRAC } },
 			},
 		},
 		{

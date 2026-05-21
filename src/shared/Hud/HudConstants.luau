@@ -15,12 +15,13 @@ local HudConstants = {
 			ZIndex = 1,
 		},
 		BottomRight = {
-			Position = UDim2.new(1, -20, 1, -20),
+			Position = UDim2.new(1, -20, 1, 0),  -- Y = 0; DASH bottom margin (DashButtonConfig.BOTTOM_MARGIN) owns the screen gap
 			AnchorPoint = Vector2.new(1, 1),
 			Size = UDim2.new(0, 640, 0, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
 			ZIndex = 1,
-			stackVertical = true, -- stacks children with UIListLayout (BottomRight holds mana bars + spell menu)
+			stackVertical = true,
+			stackPadding = 0,  -- gap between SpellMenu and DASH is owned by DashButtonConfig.SPELL_GAP
 		},
 		BottomCenter = {
 			Position = UDim2.new(0.5, 0, 1, -20),

@@ -22,15 +22,17 @@
 -- Callers that don't need a completion signal omit onComplete.
 ----------------------------------------------------------------------
 
-local Debris        = game:GetService("Debris")
-local Players       = game:GetService("Players")
+local CollectionService = game:GetService("CollectionService")
+local Debris            = game:GetService("Debris")
+local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService    = game:GetService("RunService")
+local RunService        = game:GetService("RunService")
 
 local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillEffects   = require(ReplicatedStorage.Shared.Skills.SkillEffects)
 local SkillInterrupt = require(ReplicatedStorage.Shared.Skills.SkillInterrupt)
 local SkillTypes     = require(ReplicatedStorage.Shared.Skills.SkillTypes)
+local SkillVisuals   = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 local VfxConfig      = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 local spawnEffect    = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
@@ -56,6 +58,53 @@ local function applyImpactEffects(skill: SkillSpec, hitTarget: any, source: any?
 		end
 	end
 	return firstFailure or { ok = true }
+end
+
+-- CollectionService tags whose tagged Models carry a Humanoid+HRP and
+-- should be hittable by projectile collision / splash. The project tags
+-- spawned NPCs ("NPC"), the active boss ("Boss"), and dev-mode rigs
+-- ("Damageable") — anything carrying any of these counts as a target.
+-- Player characters are NOT tagged; they're enumerated via Players.
+local DAMAGEABLE_TAGS: { string } = { "Damageable", "NPC", "Boss" }
+
+type Hittable = { hum: Humanoid, hrp: BasePart }
+
+-- Frame-level cache: rebuilt once per Heartbeat and shared across all
+-- concurrent in-flight projectiles. Boss Volley fires 30 at once — without
+-- this every projectile would re-query CollectionService each tick.
+-- Deduped by humanoid so a model carrying multiple tags doesn't double-hit.
+local _hittablesCache: { Hittable }? = nil
+RunService.Heartbeat:Connect(function()
+	_hittablesCache = nil
+end)
+
+local function collectHittables(): { Hittable }
+	if _hittablesCache then return _hittablesCache end
+	local results: { Hittable } = {}
+	local seen: { [Humanoid]: true } = {}
+
+	local function tryAdd(model: Instance?)
+		if not model or not model:IsA("Model") then return end
+		local m = model :: Model
+		local hum = m:FindFirstChildOfClass("Humanoid")
+		if not hum or hum.Health <= 0 then return end
+		if seen[hum] then return end
+		local hrp = m:FindFirstChild("HumanoidRootPart")
+		if not hrp or not hrp:IsA("BasePart") then return end
+		seen[hum] = true
+		table.insert(results, { hum = hum, hrp = hrp :: BasePart })
+	end
+
+	for _, player in Players:GetPlayers() do
+		tryAdd(player.Character)
+	end
+	for _, tag in DAMAGEABLE_TAGS do
+		for _, inst in CollectionService:GetTagged(tag) do
+			tryAdd(inst)
+		end
+	end
+	_hittablesCache = results
+	return results
 end
 
 -- Resolve a position from any target value (BasePart, Humanoid, Model, Vector3).
@@ -85,7 +134,8 @@ local SkillDelivery = {}
 SkillDelivery.handlers = {
 
 	-- "instant": apply onImpact immediately to ctx.target.
-	-- Used by Spark, Fireball, Inferno, Mend, Frost Nip, Stasis, Shield, Sanctuary.
+	-- Used by Inferno, Mend, Frost Nip, Stasis, Shield, Sanctuary.
+	-- (Firebolt and Fireball are projectile delivery — see below.)
 	instant = function(skill: SkillSpec, ctx: DeliveryCtx): Result
 		local result = applyImpactEffects(skill, ctx.target, ctx.source)
 		if ctx.onComplete then ctx.onComplete() end
@@ -94,10 +144,27 @@ SkillDelivery.handlers = {
 
 	-- "projectile": spawn deliveryParams.count Parts flying toward ctx.target.
 	-- On each hit: applyImpactEffects. After last launch: ctx.onComplete().
-	-- deliveryParams: count, speed, spreadDegrees, lifetimeSec,
-	--                 proximityRadius, size, color, staggerSec,
-	--                 cosmeticEffectId (optional VfxConfig.EFFECTS key —
-	--                 attaches a trail/glow/sound burst to each Part).
+	-- deliveryParams:
+	--   count, speed, spreadDegrees, lifetimeSec, proximityRadius, size,
+	--   color, staggerSec
+	--   trackTarget       — if true, re-resolve target position at each
+	--                       per-shot launch. Falls back to the cached
+	--                       targetPos if the target dies/despawns
+	--                       between fire-time and the staggered launch.
+	--                       In-flight projectiles do NOT curve after
+	--                       launch.
+	--   impactRadius      — if > 0, on hit applyImpactEffects fires for
+	--                       every player humanoid within this radius of
+	--                       the projectile's hit position (splash). 0 =
+	--                       single-target (legacy).
+	--   impactEffectId    — optional VfxConfig.EFFECTS key spawned at the
+	--                       impact position. For impactRadius == 0 the
+	--                       burst anchors to the hit humanoid's HRP; for
+	--                       impactRadius > 0 it anchors to the shockwave.
+	--   impactColor       — optional shockwave color tint. impactRadius > 0
+	--                       only.
+	--   cosmeticEffectId  — optional VfxConfig.EFFECTS key attached to
+	--                       each moving Part as a trail/glow.
 	projectile = function(skill: SkillSpec, ctx: DeliveryCtx): Result
 		local params = skill.deliveryParams
 		local count:          number  = params.count          or 1
@@ -107,8 +174,11 @@ SkillDelivery.handlers = {
 		local proximityRadius:number  = params.proximityRadius or 3
 		local staggerSec:     number  = params.staggerSec     or 0
 		local trackTarget:    boolean = params.trackTarget     or false
+		local impactRadius:   number  = params.impactRadius    or 0
 		local color:          Color3  = params.color          or Color3.fromRGB(255, 120, 0)
 		local cosmeticEffectId: string? = params.cosmeticEffectId
+		local impactEffectId:   string? = params.impactEffectId
+		local impactColor:      Color3? = params.impactColor
 		local sizeRaw                 = params.size            or 1.5
 		local sizeVec: Vector3        = typeof(sizeRaw) == "Vector3"
 			and (sizeRaw :: Vector3)
@@ -176,7 +246,6 @@ SkillDelivery.handlers = {
 				end
 
 				local startTime  = os.clock()
-				local hitPlayers: { [Player]: boolean } = {}
 				local conn: RBXScriptConnection
 
 				conn = RunService.Heartbeat:Connect(function()
@@ -191,19 +260,52 @@ SkillDelivery.handlers = {
 					end
 
 					local pos = projectile.Position
-					for _, player in Players:GetPlayers() do
-						if hitPlayers[player] then continue end
-						local char = player.Character
-						if not char then continue end
-						local hrp = char:FindFirstChild("HumanoidRootPart")
-						if not hrp or not hrp:IsA("BasePart") then continue end
-						local hum = char:FindFirstChildOfClass("Humanoid")
-						if not hum or hum.Health <= 0 then continue end
-						if ((hrp :: BasePart).Position - pos).Magnitude <= proximityRadius then
-							hitPlayers[player] = true
-							applyImpactEffects(skill, hum, source)
-							log:info(("SkillProjectile hit %s (skill=%s)"):format(player.Name, skill.name))
+					-- Snapshot all hittables this tick (players + tagged NPCs +
+					-- boss + Damageable rigs). Same snapshot is reused for the
+					-- splash radius loop if the projectile triggers a hit, so
+					-- a humanoid that's "inside proximityRadius" is guaranteed
+					-- to also be considered for splash on the same frame.
+					local hittables = collectHittables()
+					for _, h in hittables do
+						if h.hum.Parent == source then continue end -- skip caster
+						if (h.hrp.Position - pos).Magnitude <= proximityRadius then
+							-- Hit. Resolve impact location BEFORE destroying anything.
 							conn:Disconnect()
+							local hitPos = projectile.Position
+
+							if impactRadius > 0 then
+								-- Splash: apply effects to every hittable in
+								-- radius. spawnShockwave anchors the impact
+								-- burst to itself via cosmeticEffectId.
+								SkillVisuals.spawnShockwave(hitPos, impactRadius, {
+									color            = impactColor,
+									cosmeticEffectId = impactEffectId,
+								})
+								for _, h2 in hittables do
+									if h2.hum.Parent == source then continue end -- skip caster
+									if h2.hum.Health <= 0 then continue end
+									if (h2.hrp.Position - hitPos).Magnitude <= impactRadius then
+										applyImpactEffects(skill, h2.hum, source)
+									end
+								end
+								log:info(("SkillProjectile splash @ %s r=%.1f (skill=%s)"):format(
+									tostring(hitPos), impactRadius, skill.name
+								))
+							else
+								-- Single-target: apply effects to the triggering
+								-- humanoid only. Anchor the impact burst on its HRP.
+								applyImpactEffects(skill, h.hum, source)
+								if impactEffectId then
+									local impactEffect = VfxConfig.EFFECTS[impactEffectId]
+									if impactEffect then
+										spawnEffect(impactEffect, h.hrp)
+									end
+								end
+								log:info(("SkillProjectile hit %s (skill=%s)"):format(
+									h.hum.Parent and h.hum.Parent.Name or "?", skill.name
+								))
+							end
+
 							projectile:Destroy()
 							return
 						end
@@ -248,28 +350,12 @@ SkillDelivery.handlers = {
 		-- ctx.aoeCenter before calling. Capturing now matches historical behavior.
 		task.delay(windupSec, function()
 			if castToken.cancelled then return end
-			-- Visual shockwave ring on the ground plane
-			local shockwave = Instance.new("Part")
-			shockwave.Name        = "SkillShockwave"
-			shockwave.Shape       = Enum.PartType.Cylinder
-			shockwave.Size        = Vector3.new(0.4, radius * 2, radius * 2)
-			shockwave.CFrame      = CFrame.new(center.X, center.Y - 2, center.Z)
-				* CFrame.Angles(0, 0, math.pi / 2)
-			shockwave.Anchored    = true
-			shockwave.CanCollide  = false
-			shockwave.Color       = Color3.fromRGB(255, 210, 0)
-			shockwave.Material    = Enum.Material.Neon
-			shockwave.Transparency = 0.35
-			shockwave.Parent      = workspace
-			Debris:AddItem(shockwave, 0.5)
-
-			-- Cosmetic layer parallel to projectile branch (see above).
-			if cosmeticEffectId then
-				local cosmeticEffect = VfxConfig.EFFECTS[cosmeticEffectId]
-				if cosmeticEffect then
-					spawnEffect(cosmeticEffect, shockwave)
-				end
-			end
+			-- Visual shockwave ring on the ground plane. SkillVisuals
+			-- owns the geometry + cosmetic-effect attachment; this branch
+			-- only chooses what to render.
+			SkillVisuals.spawnShockwave(center, radius, {
+				cosmeticEffectId = cosmeticEffectId,
+			})
 
 			-- Apply onImpact to all players in radius
 			for _, player in Players:GetPlayers() do

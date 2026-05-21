@@ -10,6 +10,10 @@
 --   local passed, failed = M.runAll()
 --
 -- Logs "[TEST PASS]" / "[TEST FAIL]" lines so output is parseable.
+--
+-- Tier costs pinned to SpellRegistry.TIER_COSTS = { 5, 10, 20, 40 }
+-- (wiki/design/gameplay-loop.md § "Spell tier thresholds"). If those
+-- numbers move, the threshold-edge cases below need to move with them.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -45,11 +49,11 @@ end
 
 local cases: { { any } } = {
 	{
-		"getSpell red T2 = Fireball (cost 30, auto)",
+		"getSpell red T2 = Fireball (cost 10, auto)",
 		function()
 			local s = SpellRegistry.getSpell("red", 2)
 			expectEq(s.name, "Fireball", "Fireball.name")
-			expectEq(s.cost, 30, "Fireball.cost")
+			expectEq(s.cost, 10, "Fireball.cost")
 			expectEq(s.targetingMode, "auto", "Fireball.targetingMode")
 		end,
 	},
@@ -75,59 +79,67 @@ local cases: { { any } } = {
 		end,
 	},
 	{
-		"listAffordable red 9 -> empty (below T1)",
+		"listAffordable red 4 -> empty (below T1=5)",
 		function()
-			expectLen(SpellRegistry.listAffordableSpells("red", 9), 0, "red@9")
+			expectLen(SpellRegistry.listAffordableSpells("red", 4), 0, "red@4")
 		end,
 	},
 	{
-		"listAffordable red 10 -> [Spark]",
+		"listAffordable red 5 -> [Firebolt]",
+		function()
+			local r = SpellRegistry.listAffordableSpells("red", 5)
+			expectLen(r, 1, "red@5 length")
+			expectEq(r[1].name, "Firebolt", "red@5[1].name")
+		end,
+	},
+	{
+		"listAffordable red 10 -> [Firebolt, Fireball] (tier-ascending)",
 		function()
 			local r = SpellRegistry.listAffordableSpells("red", 10)
-			expectLen(r, 1, "red@10 length")
-			expectEq(r[1].name, "Spark", "red@10[1].name")
+			expectLen(r, 2, "red@10 length")
+			expectEq(r[1].name, "Firebolt", "red@10[1].name")
+			expectEq(r[2].name, "Fireball", "red@10[2].name")
 		end,
 	},
 	{
-		"listAffordable red 30 -> [Spark, Fireball] (tier-ascending)",
+		"listAffordable red 20 -> 3 entries (through Inferno)",
 		function()
-			local r = SpellRegistry.listAffordableSpells("red", 30)
-			expectLen(r, 2, "red@30 length")
-			expectEq(r[1].name, "Spark", "red@30[1].name")
-			expectEq(r[2].name, "Fireball", "red@30[2].name")
+			local r = SpellRegistry.listAffordableSpells("red", 20)
+			expectLen(r, 3, "red@20 length")
+			expectEq(r[1].name, "Firebolt", "red@20[1].name")
+			expectEq(r[2].name, "Fireball", "red@20[2].name")
+			expectEq(r[3].name, "Inferno", "red@20[3].name")
 		end,
 	},
 	{
-		"listAffordable red 80 -> 3 entries",
+		"listAffordable red 40 -> 4 entries (Volley unlocks)",
 		function()
-			local r = SpellRegistry.listAffordableSpells("red", 80)
-			expectLen(r, 3, "red@80 length")
-			expectEq(r[1].name, "Spark", "red@80[1].name")
-			expectEq(r[2].name, "Fireball", "red@80[2].name")
-			expectEq(r[3].name, "Inferno", "red@80[3].name")
+			local r = SpellRegistry.listAffordableSpells("red", 40)
+			expectLen(r, 4, "red@40 length")
+			expectEq(r[4].name, "Volley", "red@40[4].name")
 		end,
 	},
 	{
-		"listAffordable red 160 -> 3 entries (cap doesn't add more)",
+		"listAffordable red 160 -> 4 entries (cap doesn't add more)",
 		function()
-			expectLen(SpellRegistry.listAffordableSpells("red", 160), 3, "red@160 length")
+			expectLen(SpellRegistry.listAffordableSpells("red", 160), 4, "red@160 length")
 		end,
 	},
 	{
-		"listAffordable green 30 -> [Mend, Stone Wall]",
+		"listAffordable green 10 -> [Mend, Stone Wall]",
 		function()
-			local r = SpellRegistry.listAffordableSpells("green", 30)
-			expectLen(r, 2, "green@30 length")
-			expectEq(r[1].name, "Mend", "green@30[1].name")
-			expectEq(r[2].name, "Stone Wall", "green@30[2].name")
+			local r = SpellRegistry.listAffordableSpells("green", 10)
+			expectLen(r, 2, "green@10 length")
+			expectEq(r[1].name, "Mend", "green@10[1].name")
+			expectEq(r[2].name, "Stone Wall", "green@10[2].name")
 		end,
 	},
 	{
-		"getSpell red 4 errors",
+		"getSpell red 5 errors (only 4 tiers exist)",
 		function()
 			expectThrows(function()
-				SpellRegistry.getSpell("red", 4)
-			end, "tier 4")
+				SpellRegistry.getSpell("red", 5)
+			end, "tier 5")
 		end,
 	},
 	{

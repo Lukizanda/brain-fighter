@@ -104,8 +104,16 @@ CastAction.spellResolved:Connect(function(
 	end
 
 	-- Impact VFX at target — one burst per unique effect kind on the skill.
-	local impactTargetRoot: BasePart? = if target then resolveTargetRoot(target) else nil
-	local impactEffectIds: { string } = resolveImpactEffectIds(spec.skill)
+	-- Projectile spells own their own impact burst (fired by SkillDelivery
+	-- at the actual hit position); suppress the immediate burst-at-target
+	-- so it doesn't double-up or fire at cast time on the wrong location.
+	local impactTargetRoot: BasePart? = if target
+		then resolveTargetRoot(target)
+		else (character:FindFirstChild("HumanoidRootPart") :: BasePart?)
+	local isProjectile = spec.skill and spec.skill.delivery == "projectile"
+	local impactEffectIds: { string } = if isProjectile
+		then {}
+		else resolveImpactEffectIds(spec.skill)
 	if impactTargetRoot then
 		for _, id in impactEffectIds do
 			spawnEffect(VfxConfig.EFFECTS[id], impactTargetRoot)

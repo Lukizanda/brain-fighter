@@ -11,6 +11,7 @@ export type DashController = {
 	enable: (self: DashController) -> (),
 	disable: (self: DashController) -> (),
 	destroy: (self: DashController) -> (),
+	trigger: (self: DashController) -> (),
 }
 
 type DashControllerImpl = DashController & {
@@ -180,6 +181,18 @@ function DashController:_performDash()
 	self:_playVFX()
 end
 
+-- Shared entry point for keyboard input and mobile button.
+-- Dispatches to roll (grounded) or dash (airborne) so both code paths
+-- share the same cooldown gates inside _performDash / _performRoll.
+function DashController:trigger()
+	if not self._enabled then return end
+	if self:_isGrounded() then
+		self:_performRoll()
+	else
+		self:_performDash()
+	end
+end
+
 function DashController:_performRoll()
 	if not self:_canRoll() then
 		log:info("roll blocked — cooldown active")
@@ -213,11 +226,7 @@ function DashController:enable()
 	self._inputConn = UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 		if processed then return end
 		if input.KeyCode ~= CFG.KEY then return end
-		if self:_isGrounded() then
-			self:_performRoll()
-		else
-			self:_performDash()
-		end
+		self:trigger()
 	end)
 
 	log:info("enabled")

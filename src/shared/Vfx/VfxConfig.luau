@@ -51,6 +51,7 @@ export type EffectSpec = {
 	totalDurationSec: number,
 	anchor: "casterStaffTip" | "targetRoot" | "targetHumanoidRootPart" | "targetHead" | "worldPosition",
 	durationFromSpec: boolean?,
+	upward: boolean?,
 }
 
 export type PerfConfig = {
@@ -136,9 +137,6 @@ VfxConfig.EFFECTS = {
 	cast_red_t2   = castEntry(C.red,   2),
 	cast_red_t3   = castEntry(C.red,   3),
 	cast_red_t4   = castEntry(C.red,   4),
-	cast_green_t1 = castEntry(C.green, 1),
-	cast_green_t2 = castEntry(C.green, 2),
-	cast_green_t3 = castEntry(C.green, 3),
 	cast_blue_t1  = castEntry(C.blue,  1),
 	cast_blue_t2  = castEntry(C.blue,  2),
 	cast_blue_t3  = castEntry(C.blue,  3),
@@ -168,27 +166,29 @@ VfxConfig.EFFECTS = {
 	impact_heal = {
 		emitters = {
 			{
-				template     = "HealBurst",
-				color        = C.green,
-				emitCount    = 20,
-				lifetime     = NumberRange.new(0.5, 0.9),
-				size         = NumberSequence.new({
-					NumberSequenceKeypoint.new(0.0, 0.0),
-					NumberSequenceKeypoint.new(0.2, 0.5),
-					NumberSequenceKeypoint.new(1.0, 0.0),
+				template    = "HealBurst",
+				color       = C.green,
+				durationSec = 1.8,
+				rate        = 12,
+				lifetime    = NumberRange.new(1.2, 1.8),
+				size        = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0,  0.0),
+					NumberSequenceKeypoint.new(0.15, 0.35),
+					NumberSequenceKeypoint.new(1.0,  0.0),
 				}),
-				speed        = NumberRange.new(4, 10),
-				spreadAngle  = Vector2.new(160, 160),
-				rotation     = NumberRange.new(-180, 180),
+				speed       = NumberRange.new(1, 3),
+				spreadAngle = Vector2.new(22, 22),
+				rotation    = NumberRange.new(-180, 180),
 				transparency = NumberSequence.new({
-					NumberSequenceKeypoint.new(0.0, 0.0),
-					NumberSequenceKeypoint.new(0.7, 0.1),
+					NumberSequenceKeypoint.new(0.0, 0.2),
+					NumberSequenceKeypoint.new(0.5, 0.0),
 					NumberSequenceKeypoint.new(1.0, 1.0),
 				}),
 			},
 		},
 		sound            = { soundId = "rbxassetid://0", volume = 0.75, pitchRange = NumberRange.new(0.95, 1.05) },
-		totalDurationSec = 0.95,
+		totalDurationSec = 2.3,
+		upward           = true,
 		anchor           = "targetHumanoidRootPart",
 	},
 
@@ -300,7 +300,49 @@ VfxConfig.EFFECTS = {
 	-- ── Delivery cosmetics ─────────────────────────────────────────────
 	-- Attached to the moving projectile Part by SkillDelivery.projectile
 	-- when deliveryParams.cosmeticEffectId is set. `durationSec` matches
-	-- Volley's lifetimeSec so the trail emits for the whole flight.
+	-- each spell's lifetimeSec so the trail emits for the whole flight.
+
+	-- Firebolt (T1) — small, fast, low-rate trail.
+	projectile_red_t1 = {
+		emitters = {
+			{
+				template    = "BurstSmall",
+				color       = C.red,
+				durationSec = 1.5,           -- matches FIREBOLT_LIFETIME_SEC
+				lifetime    = NumberRange.new(0.08, 0.18),
+				size        = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.22),
+					NumberSequenceKeypoint.new(1.0, 0.0),
+				}),
+				speed       = NumberRange.new(0, 1),
+				spreadAngle = Vector2.new(12, 12),
+			},
+		},
+		totalDurationSec = 1.7,
+		anchor           = "worldPosition",
+	},
+
+	-- Fireball (T2) — denser, larger, longer-lived trail.
+	projectile_red_t2 = {
+		emitters = {
+			{
+				template    = "BurstSmall",
+				color       = C.red,
+				durationSec = 2.0,           -- matches FIREBALL_LIFETIME_SEC
+				lifetime    = NumberRange.new(0.20, 0.40),
+				size        = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.55),
+					NumberSequenceKeypoint.new(1.0, 0.0),
+				}),
+				speed       = NumberRange.new(0, 2),
+				spreadAngle = Vector2.new(18, 18),
+			},
+		},
+		totalDurationSec = 2.2,
+		anchor           = "worldPosition",
+	},
+
+	-- Volley (T4) — existing, longer-lived trail for the staggered stream.
 	projectile_red_t4 = {
 		emitters = {
 			{

@@ -22,9 +22,11 @@ export type DeliveryCtx = {
 	onComplete: (() -> ())?, -- called when the delivery fully resolves (async attacks)
 }
 
+export type DeliveryKind = "instant" | "projectile" | "aoe" | "world_spawn"
+
 export type SkillSpec = {
-	name: string,                       -- "FireballVolley", "GroundSlam", "Spark", …
-	delivery: string,                   -- "instant" | "projectile" | "aoe" | "world_spawn"
+	name: string,                       -- "FireballVolley", "GroundSlam", "Firebolt", …
+	delivery: DeliveryKind,
 	deliveryParams: { [string]: any },  -- handler-specific params
 	onImpact: { EffectSpec },           -- effects applied on landing
 	minRange: number?,                  -- if set, skill is only selected when distanceToNearest <= minRange

@@ -74,7 +74,7 @@ local player = Players.LocalPlayer
 local session = PlayerSession.get()
 local menu = SpellMenuBuilder.build()
 
-menu.gui.LayoutOrder = 2
+menu.gui.LayoutOrder = 1
 HudLayoutManager:register("BottomRight", menu.gui)
 
 -- Render initial state

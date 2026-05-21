@@ -29,3 +29,13 @@ player.CharacterAdded:Connect(onCharacterAdded)
 if player.Character then
 	onCharacterAdded(player.Character)
 end
+
+-- Cross-script dispatcher so the mobile dash button (and any other
+-- client-side UI) can trigger a dash without reaching into private state.
+-- Mirrors the `_G.PlayerHud.SpellMenu` pattern in SpellMenuGui.client.luau.
+_G.BrainFighter = _G.BrainFighter or {}
+_G.BrainFighter.requestDash = function()
+	if activeController then
+		activeController:trigger()
+	end
+end

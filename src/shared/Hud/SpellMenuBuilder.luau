@@ -51,14 +51,14 @@ local SpellMenuBuilder = {}
 function SpellMenuBuilder.build(): Handle
 	local container = Instance.new("Frame")
 	container.Name = "SpellMenu"
-	container.Size = UDim2.new(0, 0, 0, Defaults.BUTTON_HEIGHT)
-	container.AutomaticSize = Enum.AutomaticSize.X
+	container.Size = UDim2.new(0, Defaults.BUTTON_WIDTH, 0, 0)
+	container.AutomaticSize = Enum.AutomaticSize.Y
 	container.BackgroundTransparency = 1
 	container.BorderSizePixel = 0
 
 	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.VerticalAlignment = Enum.VerticalAlignment.Top
+	layout.FillDirection = Enum.FillDirection.Vertical
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
 	layout.Padding = UDim.new(0, Defaults.BUTTON_GAP)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = container

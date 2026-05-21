@@ -25,6 +25,15 @@
       "$path": "src/StarterPack"
     },
 
+    "StarterGui": {
+      "$className": "StarterGui",
+      "$properties": {
+        "ScreenOrientation": {
+          "Enum": "LandscapeSensor"
+        }
+      }
+    },
+
     "StarterPlayer": {
       "StarterPlayerScripts": {
         "Client": {

@@ -21,12 +21,30 @@ local InputCategorizer = {
 	InputCategory = InputCategory,
 	lastInputCategoryChanged = lastInputCategoryChangedEvent.Event,
 	_lastInputCategory = InputCategory.Unknown,
+	_debugOverride = nil :: string?,
 	_initialized = false,
 }
 
--- Return the last input category
+-- Return the last input category (or the debug override if one is set)
 function InputCategorizer.getLastInputCategory()
-	return InputCategorizer._lastInputCategory
+	return InputCategorizer._debugOverride or InputCategorizer._lastInputCategory
+end
+
+-- Debug-only: force getLastInputCategory() to return a specific category
+-- regardless of real input. Fires lastInputCategoryChanged so HUD widgets
+-- gated on isTouch() / category re-evaluate immediately.
+function InputCategorizer.setDebugOverride(category: string)
+	if InputCategorizer._debugOverride == category then return end
+	InputCategorizer._debugOverride = category
+	lastInputCategoryChangedEvent:Fire(category)
+end
+
+-- Clear the debug override and restore real-input behavior. Re-fires the
+-- signal with the actual current category so subscribers reset cleanly.
+function InputCategorizer.clearDebugOverride()
+	if InputCategorizer._debugOverride == nil then return end
+	InputCategorizer._debugOverride = nil
+	lastInputCategoryChangedEvent:Fire(InputCategorizer._lastInputCategory)
 end
 
 -- If _lastInputCategory and inputCategory are different, set _lastInputCategory and fire lastInputCategoryChanged
