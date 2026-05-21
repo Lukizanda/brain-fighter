@@ -8,10 +8,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local EnergyReservoirs = require(ReplicatedStorage.Shared.EnergyReservoirs)
 
 local SpellMenuConfig = {
-	BUTTON_WIDTH  = 100,
-	BUTTON_HEIGHT = 100,
-	BUTTON_GAP    = 6,
-	CORNER_RADIUS = 5,
+	BUTTON_WIDTH  = 200,
+	BUTTON_HEIGHT = 200,
+	BUTTON_GAP    = 12,
+	CORNER_RADIUS = 10,
 
 	-- Per-color panel backgrounds
 	COLORS = {
@@ -27,9 +27,9 @@ local SpellMenuConfig = {
 
 	-- Text
 	LABEL_FONT  = Enum.Font.GothamBold,
-	LABEL_SIZE  = 13,
+	LABEL_SIZE  = 26,
 	SPELL_FONT  = Enum.Font.Gotham,
-	SPELL_SIZE  = 12,
+	SPELL_SIZE  = 24,
 	TEXT_COLOR  = Color3.fromRGB(255, 255, 255),
 	DIM_COLOR   = Color3.fromRGB(160, 160, 175),
 	TEXT_STROKE = 0.5,
@@ -40,7 +40,7 @@ local SpellMenuConfig = {
 	POPUP_DURATION  = 1.8,
 	POPUP_FADE_TWEEN = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 	POPUP_FONT = Enum.Font.GothamBold,
-	POPUP_SIZE = 13,
+	POPUP_SIZE = 26,
 
 	-- UI VFX tweens
 	AFFORD_BOUNCE_TWEEN = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
