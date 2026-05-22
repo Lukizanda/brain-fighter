@@ -1,0 +1,9 @@
+{
+  "className": "Sound",
+  "properties": {
+    "SoundId": {
+      "type": "String",
+      "value": "rbxassetid://4455667"
+    }
+  }
+}

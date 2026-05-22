@@ -1,0 +1,10 @@
+{
+  "className": "PointLight",
+  "name": "SpellGlow",
+  "properties": {
+    "Color": [0.4, 0.7, 1.0],
+    "Brightness": 2.0,
+    "Range": 12.0,
+    "Enabled": true
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "className": "Folder",
+  "ignoreUnknownInstances": true,
+  "children": [
+    {
+      "name": "HardpointA",
+      "className": "Attachment",
+      "properties": {
+        "CFrame": {
+          "type": "CFrame",
+          "value": [0, 0, -4, 1, 0, 0, 0, 1, 0, 0, 0, 1]
+        }
+      }
+    },
+    {
+      "name": "HardpointB",
+      "className": "Attachment",
+      "properties": {
+        "CFrame": {
+          "type": "CFrame",
+          "value": [0, 0, 4, 1, 0, 0, 0, 1, 0, 0, 0, 1]
+        }
+      }
+    },
+    {
+      "name": "HardpointC",
+      "className": "Attachment",
+      "properties": {
+        "CFrame": {
+          "type": "CFrame",
+          "value": [-4, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]
+        }
+      }
+    },
+    {
+      "name": "HardpointD",
+      "className": "Attachment",
+      "properties": {
+        "CFrame": {
+          "type": "CFrame",
+          "value": [4, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]
+        }
+      }
+    }
+  ]
+}

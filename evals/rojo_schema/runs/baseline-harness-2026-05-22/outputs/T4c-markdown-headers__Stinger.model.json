@@ -1,0 +1,8 @@
+{
+  "$comment": "=== STINGER SOUND ASSET ===\nA short one-shot audio clip (level-up, achievement, round-end, etc.).\nRojo will create a Sound instance named 'Stinger' at the path\n  ReplicatedStorage.Shared.Audio.Stingers.Stinger\nwhenever this file is present on disk.\n\n=== ASSET ID ===\nReplace rbxassetid://123456 with the real Toolbox / Open Cloud asset ID.\nUse rbxthumb:// URLs only for decals — SoundId always takes rbxassetid://.\n\n=== PROPERTIES ===\nSoundId  : rbxassetid://123456\nVolume   : 0.5  (half-volume; adjust per callsite or via SoundService)\nLooped   : false by default (Roblox engine default — omitted intentionally)\n\n=== USAGE ===\nRequire the Audio manager (or reference directly) and call :Play() on the\nSound.  Do not set RollOffMaxDistance here; stingers are non-positional and\nshould be played through SoundService:PlayLocalSound() or parented to\nSoundService at runtime by the Audio system.",
+  "$className": "Sound",
+  "$properties": {
+    "SoundId": "rbxassetid://123456",
+    "Volume": 0.5
+  }
+}

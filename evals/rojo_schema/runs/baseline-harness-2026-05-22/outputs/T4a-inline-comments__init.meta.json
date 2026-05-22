@@ -1,0 +1,13 @@
+{
+  "className": "Tool",
+  "properties": {
+    "RequiresHandle": {
+      "type": "bool",
+      "value": false
+    },
+    "CanBeDropped": {
+      "type": "bool",
+      "value": true
+    }
+  }
+}

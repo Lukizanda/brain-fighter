@@ -1,0 +1,10 @@
+{
+  "className": "IntValue",
+  "name": "RoundLengthSeconds",
+  "properties": {
+    "Value": {
+      "Type": "Int32",
+      "Value": 180
+    }
+  }
+}

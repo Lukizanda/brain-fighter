@@ -1,7 +1,7 @@
 ---
 type: concept
 description: Pre-commit validator for `.meta.json` / `.model.json` files; hard-blocks the silent-fail traps Rojo doesn't warn about
-updated: 2026-05-01
+updated: 2026-05-22
 ---
 
 # Rojo JSON Validator
@@ -54,7 +54,14 @@ git config core.hooksPath .githooks
 
 The hook script auto-skips if Python isn't on PATH (so contributors without Python don't get blocked, though they then carry the risk). Bypass for an emergency commit: `git commit --no-verify`.
 
+## Upstream measurement: the generation eval
+
+The validator is *defense*. By the time it fires, the LLM has already produced a bad file someone has to fix. [`evals/rojo_schema/`](../../evals/rojo_schema/) is the *prevention* counterpart — 50 generation prompts targeting the five trap categories above, graded by this validator, run through the actual Claude Code harness (CLAUDE.md + memory + skills). Headline at baseline: Sonnet 4.6 scored 42/50 (84%) against the BrainFighter harness on 2026-05-22.
+
+The eval is what you run before/after changing `CLAUDE.md` to measure whether the change actually reduces the bug class at the source.
+
 ## Related
 
 - [[concepts/ModelJsonInstances]] — when to use `.model.json` vs `.meta.json` (project convention).
+- [`evals/rojo_schema/README.md`](../../evals/rojo_schema/README.md) — generation eval suite that uses this validator as its automated grader.
 - `CLAUDE.md` — Pre-Sync Safety Checks section.

@@ -1,0 +1,10 @@
+{
+  "className": "BindableEvent",
+  "name": "BossPhaseChanged",
+  "attributes": {
+    "author": {
+      "Type": "String",
+      "Value": "combat-team"
+    }
+  }
+}

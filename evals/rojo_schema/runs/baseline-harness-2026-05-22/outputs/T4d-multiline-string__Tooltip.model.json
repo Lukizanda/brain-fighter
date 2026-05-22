@@ -1,0 +1,7 @@
+{
+  "className": "StringValue",
+  "name": "Tooltip",
+  "properties": {
+    "Value": "The Spell Menu gives you quick access to all of your equipped spells. Tap the spell icon or press its hotkey to select a spell, and it becomes your active cast — ready to fire the moment you press the action button.\n\nEach spell slot displays the spell's icon, its mana cost, and a cooldown ring that fills as the ability recharges. Slots with insufficient mana are dimmed so you can read your resource state at a glance without opening any other panel.\n\nYou can swap your active spell at any time, even mid-movement. Switching does not interrupt an in-progress cast — the current cast completes first, then the newly selected spell becomes active for your next action."
+  }
+}

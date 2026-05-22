@@ -1,0 +1,10 @@
+{
+  "className": "RemoteEvent",
+  "name": "DamageFeedback",
+  "attributes": {
+    "Tags": {
+      "Type": "Tags",
+      "Value": ["client-feedback"]
+    }
+  }
+}

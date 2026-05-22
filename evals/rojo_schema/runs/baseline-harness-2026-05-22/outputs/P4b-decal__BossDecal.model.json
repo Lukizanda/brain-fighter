@@ -1,0 +1,12 @@
+{
+  "className": "Decal",
+  "name": "BossDecal",
+  "properties": {
+    "Texture": {
+      "String": "rbxassetid://7788990"
+    },
+    "Color3": {
+      "Color3": [1, 0.2, 0.2]
+    }
+  }
+}

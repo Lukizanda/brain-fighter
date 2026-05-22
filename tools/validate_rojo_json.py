@@ -187,7 +187,23 @@ def main() -> int:
         parser.print_help(sys.stderr)
         return 2
 
-    targets = [p for p in targets if p.exists() and (p.name.endswith(".meta.json") or p.name.endswith(".model.json"))]
+    def _is_eval_artifact(p: Path) -> bool:
+        # Eval suites under `evals/` contain deliberately-bad Rojo files (negative test cases)
+        # plus model-generated outputs that may or may not be valid by design. Skipping the
+        # whole tree keeps the validator focused on production `src/` files. To include an
+        # eval directory anyway, pass it explicitly (the path-resolution below honors that).
+        try:
+            rel = p.resolve().relative_to(REPO_ROOT)
+        except ValueError:
+            return False
+        return rel.parts and rel.parts[0] == "evals"
+
+    targets = [
+        p for p in targets
+        if p.exists()
+        and (p.name.endswith(".meta.json") or p.name.endswith(".model.json"))
+        and not _is_eval_artifact(p)
+    ]
 
     if not targets:
         return 0

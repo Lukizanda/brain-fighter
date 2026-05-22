@@ -1,0 +1,6 @@
+# Raw Claude responses are chatty and not interesting once parsed.
+# The committed artifact is outputs/ + report.{csv,md} + manifest.json.
+runs/*/responses/
+
+# Python cache
+__pycache__/

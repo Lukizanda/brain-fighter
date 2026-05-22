@@ -1,0 +1,13 @@
+{
+  "className": "BindableEvent",
+  "attributes": {
+    "EmittedByServer": {
+      "type": "Bool",
+      "value": true
+    },
+    "ReplicatesToClients": {
+      "type": "Bool",
+      "value": false
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "className": "StringValue",
+  "name": "TooltipText",
+  "properties": {
+    "Value": {
+      "type": "string",
+      "value": "Press F to interact"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "className": "Animation",
+  "name": "SprintForward",
+  "properties": {
+    "AnimationId": {
+      "type": "string",
+      "value": "rbxassetid://5566778"
+    }
+  }
+}

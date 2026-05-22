@@ -1,0 +1,121 @@
+{
+  "run_name": "baseline-harness-2026-05-22",
+  "backend": "harness",
+  "model": "claude-sonnet-4-6",
+  "started_at": "2026-05-22T10:59:05.455085+00:00",
+  "completed_at": "2026-05-22T11:04:46.188225+00:00",
+  "wall_seconds": 340.73314,
+  "case_count": 50,
+  "concurrency": 2,
+  "parse_errors": [],
+  "tokens": {
+    "input": 150,
+    "output": 22163
+  },
+  "harness_fingerprint": {
+    "claude_md_sha256": "e4c571b05e9915aa8ca2d6bec42d17bb59b8ca34c142b4f5e4f366fc1b3e07b3",
+    "user_claude_md_sha256": "9bf7abbbeeacd7b44b71a414274cf9dd495b489b61058fc875f44608b9fc9f7f",
+    "memory_files": [
+      {
+        "name": "feedback_always_push_after_commit.md",
+        "sha256": "9fb5f4f7d358edf686ad74d1f7ecc42e35546199285da7c467e176a3cf833793"
+      },
+      {
+        "name": "feedback_api_keys.md",
+        "sha256": "426aad97a5b6a1e96a045d45e7ee0dcbd8bf6acd693cfbe72d721c3dc3b53880"
+      },
+      {
+        "name": "feedback_commit_proposal_renames.md",
+        "sha256": "b30f3d7d8715077cf6ca46bcc53a39500d604b91daa623bda95b7be55fc5a9f7"
+      },
+      {
+        "name": "feedback_cross_process_testing.md",
+        "sha256": "92f22639f7a5ab794e08055d2a866d9e08e4016e3131522163ad0971f8415e92"
+      },
+      {
+        "name": "feedback_default_to_playtest.md",
+        "sha256": "7a0dfb93ffbd11bd5f0b5405a24e4692520c2c51176863c130eb9b8cdd78f26a"
+      },
+      {
+        "name": "feedback_mcp_clone_replication.md",
+        "sha256": "a812fc2d5949f80853c241b2347fda173bdb4bf2684607f462409f5bf49e7cf6"
+      },
+      {
+        "name": "feedback_model_selection.md",
+        "sha256": "b956c3834fa96e2a748aaa0378eca2390dcde03d9576fb7ce5d67ae7701826e3"
+      },
+      {
+        "name": "feedback_nimbalyst_commit_proposal.md",
+        "sha256": "90936eadcc9f28776a7590bb8d7f6ef87ead017184fb898c01baa7b9effb8d1d"
+      },
+      {
+        "name": "feedback_no_unsolicited_changes.md",
+        "sha256": "148e2127e37d5e0f970726a6a80357a20db9a32552982e66d68f55e7df6628a0"
+      },
+      {
+        "name": "feedback_ollama_batched_structured_output.md",
+        "sha256": "536af59708eae32a39a11a76aeff135f31be7c08287b540ffa51aa9ee0b69fc0"
+      },
+      {
+        "name": "feedback_post_commit_hygiene.md",
+        "sha256": "a7a2fbd1eb5e1003d9ab2ef81a52880533e4657414905d166f8d49486d4e5cab"
+      },
+      {
+        "name": "feedback_record_plan_changes_in_wiki.md",
+        "sha256": "c08e42ea010eb04ad0e46fc252fbfdd10676d59bf29eef1e951a1acf7e62e36d"
+      },
+      {
+        "name": "feedback_roblox_open_cloud_icon.md",
+        "sha256": "e8e4036567f2e21d2cb03f495b77b521e1c05cd40f4897ea159904a719415ce0"
+      },
+      {
+        "name": "feedback_rojo_screenshot_hierarchy.md",
+        "sha256": "38102c0825a065b180c796bd09a54bb7f491e32af5def185a8759449cadaf39d"
+      },
+      {
+        "name": "feedback_session_terminology.md",
+        "sha256": "6ffdcdc03394f83f198920f560838fbc4bd9fc8419e5912f2b2a651f701cc5b8"
+      },
+      {
+        "name": "feedback_system_domain_placement.md",
+        "sha256": "548391665f3a37ca8ada191e1bc8998ac2d4fec7fa41a30fd19231ebbdac4d03"
+      },
+      {
+        "name": "feedback_token_budget.md",
+        "sha256": "6e51db97edcc61a0442b5885e37f6e8ea0fd7c2dcecd02d537b0fc87ed8a9f84"
+      },
+      {
+        "name": "feedback_verify_before_fixing.md",
+        "sha256": "7d0d78ed36457581d0041e00426ef25424bea7526a037cdffb858f6183bbd2cf"
+      },
+      {
+        "name": "feedback_wiki_status_before_dispatch.md",
+        "sha256": "87830645fa69a26b6ed9d3fb42337798c9c7b0a697e4e49bcc3eca3d15729b3e"
+      },
+      {
+        "name": "MEMORY.md",
+        "sha256": "d57450eac6061aa529afcaee9db4b2e3371d47d4db7068b5f3d500ca76da98c4"
+      },
+      {
+        "name": "project_phase3_complete.md",
+        "sha256": "c414e9084b9d5312c1b0374a0bb21f15b181a12758c16fc712dcd4aa36638ba3"
+      },
+      {
+        "name": "reference_meshy_environment_prompts.md",
+        "sha256": "5c19e7f834c423485dd3777a0f0667b434b33d69c075d6be598ea2813a4a2750"
+      },
+      {
+        "name": "reference_roblox_ai_mesh_prompts.md",
+        "sha256": "92e3324cd8fc38509f6dcb60b463a2914f716f759afc1c6238a6faa327780d63"
+      },
+      {
+        "name": "user_profile.md",
+        "sha256": "1481b7ad37fb9098e1d0aff727ff6dc7485ab2f198c13c4d4f55b096da099b73"
+      }
+    ],
+    "git_commit": "592736cbcf708e2f6a51e26c91d450e7127acc1d",
+    "claude_cli_version": "2.1.145 (Claude Code)"
+  },
+  "model_alias_requested": "(Claude Code configured default \u2014 global settings.json: \"model\": \"sonnet\")",
+  "_note": "Model resolved from user settings.json; manifest backfilled after run because the original run.py did not parse modelUsage. Future runs auto-record this."
+}

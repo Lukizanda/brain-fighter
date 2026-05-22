@@ -1,0 +1,10 @@
+{
+  "className": "RemoteEvent",
+  "name": "ScoreUpdate",
+  "attributes": {
+    "Description": {
+      "Type": "String",
+      "Value": "fires after every kill, payload is killerUserId + newScore"
+    }
+  }
+}
