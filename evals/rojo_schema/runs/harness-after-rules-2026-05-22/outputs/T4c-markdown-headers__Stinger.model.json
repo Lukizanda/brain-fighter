@@ -1,0 +1,14 @@
+{
+  "className": "Sound",
+  "name": "Stinger",
+  "properties": {
+    "SoundId": {
+      "type": "Content",
+      "value": "rbxassetid://123456"
+    },
+    "Volume": {
+      "type": "Float32",
+      "value": 0.5
+    }
+  }
+}

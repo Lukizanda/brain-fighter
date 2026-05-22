@@ -1,0 +1,22 @@
+{
+  "className": "Folder",
+  "name": "Particles",
+  "children": [
+    {
+      "className": "ParticleEmitter",
+      "name": "Sparks",
+      "properties": {
+        "Texture": { "Content": "rbxasset://textures/particles/sparkle.dds" },
+        "Rate": { "Float32": 20 }
+      }
+    },
+    {
+      "className": "ParticleEmitter",
+      "name": "Smoke",
+      "properties": {
+        "Texture": { "Content": "rbxasset://textures/particles/smoke_main.dds" },
+        "Rate": { "Float32": 5 }
+      }
+    }
+  ]
+}

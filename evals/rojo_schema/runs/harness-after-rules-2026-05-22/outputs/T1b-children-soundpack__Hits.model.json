@@ -1,0 +1,27 @@
+{
+  "className": "Folder",
+  "name": "Hits",
+  "children": [
+    {
+      "className": "Sound",
+      "name": "HitSoft",
+      "properties": {
+        "SoundId": "rbxassetid://0"
+      }
+    },
+    {
+      "className": "Sound",
+      "name": "HitMedium",
+      "properties": {
+        "SoundId": "rbxassetid://0"
+      }
+    },
+    {
+      "className": "Sound",
+      "name": "HitHard",
+      "properties": {
+        "SoundId": "rbxassetid://0"
+      }
+    }
+  ]
+}

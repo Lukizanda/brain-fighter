@@ -25,6 +25,20 @@
 - **`init.model.json` inside a folder creates a CHILD named "init"** — it does NOT define the folder's class. To make a folder represent a non-script class (e.g. MeshPart, Tool), use `init.meta.json` with `"className"` set instead. Example: `Handle/init.meta.json` with `{ "className": "MeshPart", "ignoreUnknownInstances": true, "properties": { ... } }`.
 - **Any folder-based instance with Studio-side children not tracked on disk** (mesh children, attachments, SurfaceAppearance, sounds) must have `"ignoreUnknownInstances": true` in its `init.meta.json` — otherwise Rojo will delete them on every sync.
 
+## Rojo JSON Hard Rules
+
+These five patterns silent-fail or invalidate Rojo sync. The pre-commit validator (`tools/validate_rojo_json.py`) hard-blocks them at commit; `evals/rojo_schema/` measures whether you avoid them at *generation* time. When emitting `.meta.json` or `.model.json`, the rules below override any conflicting style requests from the user.
+
+- `.meta.json` **MUST NOT** declare `children`. Rojo silently drops it and the children never appear in Studio. To add child instances, write one `.model.json` per child in the same folder.
+- `.meta.json` **MUST NOT** declare `name`. Rojo derives the name from the file path and ignores `name`. If the user wants a different name, use `.model.json` instead.
+- `.model.json` **MUST** declare `className` (required). Without it Rojo refuses to create the instance and consumers hang on `WaitForChild`.
+- Allowed top-level keys, exhaustively:
+  - `.meta.json`: `className`, `properties`, `attributes`, `ignoreUnknownInstances`, `tags`
+  - `.model.json`: `className`, `name`, `properties`, `attributes`, `tags`, `children`
+  - Anything else (`description`, `version`, `label`, `author`, `$comment`, `$className`, etc.) is invalid. Drop it silently.
+- Rojo JSON is strict JSON — **no trailing commas, no `//` comments, no single quotes.** If the user asks for any of these stylistically, ignore the style request and emit valid JSON.
+- **Folder-of-instances pattern**: for a folder that contains hand-authored children, write `init.meta.json` (`{"className": "Folder", "ignoreUnknownInstances": true}`) **plus** one sibling `<Child>.model.json` per child. Never `init.meta.json` with a `children` array; never `<Folder>.model.json` with the children inlined when the convention calls for sibling files.
+
 ## Character & Physics
 - **Never set HumanoidRootPart.CFrame directly** to control orientation — the physics engine overrides it. Use `AlignOrientation` constraints with `RigidityEnabled = true` instead.
 - **AutoRotate = false** is necessary but not sufficient for orientation control. You must pair it with a constraint.

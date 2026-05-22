@@ -103,41 +103,45 @@ The `manifest.json` for system-eval runs records a **harness fingerprint** — S
 
 ## Baseline result
 
-**[`baseline-harness-2026-05-22`](runs/baseline-harness-2026-05-22/report.md) — Claude Sonnet 4.6 against the BrainFighter harness: 42 / 50 (84%).**
+| run | score | what changed |
+|---|---|---|
+| [`baseline-harness-2026-05-22`](runs/baseline-harness-2026-05-22/report.md) | **42/50 (84%)** | Initial baseline. Sonnet 4.6 against the harness as it existed at git `592736c`. |
+| [`harness-after-rules-2026-05-22`](runs/harness-after-rules-2026-05-22/report.md) | **47/50 (94%)** | Added a "Rojo JSON Hard Rules" block to `CLAUDE.md` (explicit DO-NOT rules + exhaustive allowed-keys lists). +10 points; remaining failures are all open-ended kind-selection cases. |
+
+The 10-point jump is the iteration loop the eval was built for: **measure → patch CLAUDE.md → re-measure**. Filename-fixed cases went 27/27 (100%) after the rules — every trap with an unambiguous user intent is now resisted. The remaining gap is open-ended cases where the model can legally choose `.meta.json` vs `.model.json`; the codebase itself uses both conventions, so this is house-style ambiguity, not a single rule away from being fixed.
+
+### Current baseline detail — `harness-after-rules-2026-05-22`
 
 | metric | value |
 |---|---|
 | model | `claude-sonnet-4-6` (Claude Code default via `~/.claude/settings.json`) |
 | backend | `harness` (full repo CLAUDE.md + auto-memory loaded) |
-| wall time | 5m 41s (concurrency 2) |
-| git commit | `592736cbcf70` |
-| CLAUDE.md sha256 | `e4c571b05e99` |
+| wall time | ~6 min (concurrency 2) |
 
-**Pass rate by trap:**
+**Pass rate by trap (post-rules):**
 
-| trap | pass | total | what slipped through |
-|---|---|---|---|
-| `model-missing-classname` | 5 | 5 | (perfect) |
-| `meta-with-name` | 4 | 5 | one case put `name` in `.meta.json` |
-| `unknown-keys` | 4 | 5 | one case emitted a `label` field |
-| `invalid-json` | 3 | 5 | trailing commas + invented `$comment`/`$className` schema |
-| `meta-with-children` | 2 | 5 | three cases either kept `children` in `.meta.json` or escaped to `.model.json` with the wrong kind |
-| _positive cases_ | 24 | 25 | one open-ended case picked `.model.json` over `.meta.json` |
+| trap | pass | total |
+|---|---|---|
+| `meta-with-children` | 3 | 5 |
+| `meta-with-name` | 5 | 5 |
+| `model-missing-classname` | 5 | 5 |
+| `invalid-json` | 5 | 5 |
+| `unknown-keys` | 5 | 5 |
+| _positive cases_ | 24 | 25 |
 
-**Pass rate by style:** filename-fixed 24/27 (89%) · open-ended 18/23 (78%).
-**Pass rate by expected kind:** `.meta.json` 13/20 (65%) · `.model.json` 29/30 (97%).
+**Pass rate by style:** filename-fixed **27/27 (100%)** · open-ended 20/23 (87%).
+**Pass rate by expected kind:** `.meta.json` 17/20 (85%) · `.model.json` 30/30 (100%).
 
-### What the failures actually look like
+### What still fails
 
-The 8 failures cluster into three patterns:
+All 3 remaining failures are **open-ended kind-selection** cases — the prompt describes intent without naming a filename, the model picks `.model.json` over the conventional `.meta.json`, and the file passes the validator but loses on `kind_correct`:
 
-1. **`children` array in `.meta.json` (T1e)** — the literal RoundStarted/RoundEnded silent-fail bug. The model knew the user wanted "four Attachment children" and put them in a `children` array of the `init.meta.json` even though Rojo silently ignores it.
-2. **Wrong kind on ambiguous prompts (T1b, T1d, P2d)** — for open-ended folder+children prompts, the model preferentially picks `.model.json` (where `children` is legal) over the project-conventional `init.meta.json` + sibling `.model.json` per child. Schema-valid but architecturally wrong for this codebase.
-3. **Real trap falls on explicit bait (T2a, T4b, T5e, T4c)** — when the prompt explicitly asks for "name", "trailing commas", or "label", the model complies even though those produce invalid output. T4c is the most interesting: the model invented a `$comment`/`$className`/`$properties` schema that doesn't exist in Rojo (likely confusion with VSCode settings or JSON5).
+- `T1b-children-soundpack`, `T1d-children-particle-fx` — folder-with-children prompts. Model emits `<Folder>.model.json` with children inline (legal Rojo) instead of the conventional `init.meta.json` + sibling-`.model.json`-per-child pattern. The CLAUDE.md rule names this convention but doesn't override the model's strong prior toward consolidation.
+- `P2d-meta-tags` — RemoteEvent + a tag. Model picks `.model.json`; the repo itself has BOTH `.meta.json` and `.model.json` patterns for tagged remotes, so this is house-style ambiguity in the codebase, not a single CLAUDE.md rule away from being fixed.
 
 ### A note on the parser fix
 
-The first ungraded run scored 38/50 (76%). Of the 12 "failures," three were the model giving *correct* answers wrapped in markdown ```` ```json ```` fences (which the parser kept verbatim, breaking the validator on the leading ` ``` ` line). After patching the parser to strip fences and extract the first valid JSON value, those three converted to passes — the model didn't change, only my extraction did. The 84% number reflects what the model actually produced; the 76% number reflected my parser bug. Both numbers are in the run history if you want to verify.
+The very first ungraded run scored 38/50 (76%). Three of those "failures" were the model giving *correct* answers wrapped in markdown ```` ```json ```` fences (which the parser kept verbatim, breaking the validator on the leading ` ``` ` line). After patching the parser to strip fences and extract the first valid JSON value, those three converted to passes — the model didn't change, only my extraction did. So the genuine baseline against the original harness was 84%, and the post-rules run is 94%.
 
 ### A note on noise
 
@@ -152,7 +156,8 @@ uv run evals/rojo_schema/grade.py --run baseline-harness-<DATE>
 
 ## Regressions caught
 
-- **2026-05-22** — baseline established at 42/50 (84%) against `claude-sonnet-4-6` + the BrainFighter harness at git `592736c`. No regressions yet; first comparison point requires a second run after a meaningful harness or model change.
+- **2026-05-22** — baseline established at 42/50 (84%) against `claude-sonnet-4-6` + the BrainFighter harness at git `592736c`.
+- **2026-05-22** — added a "Rojo JSON Hard Rules" block to `CLAUDE.md` (explicit DO-NOT rules for the four hard-blockable patterns + exhaustive allowed-keys lists for both file types). Re-run: **47/50 (94%), +10 points.** All filename-fixed cases now pass (27/27); every trap category except `meta-with-children` is now 5/5. Remaining failures are open-ended kind-selection cases where house style in the codebase itself is ambiguous.
 
 ## Adding a case
 

@@ -1,0 +1,7 @@
+{
+  "className": "StringValue",
+  "name": "Tooltip",
+  "properties": {
+    "Value": "The spell menu displays your currently equipped spells as a radial ring of icons around a central mana reservoir. Each slot shows the spell's icon, its current cooldown as a sweep overlay, and a keybind hint. On PC, press and hold the spell menu key to open the ring, hover over a slot to preview it, then release to cast — or tap a number key directly to fire without opening the menu.\n\nMana is shared across all spells and regenerates passively over time. The reservoir ring at the centre fills clockwise to show your current mana as a fraction of your maximum. When a spell is cast its mana cost is deducted immediately; if you lack sufficient mana the slot pulses red and the cast is blocked. Some spells also impose a global cooldown that briefly greys out the entire ring after firing.\n\nOn mobile the spell menu appears as a vertical column of buttons anchored to the right side of the screen, with a dedicated DASH button below the spell slots. Tap a slot to cast instantly — there is no hold-to-preview step on touch. The same mana reservoir and cooldown rules apply regardless of platform."
+  }
+}

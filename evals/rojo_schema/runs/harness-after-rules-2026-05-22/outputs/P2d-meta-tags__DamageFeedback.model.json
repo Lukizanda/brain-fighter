@@ -1,0 +1,5 @@
+{
+  "className": "RemoteEvent",
+  "name": "DamageFeedback",
+  "tags": ["client-feedback"]
+}
