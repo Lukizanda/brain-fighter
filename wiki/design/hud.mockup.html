@@ -562,12 +562,14 @@
     padding: 1px 4px;
     border-radius: 4px;
   }
-  .tier-tick.t1 { left: 6.25%; }   /* 10/160 */
-  .tier-tick.t2 { left: 18.75%; }  /* 30/160 */
-  .tier-tick.t3 { left: 50%; }     /* 80/160 */
-  .tier-label.t1 { left: 6.25%; }
-  .tier-label.t2 { left: 18.75%; }
-  .tier-label.t3 { left: 50%; }
+  .tier-tick.t1 { left: 8.33%; }   /* 5/60 */
+  .tier-tick.t2 { left: 16.67%; }  /* 10/60 */
+  .tier-tick.t3 { left: 33.33%; }  /* 20/60 */
+  .tier-tick.t4 { left: 66.67%; }  /* 40/60 (red only) */
+  .tier-label.t1 { left: 8.33%; }
+  .tier-label.t2 { left: 16.67%; }
+  .tier-label.t3 { left: 33.33%; }
+  .tier-label.t4 { left: 66.67%; }
   .tier-label.cap { left: 100%; transform: translateX(-100%); color: var(--gold-light); }
 
   .tier-tick.unlocked {
@@ -1032,9 +1034,9 @@
     width: 2px;
     background: rgba(255,255,255,0.55);
   }
-  .mini-reservoir .mini-tick.t1 { left: 6.25%; }
-  .mini-reservoir .mini-tick.t2 { left: 18.75%; }
-  .mini-reservoir .mini-tick.t3 { left: 50%; }
+  .mini-reservoir .mini-tick.t1 { left: 8.33%; }
+  .mini-reservoir .mini-tick.t2 { left: 16.67%; }
+  .mini-reservoir .mini-tick.t3 { left: 33.33%; }
   .mini-reservoir .mini-value {
     font-size: 11px;
     font-weight: bold;
@@ -1277,22 +1279,25 @@
               Damage
               <small>Red Energy</small>
             </div>
-            <div class="reservoir-value">85<small>/160</small></div>
+            <div class="reservoir-value">52<small>/60</small></div>
           </div>
           <div class="res-bar">
-            <div class="res-fill" style="width: 53%;"></div>
+            <div class="res-fill" style="width: 87%;"></div>
             <div class="tier-tick t1 unlocked"></div>
             <div class="tier-tick t2 unlocked"></div>
             <div class="tier-tick t3 unlocked"></div>
-            <div class="tier-label t1">10</div>
-            <div class="tier-label t2">30</div>
-            <div class="tier-label t3">80</div>
-            <div class="tier-label cap">160</div>
+            <div class="tier-tick t4 unlocked"></div>
+            <div class="tier-label t1">5</div>
+            <div class="tier-label t2">10</div>
+            <div class="tier-label t3">20</div>
+            <div class="tier-label t4">40</div>
+            <div class="tier-label cap">60</div>
           </div>
           <div class="tier-spells">
-            <div class="spell ready">T1·SPARK</div>
+            <div class="spell ready">T1·FIREBOLT</div>
             <div class="spell ready">T2·FIREBALL</div>
             <div class="spell ready">T3·INFERNO</div>
+            <div class="spell ready">T4·VOLLEY</div>
           </div>
           <div class="reservoir-cast-hint">Tap <span class="arrow">·</span> Drag <span class="arrow">⟵</span> to cast</div>
         </div>
@@ -1305,17 +1310,17 @@
               Healing
               <small>Green Energy</small>
             </div>
-            <div class="reservoir-value">35<small>/160</small></div>
+            <div class="reservoir-value">16<small>/60</small></div>
           </div>
           <div class="res-bar">
-            <div class="res-fill" style="width: 22%;"></div>
+            <div class="res-fill" style="width: 27%;"></div>
             <div class="tier-tick t1 unlocked"></div>
             <div class="tier-tick t2 unlocked"></div>
             <div class="tier-tick t3"></div>
-            <div class="tier-label t1">10</div>
-            <div class="tier-label t2">30</div>
-            <div class="tier-label t3">80</div>
-            <div class="tier-label cap">160</div>
+            <div class="tier-label t1">5</div>
+            <div class="tier-label t2">10</div>
+            <div class="tier-label t3">20</div>
+            <div class="tier-label cap">60</div>
           </div>
           <div class="tier-spells">
             <div class="spell ready">T1·MEND</div>
@@ -1333,17 +1338,17 @@
               Utility
               <small>Blue Energy</small>
             </div>
-            <div class="reservoir-value">22<small>/160</small></div>
+            <div class="reservoir-value">8<small>/60</small></div>
           </div>
           <div class="res-bar">
-            <div class="res-fill" style="width: 14%;"></div>
+            <div class="res-fill" style="width: 13%;"></div>
             <div class="tier-tick t1 unlocked"></div>
             <div class="tier-tick t2"></div>
             <div class="tier-tick t3"></div>
-            <div class="tier-label t1">10</div>
-            <div class="tier-label t2">30</div>
-            <div class="tier-label t3">80</div>
-            <div class="tier-label cap">160</div>
+            <div class="tier-label t1">5</div>
+            <div class="tier-label t2">10</div>
+            <div class="tier-label t3">20</div>
+            <div class="tier-label cap">60</div>
           </div>
           <div class="tier-spells">
             <div class="spell ready">T1·FROST</div>
@@ -1455,18 +1460,18 @@
         <div class="spell-entry green">
           <span class="icon">🌿</span>
           <span class="name">Mend</span>
-          <span class="cost">T1 · 10</span>
+          <span class="cost">T1 · 5</span>
         </div>
         <div class="spell-entry green highlighted placement">
           <span class="icon">🪨</span>
           <span class="name">Stone Wall</span>
-          <span class="cost">T2 · 30</span>
+          <span class="cost">T2 · 10</span>
           <span class="targeting-hint" title="placement spell — aim required">⌖</span>
         </div>
         <div class="spell-entry green locked">
           <span class="icon">🌿</span>
           <span class="name">Sanctuary</span>
-          <span class="cost">T3 · 80 — locked</span>
+          <span class="cost">T3 · 20 — locked</span>
         </div>
       </div>
 
@@ -1480,19 +1485,19 @@
       <div class="mini-reservoir green">
         <div class="mini-icon">🌿</div>
         <div class="mini-bar">
-          <div class="mini-fill" style="width: 21.875%;"></div>
+          <div class="mini-fill" style="width: 26.7%;"></div>
           <div class="mini-tick t1"></div>
           <div class="mini-tick t2"></div>
           <div class="mini-tick t3"></div>
         </div>
-        <div class="mini-value">35 / 160</div>
+        <div class="mini-value">16 / 60</div>
       </div>
     </div>
 
     <div style="flex: 1;">
       <h2>VARIANT — Reservoir-cast active</h2>
       <div class="sub">
-        Player <strong>drags from the Green reservoir inward</strong> (toward the screen center); a vertical menu opens to the left, listing <em>all currently-affordable tiers of green</em>. With Green at 35: <strong>Mend</strong> (T1·10) and <strong>Stone Wall</strong> (T2·30) are bright and selectable; <strong>Sanctuary</strong> (T3·80) is locked. Finger hovers on Stone Wall — releasing here fires it and drains 30 from Green; the ✛ marks it as a placement spell, so a second aim step will follow.
+        Player <strong>drags from the Green reservoir inward</strong> (toward the screen center); a vertical menu opens to the left, listing <em>all currently-affordable tiers of green</em>. With Green at 16: <strong>Mend</strong> (T1·5) and <strong>Stone Wall</strong> (T2·10) are bright and selectable; <strong>Sanctuary</strong> (T3·20) is locked. Finger hovers on Stone Wall — releasing here fires it and drains 10 from Green; the ✛ marks it as a placement spell, so a second aim step will follow.
       </div>
       <div class="sub">
         Release inside the dashed cancel zone (anywhere off the menu) = cancel — no energy spent. A simple <strong>tap</strong> on the reservoir (no drag) fires that color's highest currently-affordable tier — here, Stone Wall — as the casual-flow shortcut. The Memorize (✨) button is unaffected by this gesture; it only commits the buffered word into mana.
@@ -1511,17 +1516,17 @@
 
     <div class="legend-item">
       <h3>② Energy Reservoirs (color-blind safe)</h3>
-      <p>Each reservoir is labelled by <strong>icon + color + name</strong> (🔥 / 🌿 / ❄️) so the three streams are distinguishable without color. Tick marks at <strong>T1·10 / T2·30 / T3·80</strong> with cap at <strong>160</strong>. Unlocked tiers glow gold; locked spells are dimmed in the roster strip below.</p>
+      <p>Each reservoir is labelled by <strong>icon + color + name</strong> (🔥 / 🌿 / ❄️) so the three streams are distinguishable without color. Tick marks at <strong>T1·5 / T2·10 / T3·20</strong> (red adds <strong>T4·40</strong> for Volley) with cap at <strong>60</strong>. Unlocked tiers glow gold; locked spells are dimmed in the roster strip below.</p>
     </div>
 
     <div class="legend-item">
       <h3>③ Memorize (commit button)</h3>
-      <p>Icon-only ✨ button next to the buffer. <strong>Tap</strong> validates the buffered word against the dictionary. <strong>Valid</strong> → the word's energy transmutes into the matching color reservoirs (value-weighted), buffer clears. <strong>Invalid</strong> → fizzle: button shakes, buffer flashes red, letters preserved so the player can correct. <em>No spell fires from this action.</em></p>
+      <p>Icon-only ✨ button next to the buffer. <strong>Tap</strong> validates the buffered word against the dictionary. <strong>Valid</strong> → the word's energy transmutes into the matching color reservoirs (value-weighted), buffer clears. <strong>Invalid</strong> → fizzle: button shakes, buffer flashes red, and the buffer is <strong>cleared</strong> — the letters are consumed, so a bad commit costs the collected tiles. <em>No spell fires from this action.</em></p>
     </div>
 
     <div class="legend-item">
       <h3>④ Cast (reservoir-driven)</h3>
-      <p>Each color's reservoir is the cast surface for that color. <strong>Tap a reservoir</strong> = fire its highest currently-affordable tier. <strong>Drag from a reservoir</strong> = open a vertical menu listing <em>all that color's affordable tiers</em> (Spark/Fireball/Inferno for red), with locked tiers greyed; release on the desired tier to fire it. Release outside the menu cancels. See the <em>Reservoir-cast active</em> variant panel for the active state.</p>
+      <p>Each color's reservoir is the cast surface for that color. <strong>Tap a reservoir</strong> = fire its highest currently-affordable tier. <strong>Drag from a reservoir</strong> = open a vertical menu listing <em>all that color's affordable tiers</em> (Firebolt/Fireball/Inferno/Volley for red), with locked tiers greyed; release on the desired tier to fire it. Release outside the menu cancels. See the <em>Reservoir-cast active</em> variant panel for the active state.</p>
     </div>
 
   </div>
@@ -1538,7 +1543,7 @@ should be reviewed by the parent session before locking in:
    now two distinct actions on distinct surfaces.
      - Memorize button: icon-only ✨ next to the buffer. Validates
        the word, deposits energy into reservoirs on valid, fizzles
-       on invalid (letters preserved). No spell fires.
+       on invalid (buffer cleared — letters consumed). No spell fires.
      - Reservoirs are the cast surface: tap = highest affordable
        tier of that color; drag from reservoir = list of all that
        color's affordable tiers (locked tiers greyed); release on
@@ -1552,7 +1557,7 @@ should be reviewed by the parent session before locking in:
     rather than "fire."
 
 1b. Drag-state demoed against the GREEN reservoir to illustrate the
-    locked-tier visual (Green=35 → Mend T1 + Stone Wall T2 affordable;
+    locked-tier visual (Green=16 → Mend T1 + Stone Wall T2 affordable;
     Sanctuary T3 locked). Stone Wall shows the resolved placement-
     mode marker: ⌖ crosshair glyph on the right + dashed border on
     the entry (auto-target entries use solid borders). Production
