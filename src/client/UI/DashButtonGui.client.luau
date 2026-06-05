@@ -24,15 +24,8 @@ local dashButton = DashButtonBuilder.build()
 dashButton.gui.LayoutOrder = DashButtonConfig.LAYOUT_ORDER
 HudLayoutManager:register(DASH_REGION, dashButton.gui)
 
--- Apply spacing config directly onto the region so both values are
--- the sole source of truth (UIPadding on the container would affect
--- children, not external spacing).
-local region = HudLayoutManager:getRegion(DASH_REGION)
-local regionLayout = region:FindFirstChildOfClass("UIListLayout")
-if regionLayout then
-	regionLayout.Padding = UDim.new(0, DashButtonConfig.SPELL_GAP)
-end
-region.Position = UDim2.new(1, -20, 1, -DashButtonConfig.BOTTOM_MARGIN)
+-- BottomRight column geometry (screen margin + SpellMenu↔DASH gap) is
+-- owned by HudConstants.REGIONS.BottomRight, applied by HudLayoutManager.
 
 local function updateVisible()
 	dashButton.gui.Visible = HudLayoutManager:isTouch()

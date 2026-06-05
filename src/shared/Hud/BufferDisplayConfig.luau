@@ -51,6 +51,17 @@ local BufferDisplayConfig = {
 	VALID_WORD_STROKE_THICKNESS = 2,
 	VALID_WORD_STROKE_PULSE     = TweenInfo.new(0.60, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 
+	-- Interaction (Phase 4.7 drag-to-reorder / tap-to-swap)
+	DRAG_THRESHOLD_PX         = 8,
+	GHOST_TRANSPARENCY        = 0.45,
+	GHOST_ZINDEX              = 20,
+	SELECTION_STROKE_NAME     = "SelectionStroke",
+	SELECTION_STROKE_COLOR    = Color3.fromRGB(255, 215, 0),
+	SELECTION_STROKE_THICKNESS = 2,
+	SNAP_FLASH_DURATION       = 0.18,
+	PULSE_STROKE_NAME         = "MindFullPulseStroke",
+	-- VALID_WORD_STROKE_NAME is declared above under "Valid-word glow"
+
 	-- Tile sparkle (TextLabel drift animation, no external assets)
 	SPARKLE_CHAR      = "*",
 	SPARKLE_COLOR     = Color3.fromRGB(255, 240, 130),

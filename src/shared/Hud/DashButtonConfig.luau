@@ -22,11 +22,9 @@ local DashButtonConfig = {
 	LABEL_FONT          = Enum.Font.GothamBold,
 	LABEL_TEXT_SIZE     = 24,
 	-- BottomRight column slot. SpellMenu = 1 (top), DASH = 2 (below it, above native jump).
+	-- The column's screen margin and SpellMenu↔DASH gap live in
+	-- HudConstants.REGIONS.BottomRight (region geometry is the manager's domain).
 	LAYOUT_ORDER        = 2,
-	-- Gap between the bottom of the SpellMenu and the top of the DASH button.
-	SPELL_GAP           = 36,
-	-- Gap between the bottom of the DASH button and the screen edge.
-	BOTTOM_MARGIN       = 260,
 }
 
 return DashButtonConfig

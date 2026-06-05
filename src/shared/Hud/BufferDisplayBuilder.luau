@@ -28,16 +28,16 @@ local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
 local log = Logger.new("BufferDisplay")
 
--- ── Interaction constants ─────────────────────────────────────────
-local DRAG_THRESHOLD_PX = 8
-local GHOST_TRANSPARENCY = 0.45
-local GHOST_ZINDEX = 20
-local SELECTION_STROKE_NAME = "SelectionStroke"
-local SELECTION_STROKE_COLOR = Color3.fromRGB(255, 215, 0)
-local SELECTION_STROKE_THICKNESS = 2
-local SNAP_FLASH_DURATION = 0.18
-local PULSE_STROKE_NAME      = "MindFullPulseStroke"
-local VALID_WORD_STROKE_NAME = "ValidWordStroke"
+-- ── Interaction constants (sourced from BufferDisplayConfig) ──────
+local DRAG_THRESHOLD_PX = Defaults.DRAG_THRESHOLD_PX
+local GHOST_TRANSPARENCY = Defaults.GHOST_TRANSPARENCY
+local GHOST_ZINDEX = Defaults.GHOST_ZINDEX
+local SELECTION_STROKE_NAME = Defaults.SELECTION_STROKE_NAME
+local SELECTION_STROKE_COLOR = Defaults.SELECTION_STROKE_COLOR
+local SELECTION_STROKE_THICKNESS = Defaults.SELECTION_STROKE_THICKNESS
+local SNAP_FLASH_DURATION = Defaults.SNAP_FLASH_DURATION
+local PULSE_STROKE_NAME      = Defaults.PULSE_STROKE_NAME
+local VALID_WORD_STROKE_NAME = Defaults.VALID_WORD_STROKE_NAME
 
 export type Tile = { letter: string, color: string }
 

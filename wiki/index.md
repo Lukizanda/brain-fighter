@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-05-20
+updated: 2026-06-05
 ---
 
 # Wiki Index
@@ -13,7 +13,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[design/gameplay-loop]] — canonical core loop: aim → shoot letter blocks → buffer/arrange → cast color-typed spells; tuning, spell roster, worked examples
 - [[design/build-plan]] — phased build plan with parallel/sequential dependencies; one tracker per system
 - [[design/ArtDirection]] — lowpoly / chunky / oversized sci-fi proportions; greybox-first level building
-- [[design/ui-architecture-review]] — Phase 4.8 audit of `src/client/UI/`, `src/client/PlayerHud/`, `src/shared/Hud/`; 1 High (NIM-19) / 6 Medium / 4 Low; Phase 5 gate = GO
+- [[design/ui-architecture-review]] — Phase 4.8 audit of `src/client/UI/` + `src/shared/Hud/` (re-audited 2026-06-05); R-1..R-4 cleanup landed + verified, no High open; 2 Medium / 3 Low deferred; Phase 5 gate = GO
 
 ## Systems
 
@@ -26,22 +26,24 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/GameMode]] — RoundManager, ScoreTracker, mode registry (FFA, TDM)
 - [[systems/Tests]] — TestRunner + suites for NPC/Melee, MCP-driven harness
 - [[systems/EnergyEconomy]] — Phase 1 pure-Luau module: word → per-color mana (Scrabble values × length tiers, floor-reconciled color splits)
-- [[systems/EnergyReservoirs]] — Phase 1 pure-Luau state container: three per-color energy bars, cap 160, `.changed(color)` BindableEvent signal
-- [[systems/Dictionary]] — Phase 1 pure-Luau word lookup; case-insensitive `isWord`, ~79.5k words (SCOWL 60); 26 per-letter sub-modules background-preloaded at game start
-- [[systems/MemorizeAction]] — Phase 2 action: validate buffered word → split per-color energy into reservoirs + clear buffer; fizzle on empty/invalid (buffer preserved)
-- [[systems/SpellExecutor]] — Phase 2 effect runner; dispatches `damage`/`heal`/`freeze` (real) and `shield`/`wall`/`buff` (stubs) against caster/target
+- [[systems/EnergyReservoirs]] — Phase 1 pure-Luau state container: three per-color energy bars, cap 60, `.changed(color)` BindableEvent signal
+- [[systems/Dictionary]] — Phase 1 pure-Luau word lookup; case-insensitive `isWord`, ~79.9k words (SCOWL 60 + geographic supplement); 26 per-letter sub-modules background-preloaded at game start
+- [[systems/WordBuffer]] — Phase 1 pure-Luau 12-slot color-tagged buffer for the word being spelled; append-on-shot, reorder, double-tap-destroy; drains on Memorize
+- [[systems/MemorizeAction]] — Phase 2 action: validate buffered word → split per-color energy into reservoirs + clear buffer; fizzle on empty (no mutation) or invalid (buffer cleared, letters consumed)
+- [[systems/SpellRegistry]] — Phase 1 config layer for the spell roster (R/G/B × T1–T4); tier costs 5/10/20/40, name/color/cost/targeting/`skill:SkillSpec`; consumed by SpellExecutor + SpellMenu HUD
+- [[systems/SpellExecutor]] — Phase 2 effect runner; dispatches `damage`/`heal`/`freeze`/`knockup` (real) and `shield`/`wall`/`buff` (stubs) against caster/target
 - [[systems/MindFullManager]] — Phase 2 transition watcher over WordBuffer: rising-edge `mindFull` / falling-edge `mindFreed` signals for the shoot gate + HUD indicator
-- [[systems/CastAction]] — Phase 2 cast pipeline: `tapReservoir` (highest affordable) / `castSpecific` (chosen tier); drains reservoir, refunds on executor failure
+- [[systems/CastAction]] — Phase 2 cast pipeline: `tapReservoir` (highest affordable) / `castSpecific` (chosen tier); drains reservoir, refunds on executor failure, fires `spellResolved`
 - [[systems/LetterBlock]] — Phase 3 entity: floating block prefab with `Block.Letter` + `Block.Color` attributes; chunky 4×4×4 cube with 6-face SurfaceGui letter glyph + colored ParticleEmitter; CollectionService tag drives the client bob/rotation animator (6°/s, sinusoidal bob)
 - [[systems/BlockSpawner]] — Phase 3 server-side populator: Scrabble-weighted letter picks, configurable color weights, auto-refill via CollectionService removed signal; maintains ~24 blocks in a 40x8x40 arena box
 - [[systems/BlockShoot]] — shared helpers + server handler for block consumption; client input now handled by LetterBlaster (Phase 4.6)
 - [[systems/Boss]] — Full boss system: custom non-humanoid rig (BossBrain sphere), AI state machine (Idle/Patrol/AttackPrep/Attack/Cooldown), phase scaffolding, FireballVolley + GroundSlam attacks, BossHudGui health bar
 - [[systems/BossAdapter]] — Phase 3 MVP (superseded): static Humanoid-bearing Model; disabled once the full Boss system landed
 - [[systems/SkillPipeline]] — Unified `SkillSpec` + `SkillEffects` + `SkillDelivery` shared by player spells and boss attacks; pure data-driven dispatch, multi-effect `onImpact` arrays, reserved hooks for VFX/SFX/status-effects
-- [[systems/LetterBlaster]] — Phase 4.6 weapon Tool: Tool.Activated → cooldown gate → raycast → consume; reticle via ReticleBuilder; FireSound/HitSound; replaces BlockShootBoot
+- [[systems/LetterBlaster]] — Phase 4.6 weapon controller behind the Spelling Staff Tool: Tool.Activated → cooldown → mind-full gate → raycast → consume + laser blast; FireSound/HitSound/FizzleSound; no reticle (tap directly on blocks)
 - [[systems/AudioSFX]] — Sound effect inventory, two-backend overview (Sound vs AudioPlayer), wiring patterns, placeholder locations, gap priority list
 - [[systems/Tutorial]] — Phase 5 guided first-play sequence: shoot → buffer → memorize → cast → boss hit; step machine, overlay builder, skip flag (planning)
-- [[systems/VisualEffects]] — Phase 5 VFX plan: world spell cast/impact particles, UI feedback tweens, per-color (R/G/B) theming; VfxService + VfxConfig architecture (planning)
+- [[systems/VisualEffects]] — world spell cast/impact particles + cross-client broadcast (VfxController + spawnEffect + VfxBroadcastService); per-color (R/G/B) theming. Core shipped; PERF guardrails + green casts still planned
 
 ## Concepts (recurring patterns)
 

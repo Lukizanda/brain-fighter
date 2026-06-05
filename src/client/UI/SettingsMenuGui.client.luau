@@ -73,6 +73,7 @@ end
 ----------------------------------------------------------------------
 
 local handle = SettingsMenuBuilder.build()
+handle.gui.Parent = player.PlayerGui
 
 ----------------------------------------------------------------------
 -- Wire callbacks — apply immediately and persist to attributes

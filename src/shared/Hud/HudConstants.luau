@@ -15,13 +15,17 @@ local HudConstants = {
 			ZIndex = 1,
 		},
 		BottomRight = {
-			Position = UDim2.new(1, -20, 1, 0),  -- Y = 0; DASH bottom margin (DashButtonConfig.BOTTOM_MARGIN) owns the screen gap
+			-- Mobile vertical column (SpellMenu top, DASH below, above native jump).
+			-- The -260 Y offset lifts the column off the screen edge to clear the
+			-- native Roblox jump button; stackPadding is the SpellMenu↔DASH gap.
+			-- Both are authored at REFERENCE_HEIGHT and scaled by the HUD UIScale.
+			Position = UDim2.new(1, -20, 1, -260),
 			AnchorPoint = Vector2.new(1, 1),
 			Size = UDim2.new(0, 640, 0, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
 			ZIndex = 1,
 			stackVertical = true,
-			stackPadding = 0,  -- gap between SpellMenu and DASH is owned by DashButtonConfig.SPELL_GAP
+			stackPadding = 36,
 		},
 		BottomCenter = {
 			Position = UDim2.new(0.5, 0, 1, -20),

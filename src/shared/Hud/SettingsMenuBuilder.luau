@@ -5,7 +5,6 @@
 -- methods and callbacks for when settings change.
 ----------------------------------------------------------------------
 local TweenService = game:GetService("TweenService")
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
@@ -41,7 +40,6 @@ end
 
 function SettingsMenuBuilder.build(configOverrides: { [string]: any }?)
 	local config = mergeConfig(configOverrides)
-	local player = Players.LocalPlayer
 	local connections: { RBXScriptConnection } = {}
 	local tweens: { Tween } = {}
 
@@ -68,7 +66,7 @@ function SettingsMenuBuilder.build(configOverrides: { [string]: any }?)
 	screenGui.DisplayOrder = config.DISPLAY_ORDER
 	screenGui.IgnoreGuiInset = true
 	screenGui.Enabled = false
-	screenGui.Parent = player.PlayerGui
+	-- Caller mounts handle.gui to PlayerGui (keeps this module client-global-free).
 
 	-- Dimmer overlay
 	local dimmer = Instance.new("Frame")

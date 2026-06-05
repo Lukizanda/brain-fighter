@@ -26,9 +26,9 @@ Pure Luau modules. Zero Roblox-instance dependencies. All five built in parallel
 |---|---|---|
 | **Dictionary** | `isWord(s)`, `getStats()` | Hashtable lookup. 26 per-letter sub-modules from SCOWL 60 (~79.5k words); background-preloaded at game start. |
 | **EnergyEconomy** | `letterValue(c)`, `lengthMultiplier(len)`, `computeWordEnergy(word)`, `splitByColor(tiles)` | Scrabble values × length tiers. Sanity-checked against the worked examples in `gameplay-loop.md`. |
-| **SpellRegistry** | `getSpell(color, tier)`, `listAffordableSpells(color, energy)` | Config for 9 spells (R/G/B × T1/T2/T3) — cost, targetingMode, effectSpec. |
+| **SpellRegistry** | `getSpell(color, tier)`, `listAffordableSpells(color, energy)` | Config for 10 spells (R/G/B × T1–T3 + red T4 Volley) — cost, targetingMode, `skill:SkillSpec`. |
 | **WordBuffer** | `new(cap)`, `:append(letter,color)`, `:remove(idx)`, `:reorder(from,to)`, `:clear()`, `:asWord()`, `:colorBag()`, `:isFull()`, `.changed` | 12-slot state + changed signal. |
-| **EnergyReservoirs** | `new()`, `:add(color,n)`, `:get(color)`, `:canAfford(color,n)`, `:drain(color,n)`, `.changed(color)` | 3-color state with per-color signal. Cap 160 per color. |
+| **EnergyReservoirs** | `new()`, `:add(color,n)`, `:get(color)`, `:canAfford(color,n)`, `:drain(color,n)`, `.changed(color)` | 3-color state with per-color signal. Cap 60 per color. |
 
 **Milestone:** each module passes its own smoke-test asserts (e.g. `Dictionary.isWord("FIRE")` → true, `EnergyEconomy.computeWordEnergy("FLAME")` → 15). Each ships with a `wiki/systems/<Name>.md` page.
 
@@ -116,9 +116,11 @@ Add drag-to-reorder and tap-to-swap interactions to the BufferDisplay letter til
 - `src/shared/Hud/BufferDisplayBuilder.luau` — main input handler work
 - `src/client/UI/GameplayHudGui.client.luau` (or equivalent boot script) — wire `session.wordBuffer` into tile event callbacks
 
-## Phase 4.8 — UI Architecture Review
+## Phase 4.8 — UI Architecture Review ✓ COMPLETE
 
-Before Phase 5 polish work, conduct a structured review of the client UI system for modularity, single-ownership, and software design quality. Scope: `src/client/UI/`, `src/client/PlayerHud/`, `src/shared/Hud/`.
+Before Phase 5 polish work, conduct a structured review of the client UI system for modularity, single-ownership, and software design quality. Scope: `src/client/UI/`, `src/shared/Hud/` (`src/client/PlayerHud/` removed since the original audit).
+
+**Status (2026-06-05):** Re-audited from current source; GO for Phase 5 confirmed. The recommended cleanup (R-1 SettingsMenuBuilder decouple / NIM-19, R-2 dead ReservoirBars delete, R-3 BufferDisplay constants → Config, R-4 DashButton region geometry → HudConstants) landed and was verified by playtest. No High findings remain open; R-5..R-9 (2 Medium / 3 Low) deferred into Phase 5. Full findings + resolutions: [[design/ui-architecture-review]].
 
 | Question | What to check |
 |---|---|
@@ -137,6 +139,7 @@ Tuning passes (energy curve, spawn density, tier thresholds), audio cues, partic
 
 ## Plan changelog
 
+- **2026-06-05**: Phase 4.8 (UI architecture review) re-audited + complete — R-1..R-4 cleanup landed and verified by playtest; GO for Phase 5. R-5..R-9 (2 Medium / 3 Low) deferred.
 - **2026-06-05**: Phase 4.7 (letter slot drag/tap-to-swap) confirmed complete — both interactions implemented in `BufferDisplayBuilder.luau`, mouse + touch supported.
 - **2026-05-20**: added Phase 4.8 (UI architecture review) as a gate before Phase 5 polish.
 - **2026-05-20**: HUD coordinator refactor landed — `PlayerHud` is now a ModuleScript; `GameplayHudGui` is the sole BottomCenter coordinator with a single `LAYOUT` table.
