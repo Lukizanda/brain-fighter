@@ -28,9 +28,7 @@
     "StarterGui": {
       "$className": "StarterGui",
       "$properties": {
-        "ScreenOrientation": {
-          "Enum": "LandscapeSensor"
-        }
+        "ScreenOrientation": "LandscapeSensor"
       }
     },
 

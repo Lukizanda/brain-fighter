@@ -25,7 +25,7 @@ local BufferDisplayConfig = {
 
 	-- Letter text
 	TEXT_FONT                = Enum.Font.GothamBold,
-	TEXT_SIZE                = 14,
+	TEXT_SIZE                = 36,
 	TEXT_COLOR               = Color3.fromRGB(255, 255, 255),
 	TEXT_STROKE_TRANSPARENCY = 0.4,
 

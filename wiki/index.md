@@ -56,6 +56,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[concepts/ValidateBeforeShip]] — a fix is not done until you've observed it working; build a deterministic repro before pushing
 - [[concepts/RobloxOpenCloudAuth]] — Open Cloud "Invalid API Key" 401 with a previously-working key → regenerate from the dashboard, paste new value into `.env`, move on
 - [[concepts/RemoteVisualDebugging]] — 5-layer diagnostic checklist for "works for me, not for other clients" multiplayer visual bugs
+- [[concepts/DevDebugHotkeys]] — `[ ] \ 1–4 M` hotkeys in DevDebug.client.luau for word buffer, energy tier fills, and mobile-input simulation
 
 ## Decisions
 
