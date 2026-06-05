@@ -104,17 +104,17 @@ function M.run()
 	-- canAfford boundary
 	do
 		local r = EnergyReservoirs.new()
-		r:add("red", 100)
-		assertEq("canAfford boundary", "100 >= 100", r:canAfford("red", 100), true)
-		assertEq("canAfford boundary", "100 >= 99",  r:canAfford("red", 99),  true)
-		assertEq("canAfford boundary", "100 >= 101", r:canAfford("red", 101), false)
+		r:add("red", 50)
+		assertEq("canAfford boundary", "50 >= 50", r:canAfford("red", 50), true)
+		assertEq("canAfford boundary", "50 >= 49", r:canAfford("red", 49), true)
+		assertEq("canAfford boundary", "50 >= 51", r:canAfford("red", 51), false)
 		r:destroy()
 	end
 
 	-- drain success
 	do
 		local r = EnergyReservoirs.new()
-		r:add("red", 100)
+		r:add("red", 50)
 		task.wait() -- drain the add's deferred fire so it doesn't bleed into the next assertion
 
 		local changes: { string } = {}
@@ -122,7 +122,7 @@ function M.run()
 
 		local ok = r:drain("red", 30)
 		assertEq("drain success", "returned", ok, true)
-		assertEq("drain success", "value", r:get("red"), 70)
+		assertEq("drain success", "value", r:get("red"), 20)
 		task.wait()
 		assertEq("drain success", "fired once",        #changes,    1)
 		assertEq("drain success", "fired with color",  changes[1],  "red")
@@ -183,24 +183,25 @@ function M.run()
 		assert(#changes == 1 and changes[1] == "red")
 		assert(r:get("green") == 0)
 
-		r:add("red", 200)
-		assert(r:get("red") == 160)
+		local cap = EnergyReservoirs.CAP_PER_COLOR
+		r:add("red", cap + 100)
+		assert(r:get("red") == cap) -- overflow clamps to the cap
 
-		assert(r:canAfford("red", 100) == true)
-		assert(r:canAfford("red", 200) == false)
+		assert(r:canAfford("red", cap) == true)
+		assert(r:canAfford("red", cap + 1) == false)
 
 		assert(r:drain("red", 30) == true)
-		assert(r:get("red") == 130)
+		assert(r:get("red") == cap - 30)
 		task.wait()
 
 		local changesBefore = #changes
-		assert(r:drain("red", 200) == false)
-		assert(r:get("red") == 130)
+		assert(r:drain("red", cap + 100) == false)
+		assert(r:get("red") == cap - 30)
 		task.wait()
 		assert(#changes == changesBefore)
 
 		local snap = r:snapshot()
-		assert(snap.red == 130 and snap.green == 0 and snap.blue == 0)
+		assert(snap.red == cap - 30 and snap.green == 0 and snap.blue == 0)
 
 		r:destroy()
 	end
