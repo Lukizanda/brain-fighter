@@ -36,10 +36,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local log = Logger.new("EnergyReservoirs")
 
--- Cap per color. 2× T3 (80) — absorbs the overshoot from one big word like
--- EARTHQUAKES (81) or CHARACTERIZE (84) but prevents indefinite stockpiling
--- that would trivialize encounters. Sourced from `design/gameplay-loop.md`
--- "Spell economy".
+-- Cap per color. 3× the T3 cost (20) — holds enough headroom to stockpile a
+-- few big casts without letting energy accumulate indefinitely and trivialize
+-- encounters. Sourced from `design/gameplay-loop.md` "Spell economy".
 local CAP_PER_COLOR = 60
 
 -- Canonical color list. Used for `:snapshot()` order, validation, and

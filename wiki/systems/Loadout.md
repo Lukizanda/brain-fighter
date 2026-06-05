@@ -1,7 +1,7 @@
 ---
 type: system
 description: Loadout system — Normal/Special slot model, RespawnPedestalManager, drop remote, cooldown overlay. Team-aware spawn paths currently gated off.
-updated: 2026-05-13
+updated: 2026-06-05
 ---
 
 # Loadout System
@@ -35,9 +35,9 @@ Editor labels (`Label` BillboardGui) on pedestals are hidden at runtime so they 
 
 ## Open work
 
-Notably:
-- **`RespawnZoneService`** not built — needed to gate drop UX on "player is in their respawn zone".
-- **Drop UX** — drop key binding + zone-gated client validation.
+The drop UX shipped: `RespawnZoneService` (`src/server/Loadout/RespawnZoneService.luau`) is built and wired — `LoadoutService` calls `RespawnZoneService.initialize()` on start and gates every drop request through `RespawnZoneService.isPlayerInZone(...)` so players can only drop while standing in their respawn zone. Covered by the `respawnzone_tracks_hrp_presence` and `drop_request_zone_gated` multiplayer tests.
+
+Remaining: team-aware spawn/zone paths stay dormant behind `GameConfig.TEAMS_ENABLED = false` (see the gate section above).
 
 ## Inventory tracking gotchas
 

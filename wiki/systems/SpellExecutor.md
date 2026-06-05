@@ -1,7 +1,7 @@
 ---
 type: system
 description: Thin origin-resolver that delegates spell casting to SkillDelivery (delivery) and SkillEffects (effects). All damage/heal/freeze/stub logic lives in src/shared/Skills/. Damage against server-owned targets (boss, NPCs) must run server-side — SpellCastService relays client casts via RemoteEvent.
-updated: 2026-05-20
+updated: 2026-06-05
 ---
 
 # SpellExecutor
@@ -42,8 +42,9 @@ SpellExecutor.cast(
 | `damage` | `Humanoid` (or `Model` containing one) | Required. `nil` → `ok=false`. |
 | `heal` | `Humanoid` / `Model` / `nil` | `nil` falls back to the caster's Humanoid (self-heal). |
 | `freeze` | `Humanoid` (or `Model` containing one) | Required. `nil` → `ok=false`. |
+| `knockup` | `Humanoid` (or `Model` containing one) | Required. Launches the target's HumanoidRootPart upward. |
 | `shield` | (ignored — stub) | Returns `ok=true`. |
-| `wall` | `Vector3` (placement) — currently ignored | Returns `ok=true`; logs the position. |
+| `wall` | (ignored — stub) | Returns `ok=true`; logs `durationSec`. |
 | `buff` | (ignored — stub) | Returns `ok=true`. |
 
 `Model`-typed targets are resolved via `FindFirstChildOfClass("Humanoid")`. A `Humanoid` whose `Parent == nil` (destroyed) is treated as missing and fails the kind's target check.
@@ -57,9 +58,10 @@ See `SkillEffects.luau` for the implementation. `SpellExecutor` no longer contai
 | `damage` | `target.Health -= fraction × target.MaxHealth`; clamp to ≥ 0 | `fractionOfMaxHP` |
 | `heal` | `target.Health += fraction × target.MaxHealth`; clamp to ≤ MaxHealth | `fractionOfMaxHP` |
 | `freeze` | Save `target.WalkSpeed`, set to 0; restore via `task.delay(durationSec, …)`. Re-freeze extends the existing freeze. On the fresh-freeze branch: also calls `SkillInterrupt.cancelCastsBy(target)` to abort pending scheduled volley shots, and `SkillInterrupt.silence(target)` so any new casts started while frozen are born cancelled. | `durationSec` |
-| `shield` | **Stub.** `log:info("Shield stub — …")`. | — |
-| `wall` | **Stub.** `log:info("Wall stub — … at <pos>")`. | (target Vector3 logged) |
-| `buff` | **Stub.** `log:info("Buff stub — …")`. | — |
+| `knockup` | **Real handler.** Sets the target HRP's `AssemblyLinearVelocity.Y = force` (default 50) — launches the target straight up. No registry spell uses it yet, but it's callable end-to-end. | `force` |
+| `shield` | **Stub.** `log:info("shield stub — durationSec=…")`. | `durationSec` |
+| `wall` | **Stub.** `log:info("wall stub — durationSec=…")`. | `durationSec` |
+| `buff` | **Stub.** `log:info("buff stub — kind=…")`. | — |
 | anything else | `{ok=false, reason="unknown effect kind: <kind>"}` | — |
 
 Effects never raise — bad inputs come back as `{ok=false, reason=…}` so the eventual cast-flow caller can surface failure to the HUD without a pcall.
@@ -108,7 +110,7 @@ Test dummies are `Instance.new("Model")` with a child `Humanoid` parented to `sc
 
 - Spec source → [[systems/SpellRegistry]]
 - Pinned design → [[design/gameplay-loop]] § "Spell roster (prototype)", § "Targeting", § "Spell economy"
-- Eventual caller → [[systems/CastAction]] (Phase 2 — pending; wires reservoir drain + executor invocation)
+- Caller → [[systems/CastAction]] (shipped; wires reservoir drain + executor invocation)
 - Damage path comparison → [[systems/Health]] (uses `HealthService.applyDamage` for player/NPC hits; SpellExecutor writes `Humanoid.Health` directly for now since spells don't need hit-zone classification or damage modifiers)
 - Server relay → `src/server/SpellCastService.server.luau` — receives `SpellCastServer` RemoteEvent from `SpellMenuGui`, re-executes `SpellExecutor.cast` server-side so boss/NPC HP writes actually stick (client writes don't replicate for server-owned Humanoids)
 - Build plan → [[design/build-plan]] (Phase 2 — action systems)

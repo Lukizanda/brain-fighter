@@ -1,7 +1,7 @@
 ---
 type: system
-description: Pure-Luau state container for the three per-color energy bars (red/green/blue). Caps at 160 per color, emits a `changed(color)` signal on every value change.
-updated: 2026-05-14
+description: Pure-Luau state container for the three per-color energy bars (red/green/blue). Caps at 60 per color, emits a `changed(color)` signal on every value change.
+updated: 2026-06-05
 ---
 
 # EnergyReservoirs
@@ -20,13 +20,13 @@ Phase 1 foundation module (see [[design/build-plan]]). Tracker [NIM-5](tracker:/
 ```luau
 EnergyReservoirs.new() -> instance
 :get(color) -> number
-:add(color, amount: number)         -- caps at 160; non-positive is no-op
+:add(color, amount: number)         -- caps at 60; non-positive is no-op
 :canAfford(color, n: number) -> boolean
 :drain(color, n: number) -> boolean -- false if can't afford; value unchanged on failure
 :snapshot() -> { red, green, blue } -- defensive copy
 :destroy()
 .changed: RBXScriptSignal           -- fires :Fire(color) on every value change
-EnergyReservoirs.CAP_PER_COLOR = 160
+EnergyReservoirs.CAP_PER_COLOR = 60
 EnergyReservoirs.COLORS = { "red", "green", "blue" }
 ```
 
@@ -34,12 +34,12 @@ EnergyReservoirs.COLORS = { "red", "green", "blue" }
 
 ## Cap rationale
 
-`CAP_PER_COLOR = 160` = **2× T3 (80)**. This is the tightest cap that
+`CAP_PER_COLOR = 60` = **3× the T3 cost (20)**. This holds enough headroom to bank a few big casts while still
 
-- *absorbs* the overshoot from one huge single-color word — `EARTHQUAKES`=81 and `CHARACTERIZE`=84 both land entirely inside the cap, so the player isn't punished for occasionally landing a monster word, and
-- *blocks* indefinite stockpiling — anyone who keeps Memorizing same-color words past 160 starts dropping energy on the floor, which is the design's deliberate brake on "hoard letters then nuke."
+- *blocking* indefinite stockpiling — anyone who keeps Memorizing same-color words past 60 starts dropping energy on the floor, the design's deliberate brake on "hoard letters then nuke," and
+- *keeping casts frequent* — with the rebalanced tier costs (5/10/20/40), a full bar is one T4 (40) plus change, so players cast often rather than saving up.
 
-Pinned in `wiki/design/gameplay-loop.md` "Spell economy". The number is a tuning lever, not a load-bearing invariant — if playtest shows the cap is too tight (every long word overflows) or too loose (T3 stockpiling trivializes bosses), bump or pin it in code, then update both this page and the design doc.
+Pinned in `wiki/design/gameplay-loop.md` "Spell economy". The number is a tuning lever, not a load-bearing invariant — if playtest shows the cap is too tight or too loose, bump or pin it in code, then update both this page and the design doc.
 
 ## Signal semantics
 
@@ -52,7 +52,7 @@ Pinned in `wiki/design/gameplay-loop.md` "Spell economy". The number is a tuning
 The signal fires **on net change only**:
 
 - `:add` with `amount <= 0` does not fire.
-- `:add` that hits the cap (`current = 160`, `:add("red", 50)`) does not fire — `nextValue` equals `current`.
+- `:add` that hits the cap (`current = 60`, `:add("red", 50)`) does not fire — `nextValue` equals `current`.
 - `:drain` that can't afford the cost (returns `false`) does not fire — the value is unchanged.
 
 This means a `.changed` fire reliably indicates an *actual* numerical change, so listeners don't need a `previousValue == newValue` guard.
@@ -65,14 +65,14 @@ This means a `.changed` fire reliably indicates an *actual* numerical change, so
 
 - `Logger` (`src/shared/Core/Logger.luau`) — diagnostic warn before erroring on unknown-color.
 
-No Roblox-instance dependencies beyond the internal `BindableEvent`. No knowledge of tiers, spells, words, or HUD — those live in [[systems/SpellRegistry]] (planned), [[systems/MemorizeAction]] (planned), and the eventual `HUD: ReservoirBars` builder.
+No Roblox-instance dependencies beyond the internal `BindableEvent`. No knowledge of tiers, spells, words, or HUD — those live in [[systems/SpellRegistry]], [[systems/MemorizeAction]], and the HUD SpellMenu mana fill.
 
-## Consumers (planned)
+## Consumers
 
 - **MemorizeAction** — deposits via `:add` on every valid word.
-- **CastAction** — drains via `:drain` on every spell cast; precomputes affordable tiers via `:canAfford`.
-- **HUD: ReservoirBars** — subscribes to `.changed`, repaints the affected color bar.
-- **SpellRegistry** — does not consume; owns the tier-threshold numbers (10 / 30 / 80) that callers compare against `:get(color)` and `:canAfford(color, threshold)`.
+- **CastAction** — drains via `:drain` on every spell cast (and re-`:add`s on the refund path when the executor fails); precomputes affordable tiers via `:canAfford`.
+- **HUD: SpellMenu** — the per-color mana fill subscribes to `.changed` and repaints the affected color. (The standalone `ReservoirBars` builder exists but is currently unused — see [[systems/HUD]].)
+- **SpellRegistry** — does not consume; owns the tier-threshold numbers (5 / 10 / 20 / 40) that callers compare against `:get(color)` and `:canAfford(color, threshold)`.
 
 ## Verification
 
@@ -93,5 +93,5 @@ A failed scenario raises `error([EnergyReservoirs.__tests] <scenario> — <messa
 
 - [[design/gameplay-loop]] — Spell economy: per-color persistence, cap rationale, value-weighted color split.
 - [[design/build-plan]] — Phase 1 foundation modules.
-- [[systems/SpellRegistry]] — sibling foundation; owns the tier thresholds (10 / 30 / 80) callers compare against.
+- [[systems/SpellRegistry]] — sibling foundation; owns the tier thresholds (5 / 10 / 20 / 40) callers compare against.
 - [[concepts/SingleOwnership]] — only `MemorizeAction` writes via `:add`, only `CastAction` writes via `:drain`; HUD listens but never writes.

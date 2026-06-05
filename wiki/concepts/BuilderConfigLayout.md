@@ -1,7 +1,7 @@
 ---
 type: concept
 description: HUD architecture — Builder constructs, Config tunes, LayoutManager places. No .rbxmx GUI templates checked into the repo.
-updated: 2026-04-30
+updated: 2026-06-05
 ---
 
 # Builder + Config + LayoutManager
@@ -20,23 +20,24 @@ The pattern that all HUD elements follow. Three roles, three files per element.
 - The Builder is the only file that reads the Config — the LayoutManager and Adapters never do. That keeps the dependency graph one-way.
 - The LayoutManager is element-agnostic: it knows about screen regions, not specific HUD elements.
 
-## Adapter sidecar (for live data)
+## Live data (inline connections)
 
-For HUD elements that subscribe to game-state, an **Adapter** sits between the data source and the Builder's output. The Builder still has no state; the Adapter holds connections and pushes updates.
+For HUD elements that subscribe to game-state, the wiring lives **inline in the coordinator LocalScript** (`src/client/UI/<Element>Gui.client.luau`), which holds the connections and pushes updates into the Builder's output. The Builder itself still has no state.
 
 ```
 Game state (Humanoid.HealthChanged)
   ↓
-Adapter (HealthAdapter)
+Coordinator GUI script (GameplayHudGui — healthConnections table)
   ↓ updates
-Builder output (AttributeBar instance)
+Builder output (AttributeBar instance from AttributeBarBuilder)
 ```
 
-Example: `src/client/PlayerHud/Adapters/HealthAdapter.luau` listens to `Humanoid.HealthChanged` and updates the attribute bar built by `AttributeBarBuilder`.
+> Historical note: this used to be a standalone **Adapter** sidecar module (`src/client/PlayerHud/Adapters/HealthAdapter.luau`). That `PlayerHud/` indirection was stripped on 2026-05-20 — the health bar is now built directly in `GameplayHudGui.client.luau` with an inline `healthConnections` table. See [[systems/HUD]].
 
 ## Where this is in use
 
-- AttributeBar (Health / Stamina / Shield) — [[systems/HUD]]
+- AttributeBar (Health) — [[systems/HUD]]
+- BufferDisplay, MemorizeButton, SpellMenu, MindFullIndicator, DashButton (Phase 4 gameplay widgets)
 - WeaponRolodex
 - BuffTray
 - TouchControl (mobile)

@@ -1,7 +1,7 @@
 ---
 type: system
 description: Pure-Luau config layer for the spell roster (R/G/B × T1–T4) — name, color, tier, cost, targeting mode, skill:SkillSpec. Single source of truth consumed by SpellExecutor and the cast-menu HUD.
-updated: 2026-05-18
+updated: 2026-06-05
 ---
 
 # SpellRegistry
@@ -23,11 +23,11 @@ local SpellRegistry = require(ReplicatedStorage.Shared.SpellRegistry)
 -- Spec lookup. Errors on invalid color or tier (so callers can't
 -- silently pull nil and propagate into the executor).
 local spec = SpellRegistry.getSpell("red", 2)
--- spec.name == "Fireball", spec.cost == 30, spec.targetingMode == "auto"
+-- spec.name == "Fireball", spec.cost == 10, spec.targetingMode == "auto"
 
 -- Affordable list for a single color reservoir, sorted by tier ascending.
 local options = SpellRegistry.listAffordableSpells("red", 35)
--- → { Spark, Fireball }  (Inferno costs 80, filtered out)
+-- → { Firebolt, Fireball, Inferno }  (Volley costs 40, filtered out)
 ```
 
 ## Spec shape
@@ -52,27 +52,27 @@ export type Spec = {
 
 | Tier | Cost (= drain) |
 |---|---|
-| T1 | 10 |
-| T2 | 30 |
-| T3 | 80 |
-| T4 | 75 |
+| T1 | 5 |
+| T2 | 10 |
+| T3 | 20 |
+| T4 | 40 |
 
-Declared as `TIER_COSTS = { 10, 30, 80, 75 }` in `init.luau`. Cost and drain are equal by design — see [[design/gameplay-loop]] § "Spell economy".
+Declared as `TIER_COSTS = { 5, 10, 20, 40 }` in `init.luau`. Cost and drain are equal by design — see [[design/gameplay-loop]] § "Spell economy".
 
 ## The 10-spell roster
 
 | Color | Tier | Name | Targeting | Delivery | onImpact |
 |---|---|---|---|---|---|
-| Red | T1 | Spark | `auto` | `instant` | `damage fractionOfMaxHP=0.05` |
-| Red | T2 | Fireball | `auto` | `instant` | `damage fractionOfMaxHP=0.20` |
+| Red | T1 | Firebolt | `auto` | `projectile` | `damage fractionOfMaxHP=0.05` |
+| Red | T2 | Fireball | `auto` | `projectile` | `damage fractionOfMaxHP=0.20` |
 | Red | T3 | Inferno | `auto` | `instant` | `damage fractionOfMaxHP=0.50` |
-| Red | T4 | Volley | `auto` | `projectile` | `damage amount=12` (3 projectiles) |
+| Red | T4 | Volley | `auto` | `projectile` | `damage amount=12` (3 projectiles, `staggerSec=0.12`) |
 | Green | T1 | Mend | `auto` | `instant` | `heal fractionOfMaxHP=0.15` |
-| Green | T2 | Stone Wall | `placement` | `world_spawn` | _(none)_ |
+| Green | T2 | Stone Wall | `placement` | `world_spawn` | _(none; `durationSec=6`)_ |
 | Green | T3 | Sanctuary | `auto` | `instant` | `heal 100% + shield 10s` |
 | Blue | T1 | Frost Nip | `auto` | `instant` | `freeze durationSec=1` |
 | Blue | T2 | Shield | `auto` | `instant` | `shield durationSec=5` |
-| Blue | T3 | Stasis | `auto` | `instant` | `freeze durationSec=5` |
+| Blue | T3 | Stasis | `auto` | `instant` | `freeze durationSec=5, damageAmpMultiplier=2.0` |
 
 These numbers are first-prototype starting points. Tuning is expected — see [[design/gameplay-loop]] § "Playtest verification".
 
@@ -84,6 +84,6 @@ These numbers are first-prototype starting points. Tuning is expected — see [[
 ## Cross-references
 
 - Pinned design source → [[design/gameplay-loop]] § "Spell roster (prototype)"
-- Downstream consumer → [[systems/SpellExecutor|SpellExecutor]] (Phase 2 — pending)
-- Cast UX surface → [[systems/HUD]] cast-menu builder (Phase 4 — pending)
+- Downstream consumer → [[systems/SpellExecutor|SpellExecutor]] (shipped) and the unified [[systems/SkillPipeline]]
+- Cast UX surface → [[systems/HUD]] SpellMenu builder (shipped)
 - Build plan → [[design/build-plan]] (Phase 1)

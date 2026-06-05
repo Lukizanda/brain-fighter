@@ -126,7 +126,7 @@ end
 
 -- Tap-cast: fire the highest currently-affordable tier of `color`.
 -- Returns `{ ok = false, reason = "no affordable tier" }` when the
--- reservoir can't even afford T1 (cost 10) — the HUD can decide
+-- reservoir can't even afford T1 (cost 5) — the HUD can decide
 -- whether to surface a fizzle animation.
 function CastAction.tapReservoir(
 	color: Color,

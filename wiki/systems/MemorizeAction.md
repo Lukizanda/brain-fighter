@@ -1,7 +1,7 @@
 ---
 type: system
-description: Phase 2 action — validates the buffered word, deposits value-weighted per-color energy into the reservoirs, and clears the buffer on success. Fizzle on empty/invalid; buffer preserved on fizzle.
-updated: 2026-05-14
+description: Phase 2 action — validates the buffered word, deposits value-weighted per-color energy into the reservoirs, and clears the buffer. Fizzle on empty (no mutation) or invalid (buffer cleared — letters consumed regardless).
+updated: 2026-06-05
 ---
 
 # MemorizeAction
@@ -44,13 +44,13 @@ export type Result = {
 | Buffer state | Word valid? | Result | Side effects |
 |---|---|---|---|
 | empty | — | `{ ok = false, reason = "empty" }` | none |
-| non-empty | no  | `{ ok = false, reason = "invalid" }` | none — **buffer preserved** |
+| non-empty | no  | `{ ok = false, reason = "invalid" }` | **buffer cleared** — letters consumed |
 | non-empty | yes | `{ ok = true, energyByColor = split, word = word }` | reservoirs += split; buffer cleared |
 
 ### Failure modes
 
-- **Empty** — fast-path; logged at `info` (not warn — it's not abnormal, just a no-op the HUD may also visualize as a soft fizzle).
-- **Invalid** — the dictionary rejected the word. The buffer is **not cleared** so the player can correct typos without retyping. This is a deliberate design call (see [[design/gameplay-loop|"Memorize (commit button)"]]).
+- **Empty** — fast-path; logged at `info` (not warn — it's not abnormal, just a no-op the HUD may also visualize as a soft fizzle). No state mutation.
+- **Invalid** — the dictionary rejected the word. The buffer is **cleared anyway** (`init.luau:76`) — letters are consumed regardless, so a bad commit costs the player the collected letters and they must re-collect. This is a deliberate design call (see [[design/gameplay-loop|"Memorize (commit button)"]]).
 
 ### Success path
 
@@ -59,7 +59,7 @@ The success path runs in this order:
 1. Compute `word = buffer:asWord()` (uppercase — `WordBuffer:asWord` already uppercases).
 2. Snapshot tiles via `buffer:tiles()` (defensive copy — caller mutation is safe).
 3. Split via `EnergyEconomy.splitByColor(tiles)` — the floor-reconciled algorithm that guarantees `Σ split values == computeWordEnergy(word)` exactly. See [[systems/EnergyEconomy#splitByColor]].
-4. For each `(color, amount)` in the split: `reservoirs:add(color, amount)`. Per [[systems/EnergyReservoirs]] each add caps at 160 silently; overshoot is design-intentional.
+4. For each `(color, amount)` in the split: `reservoirs:add(color, amount)`. Per [[systems/EnergyReservoirs]] each add caps at 60 silently; overshoot is design-intentional.
 5. `buffer:clear()` AFTER the split has been computed.
 6. Return `{ ok = true, energyByColor = split, word = word }`.
 
@@ -75,9 +75,9 @@ This module calls synchronous methods only — `tryMemorize` returns once `add` 
 
 See [[systems/EnergyReservoirs#Signal semantics]] and `WordBuffer`'s "Why a BindableEvent" note for the underlying reason.
 
-## Consumers (planned)
+## Consumers
 
-- **HUD: MemorizeButton** ([[design/build-plan]] Phase 4) — calls `tryMemorize`, dispatches to the shake/flash animation on `ok = false`, and emits the visible letters-flowing-into-bars effect on `ok = true`.
+- **HUD: MemorizeButton** (shipped — [[systems/HUD]]) — calls `tryMemorize`, dispatches to the shake/flash animation on `ok = false`, and emits the visible letters-flowing-into-bars effect on `ok = true`.
 - **Tutorial / first-cast prompt** — may inspect the returned `word` to confirm the player Memorized the tutorial-target word.
 
 This module deliberately does **not** call any other system. It does not emit signals, does not touch the HUD, does not write to attributes — the HUD reads `Result` from the caller. Per [[concepts/SingleOwnership]], the HUD listens to `WordBuffer.changed` / `EnergyReservoirs.changed` to repaint, NOT to anything from MemorizeAction.
@@ -97,7 +97,7 @@ The four scenarios mirror the NIM-6 brief exactly:
 | # | Scenario | Pinned outcome |
 |---|---|---|
 | 1 | empty buffer | `ok=false, reason="empty"`, no mutation |
-| 2 | invalid "XYZ" | `ok=false, reason="invalid"`, buffer preserved at "XYZ" |
+| 2 | invalid "XYZ" | `ok=false, reason="invalid"`, buffer cleared |
 | 3 | valid mono-color "FIRE" (all red) | `red=7`, buffer cleared |
 | 4 | valid mixed-color "FLAME" (F-L-M red, A-E green) | `red=12, green=3`; reservoir accumulates on top of pre-existing red |
 
@@ -111,4 +111,4 @@ The "FIRE" and "FLAME" expected values come from the pinned tables in [[design/g
 - [[systems/EnergyEconomy]] — supplies `splitByColor(tiles)`.
 - WordBuffer (`src/shared/WordBuffer/init.luau`) — read via `:size`, `:asWord`, `:tiles`; mutated via `:clear` on success.
 - [[systems/EnergyReservoirs]] — mutated via `:add(color, amount)` on success.
-- [[concepts/SingleOwnership]] — only MemorizeAction writes via `:add` on the reservoirs; only MemorizeAction issues `:clear` on the buffer.
+- [[concepts/SingleOwnership]] — MemorizeAction writes via `:add` on the reservoirs (CastAction also `:add`s on its refund path); MemorizeAction issues `:clear` on the buffer on both the success and invalid paths.

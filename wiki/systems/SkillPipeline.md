@@ -1,7 +1,7 @@
 ---
 type: system
 description: Unified data + dispatch pipeline shared by player spells and boss attacks. SkillSpec (data) + SkillEffects (effects) + SkillDelivery (deliveries), with caller-resolved origin so any caster (player, boss, future NPC) plugs in the same way.
-updated: 2026-05-20
+updated: 2026-06-05
 ---
 
 # Skill Pipeline
@@ -14,7 +14,7 @@ Shipped in commit `03b6080` (replaces the old boss-only `BossAttacks.luau` and t
 
 - **`SkillSpec`** = pure data: `{ delivery, deliveryParams, onImpact: { EffectSpec } }`
 - **`SkillDelivery`** = how the skill reaches its target (`instant`, `projectile`, `aoe`, `world_spawn`)
-- **`SkillEffects`** = what happens on impact (`damage`, `heal`, `freeze`, stubs for `shield` / `wall` / `buff`)
+- **`SkillEffects`** = what happens on impact (`damage`, `heal`, `freeze`, `knockup` — all real handlers; stubs for `shield` / `wall` / `buff`)
 - **Wrappers** ([[systems/SpellRegistry]], `BossConfig.BOSS_TYPES`) add context-specific fields (cost/color/tier or phase/cooldown)
 - Adding a new effect kind once makes it available to every spell and every boss attack — no caller changes
 

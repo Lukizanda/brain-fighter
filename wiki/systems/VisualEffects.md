@@ -1,11 +1,25 @@
 ---
 type: system
-description: Visual effects plan — particle effects for spell casts/impacts, UI feedback animations, and per-color theming across all VFX
-status: partial
-updated: 2026-05-19
+description: Visual effects — particle effects for spell casts/impacts (shipped via VfxController + spawnEffect + cross-client broadcast), UI feedback animations, and per-color theming. World cast/impact VFX are implemented; PERF guardrails and some lanes remain planned.
+status: implemented (core); planned (PERF guardrails, green casts, collect-pop)
+updated: 2026-06-05
 ---
 
 # Visual Effects
+
+> **Implementation status (2026-06-05).** The world-VFX core shipped — but with different module names than the plan below describes. Read this banner first; treat the rest of the page as the original design plan, accurate in intent but stale on specifics.
+>
+> **What exists on disk:**
+> - `src/shared/Vfx/VfxConfig.luau` — `COLORS`, `EFFECTS` (cast t1–t4 red, t1–t3 blue, `impact_damage/heal/freeze/shield/knockup/wall/buff`, `projectile_red_t1/t2/t4`), and a `PERF` table.
+> - `src/shared/Vfx/spawnEffect.luau` — **the shared spawn engine** (cast/impact/projectile), used by *both* the client `VfxController` and `SkillDelivery`. The plan's inline `VfxController.spawnCast/spawnImpact` methods were never built that way.
+> - `src/client/Vfx/VfxController.client.luau` — plays cast VFX locally on `CastAction.spellResolved`, relays to server.
+> - `src/server/Vfx/VfxBroadcastService.server.luau` — validates + `SpellVfxEvent:FireAllClients`.
+> - `src/shared/Vfx/Remotes/*.model.json` — `BroadcastSpellVfx` / `SpellVfxEvent`.
+> - `src/shared/Vfx/StatusVisuals/FreezeVfx.luau` — the freeze ice-shard status visual (see [[systems/SkillPipeline]] § VFX Layers).
+>
+> **Does NOT exist (fictional in the plan below):** `UiVfxController` (UI VFX live inline inside the HUD builders, not a standalone module), `src/shared/Vfx/init.luau` barrel, and `src/shared/Vfx/Templates/` (the `VfxTemplates` folder is Studio/MCP-managed, not Rojo `.model.json`).
+>
+> **Corrected contract facts:** the broadcast payload field is **`impactEffectIds: { string }`** (plural array), not `impactEffectId`; the server validates **`MAX_TIER = 4`** (not 3) and `MAX_IMPACT_EFFECT_IDS = 8`. Lifetime cleanup is **`Debris:AddItem` only** today — the §"PERF guardrails" cap/evict/throttle table and the `"VfxInstance"` Heartbeat sweep are **not implemented** (`PERF` data exists but `spawnEffect` reads none of it). Green cast entries and the LetterBlock collect-pop are still unbuilt.
 
 ## Scope
 
@@ -53,11 +67,13 @@ Final palette goes into `VfxConfig.COLORS` so both `VfxController` (world) and t
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌─── All Clients ──────────────────────────────────────────────────────────────┐
-│  UiVfxController — TweenService on existing HUD; no RemoteEvent needed       │
+│  UI VFX — TweenService on existing HUD, inline inside each HUD Builder       │
+│  (NOT a standalone UiVfxController module); no RemoteEvent needed            │
 └──────────────────────────────────────────────────────────────────────────────┘
 
+spawnEffect.luau (shared) ── the spawn engine VfxController AND SkillDelivery both call
 VfxConfig (shared)  ── effect specs keyed by effectId
-VfxTemplates folder (ReplicatedStorage) ── ParticleEmitter / Beam / Attachment templates
+VfxTemplates folder (ReplicatedStorage) ── ParticleEmitter / Beam / Attachment templates (Studio/MCP-managed, not Rojo)
 ```
 
 - **World VFX (R2 two-event flow)**: After a successful cast, the caster's client fires `CastAction.spellResolved` (client-local BindableEvent). `VfxController` hears it and plays cast/impact VFX immediately (frame-perfect, no network round-trip). `VfxController` also fires `BroadcastSpellVfx:FireServer(payload)`. `VfxBroadcastService.server.luau` validates and relays to all clients via `SpellVfxEvent:FireAllClients`. Each receiving client skips the event if `senderUserId == LocalPlayer.UserId` (already played). Server creates NO Parts/Emitters.
@@ -349,7 +365,7 @@ The builder **already tweens fill width** on `:setValue` (line 162) using `Defau
 |---|---|---|
 | Fill sweep on big gain (≥ 8 energy delta) | One-shot bright overlay frame (sibling of `Fill`, transparency 0.5, child of `Track`) tweens `Position.X.Scale` from `0` → `1` over **350 ms** while widening to current fill fraction. Then fades to transparency 1 over **200 ms**. | New child instance in `AttributeBarBuilder.build`; new method `:playGainSweep()`. Triggered from `ReservoirBarsBuilder:setEnergy` when a per-color delta crosses the threshold. |
 | Drain ripple on Cast (decrease ≥ 10 energy) | Three radial rings emitted from the right edge of the live fill: tiny `Frame` (8×8 px, UICorner.CornerRadius 0.5 of size) that tweens `Size` ×3 + transparency 0→1 over **300 ms**, then destroys. Stagger by 80 ms. | New method `:playDrainRipple()`. `ReservoirBarsBuilder` detects the drop and invokes per affected color. |
-| Full cap (160) reached | Endless edge glow: `UIStroke.Thickness` 1 ↔ 3 over **800 ms** (`Sine, InOut`, repeat ∞, reversing). Stroke color = bar's `config.color`. | New method `:setCapGlow(active)`. `ReservoirBarsBuilder:setEnergy` watches `energy >= MAX_ENERGY`. |
+| Full cap (60) reached | Endless edge glow: `UIStroke.Thickness` 1 ↔ 3 over **800 ms** (`Sine, InOut`, repeat ∞, reversing). Stroke color = bar's `config.color`. | New method `:setCapGlow(active)`. `ReservoirBarsBuilder:setEnergy` watches `energy >= MAX_ENERGY`. (Note: ReservoirBars is currently unused — SpellMenu owns the mana fill.) |
 
 Add to `AttributeBarConfig.luau`:
 ```lua

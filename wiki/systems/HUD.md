@@ -1,7 +1,7 @@
 ---
 type: system
-description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, WeaponRolodex, BuffTray, reticle, settings menu, and 5 Phase 4 gameplay widgets (BufferDisplay, SpellMenu with embedded mana fill, MemorizeButton, MindFullIndicator).
-updated: 2026-05-20 (stripped PlayerHud indirection)
+description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, WeaponRolodex, BuffTray, reticle, settings menu, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu with embedded mana fill, MemorizeButton, MindFullIndicator), and the mobile DashButton.
+updated: 2026-06-05
 ---
 
 # HUD System
@@ -41,6 +41,7 @@ flowchart LR
   subgraph COORD["Coordinator LocalScripts (src/client/UI/, src/client/)"]
     GHUD["GameplayHudGui<br/>sole BottomCenter coordinator<br/>LAYOUT { TILES, HEALTH, ABSORB }"]:::coord
     SMG["SpellMenuGui"]:::coord
+    DBG["DashButtonGui<br/>(touch-only, BottomRight)"]:::coord
     MFI["MindFullIndicatorGui"]:::coord
     KFG["KillFeedGui"]:::coord
     BTG["BuffTrayGui (scaffold)"]:::coord
@@ -62,6 +63,7 @@ flowchart LR
     MBB["MemorizeButtonBuilder"]:::builder
     SMB["SpellMenuBuilder"]:::builder
     MFB["MindFullIndicatorBuilder"]:::builder
+    DBB["DashButtonBuilder"]:::builder
     BTB["BuffTrayBuilder"]:::builder
     WRB["WeaponRolodexBuilder"]:::builder
     RTB["ReticleBuilder"]:::builder
@@ -72,6 +74,7 @@ flowchart LR
   %% --- coordinator → builder ---
   GHUD --> BDB & MBB & ABB
   SMG --> SMB
+  DBG --> DBB
   MFI --> MFB
   BTG --> BTB
   WRG --> WRB
@@ -86,6 +89,7 @@ flowchart LR
   TSG -- "register(TopCenter)" --> TC
   RTG -- "register(TopCenter)" --> TC
   WRG -- "register(BottomRight)" --> BR
+  DBG -- "register(BottomRight, touch)" --> BR
   LDC -- "register(BottomCenter, toast)" --> BC
 
   %% --- modal / own-ScreenGui (bypass HudLayoutManager) ---
@@ -110,7 +114,7 @@ Legend: blue = Coordinator LocalScript, orange = pure-module Builder, green = ga
 ## Single-ownership invariants (Phase 4.8 audit)
 
 - `GameplayHudGui` is the **sole stable BottomCenter coordinator**. `LoadoutDropClient` registers a transient toast stack at BottomCenter — documented exception.
-- Every Builder in `src/shared/Hud/` exposes `:destroy()` (11/11). Health adapter connections are tracked inline in `GameplayHudGui` (`healthConnections` table, cleared on respawn).
+- Every Builder in `src/shared/Hud/` exposes `:destroy()` (12/12). Health adapter connections are tracked inline in `GameplayHudGui` (`healthConnections` table, cleared on respawn).
 - All Builders are pure modules except `SettingsMenuBuilder` (reads `Players.LocalPlayer` — tracked in NIM-19).
 - Detailed findings: [[design/ui-architecture-review]].
 
@@ -146,6 +150,8 @@ src/shared/Hud/
   SpellMenuConfig.luau
   MindFullIndicatorBuilder.luau   — warning banner when WordBuffer is full
   MindFullIndicatorConfig.luau
+  DashButtonBuilder.luau          — mobile dash button (BottomRight vertical column)
+  DashButtonConfig.luau
 
 src/client/UI/
   GameplayHudGui.client.luau      — BottomCenter coordinator: single LAYOUT table owns tile/health/ABSORB
@@ -154,6 +160,7 @@ src/client/UI/
   DeathScreenGui.client.luau      — death overlay
   SettingsMenuGui.client.luau     — settings menu mount
   SpellMenuGui.client.luau        — BottomRight; fires tapReservoir on color tap; drives fill via energyReservoirs.changed
+  DashButtonGui.client.luau       — BottomRight vertical column (touch-only); tap → _G.BrainFighter.requestDash()
   MindFullIndicatorGui.client.luau — TopCenter; shows/hides on mindFull/mindFreed
   BossHudGui.client.luau          — own ScreenGui (IgnoreGuiInset=true, y=8); boss health bar + phase label; hidden until a boss spawns
   RoundTimerGui.client.luau       — TopCenter; round state + formatted timer; gated behind GameConfig.ROUND_TIMER_ENABLED (currently false)
@@ -161,7 +168,7 @@ src/client/UI/
 
 ## Phase 4 gameplay widgets
 
-All five read state through `PlayerSession.get()` and subscribe to signals from the session objects.
+The first four read state through `PlayerSession.get()` and subscribe to signals from the session objects. DashButton is a mobile-only input control (no session signal).
 
 | Widget | Region | Signal source | Action |
 |---|---|---|---|
@@ -169,6 +176,7 @@ All five read state through `PlayerSession.get()` and subscribe to signals from 
 | MemorizeButton | BottomCenter | `wordBuffer.changed` | `MemorizeAction.tryMemorize` |
 | SpellMenu | BottomRight | `energyReservoirs.changed` | gradient fill + `CastAction.tapReservoir`; tap shows energy popup |
 | MindFullIndicator | TopCenter | `mindFull` / `mindFreed` | show/hide warning |
+| DashButton | BottomRight | `InputCategorizer` (touch toggle) | tap → `_G.BrainFighter.requestDash()` (mobile-only, hidden on KBM) |
 
 ## Health bar wiring
 

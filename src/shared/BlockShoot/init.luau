@@ -3,10 +3,10 @@
 ----------------------------------------------------------------------
 -- BlockShoot
 ----------------------------------------------------------------------
--- Shared helpers for the block-shoot input loop. The boot script
--- (client) handles input wiring; the service (server) handles
--- destruction. This module provides the traversal + read utilities
--- both sides need.
+-- Shared helpers for the block-shoot input loop. The LetterBlaster
+-- controller (client) handles input wiring; the service (server)
+-- handles destruction. This module provides the traversal + read
+-- utilities both sides need.
 ----------------------------------------------------------------------
 
 local CollectionService = game:GetService("CollectionService")

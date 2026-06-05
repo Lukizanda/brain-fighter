@@ -25,7 +25,7 @@ local log = Logger.new("SpellMenuGui")
 -- Max range for auto-targeting. Spells won't lock onto anything farther than this.
 local AUTO_TARGET_RANGE_STUDS = 150
 
--- Returns the nearest living enemy Model (NPC or BossAdapter boss) within
+-- Returns the nearest living enemy Model (NPC or the Boss-system boss) within
 -- AUTO_TARGET_RANGE_STUDS of the character. Returns nil if nothing is in range.
 local function findAutoTarget(character: Model): Model?
 	local hrp = character:FindFirstChild("HumanoidRootPart")
@@ -56,7 +56,7 @@ local function findAutoTarget(character: Model): Model?
 		consider(npc)
 	end
 
-	-- BossAdapter boss is named "Boss" in workspace but not tagged NPC
+	-- The Boss-system boss is named "Boss" in workspace but not tagged NPC
 	local boss = workspace:FindFirstChild("Boss")
 	if boss then
 		consider(boss)

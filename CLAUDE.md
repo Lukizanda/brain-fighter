@@ -102,21 +102,36 @@ Replace `YOUR_SESSION_NAME` with a short identifier for the current session's ta
 - When replacing a Part that has WeldConstraints pointing to it, **explicitly re-wire `Part0`/`Part1` to the replacement** before destroying the old Part — the WeldConstraint reference doesn't move with a reparent and will go nil on destroy, silently breaking the weld.
 
 ## Project Structure
+
+Template-era systems (Character/Weapon/Health/NPC/GameMode/Loadout) sit alongside the Brain Fighter spelling-combat gameplay chain (LetterBlock → WordBuffer → Dictionary/EnergyEconomy → EnergyReservoirs → SpellRegistry → CastAction → SpellExecutor → Skills → Vfx). Representative tree, not exhaustive — `src/` is the authority.
 ```
 src/
-  client/          — LocalScripts (CharacterSystemsLoader, CameraManager, LocomotionManager)
-    UI/            — UI LocalScripts (HealthGui)
-  server/          — Server Scripts (weapon spawner, shot validation, health service)
+  client/          — LocalScripts: CameraManager, LocomotionManager, DashManager,
+                     DevDebug (playtest hotkeys), PlayerSession (per-session state cache)
+    UI/            — HUD coordinator LocalScripts (GameplayHudGui, SpellMenuGui,
+                     DashButtonGui, KillFeedGui, ScoreboardGui, …)
+    Vfx/           — VfxController (client cast/impact playback + relay)
+  server/          — Server Scripts: Firearm, Health, GameMode, Loadout, NPC, Boss,
+                     BlockShoot (block destroy), BlockSpawner, SpellCastService (relay),
+                     Vfx (VfxBroadcastService), Tests
+    BossAdapter/   — disabled (superseded by server/Boss); see wiki/systems/BossAdapter.md
   shared/
-    Core/          — Shared utilities (Logger, Cleanup, InputCategorizer, GameConfig)
-    Character/     — Character systems (CameraController, LocomotionController)
-    Health/        — Health/damage types, constants, modifiers
-    Hud/           — Code-driven HUD system (HudLayoutManager, builders, configs)
-    Weapon/        — Weapon systems (controllers, effects, state machines)
-      Scripts/     — Weapon-specific modules
-      Templates/   — Weapon tool templates (Blaster, etc.)
-    LocomotionAnimations/  — Folder for locomotion Animation instances
-  utility/         — Generic utilities (disconnectAndClear, lerp, etc.)
+    Core/          — Logger, Cleanup, InputCategorizer, GameConfig
+    Character/     — CameraController, LocomotionController
+    Health/        — damage types, constants, modifiers, getHitZone
+    Hud/           — Builder + Config + LayoutManager HUD modules
+    Weapon/        — firearm + melee controllers, effects, state machines
+    NPC/ · GameMode/ · Boss/   — AI archetypes, mode registry, boss config/types
+    -- Brain Fighter gameplay chain (pure-Luau modules, each <Name>/init.luau + __tests):
+    Dictionary/    — word lookup (26 per-letter word modules under words/)
+    WordBuffer/ · EnergyEconomy/ · EnergyReservoirs/   — buffer + mana economy
+    SpellRegistry/ · SpellExecutor/ · CastAction/ · MemorizeAction/ · MindFullManager/
+    Skills/        — SkillSpec/Effects/Delivery/Interrupt/Visuals (player + boss)
+    Vfx/           — VfxConfig, spawnEffect, StatusVisuals/ (shared VFX engine)
+    BlockShoot/ · LetterBlocks/ · LetterBlaster/   — block consume pipeline
+    Tests/         — TestRunner + suites (NPC, Melee, Multiplayer, Phase3)
+  StarterPack/
+    Spelling Staff/  — the LetterBlaster weapon Tool (Handle + sounds + boot script)
 ```
 
 ## Naming Conventions

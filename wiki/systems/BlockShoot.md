@@ -1,7 +1,7 @@
 ---
 type: system
 description: Shared helpers and server handler for block consumption. Client input is handled by LetterBlaster (Phase 4.6) — see [[systems/LetterBlaster]].
-updated: 2026-05-15
+updated: 2026-06-05
 ---
 
 # BlockShoot
@@ -19,18 +19,20 @@ Shared library and server handler for the letter-block consume pipeline. The cli
 
 ## Flow
 
-1. Player left-clicks.
-2. `BlockShootBoot` checks `MindFullManager:isMindFull()` — blocks input when buffer is at 12/12.
+The input side now runs inside the [[systems/LetterBlaster]] controller (`LetterBlaster:_onActivated`); the steps below describe the end-to-end consume path. Only steps 4–8 (the helpers + server handler) live in this module.
+
+1. Player activates the Spelling Staff Tool (`Tool.Activated`).
+2. `LetterBlaster` checks `MindFullManager:isMindFull()` — blocks the shot when the buffer is at 12/12.
 3. Raycast from camera through mouse position, excluding the player's character.
-4. If the hit instance is inside a tagged `LetterBlock` Model (ancestor walk via `findLetterBlock`), read `Block.Letter` + `Block.Color` attributes.
+4. If the hit instance is inside a tagged `LetterBlock` Model (ancestor walk via `findLetterBlock`), read `Block.Letter` + `Block.Color` attributes (`readBlock`).
 5. `WordBuffer:append(letter, color)` on the local session buffer.
 6. Fire `ConsumeBlock` remote to the server with the block Model reference.
-7. Server validates (Instance? Model? tagged?) and calls `block:Destroy()`.
+7. Server handler validates (Instance? Model? tagged?) and calls `block:Destroy()`.
 8. The `CollectionService` removed signal triggers [[systems/BlockSpawner]]'s auto-refill to maintain target count.
 
 ## MindFull gate
 
-When the buffer hits 12/12, [[systems/MindFullManager]] fires `mindFull`. BlockShootBoot simply polls `:isMindFull()` on each click — no signal wiring needed because the check is cheap and the gate is checked exactly once per input event. When the player removes tiles or memorizes a word, the buffer shrinks and `:isMindFull()` returns false, re-enabling input.
+When the buffer hits 12/12, [[systems/MindFullManager]] fires `mindFull`. `LetterBlaster` simply polls `:isMindFull()` on each activation — no signal wiring needed because the check is cheap and the gate is checked exactly once per input event (a blocked shot plays `FizzleSound`). When the player removes tiles or memorizes a word, the buffer shrinks and `:isMindFull()` returns false, re-enabling input.
 
 ## PlayerSession
 
@@ -40,9 +42,9 @@ When the buffer hits 12/12, [[systems/MindFullManager]] fires `mindFull`. BlockS
 |---|---|---|
 | `wordBuffer` | `WordBuffer` | 12-slot buffer |
 | `mindFullManager` | `MindFullManager` | Transition watcher over the buffer |
-| `energyReservoirs` | `EnergyReservoirs` | 3-color energy store (for Phase 4 MemorizeAction + CastAction wiring) |
+| `energyReservoirs` | `EnergyReservoirs` | 3-color energy store (consumed by MemorizeAction + CastAction) |
 
-Any client system that needs player state calls `PlayerSession.get()` rather than constructing its own. Phase 4 HUD scripts will require the same module.
+Any client system that needs player state calls `PlayerSession.get()` rather than constructing its own — the HUD gameplay widgets (BufferDisplay, MemorizeButton, SpellMenu) and LetterBlaster all share this one instance.
 
 ## Security
 

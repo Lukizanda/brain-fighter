@@ -1,7 +1,7 @@
 ---
 type: design
 description: Canonical core loop — aim, shoot letter blocks, spell words in a 12-slot buffer, cast color-typed spells that drain per-color energy reservoirs to defeat the level monster
-updated: 2026-05-13
+updated: 2026-06-05
 ---
 
 # Gameplay Loop
@@ -18,9 +18,9 @@ The full cycle, as drawn in [`./gameplay-loop.excalidraw`](./gameplay-loop.excal
 2. **Shoot** — a successful hit despawns the block; the spawner queues a replacement.
 3. **Buffer** — the shot letter appends to the 12-slot word buffer. Each tile remembers the **color** of the block it came from.
 4. **Arrange** — player drags buffer tiles into the order they want and double-clicks/taps to destroy unwanted letters. The buffer is the only place words are constructed.
-5. **Memorize** — the explicit commit button (icon-only, e.g. ✨) validates the buffered word against the dictionary. **Valid** → the word's energy transmutes into the matching per-color reservoirs and the buffer clears. **Invalid** → the button shakes, the buffer flashes red, and the letters are preserved so the player can correct typos without retyping. *No spell fires from this action* — committing and casting are now separate.
+5. **Memorize** — the explicit commit button (icon-only, e.g. ✨) validates the buffered word against the dictionary. **Valid** → the word's energy transmutes into the matching per-color reservoirs and the buffer clears. **Invalid** → the button shakes, the buffer flashes red, and the buffer is **cleared anyway** — the letters are consumed, so a bad commit costs the collected tiles and the player must re-collect. *No spell fires from this action* — committing and casting are now separate. (Revised from an earlier "preserve on invalid" rule; see Memorize section below.)
 6. **Energy** — on a valid Memorize, `word_energy = Σ letter_values × length_multiplier`. Mixed-color words are allowed; energy is **split value-weighted by tile color** — each tile contributes its own `letter_value × length_multiplier` to *its* color's reservoir. Sum across colors equals whole-word energy. All blocks are colored. Energy persists across words, so the player can Memorize multiple words to stockpile before casting.
-7. **Cast** — the player spends energy by interacting with a color reservoir directly. **Tap** a reservoir = fire that color's highest currently-affordable tier. **Drag from** a reservoir = a vertical menu opens, listing **all currently-affordable tiers of that color** (Spark T1·10 / Fireball T2·30 / Inferno T3·80 for red), with locked tiers greyed; release on the desired tier to fire it. Release outside = cancel. Casting drains *exactly the tier cost*, not the whole bar.
+7. **Cast** — the player spends energy by interacting with a color reservoir directly. **Tap** a reservoir = fire that color's highest currently-affordable tier. **Drag from** a reservoir = a vertical menu opens, listing **all currently-affordable tiers of that color** (Firebolt T1·5 / Fireball T2·10 / Inferno T3·20 / Volley T4·40 for red), with locked tiers greyed; release on the desired tier to fire it. Release outside = cancel. Casting drains *exactly the tier cost*, not the whole bar.
 8. **Spell** — the spell config's `targetingMode` decides what happens next: `auto` fires at the monster (or self, for buffs); `placement` hands the player an aimed reticle for the spell's footprint.
 9. **Effect** — the spell resolves against the monster (damage, debuff) or the player (heal, shield) or the world (wall, AOE).
 10. **Loop** — buffer drains on Memorize; player re-engages floating blocks. Level ends when the monster's HP hits zero.
@@ -44,7 +44,7 @@ Pacing tension — slow spelling vs urgent combat — is the central design risk
 ### Spell economy
 
 - **Per-color persistent reservoirs.** *Why:* one shared energy pool would erase the meaning of color; one tier-locked reservoir per color forces the player to actually engage with whichever colors the spawner is offering. Persistence (vs. per-word reset) is what lets short words contribute — `CAT` is worthless on its own, but five `CAT`s is a T2 cast.
-- **Casting drains exactly the tier cost; cap at 160 (2×T3).** *Why:* full-drain casting would punish the player for accidentally chaining big words. Exact-cost drain rewards efficiency without punishing surplus. The 160 cap absorbs overshoot from one huge word (`EARTHQUAKES`=81, `CHARACTERIZE`=84) but blocks indefinite stockpiling that would trivialize encounters.
+- **Casting drains exactly the tier cost; cap at 60 (3×T3).** *Why:* full-drain casting would punish the player for accidentally chaining big words. Exact-cost drain rewards efficiency without punishing surplus. The 60 cap (≈ one T4 cast plus change) blocks indefinite stockpiling that would trivialize encounters and keeps the player casting frequently rather than hoarding for one nuke. (Originally 160 = 2×T3-of-80; lowered alongside the tier-cost rebalance.)
 - **Word power = Scrabble letter values × length multiplier.** *Why:* Scrabble values are a known-good distribution that already rewards rare letters; pinning the formula to that gives us free intuition ("Z is worth more than E"). The length multiplier is what turns short common words into kindling and long words into the climactic payoff — `LIGHTNING` should feel meaningfully bigger than `FIRE`, not just slightly bigger.
 
 ### Targeting
@@ -60,7 +60,7 @@ Word commit and spell cast are decoupled (revised 2026-05-13, supersedes an earl
 An icon-only button next to the buffer converts the buffered word into mana.
 
 - **Valid word** → energy transmutes into the matching color reservoirs (value-weighted by tile color per the formula). Buffer clears. The letters visibly flow into the bars as feedback.
-- **Invalid word** → the button shakes, the buffer flashes red, but **letters are preserved** so the player can correct typos without starting over. A soft fizzle sound communicates the failure without punishing it.
+- **Invalid word** → the button shakes, the buffer flashes red, and the buffer is **cleared** — the letters are consumed regardless (`MemorizeAction` `init.luau:76`). A soft fizzle sound communicates the failure. *(Revised 2026-05/06 from the original "letters preserved for typo correction" rule: consuming on a bad commit makes Memorize a real decision with stakes rather than a free retry. If playtest shows it's too punishing for young players, this is a one-line revert in `MemorizeAction`.)*
 - The button is **icon-only** (sparkle / swirl glyph). No text label → no localization burden, and the action is taught in tutorial copy ("tap to absorb the word into mana") rather than baked into the button itself.
 
 *Why:* the prior design coupled word commit with spell fire — every commit forced a cast decision. Decoupling them turns stockpiling into a real strategy (commit several words first, then choose when and what to cast) and removes the awkward "what color does an empty Cast tap default to?" question.
@@ -70,7 +70,7 @@ An icon-only button next to the buffer converts the buffered word into mana.
 Each color's reservoir is the cast surface for that color.
 
 - **Tap a reservoir** = fire the highest currently-affordable tier of that color. Default fast-path; one touch, predictable.
-- **Drag from a reservoir** = a vertical menu opens alongside it, listing **all currently-affordable tiers of that color** (e.g. red: Spark T1·10, Fireball T2·30, Inferno T3·80). Affordable tiers are bright; tiers above the current energy are greyed/locked. Release on a tier to fire that spell.
+- **Drag from a reservoir** = a vertical menu opens alongside it, listing **all currently-affordable tiers of that color** (e.g. red: Firebolt T1·5, Fireball T2·10, Inferno T3·20, Volley T4·40). Affordable tiers are bright; tiers above the current energy are greyed/locked. Release on a tier to fire that spell.
 - **Release outside the menu** = cancel; no energy spent.
 - The menu opens **toward the screen interior** (reservoirs live on the right edge → menu opens to the left), so the player's finger doesn't occlude the choices.
 - **Placement-mode spells are visually marked** in the menu — a crosshair glyph (⌖) at the right edge of the entry, plus a **dashed outline** around the entry (auto-target entries use a solid outline). Two layered cues: the glyph identifies the targeting mode; the dashed outline signals "this entry has a second step after release." First-time use of any placement spell triggers a one-shot tutorial flash so the second aim step doesn't surprise the player.
@@ -120,25 +120,29 @@ Each color's reservoir is the cast surface for that color.
 
 | Tier | Energy required to cast | Drain on cast |
 |---|---|---|
-| T1 | 10 | 10 |
-| T2 | 30 | 30 |
-| T3 | 80 | 80 |
+| T1 | 5 | 5 |
+| T2 | 10 | 10 |
+| T3 | 20 | 20 |
+| T4 | 40 | 40 |
 
-Bar cap per color: **160** (2×T3). Energy above the cap is discarded.
+Bar cap per color: **60** (3×T3). Energy above the cap is discarded. (Rebalanced 2026-05/06 from the original 10/30/80/75 + cap 160 — the lower numbers keep casts frequent rather than encouraging hoarding. Code is pinned: `SpellRegistry.TIER_COSTS = { 5, 10, 20, 40 }`, `EnergyReservoirs.CAP_PER_COLOR = 60`.)
+
+T4 exists for red only (Volley). Other colors top out at T3.
 
 ### Spell roster (prototype)
 
-| Color | Tier | Spell | Effect (prototype) | Targeting |
-|---|---|---|---|---|
-| Red | T1 | Spark | ~5% boss HP damage | `auto` |
-| Red | T2 | Fireball | ~20% boss HP damage | `auto` |
-| Red | T3 | Inferno | ~50% boss HP damage | `auto` |
-| Green | T1 | Mend | ~15% self-heal | `auto` |
-| Green | T2 | Stone Wall | ~6 s wall, player-placed | `placement` |
-| Green | T3 | Sanctuary | Full heal + buff | `auto` |
-| Blue | T1 | Frost Nip | 1 s freeze on target | `auto` |
-| Blue | T2 | Shield | ~5 s damage absorb on self | `auto` |
-| Blue | T3 | Stasis | 5 s freeze + damage amp | `auto` |
+| Color | Tier | Spell | Effect (prototype) | Delivery | Targeting |
+|---|---|---|---|---|---|
+| Red | T1 | Firebolt | ~5% boss HP damage | projectile | `auto` |
+| Red | T2 | Fireball | ~20% boss HP damage | projectile | `auto` |
+| Red | T3 | Inferno | ~50% boss HP damage | instant | `auto` |
+| Red | T4 | Volley | 3 × flat-12 damage projectiles | projectile | `auto` |
+| Green | T1 | Mend | ~15% self-heal | instant | `auto` |
+| Green | T2 | Stone Wall | ~6 s wall, player-placed (stub) | world_spawn | `placement` |
+| Green | T3 | Sanctuary | Full heal + shield 10 s | instant | `auto` |
+| Blue | T1 | Frost Nip | 1 s freeze on target | instant | `auto` |
+| Blue | T2 | Shield | ~5 s damage absorb on self (stub) | instant | `auto` |
+| Blue | T3 | Stasis | 5 s freeze + 2× damage amp | instant | `auto` |
 
 Numbers are starting points for first-prototype tuning, not final balance.
 
