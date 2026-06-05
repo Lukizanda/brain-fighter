@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-05-20
+updated: 2026-06-05
 ---
 
 # Build Plan
@@ -98,7 +98,7 @@ Replace the bare `BlockShootBoot` click handler with a dedicated weapon Tool.
 
 **Deleted:** `src/client/BlockShootBoot.client.luau`
 
-## Phase 4.7 — Letter Slot Reorder
+## Phase 4.7 — Letter Slot Reorder ✓ COMPLETE
 
 Add drag-to-reorder and tap-to-swap interactions to the BufferDisplay letter tiles. The backend `WordBuffer:reorder(fromIdx, toIdx)` already exists and is unit-tested — this phase is purely UI input wiring.
 
@@ -137,6 +137,7 @@ Tuning passes (energy curve, spawn density, tier thresholds), audio cues, partic
 
 ## Plan changelog
 
+- **2026-06-05**: Phase 4.7 (letter slot drag/tap-to-swap) confirmed complete — both interactions implemented in `BufferDisplayBuilder.luau`, mouse + touch supported.
 - **2026-05-20**: added Phase 4.8 (UI architecture review) as a gate before Phase 5 polish.
 - **2026-05-20**: HUD coordinator refactor landed — `PlayerHud` is now a ModuleScript; `GameplayHudGui` is the sole BottomCenter coordinator with a single `LAYOUT` table.
 - **2026-05-15**: added Phase 4.7 (letter slot drag/tap-to-swap reorder).
