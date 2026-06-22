@@ -2,7 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
-local Constants = require(ReplicatedStorage.Shared.Weapon.Constants)
+local LASER_BEAM_VISUAL_SPEED = 200 -- studs/sec; beam travels from muzzle to hit point
 
 local laserBeamTemplate = ReplicatedStorage.Shared.Weapon.Objects.LaserBeam
 
@@ -12,7 +12,7 @@ local function laserBeamEffect(startPosition: Vector3, endPosition: Vector3)
 		return
 	end
 
-	local tweenTime = distance / Constants.LASER_BEAM_VISUAL_SPEED
+	local tweenTime = distance / LASER_BEAM_VISUAL_SPEED
 	local tweenInfo = TweenInfo.new(tweenTime, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
 
 	local laser = laserBeamTemplate:Clone()

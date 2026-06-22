@@ -22,7 +22,6 @@ local ACTIVE_MODE_ATTRIBUTE = "ActiveGameMode"
 local ScoreTracker = require(script.ScoreTracker)
 local SpawnManager = require(script.SpawnManager)
 local RoundManager = require(script.RoundManager)
-local TeamService = require(script.TeamService)
 
 local log = Logger.new("GameModeService")
 
@@ -60,13 +59,6 @@ local activeMode, resolvedModeKey = GameModes.get(requestedModeKey)
 ----------------------------------------------------------------------
 
 local function onPlayerAdded(player: Player)
-	-- Auto-balance assignment for team-based modes runs first so the
-	-- mode's onPlayerJoin override sees the player already on a team.
-	-- FFA-style modes leave teamBased = false; TeamService is
-	-- bypassed and the mode's onPlayerJoin sets player.Neutral = true.
-	if activeMode.getConfig().teamBased then
-		TeamService.assignToSmallestTeam(player)
-	end
 	activeMode.onPlayerJoin(player)
 
 	ScoreTracker.addPlayer(player)
@@ -124,14 +116,6 @@ local function onPlayerAdded(player: Player)
 		setupCharacter(player.Character)
 	end
 
-	-- For team-based modes the spawn-location TeamColor filter only
-	-- matches once the player is on a team. CharacterAutoLoads was
-	-- disabled at boot so the first character isn't loaded before
-	-- assignment lands; trigger the initial load now.
-	if activeMode.getConfig().teamBased and player.Character == nil then
-		player:LoadCharacter()
-	end
-
 	log:info("Player added:", player.Name)
 end
 
@@ -185,17 +169,6 @@ local function initialize()
 		killFeedRemote = killFeedRemote,
 		playerDamagedEvent = playerDamagedEvent,
 	})
-
-	-- Teams must exist before SpawnManager is asked for team-aware
-	-- selections, and before any PlayerAdded fires from the loop below.
-	-- We also disable CharacterAutoLoads on each player so the engine
-	-- doesn't spawn them before TeamService.assignToSmallestTeam runs;
-	-- the explicit LoadCharacter call inside onPlayerAdded re-triggers
-	-- the spawn against a now-team-aware SpawnLocation match.
-	if activeMode.getConfig().teamBased then
-		TeamService.initialize()
-		Players.CharacterAutoLoads = false
-	end
 
 	SpawnManager.initialize({ spawnTag = activeMode.getConfig().spawnTag })
 

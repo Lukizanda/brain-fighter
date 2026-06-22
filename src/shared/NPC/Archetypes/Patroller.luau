@@ -18,7 +18,7 @@ local Patroller = {
 	-- Weapon template (optional) — cloned from ReplicatedStorage.Shared.Weapon.Templates
 	-- and welded to the NPC's right hand on spawn for visual display only.
 	-- NPC damage comes from NPCConstants.COMBAT_*, not the weapon's attributes.
-	weaponTemplateName = "Rifle" :: string?,
+	weaponTemplateName = nil :: string?,
 
 	-- Animation asset IDs (rbxassetid:// strings). nil = skip that animation.
 	-- Default R15 walk/idle + Rifle shoot animation from the weapon template.

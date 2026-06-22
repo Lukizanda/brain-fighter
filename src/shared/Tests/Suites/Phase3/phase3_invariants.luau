@@ -11,7 +11,6 @@ return {
 		local requiredModules = {
 			"BlockSpawner",
 			"BlockShoot",
-			"BossAdapter",
 			"LetterBlocks",
 			"WordBuffer",
 			"MindFullManager",

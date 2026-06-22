@@ -16,7 +16,7 @@ local GameConfig = {
 	----------------------------------------------------------------------
 	SHOW_BACKPACK = false,         -- Default tool hotbar (bottom center)
 	SHOW_HEALTH = false,           -- Default health bar (replaced by HealthGui)
-	SHOW_PLAYER_LIST = false,      -- Leaderboard (top right) — replaced by custom ScoreboardGui; also frees the Tab key for WeaponRolodex cycling
+	SHOW_PLAYER_LIST = false,      -- Leaderboard (top right) — replaced by custom ScoreboardGui
 	SHOW_CHAT = true,              -- Chat window
 	SHOW_EMOTES = true,            -- Emote menu
 
@@ -36,17 +36,10 @@ local GameConfig = {
 	ROUND_COUNTDOWN_ENABLED = false,  -- When false, the pre-round 10-s countdown is skipped; round starts immediately. Set true to restore.
 
 	----------------------------------------------------------------------
-	-- Character system gates
+	-- Gameplay feature flags
 	----------------------------------------------------------------------
-	-- Brain Fighter uses default Roblox third-person camera + AutoRotate
-	-- character (platformer-style). The inherited TPS template's
-	-- camera-locked body orientation + Motor6D upper-body tracking +
-	-- weapon-aim camera modes are gated behind this flag — leave OFF for
-	-- Brain Fighter, flip ON to restore the TPS feel for testing or a
-	-- future mode.
-	----------------------------------------------------------------------
-	TPS_CHARACTER_ENABLED = false,    -- When true, CameraManager + LocomotionManager initialize and apply the TPS body-lock + camera-aim stack. When false, default Roblox PlayerModule handles camera + locomotion.
-	SHOW_WEAPON_ROLODEX = false,      -- When false, the weapon rolodex HUD is not built or registered. Flip true to restore.
+	TPS_CHARACTER_ENABLED = false,    -- Reserved; TPS camera/locomotion stack removed. No effect.
+	SHOW_WEAPON_ROLODEX = false,      -- Reserved; weapon rolodex removed. No effect.
 
 	----------------------------------------------------------------------
 	-- Dev-only helpers (leave off in shipped builds)
