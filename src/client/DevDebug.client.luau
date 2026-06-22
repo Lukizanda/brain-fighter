@@ -12,6 +12,7 @@
 --   4  fill all reservoirs to T4 threshold (40)
 --   M  toggle mobile-input override (forces InputCategorizer to "Touch"
 --       so touch-only HUD widgets like the dash button appear on desktop)
+--   ;  toggle boss phase label visibility
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -92,4 +93,4 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 end)
 
-log:info("ready — [=letter  ]=memorize  \\=clear  1-4=fill mana T1-T4  M=mobile-toggle  (cycling: " .. TEST_WORD .. ")")
+log:info("ready — [=letter  ]=memorize  \\=clear  1-4=fill mana T1-T4  M=mobile-toggle  ;=phase-label  (cycling: " .. TEST_WORD .. ")")

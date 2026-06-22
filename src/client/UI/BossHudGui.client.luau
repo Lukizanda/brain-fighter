@@ -16,6 +16,7 @@
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService      = game:GetService("TweenService")
+local UserInputService  = game:GetService("UserInputService")
 
 local Logger           = require(ReplicatedStorage.Shared.Core.Logger)
 
@@ -86,6 +87,7 @@ phaseLabel.TextXAlignment  = Enum.TextXAlignment.Right
 phaseLabel.TextScaled      = true
 phaseLabel.Font            = Enum.Font.GothamBold
 phaseLabel.Text            = "Phase I"
+phaseLabel.Visible         = false   -- hidden by default; toggle with P
 phaseLabel.Parent          = topRow
 
 -- Health bar background
@@ -133,6 +135,17 @@ end
 local function showBoss(visible: boolean)
 	container.Visible = visible
 end
+
+local phaseDebugVisible = false
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.Semicolon then
+		phaseDebugVisible = not phaseDebugVisible
+		phaseLabel.Visible = phaseDebugVisible
+		log:info("phase label " .. (phaseDebugVisible and "ON" or "OFF"))
+	end
+end)
 
 -- ---------------------------------------------------------------
 -- Remote event connections

@@ -20,6 +20,7 @@ updated: 2026-06-05
 | `3` | Fill all energy reservoirs to T3 (20 energy) |
 | `4` | Fill all energy reservoirs to T4 (40 energy) |
 | `M` | Toggle mobile-input override — forces `InputCategorizer` to report "Touch" so the touch HUD can be tested on desktop |
+| `;` | Toggle boss phase label visibility — hidden by default in gameplay; press to reveal/hide during playtesting |
 
 ## Notes
 
