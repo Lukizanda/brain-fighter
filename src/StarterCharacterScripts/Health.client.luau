@@ -1,0 +1,2 @@
+-- Intentional no-op: overrides Roblox's default health-regen LocalScript.
+-- Health is managed server-side by HealthService; automatic regen is disabled.

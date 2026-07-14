@@ -36,6 +36,8 @@ Originally the validator was stricter. After empirical MCP-probing of a running 
 
 The lesson: **validate against proven bugs, not aspirational conventions.** Style policing produces false positives that erode trust in the tool.
 
+**Adjacent trap, not yet covered:** `default.project.json` itself can silently fail to sync a subtree when a key names a Roblox service that only exists *nested* under another service (e.g. `StarterCharacterScripts`, which lives at `StarterPlayer.StarterCharacterScripts`, not the DataModel root) — placing it as a root sibling produces no error and no red-delete warning; the path is just never created. Caught by playtest verification, not the validator, on 2026-07-14 — see [[systems/Health]] "Rojo placement gotcha". This validator only lints `.meta.json`/`.model.json`; `default.project.json` tree-shape mistakes are an open gap.
+
 ## Run modes
 
 ```sh
