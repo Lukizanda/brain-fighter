@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-06-05
+updated: 2026-07-15
 ---
 
 # Build Plan
@@ -135,10 +135,45 @@ Before Phase 5 polish work, conduct a structured review of the client UI system 
 
 ## Phase 5 — Polish
 
-Tuning passes (energy curve, spawn density, tier thresholds), audio cues, particle effects, tutorial copy, accessibility passes.
+Split into three sub-phases (2026-07-15), sequenced so correctness debt lands before content built on top of it. Source of the item list: [[design/system-audit-2026-06]] (re-verified against `src/` on 2026-07-15 — Skills leak, stub-spell mana drain, and placeholder sounds all confirmed still live).
+
+### Phase 5.1 — Correctness sprint
+
+The audit's Tier 1 items that survived the template cut. Small scope, gates 5.2.
+
+| Item | Detail |
+|---|---|
+| **Skills Humanoid state leak [H]** | `SkillEffects._freezeState` + `SkillInterrupt._active`/`_silenced` are cleaned only by timer/finish paths. Add one-shot `Humanoid.Died`/`Destroying` cleanup purging both registries. |
+| **Stub spells drain mana** | `shield`/`wall`/`buff` handlers in `SkillEffects.luau` no-op but return `ok=true`, so CastAction never refunds. Return `ok=false, reason="unimplemented"` until 5.2 implements them. |
+| **Split-brain damage path [M]** | `SkillEffects` writes `Humanoid.Health` directly for spell damage while boss attacks route through `applyDamage.process`. Funnel all damage through `applyDamage`, or document hit-zones as out of scope for spells. |
+| **SkillInterrupt tests** | The Skills layer has zero `__tests`; `SkillInterrupt` (token cancel/finish/silence) is trivially unit-testable. Add a smoke suite alongside the leak fix. |
+
+**Milestone:** boss fight playtest with freeze/death races shows no leaked registry entries; casting a stub spell refunds its mana.
+
+### Phase 5.2 — Content completion
+
+Make the full spell roster and AV feedback real.
+
+| Item | Detail |
+|---|---|
+| **Implement shield / wall / buff** | Replace the 5.1 `ok=false` stubs with real effects (design pass with user on behavior first). |
+| **Real SFX assets** | Replace `rbxassetid://0` placeholders (SpellMenuGui, GameplayHudGui, VfxConfig fizzle sites); work the [[systems/AudioSFX]] gap priority list. |
+| **VFX gaps** | Green cast effects + PERF guardrails from [[systems/VisualEffects]]. |
+
+### Phase 5.3 — Polish & tutorial
+
+| Item | Detail |
+|---|---|
+| **Tuning passes** | Energy curve, spawn density, tier thresholds. |
+| **UI review leftovers** | R-5..R-9 from [[design/ui-architecture-review]] (2 Medium / 3 Low). |
+| **Tier 3 debt (opportunistic)** | Color type dedup ×4, Skills/Vfx magic-number extraction — as polish touches each area. |
+| **Tutorial** | Guided first-play sequence per [[systems/Tutorial]] (shoot → buffer → memorize → cast → boss hit). |
+
+**Deferred (not scheduled):** server trust hardening on `ConsumeBlock`/`SpellCastServer` — revisit if a public/multiplayer release approaches.
 
 ## Plan changelog
 
+- **2026-07-15**: Phase 5 split into 5.1 (correctness sprint: Skills leak, stub-spell refund, damage-path unification), 5.2 (content: shield/wall/buff, real SFX, VFX gaps), 5.3 (tuning, UI R-5..R-9, tutorial). Server trust hardening explicitly deferred. Audit items re-verified live against `src/` before scheduling.
 - **2026-06-05**: Phase 4.8 (UI architecture review) re-audited + complete — R-1..R-4 cleanup landed and verified by playtest; GO for Phase 5. R-5..R-9 (2 Medium / 3 Low) deferred.
 - **2026-06-05**: Phase 4.7 (letter slot drag/tap-to-swap) confirmed complete — both interactions implemented in `BufferDisplayBuilder.luau`, mouse + touch supported.
 - **2026-05-20**: added Phase 4.8 (UI architecture review) as a gate before Phase 5 polish.
