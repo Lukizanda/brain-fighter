@@ -1,10 +1,12 @@
 ---
 type: system
-description: Per-character systems — locomotion controller, camera controller, character systems loader, dash/roll. Single-owner Motor6D + AlignOrientation pattern. TPS stack gated behind GameConfig.TPS_CHARACTER_ENABLED (default off for Brain Fighter).
-updated: 2026-05-19
+description: Per-character systems (mostly REMOVED 2026-06-22, commit 6610291) — CameraController + LocomotionController deleted; only DashController + CharacterSystemsLoader (CoreGui config) survive. Retained as historical record of the TPS stack.
+updated: 2026-07-15
 ---
 
 # Character System
+
+> **CameraController + LocomotionController REMOVED 2026-06-22 (commit `6610291`).** The TPS body-lock + Motor6D upper-body tracking + weapon-aim camera stack described below was deleted, not gated — Brain Fighter uses the default Roblox third-person camera + `Humanoid.AutoRotate = true` platformer character, and the template stack was never coming back. **Surviving character-level code:** `DashController` (dash/roll) and `CharacterSystemsLoader` (now simplified to CoreGui config only). The `GameConfig.TPS_CHARACTER_ENABLED` flag referenced below no longer gates anything — the code it guarded is gone. This page is retained for historical context.
 
 Locomotion, camera, and weapon-pose are intentionally separated but coordinated through the [[concepts/SingleOwnership]] rule — exactly one controller owns each Motor6D / property.
 

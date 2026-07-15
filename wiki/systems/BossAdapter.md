@@ -1,12 +1,12 @@
 ---
 type: system
-description: Phase 3 MVP Boss target (SUPERSEDED) — spawned a static Humanoid-bearing Model that SpellExecutor could damage. Replaced by the full Boss system; its server bootstrap is now disabled.
-updated: 2026-06-05
+description: Phase 3 MVP Boss target (REMOVED 2026-06-22, commit 6610291) — was a static Humanoid-bearing Model that SpellExecutor could damage. Superseded by the full Boss system, then deleted along with its tests. Retained as historical record.
+updated: 2026-07-15
 ---
 
 # BossAdapter
 
-> **SUPERSEDED by [[systems/Boss]] (2026-05-18).** BossAdapter was the Phase 3 MVP boss — a static Humanoid Model with no AI. The full [[systems/Boss]] system (custom BossBrain rig, AI state machine, attacks, HUD health bar) replaced it. The server bootstrap `src/server/BossAdapter/BossService.server.luau` was renamed to `…BossService.server.luau.disabled` and no longer runs; `src/shared/BossAdapter/init.luau` still exists and is exercised only by the Phase 3 test suite (`bossadapter_*` tests). The live boss is now found in workspace as the model named/tagged `"Boss"`. This page is retained for the test suite and historical context — do not wire new gameplay against BossAdapter.
+> **REMOVED 2026-06-22 (commit `6610291`); previously SUPERSEDED by [[systems/Boss]] (2026-05-18).** BossAdapter was the Phase 3 MVP boss — a static Humanoid Model with no AI — replaced by the full [[systems/Boss]] system (custom BossBrain rig, AI state machine, attacks, HUD health bar). As of `6610291` the shared module `src/shared/BossAdapter/init.luau`, the disabled server bootstrap `src/server/BossAdapter/BossService.server.luau.disabled`, and the Phase 3 `bossadapter_*` test suites are all deleted, and `phase3_invariants` dropped its BossAdapter check. The live boss is found in workspace as the model named/tagged `"Boss"`. This page is retained for historical context only — nothing it describes exists in `src/` anymore.
 
 Server-side module that spawned and tracked a Boss target for spell combat. Phase 3 MVP: a static Model with a Humanoid — no AI, no movement. The player defeated it by casting spells (damage flows through [[systems/SpellExecutor]], which just needs a Humanoid target).
 

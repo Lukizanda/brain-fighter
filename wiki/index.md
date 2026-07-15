@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-06-05
+updated: 2026-07-15
 ---
 
 # Wiki Index
@@ -18,13 +18,13 @@ Start here. See [[WIKI]] for conventions and operations.
 
 ## Systems
 
-- [[systems/Weapon]] — firearm + melee pipelines, templates, state machines, hit detection
+- [[systems/Weapon]] — **REMOVED (commit 6610291)**; historical record of the deleted TPS firearm/melee stack. Only MeleeHitDetector/MeleeConstants/laserBeamEffect survive (NPC-facing)
 - [[systems/Health]] — damage types, hit zones, modifiers, HealthService, DeathHandler
-- [[systems/Character]] — locomotion + camera (single-owner Motor6D control, AlignOrientation lock)
+- [[systems/Character]] — **mostly REMOVED (commit 6610291)**; Camera/Locomotion controllers deleted, only DashController + CharacterSystemsLoader survive
 - [[systems/NPC]] — Perception → StateMachine → Actions, Patroller archetype, WorldDataManager
-- [[systems/HUD]] — Builder + Config + LayoutManager pattern, attribute bars, WeaponRolodex
-- [[systems/Loadout]] — Normal/Special slot model, RespawnPedestalManager, drop remote
-- [[systems/GameMode]] — RoundManager, ScoreTracker, mode registry (FFA, TDM)
+- [[systems/HUD]] — Builder + Config + LayoutManager pattern, attribute bars, Phase 4 gameplay widgets (WeaponRolodex + LoadoutDropClient removed in 6610291)
+- [[systems/Loadout]] — **REMOVED (commit 6610291)**; pedestal pickup / RespawnPedestalManager / drop remote all deleted
+- [[systems/GameMode]] — RoundManager, ScoreTracker, mode registry; FFA/TDM/TeamService deleted (6610291), NoOpMode only
 - [[systems/Tests]] — TestRunner + suites for NPC/Melee, MCP-driven harness
 - [[systems/EnergyEconomy]] — Phase 1 pure-Luau module: word → per-color mana (Scrabble values × length tiers, floor-reconciled color splits)
 - [[systems/EnergyReservoirs]] — Phase 1 pure-Luau state container: three per-color energy bars, cap 60, `.changed(color)` BindableEvent signal
@@ -39,7 +39,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/BlockSpawner]] — Phase 3 server-side populator: Scrabble-weighted letter picks, configurable color weights, auto-refill via CollectionService removed signal; maintains ~24 blocks in a 40x8x40 arena box
 - [[systems/BlockShoot]] — shared helpers + server handler for block consumption; client input now handled by LetterBlaster (Phase 4.6)
 - [[systems/Boss]] — Full boss system: custom non-humanoid rig (BossBrain sphere), AI state machine (Idle/Patrol/AttackPrep/Attack/Cooldown), phase scaffolding, FireballVolley + GroundSlam attacks, BossHudGui health bar
-- [[systems/BossAdapter]] — Phase 3 MVP (superseded): static Humanoid-bearing Model; disabled once the full Boss system landed
+- [[systems/BossAdapter]] — Phase 3 MVP (**REMOVED commit 6610291**, previously superseded by Boss): static Humanoid-bearing Model; module + Phase 3 tests now deleted
 - [[systems/SkillPipeline]] — Unified `SkillSpec` + `SkillEffects` + `SkillDelivery` shared by player spells and boss attacks; pure data-driven dispatch, multi-effect `onImpact` arrays, reserved hooks for VFX/SFX/status-effects
 - [[systems/LetterBlaster]] — Phase 4.6 weapon controller behind the Spelling Staff Tool: Tool.Activated → cooldown → mind-full gate → raycast → consume + laser blast; FireSound/HitSound/FizzleSound; no reticle (tap directly on blocks)
 - [[systems/AudioSFX]] — Sound effect inventory, two-backend overview (Sound vs AudioPlayer), wiring patterns, placeholder locations, gap priority list

@@ -51,6 +51,5 @@ Implemented in `applyDamage.process` — when source and target are on the same 
 
 ## Cross-references
 
-- Friendly fire team logic → [[systems/GameMode]] (TeamService)
-- Damage callers → [[systems/Weapon]]
+- Damage callers → NPC melee (`MeleeHitDetector`) and player spells ([[systems/SpellExecutor]] / [[systems/SkillPipeline]]). (The former firearm/TeamService friendly-fire path was deleted with the TPS stack in commit `6610291`.)
 - Death zone (falls) → `src/server/Arena/DeathZoneService.server.luau`

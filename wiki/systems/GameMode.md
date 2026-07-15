@@ -1,12 +1,14 @@
 ---
 type: system
-description: Game mode framework — RoundManager, ScoreTracker, SpawnManager, mode registry. FFA Deathmatch + TDM modes (currently gated off; NoOpMode active).
-updated: 2026-05-19
+description: Game mode framework — RoundManager, ScoreTracker, SpawnManager, mode registry. FFA/TDM modes + TeamService DELETED (2026-06-22, commit 6610291); NoOpMode is the only registered mode.
+updated: 2026-07-15
 ---
 
 # GameMode System
 
 Round-based game modes share a common scaffold: a state-machine round, a per-player score tracker, a spawn manager, and a mode-specific definition. Each mode plugs into the registry under `src/shared/GameMode/`.
+
+> **`FFADeathmatch`, `TeamDeathmatch`, and `TeamService` REMOVED 2026-06-22 (commit `6610291`).** They were gated off since Phase 1 and are now deleted, not just disabled — `Modes/init.luau` is stripped to `NoOpMode`-only and `GameModeService`'s `TeamService` require is gone. The gating section below is retained for historical context, but the competitive modes it describes no longer exist and cannot be re-enabled by flipping a flag. What survives and runs today: `GameModeService`, `RoundManager`, `ScoreTracker`, `SpawnManager`, and `NoOpMode`.
 
 ## Current gating (2026-05-13)
 

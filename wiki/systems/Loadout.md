@@ -1,10 +1,12 @@
 ---
 type: system
-description: Loadout system — Normal/Special slot model, RespawnPedestalManager, drop remote, cooldown overlay. Team-aware spawn paths currently gated off.
-updated: 2026-06-05
+description: Loadout system (REMOVED 2026-06-22, commit 6610291) — pedestal pickup, LoadoutService, RespawnPedestalManager, RespawnZoneService, and drop remote all deleted. Retained as historical record.
+updated: 2026-07-15
 ---
 
 # Loadout System
+
+> **REMOVED 2026-06-22 (commit `6610291`).** The entire Loadout stack — `LoadoutService`, `RespawnPedestalManager`, `RespawnZoneService`, the drop `RemoteEvent`s, and the pedestal-pickup flow — was deleted, not gated. Brain Fighter equips the single [[systems/LetterBlaster]] Spelling Staff Tool directly; there is no weapon-pickup economy. This page is retained for historical context — nothing it describes exists in `src/` anymore.
 
 Players pick weapons from pedestals in the spawn room, carry up to 2 Normal weapons + 1 Special, and can drop their currently-equipped Tool to swap. Reserves reset per life (no carry hoarding).
 

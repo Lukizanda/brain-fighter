@@ -2,7 +2,7 @@
 type: system
 description: Tutorial system — teaches the core Brain Fighter loop (shoot blocks → buffer word → memorize → cast spell) through guided in-world steps
 status: planning
-updated: 2026-05-16
+updated: 2026-07-15
 ---
 
 # Tutorial System
@@ -45,7 +45,7 @@ TutorialConstants (shared)      — IDs, DataStore key prefix, magic numbers.
 | Skip option | **DataStore-backed `TutorialCompleted` boolean** + persistent in-overlay Skip button. | Returning players bypass automatically; first-time players can opt out at any step. |
 | Failure handling | **Silent retry.** Invalid memorize / no-target cast / mis-color spell don't fail the tutorial — hint stays visible, player retries. | Punishing mistakes during a tutorial is a anti-pattern. The Skip button is the escape hatch. |
 | Locale / copy | All text lives in `TutorialConfig.STEPS[i].hintText`. | Single translation surface; designers can edit copy without touching code. |
-| Tutorial dummy boss | **Reuse the existing BossAdapter boss** (no separate dummy variant). Advance on first damage, not death. | Simpler; avoids forking BossAdapter. The tutorial completes the moment any spell lands a damage event on the boss, well before the boss could die. |
+| Tutorial dummy boss | **Reuse the live [[systems/Boss]] rig** (no separate dummy variant). Advance on first damage, not death. | Simpler; avoids forking the boss. The tutorial completes the moment any spell lands a damage event on the boss, well before the boss could die. (Originally planned against BossAdapter, deleted in commit `6610291`; retarget to the Boss `Humanoid`/health signal.) |
 
 ## Systems the Tutorial Touches
 
@@ -57,7 +57,7 @@ TutorialConstants (shared)      — IDs, DataStore key prefix, magic numbers.
 | MemorizeAction | Client fires `memorize_success` claim after `tryMemorize` returns `ok=true`. Server trusts the claim (no independent validation in MVP). | No (claim from `GameplayHudGui` call site) |
 | CastAction | Client fires `cast_success` claim after `tapReservoir`/`castSpecific` returns `ok=true`. | No (claim from `SpellMenuGui` call site) |
 | SpellExecutor | Untouched — damage happens via existing path. | No |
-| BossAdapter | TutorialService connects to `boss.Humanoid.HealthChanged` to detect first-damage event. | No |
+| [[systems/Boss]] | TutorialService connects to the boss health-changed signal to detect the first-damage event. | No |
 | HUD (existing builders) | Builders already expose their root `gui` Frame and are registered in `_G.PlayerHud.*`. TutorialController reads `_G.PlayerHud.MemorizeButton.gui` etc. to position tooltips. | No |
 
 ## TutorialConfig — Step Table
@@ -423,7 +423,7 @@ Ordered for implementation. Tasks within a phase are roughly parallelizable; pha
 - [[systems/MemorizeAction]]
 - [[systems/CastAction]]
 - [[systems/SpellExecutor]]
-- [[systems/BossAdapter]]
+- [[systems/Boss]]
 - [[systems/HUD]]
 - [[concepts/BuilderConfigLayout]]
 - [[concepts/SingleOwnership]]

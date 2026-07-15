@@ -38,7 +38,6 @@ Builder output (AttributeBar instance from AttributeBarBuilder)
 
 - AttributeBar (Health) — [[systems/HUD]]
 - BufferDisplay, MemorizeButton, SpellMenu, MindFullIndicator, DashButton (Phase 4 gameplay widgets)
-- WeaponRolodex
 - BuffTray
 - TouchControl (mobile)
 - SettingsMenu

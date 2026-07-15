@@ -1,10 +1,12 @@
 ---
 type: system
-description: Weapon system — firearms (handgun, rifle, blaster) and melee (sword) with shared state-machine, hit detection, and effects layers
-updated: 2026-05-14
+description: Weapon system (REMOVED 2026-06-22, commit 6610291) — firearm/melee TPS stack deleted; only MeleeHitDetector, MeleeConstants, and laserBeamEffect survive as NPC-facing utilities. Retained as historical record.
+updated: 2026-07-15
 ---
 
 # Weapon System
+
+> **REMOVED 2026-06-22 (commit `6610291`).** The TPS weapon stack this page describes — firearm controllers, weapon templates (Pistol/Rifle/Sword/LaserPistol), the shared state machine, AimAssist, WeaponRolodex, and player-melee swing — was deleted, not gated. Brain Fighter is a spelling-combat game (the [[systems/LetterBlaster]] Spelling Staff is the only Tool). **Only three former Weapon files survive, kept for NPC combat, not player weapons:** `MeleeHitDetector` + `MeleeConstants` (NPC attacks) and `laserBeamEffect` (LetterBlaster + NPC ranged). This page is retained for historical context — do not wire new gameplay against anything below.
 
 Weapons are Tools. Each Tool template has a per-weapon controller LocalScript that drives a generic state machine. Hit detection and damage application are split between client and server with different authority models per weapon type.
 

@@ -1,7 +1,7 @@
 ---
 type: system
-description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, WeaponRolodex, BuffTray, reticle, settings menu, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu with embedded mana fill, MemorizeButton, MindFullIndicator), and the mobile DashButton.
-updated: 2026-06-05
+description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, reticle, settings menu, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu with embedded mana fill, MemorizeButton, MindFullIndicator), and the mobile DashButton. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291.)
+updated: 2026-07-15
 ---
 
 # HUD System
@@ -23,7 +23,7 @@ flowchart LR
   subgraph SRC["Game state (src/shared/, src/client/PlayerSession.luau)"]
     PS["PlayerSession.get()<br/>wordBuffer · energyReservoirs · mindFullManager"]:::state
     HUM["Character.Humanoid<br/>HealthChanged"]:::state
-    REM["Server RemoteEvents<br/>KillFeed · ScoreUpdate · LoadoutDropRejected"]:::state
+    REM["Server RemoteEvents<br/>KillFeed · ScoreUpdate"]:::state
     CFG["GameConfig flags<br/>TEAMS_ENABLED · ROUND_TIMER_ENABLED · SHOW_WEAPON_ROLODEX"]:::state
   end
 
@@ -47,8 +47,6 @@ flowchart LR
     BTG["BuffTrayGui (scaffold)"]:::coord
     TSG["TeamScoreGui<br/>(gated TEAMS_ENABLED)"]:::coord
     RTG["RoundTimerGui<br/>(gated ROUND_TIMER_ENABLED)"]:::coord
-    WRG["WeaponRolodex<br/>(gated SHOW_WEAPON_ROLODEX)"]:::coord
-    LDC["LoadoutDropClient<br/>(toast stack)"]:::coord
     BHG["BossHudGui<br/>(own ScreenGui)"]:::modal
     SMGUI["SettingsMenuGui<br/>(modal overlay)"]:::modal
     SBG["ScoreboardGui<br/>(Tab modal)"]:::modal
@@ -65,7 +63,6 @@ flowchart LR
     MFB["MindFullIndicatorBuilder"]:::builder
     DBB["DashButtonBuilder"]:::builder
     BTB["BuffTrayBuilder"]:::builder
-    WRB["WeaponRolodexBuilder"]:::builder
     RTB["ReticleBuilder"]:::builder
     TCB["TouchControlBuilder"]:::builder
     STB["SettingsMenuBuilder<br/>(⚠ reads Players.LocalPlayer — NIM-19)"]:::builder
@@ -77,7 +74,6 @@ flowchart LR
   DBG --> DBB
   MFI --> MFB
   BTG --> BTB
-  WRG --> WRB
   SMGUI --> STB
 
   %% --- coordinator → HudLayoutManager region ---
@@ -88,9 +84,7 @@ flowchart LR
   BTG -- "register(TopRight)" --> TR
   TSG -- "register(TopCenter)" --> TC
   RTG -- "register(TopCenter)" --> TC
-  WRG -- "register(BottomRight)" --> BR
   DBG -- "register(BottomRight, touch)" --> BR
-  LDC -- "register(BottomCenter, toast)" --> BC
 
   %% --- modal / own-ScreenGui (bypass HudLayoutManager) ---
   BHG -.->|own ScreenGui| HM
@@ -105,15 +99,15 @@ flowchart LR
   PS -- "energyReservoirs.changed" --> SMG
   PS -- "mindFull / mindFreed" --> MFI
   HUM -- "HealthChanged" --> GHUD
-  REM -- "OnClientEvent" --> KFG & TSG & LDC
-  CFG -. "GameConfig gate" .-> TSG & RTG & WRG
+  REM -- "OnClientEvent" --> KFG & TSG
+  CFG -. "GameConfig gate" .-> TSG & RTG
 ```
 
 Legend: blue = Coordinator LocalScript, orange = pure-module Builder, green = game-state source, purple = modal/own-ScreenGui (bypasses HudLayoutManager), gray = layout region. Solid arrows = mount/register. Dashed arrows = own ScreenGui parented directly to `PlayerGui`.
 
 ## Single-ownership invariants (Phase 4.8 audit)
 
-- `GameplayHudGui` is the **sole stable BottomCenter coordinator**. `LoadoutDropClient` registers a transient toast stack at BottomCenter — documented exception.
+- `GameplayHudGui` is the **sole BottomCenter coordinator**. (The former `LoadoutDropClient` toast stack that shared BottomCenter was removed with the Loadout system in commit `6610291`.)
 - Every Builder in `src/shared/Hud/` exposes `:destroy()` (12/12). Health adapter connections are tracked inline in `GameplayHudGui` (`healthConnections` table, cleared on respawn).
 - All Builders are pure modules except `SettingsMenuBuilder` (reads `Players.LocalPlayer` — tracked in NIM-19).
 - Detailed findings: [[design/ui-architecture-review]].
@@ -131,8 +125,6 @@ src/shared/Hud/
   HudConstants.luau               — shared sizes / colors / margins
   AttributeBarBuilder.luau        — Health / Stamina / Shield bars
   AttributeBarConfig.luau
-  WeaponRolodexBuilder.luau       — single weapon card with cycling
-  WeaponRolodexConfig.luau        — gradient, corner radius, pill positions
   BuffTrayBuilder.luau            — top-right buff icons (scaffold)
   BuffIconConfig.luau
   TouchControlBuilder.luau        — mobile touch overlay
@@ -182,11 +174,9 @@ The first four read state through `PlayerSession.get()` and subscribe to signals
 
 `GameplayHudGui` builds the health bar directly via `AttributeBarBuilder.build({name="Health", ...})` and maintains a `healthConnections` table of `RBXScriptConnection`s. On each `CharacterAdded` it disconnects old connections and re-subscribes to the new character's `Humanoid.HealthChanged` and `Humanoid.MaxHealthChanged`. No separate Adapter module.
 
-## WeaponRolodex
+## WeaponRolodex — REMOVED (2026-06-22, commit `6610291`)
 
-Single card that always shows the equipped weapon. Cycles via Tab / Shift+Tab or touch swipe. Reads `_ammo` / `_reserveAmmo` Tool attributes for live firearm ammo, `WeaponIcon` for icon swaps, `_cooldownEnd` for the special-weapon cooldown overlay.
-
-Current visual iterating — gradient rotation, card corner radius, and pill positions are active dial-ins.
+The weapon-cycling card widget (Builder + Config + `WeaponRolodexGui` coordinator) was removed with the TPS weapon stack — Brain Fighter equips the single [[systems/LetterBlaster]] Spelling Staff, so there is nothing to cycle. The former `SHOW_WEAPON_ROLODEX` gate and the `_ammo` / `WeaponIcon` / `_cooldownEnd` Tool-attribute reads no longer apply.
 
 ## Reticle
 

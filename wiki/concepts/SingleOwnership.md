@@ -1,7 +1,7 @@
 ---
 type: concept
-description: One controller owns each Motor6D / property. Two writers always fight.
-updated: 2026-05-08
+description: One controller owns each Motor6D / property. Two writers always fight. (Examples reference the TPS controllers deleted in commit 6610291; the principle stands.)
+updated: 2026-07-15
 ---
 
 # Single Ownership Rule
@@ -9,6 +9,8 @@ updated: 2026-05-08
 > One system should own each Motor6D / property. If two scripts write to the same Motor6D.C0 or Humanoid.AutoRotate, they will fight. Merge them into one controller.
 
 — `CLAUDE.md`
+
+> **Note (2026-06-22):** The concrete owners in the table and worked example below — `LocomotionController`, `MeleeSwingController`, `WeaponRolodex`, the `Ammo` module — were deleted with the TPS stack in commit `6610291` (see [[systems/Character]], [[systems/Weapon]]). They're retained here as a worked illustration of the pattern; the **principle** remains a live rule (enforced by `CLAUDE.md`) for any current Motor6D writers (e.g. Boss rig animation vs. skill effects).
 
 ## Why this matters here
 

@@ -290,7 +290,7 @@ Two cases, both handled via runtime Attachments — never pre-placed:
 | `casterStaffTip` | Walk `caster.Character.<EquippedTool>.Handle.Tip`. Fallback to HumanoidRootPart if the tool isn't equipped at fire time (e.g. dropped mid-cast). |
 
 We **clone emitters to the target** rather than pre-placing because:
-1. Targets vary (NPCs, BossAdapter, future props). Pre-placing wastes memory on every potential target.
+1. Targets vary (NPCs, the Boss rig, future props). Pre-placing wastes memory on every potential target.
 2. NPCs respawn — pre-placed emitters would die with the original rig.
 
 ### 2.3 Choosing Roblox instance type per effect
