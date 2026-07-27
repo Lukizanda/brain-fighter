@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-07-15
+updated: 2026-07-27
 ---
 
 # Build Plan
@@ -169,10 +169,23 @@ Make the full spell roster and AV feedback real.
 | **Tier 3 debt (opportunistic)** | Color type dedup ×4, Skills/Vfx magic-number extraction — as polish touches each area. |
 | **Tutorial** | Guided first-play sequence per [[systems/Tutorial]] (shoot → buffer → memorize → cast → boss hit). |
 
-**Deferred (not scheduled):** server trust hardening on `ConsumeBlock`/`SpellCastServer` — revisit if a public/multiplayer release approaches.
+## Phase 5.4 — Release gate: public soft launch
+
+Release target decided 2026-07-27: **public soft launch** (unlisted first, then listed). The bar is everything in 5.1–5.3 that players touch, plus two items previously outside the plan. Explicitly *not* required: UI review leftovers R-5..R-9 and Tier 3 debt — those stay opportunistic.
+
+| Item | Detail |
+|---|---|
+| **Server trust hardening** | Un-deferred (was "revisit if public release approaches" — it now is). Validate `ConsumeBlock` (block exists / in range / rate) and `SpellCastServer` (registry-known spell, server-side affordability) instead of trusting the client. Parallel-safe with 5.2 — different files. |
+| **Game page assets** | Icon, thumbnails, description. Remember [[concepts/RobloxOpenCloudAuth]] and the `rbxthumb://` requirement for Open Cloud decals. |
+| **Rollout** | Unlisted link → friends checkpoint → public listing. The friends checkpoint after 5.1 feeds tuning and the shield/wall/buff design pass before they're built. |
+
+**Sequencing:** 5.1 → friends-playtest checkpoint → 5.2 + hardening (parallel) → tutorial + tuning (5.3) → store assets → listing.
+
+**Milestone:** a cold player (no instructions) completes shoot → memorize → cast → boss damage inside their first session, with no placeholder audio and no client-trusted remotes.
 
 ## Plan changelog
 
+- **2026-07-27**: Release bar set — public soft launch. Added Phase 5.4 (release gate): server trust hardening un-deferred, game page assets added, rollout sequence pinned (5.1 → friends checkpoint → 5.2 + hardening → tutorial/tuning → listing). R-5..R-9 and Tier 3 debt explicitly excluded from the bar.
 - **2026-07-15**: Phase 5 split into 5.1 (correctness sprint: Skills leak, stub-spell refund, damage-path unification), 5.2 (content: shield/wall/buff, real SFX, VFX gaps), 5.3 (tuning, UI R-5..R-9, tutorial). Server trust hardening explicitly deferred. Audit items re-verified live against `src/` before scheduling.
 - **2026-06-05**: Phase 4.8 (UI architecture review) re-audited + complete — R-1..R-4 cleanup landed and verified by playtest; GO for Phase 5. R-5..R-9 (2 Medium / 3 Low) deferred.
 - **2026-06-05**: Phase 4.7 (letter slot drag/tap-to-swap) confirmed complete — both interactions implemented in `BufferDisplayBuilder.luau`, mouse + touch supported.

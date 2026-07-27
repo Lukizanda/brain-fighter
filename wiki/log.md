@@ -250,3 +250,7 @@ The wildcard char lives in a new dependency-free `src/shared/Wildcard/init.luau`
 Playtest-verified: gold block with a white ★ on all six faces (GothamBold carries the glyph — `TextBounds` 68×100, not a missing-glyph box), HUD tile ★ on `RGB(225,180,60)`, `FL*ME` → FLAME splitting `{red=12, green=2, blue=1}`, `XQ*ZJ` fizzling like any invalid word. Dictionary / EnergyEconomy / WordBuffer suites all pass.
 
 Two accepted consequences, both documented on the system page rather than silently absorbed: an all-wildcard buffer pays out the best word of its length (`★★★` → KHZ, 19 energy; twelve stars → SQUEEZEBOXES, 117), which the 4% spawn rate makes impractical to exploit; and a lone `★` is **not** spellable, because SCOWL-60 carries no single-letter entries, not even "a" or "i".
+
+## [2026-07-27] ingest | Release bar decided: public soft launch (Phase 5.4)
+
+Release-readiness discussion set the target at a public soft launch, not a friends-only playtest. New Phase 5.4 in [[design/build-plan]] defines the gate: all of 5.1-5.3 player-facing work, plus server trust hardening (un-deferred from the 2026-07-15 deferral) and game page assets (new scope). UI R-5..R-9 and Tier 3 debt stay out of the bar. Sequencing: 5.1 correctness sprint first, then an unlisted friends checkpoint to feed tuning and the shield/wall/buff design pass, then 5.2 + hardening in parallel, then tutorial/tuning, then listing. Milestone framing: a cold player completes the full loop unaided with no placeholder audio and no client-trusted remotes.
