@@ -25,6 +25,7 @@ local UserInputService = game:GetService("UserInputService")
 local Defaults = require(ReplicatedStorage.Shared.Hud.BufferDisplayConfig)
 local HudLayoutManager = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
 
 local log = Logger.new("BufferDisplay")
 
@@ -380,7 +381,8 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 				local tileColor = Defaults.TILE_COLORS[tile.color] or Defaults.TILE_COLORS.blue
 				cell.BackgroundColor3 = tileColor
 				cell.BackgroundTransparency = Defaults.TILE_TRANSPARENCY
-				label.Text = string.upper(tile.letter)
+				-- Wildcard tiles hold "*" but render as "★".
+				label.Text = Wildcard.toDisplay(tile.letter)
 				label.TextColor3 = Defaults.TEXT_COLOR
 			else
 				cell.BackgroundColor3 = Defaults.EMPTY_COLOR

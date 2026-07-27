@@ -23,6 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
 
 local log = Logger.new("BlockSpawner")
 
@@ -64,6 +65,14 @@ local ALPHABET = {
 	"A","B","C","D","E","F","G","H","I","J","K","L","M",
 	"N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
 }
+
+-- Wildcard blocks roll as a 27th "letter" against the same cumulative
+-- table. The Scrabble bag above totals 98, so weight 4 lands at
+-- 4/102 ≈ 3.9% — roughly one ★ visible in the ~24-block reference
+-- arena. Scrabble's own 2-blanks-in-98 is stingier than this design
+-- wants given blocks recycle continuously as they're consumed.
+-- Set to 0 to disable wildcard spawns entirely.
+local WILDCARD_FREQUENCY = 4
 
 local FULL_REVOLUTION_RADIANS = math.pi * 2
 local MAX_SPAWN_ATTEMPTS = 20
@@ -137,6 +146,10 @@ local function buildLetterTable()
 			letterTotal += weight
 			table.insert(letterCumulative, { letter = letter, threshold = letterTotal })
 		end
+	end
+	if WILDCARD_FREQUENCY > 0 then
+		letterTotal += WILDCARD_FREQUENCY
+		table.insert(letterCumulative, { letter = Wildcard.CHAR, threshold = letterTotal })
 	end
 end
 
@@ -236,7 +249,12 @@ local function spawnOne(): Model
 			cf = pickCFrame()
 		end
 	end
-	local block = LetterBlocks.spawn(pickLetter(), pickColor(), cf, resolvedOpts.parent)
+	-- A wildcard's color is fixed to gold rather than rolled, so it can't
+	-- masquerade as a reservoir color the player might be hunting for.
+	local letter = pickLetter()
+	local color = if Wildcard.isWildcard(letter) then Wildcard.COLOR else pickColor()
+
+	local block = LetterBlocks.spawn(letter, color, cf, resolvedOpts.parent)
 	active[block] = true
 	activeCount += 1
 	return block
@@ -309,6 +327,7 @@ end
 local BlockSpawner = {}
 
 BlockSpawner.LETTER_FREQUENCIES = LETTER_FREQUENCIES
+BlockSpawner.WILDCARD_FREQUENCY = WILDCARD_FREQUENCY
 
 function BlockSpawner.start(userOpts: Opts?)
 	if running then

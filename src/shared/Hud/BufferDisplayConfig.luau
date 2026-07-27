@@ -11,11 +11,13 @@ local BufferDisplayConfig = {
 	CAP       = 12, -- max slots (must match WordBuffer DEFAULT_CAP)
 	CORNER_RADIUS = 3,
 
-	-- Active tile colors by WordBuffer color
+	-- Active tile colors by WordBuffer color. `wild` is the gold ★ tile
+	-- (see shared/Wildcard) — keyed by the same string the block carries.
 	TILE_COLORS = {
 		red   = Color3.fromRGB(210, 65, 65),
 		green = Color3.fromRGB(60, 175, 80),
 		blue  = Color3.fromRGB(65, 125, 220),
+		wild  = Color3.fromRGB(225, 180, 60),
 	},
 	TILE_TRANSPARENCY = 0.1,
 

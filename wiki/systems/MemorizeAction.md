@@ -1,7 +1,7 @@
 ---
 type: system
 description: Phase 2 action — validates the buffered word, deposits value-weighted per-color energy into the reservoirs, and clears the buffer. Fizzle on empty (no mutation) or invalid (buffer cleared — letters consumed regardless).
-updated: 2026-06-05
+updated: 2026-07-27
 ---
 
 # MemorizeAction
@@ -33,35 +33,42 @@ export type Result = {
     ok: boolean,
     reason: Reason?,                                  -- only on ok=false
     energyByColor: { [Color]: number }?,              -- only on ok=true
-    word: string?,                                    -- only on ok=true
+    word: string?,                                    -- only on ok=true; the CONCRETE word, e.g. "DOG"
+    pattern: string?,                                 -- what was buffered, e.g. "D*G"; also set on reason="invalid"
 }
 ```
 
-`Color` is `"red" | "green" | "blue"` per [[systems/EnergyReservoirs]] and [[systems/EnergyEconomy]].
+`Color` keys in `energyByColor` are `"red" | "green" | "blue"` per [[systems/EnergyReservoirs]] and [[systems/EnergyEconomy]]. Tile colors additionally include `"wild"`, which is never a key here — see [[systems/Wildcard]].
+
+`word` vs `pattern`: with no wildcards they are equal. With wildcards, `pattern` is what the player assembled (`D*G`) and `word` is what it resolved to (`DOG`). `pattern` is populated on an invalid result too, so the HUD can show what fizzled.
 
 ## Behavior
 
 | Buffer state | Word valid? | Result | Side effects |
 |---|---|---|---|
 | empty | — | `{ ok = false, reason = "empty" }` | none |
-| non-empty | no  | `{ ok = false, reason = "invalid" }` | **buffer cleared** — letters consumed |
-| non-empty | yes | `{ ok = true, energyByColor = split, word = word }` | reservoirs += split; buffer cleared |
+| non-empty | no  | `{ ok = false, reason = "invalid", pattern = pattern }` | **buffer cleared** — letters consumed |
+| non-empty | yes | `{ ok = true, energyByColor = split, word = word, pattern = pattern }` | reservoirs += split; buffer cleared |
 
 ### Failure modes
 
 - **Empty** — fast-path; logged at `info` (not warn — it's not abnormal, just a no-op the HUD may also visualize as a soft fizzle). No state mutation.
-- **Invalid** — the dictionary rejected the word. The buffer is **cleared anyway** (`init.luau:76`) — letters are consumed regardless, so a bad commit costs the player the collected letters and they must re-collect. This is a deliberate design call (see [[design/gameplay-loop|"Memorize (commit button)"]]).
+- **Invalid** — the buffer content could not be resolved to any dictionary word. The buffer is **cleared anyway** — letters are consumed regardless, so a bad commit costs the player the collected letters and they must re-collect. This is a deliberate design call (see [[design/gameplay-loop|"Memorize (commit button)"]]).
 
 ### Success path
 
 The success path runs in this order:
 
-1. Compute `word = buffer:asWord()` (uppercase — `WordBuffer:asWord` already uppercases).
-2. Snapshot tiles via `buffer:tiles()` (defensive copy — caller mutation is safe).
-3. Split via `EnergyEconomy.splitByColor(tiles)` — the floor-reconciled algorithm that guarantees `Σ split values == computeWordEnergy(word)` exactly. See [[systems/EnergyEconomy#splitByColor]].
-4. For each `(color, amount)` in the split: `reservoirs:add(color, amount)`. Per [[systems/EnergyReservoirs]] each add caps at 60 silently; overshoot is design-intentional.
-5. `buffer:clear()` AFTER the split has been computed.
-6. Return `{ ok = true, energyByColor = split, word = word }`.
+1. Compute `pattern = buffer:asWord()` (uppercase). With [[systems/Wildcard]] tiles in the buffer this is a pattern like `D*G`, not necessarily a word.
+2. `word = Dictionary.resolve(pattern, EnergyEconomy.computeWordEnergy)` — collapses the pattern to the concrete match worth the most energy, or `nil` to fail. Every candidate is the same length, so maximizing whole-word energy is exactly maximizing the letters the stars stand in for. A wildcard-free pattern resolves to itself via an O(1) lookup, so this is also the plain path.
+3. Snapshot tiles via `buffer:tiles()` (defensive copy — caller mutation is safe).
+4. **Stamp the resolved letter onto every tile** (`tile.letter = word:sub(i, i)`), so wildcards score as the letter they became. Colors are deliberately left alone — a wild tile stays `"wild"` so the split still spreads its energy across all three reservoirs rather than banking it in one.
+5. Split via `EnergyEconomy.splitByColor(tiles)` — the floor-reconciled algorithm that guarantees `Σ split values == computeWordEnergy(word)` exactly. See [[systems/EnergyEconomy#splitByColor]].
+6. For each `(color, amount)` in the split: `reservoirs:add(color, amount)`. Per [[systems/EnergyReservoirs]] each add caps at 60 silently; overshoot is design-intentional.
+7. `buffer:clear()` AFTER the split has been computed.
+8. Return `{ ok = true, energyByColor = split, word = word, pattern = pattern }`.
+
+Step 4 is the hinge of the wildcard feature: stamping the letter but *not* the color is what lets a star score as a real letter and still spread three ways.
 
 The clear happens last because `tiles()` and `asWord()` both read buffer state. Reservoir adds also precede the clear, but only because there is no observable consequence — both must succeed.
 
@@ -107,7 +114,8 @@ The "FIRE" and "FLAME" expected values come from the pinned tables in [[design/g
 
 - [[design/gameplay-loop]] — Memorize step (#5); "Memorize (commit button)" subsection; worked-examples tables.
 - [[design/build-plan]] — Phase 2 placement; parallel-safe with `SpellExecutor` and `MindFullManager`.
-- [[systems/Dictionary]] — supplies `isWord(word)`.
+- [[systems/Dictionary]] — supplies `resolve(pattern, scoreFn)`.
+- [[systems/Wildcard]] — why resolution and letter-stamping exist at all.
 - [[systems/EnergyEconomy]] — supplies `splitByColor(tiles)`.
 - WordBuffer (`src/shared/WordBuffer/init.luau`) — read via `:size`, `:asWord`, `:tiles`; mutated via `:clear` on success.
 - [[systems/EnergyReservoirs]] — mutated via `:add(color, amount)` on success.

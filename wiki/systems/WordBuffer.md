@@ -1,7 +1,7 @@
 ---
 type: system
 description: 12-slot color-tagged word buffer — pure-Luau state container for the word being spelled. Append-on-shot, drag-to-reorder, double-tap-to-destroy. Drains on Memorize.
-updated: 2026-05-14
+updated: 2026-07-27
 ---
 
 # WordBuffer
@@ -22,11 +22,11 @@ Capacity is **12 tiles** (`DEFAULT_CAP`), wide enough for any word a curated K-1
 | Member | Type | Notes |
 |---|---|---|
 | `.new(cap?: number)` | constructor | Default cap `12`. Returns a fresh `WordBuffer` instance. |
-| `:append(letter, color)` | `(string, "red" \| "green" \| "blue") -> boolean` | Returns `false` if full or color invalid. Fires `.changed` on success. |
+| `:append(letter, color)` | `(string, "red" \| "green" \| "blue" \| "wild") -> boolean` | Returns `false` if full or color invalid. Fires `.changed` on success. `"wild"` is the [[systems/Wildcard]] tile. |
 | `:remove(index)` | `(number) -> ()` | 1-based. Out-of-range = warn + no-op. Subsequent tiles shift down. |
 | `:reorder(fromIdx, toIdx)` | `(number, number) -> ()` | 1-based on both sides. Out-of-range = warn + no-op. `from == to` is a no-op (no fire). |
 | `:clear()` | `() -> ()` | Empties all slots. Fires `.changed` only if there was something to clear. |
-| `:asWord()` | `() -> string` | Concatenates letters in order, uppercased. Empty buffer → `""`. |
+| `:asWord()` | `() -> string` | Concatenates letters in order, uppercased. Empty buffer → `""`. A wildcard tile contributes its raw `*`, so this may be a **pattern** (`"D*G"`) rather than a word — pass it through `Dictionary.resolve`. |
 | `:colorBag()` | `() -> {[color]: number}` | Tile counts per color. Colors with 0 tiles **do not appear** as keys. |
 | `:isFull()` | `() -> boolean` | `size() >= cap`. |
 | `:size()` | `() -> number` | Current tile count. |
@@ -40,6 +40,7 @@ Capacity is **12 tiles** (`DEFAULT_CAP`), wide enough for any word a curated K-1
 - **Drag-to-reorder, double-tap-to-destroy.** The HUD (see [[systems/HUD]] / `wiki/design/hud.mockup.html`) is the only consumer that exposes these gestures. The module just provides `:reorder` and `:remove` as the underlying primitives.
 - **Buffer-full blocks shooting.** When `:isFull()`, the shoot pipeline should reject the hit with diegetic feedback (fizzle / "mind full" indicator); see [[systems/MindFullManager]]. The buffer itself just returns `false` from `:append` — feedback is the caller's job.
 - **Per-color split happens elsewhere.** `:colorBag()` is informational. The actual energy split lives in [[systems/EnergyEconomy]] (`splitByColor(tiles)`), which the MemorizeAction calls with `buffer:tiles()`.
+- **`"wild"` is a tile color, not a reservoir color.** The buffer accepts it like any other; only [[systems/EnergyEconomy]] knows it means "spread this value across all three reservoirs". `:colorBag()` will report a `wild` count.
 - **`.changed` fires once per successful mutation.** No-op operations (out-of-range index, full append, clear-when-empty, `reorder(i,i)`) do not fire. This matters for HUD subscribers that re-render on each signal.
 
 ## Consumers

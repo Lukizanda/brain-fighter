@@ -53,7 +53,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		local color = TEST_COLORS[math.random(1, #TEST_COLORS)]
 		session.wordBuffer:append(letter, color)
 		local word = session.wordBuffer:asWord()
-		log:info(string.format("append '%s' [%s] → '%s'  valid=%s", letter, color, word, tostring(Dictionary.isWord(word))))
+		log:info(string.format("append '%s' [%s] → '%s'  valid=%s", letter, color, word, tostring(Dictionary.isSpellable(word))))
 
 	elseif input.KeyCode == Enum.KeyCode.RightBracket then
 		local result = MemorizeAction.tryMemorize(session.wordBuffer, session.energyReservoirs)

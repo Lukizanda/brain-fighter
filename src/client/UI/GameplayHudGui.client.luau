@@ -90,7 +90,9 @@ local function onBufferChanged()
 	local tiles = session.wordBuffer:tiles()
 	display:setTiles(tiles)
 	local size = session.wordBuffer:size()
-	local isValid = size > 0 and Dictionary.isWord(session.wordBuffer:asWord())
+	-- isSpellable, not isWord: the buffer may hold wildcard tiles, so
+	-- "D*G" has to glow as valid on the strength of DOG existing.
+	local isValid = size > 0 and Dictionary.isSpellable(session.wordBuffer:asWord())
 	display:setValidWordGlow(isValid)
 	display:setSparkle(isValid)
 	btn:setValidWord(isValid)

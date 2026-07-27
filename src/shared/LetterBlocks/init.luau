@@ -14,15 +14,20 @@ local CollectionService = game:GetService("CollectionService")
 
 local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
 
 local TAG = "LetterBlock"
 local LETTER_ATTRIBUTE = "Block.Letter"
 local COLOR_ATTRIBUTE = "Block.Color"
 
+-- Gold marks the wildcard block. It sits alongside the three reservoir
+-- colors deliberately: a player scanning the arena should be able to
+-- pick a ★ out of a field of red/green/blue at a glance.
 local COLOR_TINTS: { [string]: Color3 } = {
 	red = Color3.fromHex("#dc2626"),
 	green = Color3.fromHex("#16a34a"),
 	blue = Color3.fromHex("#2563eb"),
+	[Wildcard.COLOR] = Color3.fromHex("#eab308"),
 }
 
 local DEFAULT_LETTER = "A"
@@ -57,7 +62,8 @@ local function applyVisualState(block: Model)
 		if child:IsA("SurfaceGui") then
 			local label = child:FindFirstChildOfClass("TextLabel")
 			if label then
-				label.Text = letter
+				-- Wildcards store "*" but read as "★" on the block face.
+				label.Text = Wildcard.toDisplay(letter)
 			end
 		elseif child:IsA("ParticleEmitter") then
 			child.Color = ColorSequence.new(tint)
@@ -72,7 +78,9 @@ function LetterBlocks.spawn(letter: string, color: string, cframe: CFrame, paren
 	assert(COLOR_TINTS[color] ~= nil, "unknown color: " .. tostring(color))
 
 	local block = TemplatePath:Clone()
-	block:SetAttribute(LETTER_ATTRIBUTE, letter:upper():sub(1, 1))
+	-- normalize() keeps the wildcard as "*" and reduces anything else to
+	-- a single uppercase character.
+	block:SetAttribute(LETTER_ATTRIBUTE, Wildcard.normalize(letter))
 	block:SetAttribute(COLOR_ATTRIBUTE, color)
 	applyVisualState(block)
 	if GameConfig.BLOCK_SCALE ~= 1 then

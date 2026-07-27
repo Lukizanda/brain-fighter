@@ -38,16 +38,21 @@ export type Result = {
 	ok: boolean,
 	reason: Reason?,
 	energyByColor: EnergyEconomy.ColorEnergy?,
+	-- The concrete dictionary word that was committed, e.g. "DOG".
 	word: string?,
+	-- What the player actually had buffered, e.g. "D*G". Equal to `word`
+	-- when no wildcards were used. Present on failure too, so the HUD can
+	-- show what fizzled.
+	pattern: string?,
 }
 
 local MemorizeAction = {}
 
 -- Try to commit the buffered word.
 --
--- On `buffer:size() == 0`        → `{ ok = false, reason = "empty" }`,
+-- On `buffer:size() == 0`         → `{ ok = false, reason = "empty" }`,
 --                                    no state mutation.
--- On `not Dictionary.isWord(...)` → `{ ok = false, reason = "invalid" }`,
+-- On unresolvable buffer content  → `{ ok = false, reason = "invalid" }`,
 --                                    buffer cleared (letters destroyed).
 -- Otherwise: split the buffered tiles into per-color energy via
 -- EnergyEconomy.splitByColor (floor-reconciled so the per-color sums
@@ -70,14 +75,32 @@ function MemorizeAction.tryMemorize(
 		return { ok = false, reason = "empty" }
 	end
 
-	local word = buffer:asWord()
-	if not Dictionary.isWord(word) then
-		log:info("memorize fizzle — invalid word", word)
+	-- The buffer may hold wildcard tiles, so what it spells is a pattern
+	-- ("D*G") rather than a word. resolve() collapses it to the concrete
+	-- match worth the most energy — every candidate is the same length,
+	-- so maximizing whole-word energy is exactly maximizing the letters
+	-- the stars stand in for. Wildcard-free buffers resolve to
+	-- themselves via an O(1) lookup, so this is also the plain path.
+	local pattern = buffer:asWord()
+	local word = Dictionary.resolve(pattern, EnergyEconomy.computeWordEnergy)
+	if not word then
+		log:info("memorize fizzle — invalid word", pattern)
 		buffer:clear()
-		return { ok = false, reason = "invalid" }
+		return { ok = false, reason = "invalid", pattern = pattern }
 	end
 
 	local tiles = buffer:tiles()
+
+	-- Stamp the resolved letter onto every tile so wildcards score as the
+	-- letter they became. resolve() matches on length, so the two strings
+	-- are always the same size. Colors are deliberately left alone: a
+	-- wild tile stays "wild" so splitByColor still spreads its energy
+	-- across all three reservoirs rather than banking it in one.
+	-- tiles() hands back a copy, so this doesn't disturb the buffer.
+	for i, tile in tiles do
+		tile.letter = string.sub(word, i, i)
+	end
+
 	local energyByColor = EnergyEconomy.splitByColor(tiles)
 
 	for color, amount in energyByColor do
@@ -86,12 +109,17 @@ function MemorizeAction.tryMemorize(
 
 	buffer:clear()
 
-	log:info("memorize ok —", word)
+	if word ~= pattern then
+		log:info("memorize ok —", pattern, "→", word)
+	else
+		log:info("memorize ok —", word)
+	end
 
 	return {
 		ok = true,
 		energyByColor = energyByColor,
 		word = word,
+		pattern = pattern,
 	}
 end
 

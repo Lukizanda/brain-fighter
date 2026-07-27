@@ -21,6 +21,11 @@
 -- never drifts; rounding shortfall is absorbed by the last present
 -- color in canonical RGB order.
 --
+-- Wild tiles (the gold ★ blocks — see [[Wildcard]]) have no reservoir
+-- of their own, so their contribution is spread evenly across all three
+-- instead. Their letter value comes from whatever letter the wildcard
+-- resolved to, which MemorizeAction substitutes in before calling here.
+--
 -- This module is pure: no Roblox-instance reads, no signals, no
 -- mutation. Callers (MemorizeAction, HUD) read from it freely.
 ----------------------------------------------------------------------
@@ -28,6 +33,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
 
 local log = Logger.new("EnergyEconomy")
 
@@ -114,11 +120,18 @@ local CANONICAL_COLOR_ORDER: { string } = {
 	COLOR_BLUE,
 }
 
+-- Wild tiles carry no reservoir color of their own; their energy is
+-- divided evenly across the three below. Derived from the canonical
+-- order so adding a reservoir color can't silently skew the split.
+local RESERVOIR_COLOR_COUNT = #CANONICAL_COLOR_ORDER
+
 ----------------------------------------------------------------------
 -- Public types
 ----------------------------------------------------------------------
 
-export type Color = "red" | "green" | "blue"
+-- "wild" is a tile color but NOT a reservoir color: it never appears as
+-- a key in ColorEnergy. See splitByColor.
+export type Color = "red" | "green" | "blue" | "wild"
 
 export type Tile = {
 	letter: string,
@@ -147,6 +160,17 @@ end
 -- notice spawner config drift rather than silently emitting zeros).
 function EnergyEconomy.letterValue(c: string): number
 	if c == "" then
+		return UNKNOWN_LETTER_VALUE
+	end
+
+	-- A raw wildcard has no value yet — which letter it stands for isn't
+	-- decided until Dictionary.resolve picks the highest-scoring match.
+	-- MemorizeAction substitutes the resolved letters into the tiles
+	-- before scoring, so this branch only catches pre-resolution reads
+	-- (e.g. a HUD energy preview of a buffer still holding a star). It
+	-- returns 0 silently rather than warning: a star is a known
+	-- character, not the spawner-config drift the warn below hunts for.
+	if Wildcard.isWildcard(c) then
 		return UNKNOWN_LETTER_VALUE
 	end
 
@@ -197,6 +221,13 @@ end
 -- point of energy to floor() rounding.
 --
 -- Colors with zero tiles are omitted from the result.
+--
+-- Wild tiles are the exception: they belong to no reservoir, so their
+-- value is divided evenly across all three (the design's "wild energy
+-- feeds every color" rule). A word containing any wild tile therefore
+-- reports all three colors, even ones with no tile of their own. The
+-- caller is expected to have substituted each wild tile's resolved
+-- letter in already — a tile still holding a raw star scores 0.
 function EnergyEconomy.splitByColor(tiles: { Tile }): ColorEnergy
 	local tileCount = #tiles
 	local multiplier = EnergyEconomy.lengthMultiplier(tileCount)
@@ -211,20 +242,29 @@ function EnergyEconomy.splitByColor(tiles: { Tile }): ColorEnergy
 		[COLOR_GREEN] = false,
 		[COLOR_BLUE] = false,
 	}
+	local wildLetterSum = 0
+	local hasWild = false
 	local totalLetterSum = 0
 
 	for _, tile in tiles do
 		local value = EnergyEconomy.letterValue(tile.letter)
-		letterSumByColor[tile.color] = (letterSumByColor[tile.color] or 0) + value
-		colorPresent[tile.color] = true
+		if tile.color == Wildcard.COLOR then
+			wildLetterSum += value
+			hasWild = true
+		else
+			letterSumByColor[tile.color] = (letterSumByColor[tile.color] or 0) + value
+			colorPresent[tile.color] = true
+		end
 		totalLetterSum += value
 	end
 
 	local totalEnergy = math.floor(totalLetterSum * multiplier)
 
+	-- One wild tile makes every reservoir a recipient, since each gets a
+	-- third of its energy.
 	local presentInOrder: { string } = {}
 	for _, color in CANONICAL_COLOR_ORDER do
-		if colorPresent[color] then
+		if colorPresent[color] or hasWild then
 			table.insert(presentInOrder, color)
 		end
 	end
@@ -236,7 +276,14 @@ function EnergyEconomy.splitByColor(tiles: { Tile }): ColorEnergy
 		if i == lastIndex then
 			result[color] = totalEnergy - assignedSoFar
 		else
-			local share = math.floor(letterSumByColor[color] * multiplier)
+			-- Scale into thirds BEFORE dividing, so a color's own letters
+			-- and its cut of the wild pool stay exact integers right up to
+			-- the final division. Computing wildLetterSum/3 up front would
+			-- introduce a repeating binary fraction whose rounding can
+			-- straddle an integer boundary and flip this floor() by one —
+			-- e.g. (1 + 1/3) * 1.5 lands a hair under 2.
+			local scaled = letterSumByColor[color] * RESERVOIR_COLOR_COUNT + wildLetterSum
+			local share = math.floor(scaled * multiplier / RESERVOIR_COLOR_COUNT)
 			result[color] = share
 			assignedSoFar += share
 		end

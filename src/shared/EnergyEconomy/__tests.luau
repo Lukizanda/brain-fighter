@@ -84,6 +84,54 @@ local COLOR_SPLIT_CASES: { ColorSplitCase } = {
 		expectedSplit = { red = 2, blue = 8 },
 		expectedTotal = 10,
 	},
+
+	------------------------------------------------------------------
+	-- Wildcard splits
+	------------------------------------------------------------------
+	-- Tiles arrive here already carrying the letter their star resolved
+	-- to (MemorizeAction stamps it on), but keeping color = "wild" — so
+	-- the value is spread across all three reservoirs instead of banked.
+	-- Every case must still satisfy Σ split == computeWordEnergy.
+	{
+		-- The design's headline example: D★G resolved to DOG. O is worth
+		-- 1, so each reservoir is owed 1/3 — red floors to its own 2,
+		-- green to 0, and blue absorbs the reconciliation remainder.
+		label = "D*G -> DOG (D red, * wild, G blue)",
+		tiles = {
+			{ letter = "D", color = "red" },
+			{ letter = "O", color = "wild" },
+			{ letter = "G", color = "blue" },
+		},
+		expectedSplit = { red = 2, green = 0, blue = 3 },
+		expectedTotal = 5,
+	},
+	{
+		-- No reservoir-colored tiles at all: every color still appears,
+		-- because a wild tile makes all three recipients.
+		label = "*** -> CAT (all wild)",
+		tiles = {
+			{ letter = "C", color = "wild" },
+			{ letter = "A", color = "wild" },
+			{ letter = "T", color = "wild" },
+		},
+		expectedSplit = { red = 1, green = 1, blue = 3 },
+		expectedTotal = 5,
+	},
+	{
+		-- Exercises the 1.5x length tier with a wild tile present. This
+		-- is the case that breaks if the wild share is divided before
+		-- being scaled: (1 + 1/3) * 1.5 floors to 1, not 2.
+		label = "FL*ME -> FLAME (F-L-M red, * wild, E green)",
+		tiles = {
+			{ letter = "F", color = "red" },
+			{ letter = "L", color = "red" },
+			{ letter = "A", color = "wild" },
+			{ letter = "M", color = "red" },
+			{ letter = "E", color = "green" },
+		},
+		expectedSplit = { red = 12, green = 2, blue = 1 },
+		expectedTotal = 15,
+	},
 }
 
 type CaseResult = {
@@ -192,6 +240,19 @@ local function runAll()
 			failed += 1
 			log:warn(string.format("[FAIL] split %s — %s", case.label, result.message or "?"))
 		end
+	end
+
+	-- An unresolved star is worth nothing. MemorizeAction substitutes the
+	-- resolved letter before scoring, so this only guards the
+	-- pre-resolution path (e.g. a HUD preview of a buffer still holding
+	-- a star) against silently inheriting some other letter's value.
+	local rawWildValue = EnergyEconomy.letterValue("*")
+	if rawWildValue ~= 0 then
+		failed += 1
+		log:warn(string.format("[FAIL] letterValue('*') — expected 0, got %d", rawWildValue))
+	else
+		passed += 1
+		log:info("[PASS] letterValue('*') = 0")
 	end
 
 	if failed > 0 then

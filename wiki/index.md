@@ -28,7 +28,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/Tests]] — TestRunner + suites for NPC/Melee, MCP-driven harness
 - [[systems/EnergyEconomy]] — Phase 1 pure-Luau module: word → per-color mana (Scrabble values × length tiers, floor-reconciled color splits)
 - [[systems/EnergyReservoirs]] — Phase 1 pure-Luau state container: three per-color energy bars, cap 60, `.changed(color)` BindableEvent signal
-- [[systems/Dictionary]] — Phase 1 pure-Luau word lookup; case-insensitive `isWord`, ~79.9k words (SCOWL 60 + geographic supplement); 26 per-letter sub-modules background-preloaded at game start
+- [[systems/Dictionary]] — Phase 1 pure-Luau word lookup; case-insensitive `isWord` plus wildcard-aware `resolve`/`isSpellable`, ~79.9k words (SCOWL 60 + geographic/playtest supplements); 26 per-letter sub-modules background-preloaded at game start
 - [[systems/WordBuffer]] — Phase 1 pure-Luau 12-slot color-tagged buffer for the word being spelled; append-on-shot, reorder, double-tap-destroy; drains on Memorize
 - [[systems/MemorizeAction]] — Phase 2 action: validate buffered word → split per-color energy into reservoirs + clear buffer; fizzle on empty (no mutation) or invalid (buffer cleared, letters consumed)
 - [[systems/SpellRegistry]] — Phase 1 config layer for the spell roster (R/G/B × T1–T4); tier costs 5/10/20/40, name/color/cost/targeting/`skill:SkillSpec`; consumed by SpellExecutor + SpellMenu HUD
@@ -36,7 +36,8 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/MindFullManager]] — Phase 2 transition watcher over WordBuffer: rising-edge `mindFull` / falling-edge `mindFreed` signals for the shoot gate + HUD indicator
 - [[systems/CastAction]] — Phase 2 cast pipeline: `tapReservoir` (highest affordable) / `castSpecific` (chosen tier); drains reservoir, refunds on executor failure, fires `spellResolved`
 - [[systems/LetterBlock]] — Phase 3 entity: floating block prefab with `Block.Letter` + `Block.Color` attributes; chunky 4×4×4 cube with 6-face SurfaceGui letter glyph + colored ParticleEmitter; CollectionService tag drives the client bob/rotation animator (6°/s, sinusoidal bob)
-- [[systems/BlockSpawner]] — Phase 3 server-side populator: Scrabble-weighted letter picks, configurable color weights, auto-refill via CollectionService removed signal; maintains ~24 blocks in a 40x8x40 arena box
+- [[systems/BlockSpawner]] — Phase 3 server-side populator: Scrabble-weighted letter picks (plus a 27th wildcard roll at ~4%), configurable color weights, auto-refill via CollectionService removed signal; maintains ~24 blocks in a 40x8x40 arena box
+- [[systems/Wildcard]] — the gold ★ block that stands in for any letter (`D★G` → DOG); ASCII `*` internally / `★` on screen, uncapped per word, length-indexed dictionary matcher, energy spread across all three reservoirs
 - [[systems/BlockShoot]] — shared helpers + server handler for block consumption; client input now handled by LetterBlaster (Phase 4.6)
 - [[systems/Boss]] — Full boss system: custom non-humanoid rig (BossBrain sphere), AI state machine (Idle/Patrol/AttackPrep/Attack/Cooldown), phase scaffolding, FireballVolley + GroundSlam attacks, BossHudGui health bar
 - [[systems/BossAdapter]] — Phase 3 MVP (**REMOVED commit 6610291**, previously superseded by Boss): static Humanoid-bearing Model; module + Phase 3 tests now deleted

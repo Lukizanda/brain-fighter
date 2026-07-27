@@ -84,6 +84,24 @@ local function runTests(): boolean
 
 	b:destroy()
 
+	-- Wildcard tiles: "wild" is a legal 4th color, and a star survives
+	-- asWord() as a pattern rather than being uppercased away or dropped.
+	local w = WordBuffer.new(CAP)
+	assert(w:append("D", "red") == true, "append D red should succeed")
+	assert(w:append("*", "wild" :: any) == true, "append * wild should succeed")
+	assert(w:append("G", "blue") == true, "append G blue should succeed")
+	assert(w:asWord() == "D*G", `asWord should be "D*G", got "{w:asWord()}"`)
+
+	local wildTiles = w:tiles()
+	assert(wildTiles[2].letter == "*", "wild tile should keep its star letter")
+	assert(wildTiles[2].color == "wild", "wild tile should keep its wild color")
+
+	local bag = w:colorBag()
+	assert(bag.wild == 1, `colorBag should count 1 wild, got {tostring(bag.wild)}`)
+	assert(bag.red == 1 and bag.blue == 1, "colorBag should still count reservoir colors")
+
+	w:destroy()
+
 	log:info("[TEST PASS] WordBuffer smoke")
 	return true
 end

@@ -1,12 +1,14 @@
 ---
 type: system
 description: Floating letter-block prefab — the in-world entity the player shoots to spell words. Spawn API, color tints, and CollectionService tag for the animator.
-updated: 2026-05-14
+updated: 2026-07-27
 ---
 
 # LetterBlock
 
-The in-world entity the player shoots to spell words. A small Model with a `Cube` BasePart, six SurfaceGuis (one glyph per face), and a colored ParticleEmitter. Two attributes drive everything: `Block.Letter` (the glyph) and `Block.Color` (`"red" | "green" | "blue"`). Spawned by the upcoming [[systems/BlockShoot|BlockSpawner]] / [[design/build-plan|Phase 3]] pipeline.
+The in-world entity the player shoots to spell words. A small Model with a `Cube` BasePart, six SurfaceGuis (one glyph per face), and a colored ParticleEmitter. Two attributes drive everything: `Block.Letter` (the glyph) and `Block.Color` (`"red" | "green" | "blue" | "wild"`). Spawned by the upcoming [[systems/BlockShoot|BlockSpawner]] / [[design/build-plan|Phase 3]] pipeline.
+
+`"wild"` is the gold wildcard block, whose `Block.Letter` is the ASCII `*` and whose faces render `★`. See [[systems/Wildcard]].
 
 ## Anatomy
 
@@ -55,25 +57,28 @@ Yaw advances at exactly **6°/s**, matching `ROTATION_DEGREES_PER_SECOND`. Y bob
 
 | Member | Type | Notes |
 |---|---|---|
-| `.spawn(letter, color, cframe, parent?)` | `(string, "red"\|"green"\|"blue", CFrame, Instance?) -> Model` | Clones Template, sets attributes, applies tint to `Cube`, updates SurfaceGui TextLabels + ParticleEmitter color, tags with `"LetterBlock"`, parents. |
+| `.spawn(letter, color, cframe, parent?)` | `(string, "red"\|"green"\|"blue"\|"wild", CFrame, Instance?) -> Model` | Clones Template, sets attributes (letter via `Wildcard.normalize`), applies tint to `Cube`, updates SurfaceGui TextLabels + ParticleEmitter color, tags with `"LetterBlock"`, parents. |
 | `.applyVisualState(block)` | `(Model) -> ()` | Re-runs the visual pass from current attributes. Idempotent. |
 | `.TAG` | `string` | `"LetterBlock"` — the CollectionService tag the animator listens for. |
 | `.LETTER_ATTRIBUTE` | `string` | `"Block.Letter"`. |
 | `.COLOR_ATTRIBUTE` | `string` | `"Block.Color"`. |
-| `.COLOR_TINTS` | `{[color]: Color3}` | red `#dc2626`, green `#16a34a`, blue `#2563eb`. |
+| `.COLOR_TINTS` | `{[color]: Color3}` | red `#dc2626`, green `#16a34a`, blue `#2563eb`, wild `#eab308`. |
 | `.Template` | `Instance` | The Template Model under the module script. |
 
 ## Color tints
 
-The same three values used everywhere color is rendered in the game:
+The three reservoir values used everywhere color is rendered in the game, plus gold for the wildcard:
 
 | Color | Hex | Notes |
 |---|---|---|
 | red | `#dc2626` | matches HUD reservoir bar, spell-roster color split |
 | green | `#16a34a` | same |
 | blue | `#2563eb` | same |
+| wild | `#eab308` | [[systems/Wildcard]] — **not** a reservoir color; deliberately off-palette so a ★ is spottable in a field of blocks |
 
-Wired into the Cube's `Color`, every SurfaceGui-driven label tint, and the ParticleEmitter's `ColorSequence`. If you ever expand the palette, change `COLOR_TINTS` here in one place — [[systems/EnergyReservoirs]] enforces the same set on its side.
+Wired into the Cube's `Color`, every SurfaceGui-driven label tint, and the ParticleEmitter's `ColorSequence`. If you ever expand the palette, change `COLOR_TINTS` here in one place — [[systems/EnergyReservoirs]] enforces the same set on its side (reservoir colors only; it never sees `wild`).
+
+The face label goes through `Wildcard.toDisplay(letter)`, so a wildcard's stored `*` renders as `★` while every other letter passes through uppercased.
 
 ## CollectionService tag → animator
 

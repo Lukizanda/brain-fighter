@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server-side letter-block populator — maintains a target count of floating LetterBlocks in the arena with Scrabble-weighted letter distribution and configurable color weights.
-updated: 2026-05-16
+updated: 2026-07-27
 ---
 
 # BlockSpawner
@@ -87,6 +87,13 @@ Each block spawns with a random initial Y-axis rotation so a cluster doesn't loo
 | Arena box | 40×8×40 studs, Y 8–16 (reference) | `BlockSpawnVolume` tagged parts |
 | Color weights | uniform (1, 1, 1) | gameplay-loop § Spawner |
 | Min spacing | 4 studs between block centers | `GameConfig.BLOCK_MIN_SPACING` |
+| Wildcard frequency | `4` → 4/102 ≈ 3.9% | `WILDCARD_FREQUENCY` in `BlockSpawner/init.luau`; `0` disables |
+
+### Wildcard rolls
+
+The wildcard (see [[systems/Wildcard]]) is rolled as a **27th letter** against the same cumulative table as the Scrabble bag — weight `4` against the bag's total of `98`. Its color is then **fixed** to `"wild"` rather than rolled, so a star can never masquerade as a reservoir color the player is hunting for.
+
+Scrabble's own ratio is 2 blanks per 98 tiles (≈2%), but blocks here recycle continuously as they're consumed, and that rate left too many arenas with no star visible at all.
 
 ## Consumers
 

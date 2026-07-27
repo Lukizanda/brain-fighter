@@ -1,21 +1,25 @@
 ---
 type: system
-description: Word lookup module that validates the buffered word during Memorize. O(1) hashtable, ~79.9k words from SCOWL size 60 + curated geographic supplement; 26 per-letter sub-modules background-preloaded at game start.
-updated: 2026-05-19
+description: Word lookup module that validates the buffered word during Memorize. O(1) hashtable, ~79.9k words from SCOWL size 60 + curated supplements; 26 per-letter sub-modules background-preloaded at game start.
+updated: 2026-07-27
 ---
 
 # Dictionary
 
-Pure-Luau, Roblox-instance-free word lookup. The Memorize action calls `Dictionary.isWord(buffer:asWord())` to decide whether the buffered word transmutes into per-color reservoirs or fizzles. See [[design/gameplay-loop]] for the decision context.
+Pure-Luau, Roblox-instance-free word lookup. The Memorize action calls `Dictionary.resolve(buffer:asWord(), …)` to decide whether the buffered word transmutes into per-color reservoirs or fizzles. See [[design/gameplay-loop]] for the decision context.
+
+Because the buffer may hold [[systems/Wildcard]] tiles, what it spells is a *pattern* (`D*G`) rather than a word. `resolve` collapses it to a concrete match; `isWord` remains the exact, wildcard-blind lookup. See [[systems/Wildcard#Dictionary resolution]] for the length-index matcher and its measured cost.
 
 Phase 1 foundation module ([[design/build-plan]]) — sibling to [[systems/EnergyEconomy]], [[systems/EnergyReservoirs]], `WordBuffer`, and `SpellRegistry`.
 
 ## Files
 
-- `src/shared/Dictionary/init.luau` — public API (isWord, getStats); background-preloads 26 per-letter modules via `task.defer` at game start; logs `Dictionary preload complete — N words` when done
+- `src/shared/Dictionary/init.luau` — public API (isWord, isSpellable, resolve, getStats); background-preloads 26 per-letter modules via `task.defer` at game start; logs `Dictionary preload complete — N words` when done. Load also builds `byLength[letter][len]` arrays for the wildcard matcher.
 - `src/shared/Dictionary/words/{a..z}.luau` — 26 auto-generated ModuleScripts; each returns a packed newline-delimited string of words starting with that letter (SCOWL size 60)
 - `src/shared/Dictionary/__tests.luau` — smoke tests; runs assertions on require, logs `[TEST PASS]` line on success
-- `tools/generate_wordlist.py` — offline parser: reads SCOWL source files, filters, writes the 26 `.luau` files
+- `tools/generate_wordlist.py` — offline parser: reads SCOWL source files, filters, merges supplements, writes the 26 `.luau` files
+- `tools/wordlists/proper-names.txt` — curated geographic supplement (~400 single-word country/city names)
+- `tools/wordlists/playtest-additions.txt` — words found missing during playtesting (see [[#Adding a missing word]])
 
 ## API
 
@@ -23,8 +27,20 @@ Phase 1 foundation module ([[design/build-plan]]) — sibling to [[systems/Energ
 local Dictionary = require(ReplicatedStorage.Shared.Dictionary)
 
 Dictionary.isWord(s: string) -> boolean
--- Case-insensitive lookup. Lowercases input, checks per-letter hashtable.
+-- Case-insensitive EXACT lookup. Lowercases input, checks per-letter hashtable.
+-- Does NOT interpret wildcards: isWord("D*G") is false.
 -- Returns false for non-string input or empty string.
+
+Dictionary.isSpellable(s: string) -> boolean
+-- Wildcard-aware validity. Identical to isWord for wildcard-free input;
+-- for "D*G" it is true because DOG exists. Early-exits on first match,
+-- so this is the cheap per-keystroke call the HUD glow uses.
+
+Dictionary.resolve(s: string, scoreFn: ((word: string) -> number)?) -> string?
+-- Wildcard-aware resolution to a concrete UPPERCASE word, or nil.
+-- Without scoreFn the first match wins (early exit).
+-- With scoreFn every candidate is scored and the highest wins; ties keep
+-- the first in corpus (alphabetical) order, so results are deterministic.
 
 Dictionary.getStats() -> { wordCount: number, byLength: { [number]: number } }
 -- Cached on first call. byLength[n] = number of words of length n.
@@ -67,46 +83,79 @@ uv run tools/generate_wordlist.py          # default: size 60 ≈ 79.5k words
 uv run tools/generate_wordlist.py --size 50  # smaller list if needed
 ```
 
-`tools/scowl/` and `tools/wordlists/` are gitignored. Only the generated `src/shared/Dictionary/words/*.luau` files are committed.
+`tools/scowl/` and `tools/wordlists/` are gitignored, with hand-curated supplements as explicit `!` exceptions in `.gitignore` (`proper-names.txt`, `playtest-additions.txt`). The generated `src/shared/Dictionary/words/*.luau` files are committed. **When adding a new supplement file, add a matching `!` exception** — otherwise it stays local-only and the next clone silently regenerates without it.
 
 **Locale coverage**: English + American + British + British-z spellings (e.g. both `color` and `colour`, both `organize` and `organise`).  
 **Filters applied**: contractions, proper nouns, words ≤ 2 letters (except allowlist: `am an as at be by do go he if in is it me my no of on or ok so to up us we`), offensive word blocklist (`tools/wordlists/offensive.txt`), non-alpha characters.
 
-**Supplement**: after SCOWL filtering, words from `tools/wordlists/proper-names.txt` are merged in (minus any offensive matches). This adds ~400 single-word geographic names — countries, capitals, and major cities — that SCOWL's `-words` files omit. Multi-word names (New York, Buenos Aires) are intentionally excluded; they can't be spelled as a single play. Edit the supplement and re-run to add/remove entries.
+**Supplements**: after SCOWL filtering, words from every file in `SUPPLEMENT_PATHS` (top of the generator) are merged in, minus any offensive matches. `--supplement` takes multiple paths and overrides the default list. Two supplements ship today:
+
+| File | Contents |
+|---|---|
+| `proper-names.txt` | ~400 single-word geographic names — countries, capitals, major cities. Multi-word names (New York, Buenos Aires) intentionally excluded; they can't be spelled as a single play. |
+| `playtest-additions.txt` | Words found missing during playtesting. |
+
+Supplement words bypass the length floor and the non-alpha filter is applied at load (`^[a-z]+$`), so short entries survive but hyphens/apostrophes/spaces are silently dropped. Only the offensive blocklist still filters them.
 
 To resize: change `--size` and commit the regenerated `words/*.luau` files. No Luau code changes needed.
 
-## Word count (SCOWL size 60 + geographic supplement, 2026-05-19)
+## Adding a missing word
 
-Total: **79,896 words**
+When a word that should be valid fizzles during play:
+
+```bash
+# 1. Confirm it's actually absent (exit 1 = missing)
+grep -nx "zen" src/shared/Dictionary/words/z.luau
+
+# 2. Append it to the supplement — one word per line, lowercase, a-z only
+echo "zen" >> tools/wordlists/playtest-additions.txt
+
+# 3. Regenerate
+uv run tools/generate_wordlist.py --size 60
+
+# 4. Verify the diff is only the words you added
+git diff --unified=1 src/shared/Dictionary/words/
+```
+
+Regeneration is deterministic — same SCOWL + same supplements + same `--size` reproduces the committed files byte-for-byte, so step 4 should show exactly one added line per new word and nothing else. A noisy diff means `--size` or the SCOWL version drifted.
+
+Commit the supplement edit **and** the regenerated `words/*.luau` together. Editing `words/*.luau` by hand instead works until the next regen, then silently reverts — the supplement is the durable path.
+
+Prereq: `tools/scowl/` must be populated (see [[#Offline parser]]). Without it the generator exits with a "SCOWL final/ directory not found" error rather than writing a partial list.
+
+## Word count (SCOWL size 60 + supplements, 2026-07-27)
+
+Total: **79,897 words** — rows below are the generator's own per-letter report and sum to exactly this total.
+
+> Corrected 2026-07-27: the previous table's rows were each +1 (they summed to 79,922 against a stated total of 79,896), from counting `.luau` file lines rather than words. Take counts from the generator's stderr report, not `wc -l`.
 
 | Letter | Count |
 |---|---|
-| a | 4,443 |
-| b | 4,698 |
-| c | 7,754 |
-| d | 5,110 |
-| e | 3,205 |
-| f | 3,406 |
-| g | 2,572 |
-| h | 2,868 |
-| i | 3,252 |
-| j | 693 |
-| k | 581 |
-| l | 2,377 |
-| m | 4,198 |
-| n | 1,686 |
-| o | 2,066 |
-| p | 6,390 |
-| q | 384 |
-| r | 4,967 |
-| s | 9,220 |
-| t | 4,074 |
-| u | 2,240 |
-| v | 1,210 |
-| w | 2,134 |
-| x | 19 |
-| y | 235 |
+| a | 4,442 |
+| b | 4,697 |
+| c | 7,753 |
+| d | 5,109 |
+| e | 3,204 |
+| f | 3,405 |
+| g | 2,571 |
+| h | 2,867 |
+| i | 3,251 |
+| j | 692 |
+| k | 580 |
+| l | 2,376 |
+| m | 4,197 |
+| n | 1,685 |
+| o | 2,065 |
+| p | 6,389 |
+| q | 383 |
+| r | 4,966 |
+| s | 9,219 |
+| t | 4,073 |
+| u | 2,239 |
+| v | 1,209 |
+| w | 2,133 |
+| x | 18 |
+| y | 234 |
 | z | 140 |
 
 ## Worked-example coverage
@@ -129,6 +178,12 @@ Every word from the [[design/gameplay-loop|gameplay-loop]] worked-examples table
 - `Dictionary.isWord("colour")` → `true` (British spelling pin, 2026-05-15)
 - `Dictionary.isWord("XYZQQ")` → `false`
 - `Dictionary.isWord("")` → `false`
+- `Dictionary.isWord("D*G")` → `false` (isWord never interprets wildcards)
+- `Dictionary.isSpellable("d*g" | "D*G" | "*og" | "***")` → `true`
+- `Dictionary.isSpellable("xq*zj")` → `false`
+- `Dictionary.isSpellable("*")` → `false` (no single-letter words in SCOWL-60)
+- `Dictionary.isSpellable("d.g" | "d1g")` → `false` (illegal chars rejected before the pattern is built, so `.` can't match everything)
+- `Dictionary.resolve("d*g", preferO)` → `"DOG"`; `resolve("d*g", preferU)` → `"DUG"` (proves scoreFn steers the result rather than corpus order)
 - `Dictionary.getStats().wordCount > 70000`
 - `Dictionary.getStats().byLength` is a table
 
@@ -146,6 +201,7 @@ A passing run logs `[Dictionary.tests] [TEST PASS] Dictionary smoke tests — N 
 |---|---|---|---|
 | 2026-05-15 | `tout` | ~90 missing common words in 4.1k bootstrap list | Replaced bootstrap list with SCOWL 60 (79.5k words) |
 | 2026-05-19 | `cairo` | SCOWL `-words` files exclude proper nouns; `cairo` lives in `english-upper.50` | Added `tools/wordlists/proper-names.txt` supplement (~400 single-word geographic names); generator merges it after SCOWL filtering |
+| 2026-07-27 | `zen` | Same proper-noun exclusion as `cairo`, non-geographic slice — SCOWL files it capitalized, so `zenith` is present but bare `zen` is not | Added `tools/wordlists/playtest-additions.txt`; `--supplement` now takes multiple paths and both lists merge by default |
 
 ## Cross-references
 

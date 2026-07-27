@@ -17,18 +17,23 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
 
 local DEFAULT_CAP = 12
 local FIRST_INDEX = 1
 local APPEND_FULL_LOG_INTERVAL = 30
 
+-- "wild" is the gold ★ block (see [[Wildcard]]). It is a legal tile
+-- color but not a reservoir color — EnergyEconomy spreads its energy
+-- across red/green/blue rather than banking it into a single one.
 local VALID_COLORS: { [string]: boolean } = {
 	red = true,
 	green = true,
 	blue = true,
+	[Wildcard.COLOR] = true,
 }
 
-export type Color = "red" | "green" | "blue"
+export type Color = "red" | "green" | "blue" | "wild"
 export type Tile = { letter: string, color: Color }
 
 local WordBuffer = {}
@@ -116,6 +121,10 @@ function WordBuffer:clear()
 	self._changedSignal:Fire()
 end
 
+-- Uppercased concatenation of the buffered letters. Wildcard tiles
+-- contribute their raw character, so this may be a pattern ("D*G")
+-- rather than a word — pass it through Dictionary.resolve to get the
+-- concrete word.
 function WordBuffer:asWord(): string
 	local letters = table.create(#self._tiles)
 	for i, tile in self._tiles do
