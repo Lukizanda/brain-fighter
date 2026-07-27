@@ -177,14 +177,32 @@ Release target decided 2026-07-27: **public soft launch** (unlisted first, then 
 |---|---|
 | **Server trust hardening** | Un-deferred (was "revisit if public release approaches" — it now is). Validate `ConsumeBlock` (block exists / in range / rate) and `SpellCastServer` (registry-known spell, server-side affordability) instead of trusting the client. Parallel-safe with 5.2 — different files. |
 | **Game page assets** | Icon, thumbnails, description. Remember [[concepts/RobloxOpenCloudAuth]] and the `rbxthumb://` requirement for Open Cloud decals. |
+| **Analytics** | Added 2026-07-27 (from the persistence discussion): `AnalyticsService` onboarding funnel (join → first shoot → first memorize → first cast → first boss damage → boss kill) + custom loop-health events. Pulled into the gate because the soft launch exists to observe retention — unobservable without it. See [[design/persistence-progression]]. |
 | **Rollout** | Unlisted link → friends checkpoint → public listing. The friends checkpoint after 5.1 feeds tuning and the shield/wall/buff design pass before they're built. |
 
 **Sequencing:** 5.1 → friends-playtest checkpoint → 5.2 + hardening (parallel) → tutorial + tuning (5.3) → store assets → listing.
 
 **Milestone:** a cold player (no instructions) completes shoot → memorize → cast → boss damage inside their first session, with no placeholder audio and no client-trusted remotes.
 
+## Phase 5.5 — Persistence & progression (post-launch)
+
+First phase after the soft launch. Decisions and rationale live in [[design/persistence-progression]] (2026-07-27): **mastery-first** progression — no session-to-session content gating; retention via personal bests and stats.
+
+| Item | Detail |
+|---|---|
+| **PlayerData module** | ProfileStore (session locking) wrapped in a single server-side `PlayerData` module — the only file allowed to touch DataStores ([[concepts/SingleOwnership]]). Schema versioning + reconcile-with-defaults from day one. |
+| **Settings persistence** | Input prefs, UI options. |
+| **Word stats & personal bests** | Total words, highest-value word, longest word, best boss clear time, boss kills, total sessions — all from existing MemorizeAction/CastAction/Boss events. |
+| **Cosmetics schema reservation** | `owned`/`equipped` slots in the profile template; **no cosmetic content in 5.5**. Future cosmetics are mastery-milestone-earned only, no Robux. |
+| **PB surface in HUD** | Minimal personal-bests display (end-of-run summary vs. menu page — design pass at kickoff). |
+
+**Explicitly out of 5.5:** leaderboards (OrderedDataStore — wait for soft-launch analytics), streaks/run history, spell/tier meta unlocks (rejected), cosmetics content.
+
+**Milestone:** rejoin after a session and see settings + personal bests intact; a second-device login is safely locked out mid-session (ProfileStore session lock verified).
+
 ## Plan changelog
 
+- **2026-07-27**: Persistence & progression decided ([[design/persistence-progression]]) — mastery-first, ProfileStore-backed PlayerData, added as Phase 5.5 (first post-launch). One change to the 5.4 bar: AnalyticsService funnel + custom events pulled into the release gate so the soft launch can measure retention.
 - **2026-07-27**: Release bar set — public soft launch. Added Phase 5.4 (release gate): server trust hardening un-deferred, game page assets added, rollout sequence pinned (5.1 → friends checkpoint → 5.2 + hardening → tutorial/tuning → listing). R-5..R-9 and Tier 3 debt explicitly excluded from the bar.
 - **2026-07-15**: Phase 5 split into 5.1 (correctness sprint: Skills leak, stub-spell refund, damage-path unification), 5.2 (content: shield/wall/buff, real SFX, VFX gaps), 5.3 (tuning, UI R-5..R-9, tutorial). Server trust hardening explicitly deferred. Audit items re-verified live against `src/` before scheduling.
 - **2026-06-05**: Phase 4.8 (UI architecture review) re-audited + complete — R-1..R-4 cleanup landed and verified by playtest; GO for Phase 5. R-5..R-9 (2 Medium / 3 Low) deferred.

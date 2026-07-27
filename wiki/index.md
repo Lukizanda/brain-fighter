@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-07-15
+updated: 2026-07-27
 ---
 
 # Wiki Index
@@ -15,6 +15,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[design/ArtDirection]] — lowpoly / chunky / oversized sci-fi proportions; greybox-first level building
 - [[design/ui-architecture-review]] — Phase 4.8 audit of `src/client/UI/` + `src/shared/Hud/` (re-audited 2026-06-05); R-1..R-4 cleanup landed + verified, no High open; 2 Medium / 3 Low deferred; Phase 5 gate = GO
 - [[design/system-audit-2026-06]] — whole-repo architecture/tech-debt audit (2026-06-05); ~half the repo is dormant template code; Tier 1 = Skills Humanoid leak + BossAdapter retirement + split-brain damage; key call = template keep-or-cut. Next-session pick-up point.
+- [[design/persistence-progression]] — persistence & progression strategy (2026-07-27): mastery-first (no meta unlocks), ProfileStore-backed PlayerData, settings + word PBs + reserved cosmetics schema; analytics pulled into the 5.4 gate; implementation = Phase 5.5
 
 ## Systems
 
