@@ -200,8 +200,10 @@ local SPELLS: { [Color]: { Spec } } = {
 				delivery = "instant",
 				deliveryParams = {},
 				onImpact = {
+					-- shield component removed until 5.2 implements it: with the
+					-- stub failing (ok=false) the real heal would land AND the
+					-- mana refund — a free full heal. Re-add with the 5.2 shield.
 					{ kind = "heal", fractionOfMaxHP = 1.0 },
-					{ kind = "shield", durationSec = 10 },
 				},
 			},
 		},

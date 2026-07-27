@@ -137,18 +137,18 @@ Before Phase 5 polish work, conduct a structured review of the client UI system 
 
 Split into three sub-phases (2026-07-15), sequenced so correctness debt lands before content built on top of it. Source of the item list: [[design/system-audit-2026-06]] (re-verified against `src/` on 2026-07-15 — Skills leak, stub-spell mana drain, and placeholder sounds all confirmed still live).
 
-### Phase 5.1 — Correctness sprint
+### Phase 5.1 — Correctness sprint ✅ (2026-07-27)
 
-The audit's Tier 1 items that survived the template cut. Small scope, gates 5.2.
+The audit's Tier 1 items that survived the template cut. Small scope, gates 5.2. **Complete — all four items landed and playtest-verified (Skills suite 4/4).**
 
-| Item | Detail |
-|---|---|
-| **Skills Humanoid state leak [H]** | `SkillEffects._freezeState` + `SkillInterrupt._active`/`_silenced` are cleaned only by timer/finish paths. Add one-shot `Humanoid.Died`/`Destroying` cleanup purging both registries. |
-| **Stub spells drain mana** | `shield`/`wall`/`buff` handlers in `SkillEffects.luau` no-op but return `ok=true`, so CastAction never refunds. Return `ok=false, reason="unimplemented"` until 5.2 implements them. |
-| **Split-brain damage path [M]** | `SkillEffects` writes `Humanoid.Health` directly for spell damage while boss attacks route through `applyDamage.process`. Funnel all damage through `applyDamage`, or document hit-zones as out of scope for spells. |
-| **SkillInterrupt tests** | The Skills layer has zero `__tests`; `SkillInterrupt` (token cancel/finish/silence) is trivially unit-testable. Add a smoke suite alongside the leak fix. |
+| Item | Detail | Outcome |
+|---|---|---|
+| **Skills Humanoid state leak [H]** | `SkillEffects._freezeState` + `SkillInterrupt._active`/`_silenced` were cleaned only by timer/finish paths. | ✅ One-shot `Died` + `HealthChanged<=0` + `Destroying` cleanup purges both registries (HealthChanged backs up Died — the Dead state never fires on partial rigs; place runs deferred signals). Also fixes orphaned FreezeVfx shards. |
+| **Stub spells drain mana** | `shield`/`wall`/`buff` handlers no-op'd but returned `ok=true`, so CastAction never refunded. | ✅ Stubs return `ok=false, reason="unimplemented"`; the `world_spawn` delivery stub too (Stone Wall's actual no-op path — its `onImpact` is empty). Sanctuary's stub `shield` entry removed until 5.2 (real heal + refund would have been a free full heal). Refund verified end-to-end. |
+| **Split-brain damage path [M]** | Spells write `Humanoid.Health` directly; boss attacks use `applyDamage.process`. | ✅ Decision (user, 2026-07-27): documented as out of scope for spells — `applyDamage` is server-only while spells cast client-side; unify when 5.4 hardening moves casting server-side. See [[systems/SkillPipeline]] § Damage paths. |
+| **SkillInterrupt tests** | The Skills layer had zero `__tests`. | ✅ `src/shared/Skills/__tests.luau` (7 scenarios incl. death/despawn purge races) + `Tests/Suites/Skills/` autorunner suite wrapping it with SpellExecutor, CastAction, and an end-to-end refund check. Also modernized 2 stale SpellExecutor tests (Frost Nip 3s, Fireball-as-projectile). |
 
-**Milestone:** boss fight playtest with freeze/death races shows no leaked registry entries; casting a stub spell refunds its mana.
+**Milestone:** ✅ freeze/death races show no leaked registry entries; casting a stub spell refunds its mana; Skills suite 4/4 in playtest.
 
 ### Phase 5.2 — Content completion
 
@@ -202,6 +202,7 @@ First phase after the soft launch. Decisions and rationale live in [[design/pers
 
 ## Plan changelog
 
+- **2026-07-27**: Phase 5.1 complete — Skills leak fix (Died/HealthChanged/Destroying purge), stub-spell refunds (`unimplemented` failures incl. `world_spawn`), damage-path split documented (unify in 5.4), Skills test suite added (4/4 in playtest). Sanctuary temporarily heal-only. Next: friends-playtest checkpoint, then 5.2 + hardening.
 - **2026-07-27**: Persistence & progression decided ([[design/persistence-progression]]) — mastery-first, ProfileStore-backed PlayerData, added as Phase 5.5 (first post-launch). One change to the 5.4 bar: AnalyticsService funnel + custom events pulled into the release gate so the soft launch can measure retention.
 - **2026-07-27**: Release bar set — public soft launch. Added Phase 5.4 (release gate): server trust hardening un-deferred, game page assets added, rollout sequence pinned (5.1 → friends checkpoint → 5.2 + hardening → tutorial/tuning → listing). R-5..R-9 and Tier 3 debt explicitly excluded from the bar.
 - **2026-07-15**: Phase 5 split into 5.1 (correctness sprint: Skills leak, stub-spell refund, damage-path unification), 5.2 (content: shield/wall/buff, real SFX, VFX gaps), 5.3 (tuning, UI R-5..R-9, tutorial). Server trust hardening explicitly deferred. Audit items re-verified live against `src/` before scheduling.

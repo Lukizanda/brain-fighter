@@ -382,14 +382,16 @@ SkillDelivery.handlers = {
 		return { ok = true }
 	end,
 
-	-- "world_spawn": stub for Stone Wall and terrain placements.
-	-- onImpact is typically empty for walls (the Part IS the effect).
+	-- "world_spawn": stub for Stone Wall and terrain placements until
+	-- Phase 5.2. onImpact is typically empty for walls (the Part IS the
+	-- effect), so this handler — not an effect stub — is what makes the
+	-- cast fail and triggers CastAction's mana refund.
 	world_spawn = function(skill: SkillSpec, ctx: DeliveryCtx): Result
 		log:info(("world_spawn stub — %s at %s"):format(
 			skill.name, tostring(ctx.target or ctx.origin.Position)
 		))
 		if ctx.onComplete then ctx.onComplete() end
-		return { ok = true }
+		return { ok = false, reason = "unimplemented" }
 	end,
 }
 

@@ -14,6 +14,7 @@
 -- the run and are Destroyed at the end of each case.
 ----------------------------------------------------------------------
 
+local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local SpellExecutor = require(ReplicatedStorage.Shared.SpellExecutor)
@@ -26,9 +27,26 @@ local TEST_MAX_HEALTH = 100
 local TEST_WALK_SPEED = 16
 local HEALTH_TOLERANCE = 0.01
 local WALK_SPEED_TOLERANCE = 0.01
--- Slack on top of the 1s Frost Nip duration so the task.delay restore
--- has resolved before we assert. Empirically 0.15s is comfortable.
-local FREEZE_WAIT_SEC = 1.15
+-- Frost Nip's freeze duration is read from the registry so this test
+-- tracks tuning changes (it was originally written against a 1s freeze
+-- that was later tuned to 3s and went stale). Slack covers the
+-- task.delay restore resolving after the duration elapses.
+local FREEZE_RESTORE_SLACK_SEC = 0.25
+local function frostNipFreezeSec(): number
+	for _, entry in SpellRegistry.getSpell("blue", 1).skill.onImpact do
+		if (entry :: any).kind == "freeze" then
+			return (entry :: any).durationSec
+		end
+	end
+	error("Frost Nip freeze entry not found in registry")
+end
+-- Fireball projectile test geometry: the tagged target sits this far
+-- from the caster, high above the map so death zones, NPCs, and the
+-- boss can't interfere with the flight path or splash.
+local PROJECTILE_TARGET_DISTANCE = 10
+local PROJECTILE_TEST_ALTITUDE = 400
+local PROJECTILE_HIT_TIMEOUT_SEC = 3
+local PROJECTILE_HIT_POLL_SEC = 0.05
 
 local M = {}
 
@@ -100,13 +118,41 @@ end
 
 local cases: { { any } } = {
 	{
-		"damage 20% (Fireball) on 100/100 HP drops to 80",
+		"damage 20% (Fireball) projectile hits tagged target, 100 -> 80",
 		function()
-			local model, humanoid = makeDummy()
-			local res = SpellExecutor.cast(SpellRegistry.getSpell("red", 2), humanoid, humanoid)
+			-- Projectile delivery skips the caster, aims at the target's
+			-- HumanoidRootPart, and only detects models carrying a
+			-- Damageable/NPC/Boss tag — so this needs a real two-rig setup
+			-- in workspace, not the self-cast the old instant path allowed.
+			local function makeRig(name: string, xOffset: number): (Model, Humanoid)
+				local model, humanoid = makeDummy()
+				model.Name = name
+				local hrp = Instance.new("Part")
+				hrp.Name = "HumanoidRootPart"
+				hrp.Anchored = true
+				hrp.CanCollide = false
+				hrp.Size = Vector3.new(2, 2, 1)
+				hrp.CFrame = CFrame.new(xOffset, PROJECTILE_TEST_ALTITUDE, 0)
+				hrp.Parent = model
+				model.Parent = workspace
+				return model, humanoid
+			end
+
+			local casterModel, casterHumanoid = makeRig("FireballTestCaster", 0)
+			local targetModel, targetHumanoid = makeRig("FireballTestTarget", PROJECTILE_TARGET_DISTANCE)
+			CollectionService:AddTag(targetModel, "Damageable")
+
+			local res = SpellExecutor.cast(SpellRegistry.getSpell("red", 2), casterHumanoid, targetHumanoid)
 			expectEq(res.ok, true, "ok")
-			expectNear(humanoid.Health, 80, HEALTH_TOLERANCE, "Health after Fireball")
-			model:Destroy()
+
+			local deadline = os.clock() + PROJECTILE_HIT_TIMEOUT_SEC
+			while targetHumanoid.Health > 80 + HEALTH_TOLERANCE and os.clock() < deadline do
+				task.wait(PROJECTILE_HIT_POLL_SEC)
+			end
+			expectNear(targetHumanoid.Health, 80, HEALTH_TOLERANCE, "Health after Fireball impact")
+
+			casterModel:Destroy()
+			targetModel:Destroy()
 		end,
 	},
 	{
@@ -151,45 +197,50 @@ local cases: { { any } } = {
 		end,
 	},
 	{
-		"freeze (Frost Nip 1s) sets WalkSpeed=0, restores after duration",
+		"freeze (Frost Nip) sets WalkSpeed=0, restores after registry duration",
 		function()
 			local model, humanoid = makeDummy()
 			local res = SpellExecutor.cast(SpellRegistry.getSpell("blue", 1), humanoid, humanoid)
 			expectEq(res.ok, true, "ok")
 			expectEq(humanoid.WalkSpeed, 0, "WalkSpeed during freeze")
-			task.wait(FREEZE_WAIT_SEC)
+			task.wait(frostNipFreezeSec() + FREEZE_RESTORE_SLACK_SEC)
 			expectNear(humanoid.WalkSpeed, TEST_WALK_SPEED, WALK_SPEED_TOLERANCE, "WalkSpeed restored")
 			model:Destroy()
 		end,
 	},
+	-- Phase 5.1: unimplemented stubs fail (ok=false, reason="unimplemented")
+	-- so CastAction refunds the mana instead of draining it on a no-op.
+	-- 5.2 flips these expectations back when the real effects land.
 	{
-		"shield stub (Blue T2 Shield) returns ok=true",
+		"shield stub (Blue T2 Shield) fails with unimplemented so cast refunds",
 		function()
 			local model, humanoid = makeDummy()
 			local res = SpellExecutor.cast(SpellRegistry.getSpell("blue", 2), humanoid, humanoid)
-			expectEq(res.ok, true, "ok")
-			expectEq(res.reason, nil, "no reason on success")
+			expectEq(res.ok, false, "ok")
+			expectContains(res.reason, "unimplemented", "reason")
 			model:Destroy()
 		end,
 	},
 	{
-		"wall stub (Green T2 Stone Wall) accepts Vector3 target",
+		"wall stub (Green T2 Stone Wall) fails with unimplemented so cast refunds",
 		function()
 			local model, humanoid = makeDummy()
 			local res = SpellExecutor.cast(SpellRegistry.getSpell("green", 2), humanoid, Vector3.new(10, 0, 10))
-			expectEq(res.ok, true, "ok")
+			expectEq(res.ok, false, "ok")
+			expectContains(res.reason, "unimplemented", "reason")
 			model:Destroy()
 		end,
 	},
 	{
-		"buff stub returns ok=true",
+		"buff stub fails with unimplemented so cast refunds",
 		function()
 			local model, humanoid = makeDummy()
 			-- No pure 'buff' spell exists in the prototype roster, so we
 			-- synthesize a spec to cover the stub branch.
 			local spec = makeSpec("buff", { durationSec = 5 }, "TestBuff")
 			local res = SpellExecutor.cast(spec, humanoid, humanoid)
-			expectEq(res.ok, true, "ok")
+			expectEq(res.ok, false, "ok")
+			expectContains(res.reason, "unimplemented", "reason")
 			model:Destroy()
 		end,
 	},

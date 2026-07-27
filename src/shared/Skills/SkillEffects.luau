@@ -50,7 +50,36 @@ end
 
 -- Per-Humanoid freeze bookkeeping. Re-freezes extend the expiry
 -- rather than overwriting the saved WalkSpeed (which would record 0).
-local _freezeState: { [Humanoid]: { originalSpeed: number, restoreAt: number } } = {}
+-- `conns` holds the one-shot Died/Destroying cleanup connections; without
+-- them a humanoid that dies or despawns mid-freeze leaks its entry forever
+-- (the timer paths bail on the deadline check and never purge).
+type FreezeState = {
+	originalSpeed: number,
+	restoreAt: number,
+	conns: { RBXScriptConnection },
+}
+local _freezeState: { [Humanoid]: FreezeState } = {}
+
+-- Timer callbacks fire a hair early; treat "within epsilon of the
+-- deadline" as expired so an extend-then-restore race can't strand state.
+local RESTORE_EPSILON_SEC = 0.01
+
+-- Single teardown path for a freeze: timer expiry passes
+-- restoreSpeed=true, death/removal passes false (no point writing
+-- WalkSpeed on a dead or destroyed humanoid).
+local function purgeFreeze(h: Humanoid, restoreSpeed: boolean)
+	local state = _freezeState[h]
+	if not state then return end
+	_freezeState[h] = nil
+	for _, conn in state.conns do
+		conn:Disconnect()
+	end
+	if restoreSpeed and h.Parent then
+		h.WalkSpeed = state.originalSpeed
+	end
+	FreezeVfx.stop(h)
+	SkillInterrupt.unsilence(h)
+end
 
 local function resolveHumanoid(target: any): Humanoid?
 	if typeof(target) ~= "Instance" then return nil end
@@ -111,18 +140,29 @@ SkillEffects.handlers = {
 				state.restoreAt = extended
 				task.delay(extended - now, function()
 					local s = _freezeState[h]
-					if s and os.clock() >= s.restoreAt - 0.01 then
-						if h.Parent then h.WalkSpeed = s.originalSpeed end
-						FreezeVfx.stop(h)
-						SkillInterrupt.unsilence(target)
-						_freezeState[h] = nil
+					if s and os.clock() >= s.restoreAt - RESTORE_EPSILON_SEC then
+						purgeFreeze(h, true)
 					end
 				end)
 			end
 		else
-			state = { originalSpeed = h.WalkSpeed, restoreAt = now + duration }
+			state = { originalSpeed = h.WalkSpeed, restoreAt = now + duration, conns = {} }
 			_freezeState[h] = state
 			h.WalkSpeed = 0
+			-- One-shot death/removal cleanup: the timer paths above never
+			-- purge a humanoid that dies or despawns mid-freeze. HealthChanged
+			-- backs up Died because the Dead state transition is unreliable on
+			-- partial/synthetic rigs; purgeFreeze is idempotent so overlapping
+			-- fires are harmless.
+			table.insert(state.conns, h.Died:Connect(function()
+				purgeFreeze(h, false)
+			end))
+			table.insert(state.conns, h.HealthChanged:Connect(function(health: number)
+				if health <= 0 then purgeFreeze(h, false) end
+			end))
+			table.insert(state.conns, h.Destroying:Connect(function()
+				purgeFreeze(h, false)
+			end))
 			-- Fresh freeze interrupts the target's pending scheduled casts
 			-- (e.g. remaining shots of a FireballVolley stagger) AND silences
 			-- any new casts the target tries to start while frozen — without
@@ -136,11 +176,8 @@ SkillEffects.handlers = {
 			FreezeVfx.start(h, duration)
 			task.delay(duration, function()
 				local s = _freezeState[h]
-				if s and os.clock() >= s.restoreAt - 0.01 then
-					if h.Parent then h.WalkSpeed = s.originalSpeed end
-					FreezeVfx.stop(h)
-					SkillInterrupt.unsilence(target)
-					_freezeState[h] = nil
+				if s and os.clock() >= s.restoreAt - RESTORE_EPSILON_SEC then
+					purgeFreeze(h, true)
 				end
 			end)
 		end
@@ -163,27 +200,36 @@ SkillEffects.handlers = {
 		return { ok = true }
 	end,
 
-	-- Stubs for future systems; always succeed so every spell in the
-	-- registry is callable end-to-end before those systems ship.
+	-- Stubs until Phase 5.2 implements the real effects. They fail with
+	-- reason="unimplemented" so CastAction's refund path returns the mana
+	-- instead of silently draining it on a no-op.
 	shield = function(spec: EffectSpec, _target: any, _source: any): Result
 		log:info(("shield stub — durationSec=%s"):format(tostring(spec.durationSec)))
-		return { ok = true }
+		return { ok = false, reason = "unimplemented" }
 	end,
 
 	buff = function(spec: EffectSpec, _target: any, _source: any): Result
 		log:info(("buff stub — kind=%s"):format(tostring(spec.kind)))
-		return { ok = true }
+		return { ok = false, reason = "unimplemented" }
 	end,
 
 	wall = function(spec: EffectSpec, _target: any, _source: any): Result
 		log:info(("wall stub — durationSec=%s"):format(tostring(spec.durationSec)))
-		return { ok = true }
+		return { ok = false, reason = "unimplemented" }
 	end,
 }
 
 ----------------------------------------------------------------------
 -- Public API
 ----------------------------------------------------------------------
+
+-- Read-only probe: is `target` currently tracked by the freeze registry?
+-- For tests/diagnostics — the 5.1 leak fix is verified by this going
+-- false after a mid-freeze death or despawn.
+function SkillEffects.isFrozen(target: any): boolean
+	local h = resolveHumanoid(target)
+	return h ~= nil and _freezeState[h] ~= nil
+end
 
 function SkillEffects.apply(spec: EffectSpec, target: any, source: any?): Result
 	local handler = SkillEffects.handlers[spec.kind]

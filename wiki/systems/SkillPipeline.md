@@ -1,7 +1,7 @@
 ---
 type: system
 description: Unified data + dispatch pipeline shared by player spells and boss attacks. SkillSpec (data) + SkillEffects (effects) + SkillDelivery (deliveries), with caller-resolved origin so any caster (player, boss, future NPC) plugs in the same way.
-updated: 2026-06-05
+updated: 2026-07-27
 ---
 
 # Skill Pipeline
@@ -14,7 +14,7 @@ Shipped in commit `03b6080` (replaces the old boss-only `BossAttacks.luau` and t
 
 - **`SkillSpec`** = pure data: `{ delivery, deliveryParams, onImpact: { EffectSpec } }`
 - **`SkillDelivery`** = how the skill reaches its target (`instant`, `projectile`, `aoe`, `world_spawn`)
-- **`SkillEffects`** = what happens on impact (`damage`, `heal`, `freeze`, `knockup` — all real handlers; stubs for `shield` / `wall` / `buff`)
+- **`SkillEffects`** = what happens on impact (`damage`, `heal`, `freeze`, `knockup` — all real handlers; `shield` / `wall` / `buff` stubs fail with `reason="unimplemented"` so casts refund — see Phase 5.1 notes)
 - **Wrappers** ([[systems/SpellRegistry]], `BossConfig.BOSS_TYPES`) add context-specific fields (cost/color/tier or phase/cooldown)
 - Adding a new effect kind once makes it available to every spell and every boss attack — no caller changes
 
@@ -55,7 +55,7 @@ graph LR
 
 The registries are **pure**: they never branch on caster type, don't know about staffs vs boss rigs, don't touch cost or cooldown. Each caller ([[systems/SpellExecutor]], `BossStates`) resolves its own context (origin CFrame, source instance) and passes it via `DeliveryCtx`.
 
-`*` = stub handler in SkillEffects (returns `ok=true`, logs). Will activate when the backing system lands. See [Reserved Hooks](#reserved-hooks-not-yet-implemented).
+`*` = stub handler in SkillEffects. Since Phase 5.1 stubs return `ok=false, reason="unimplemented"` so [[systems/CastAction]] refunds the mana instead of draining it on a no-op (previously they returned `ok=true` and silently ate the cost). Same for the `world_spawn` delivery stub — Stone Wall's `onImpact` is empty, so the *delivery* stub is what makes that cast refund. Real implementations land in Phase 5.2. See [Reserved Hooks](#reserved-hooks-not-yet-implemented).
 
 ## Data Shape
 
@@ -95,7 +95,7 @@ graph LR
     SOI --> E4
 ```
 
-`onImpact` is an **array** — a single skill can apply multiple effects in sequence (e.g., GroundSlam does damage + knockup; Sanctuary does heal + shield).
+`onImpact` is an **array** — a single skill can apply multiple effects in sequence (e.g., GroundSlam does damage + knockup). Sanctuary is heal-only until Phase 5.2: its `shield` entry was removed in 5.1 because a failing stub after a *real* full heal would have triggered the refund path — a free full heal. It comes back when shield is implemented.
 
 ## Execution Flow — Boss GroundSlam
 
@@ -140,6 +140,25 @@ sequenceDiagram
 
 **Note**: this is the exact same `SkillDelivery.handlers.projectile` that the boss's FireballVolley uses. The only difference is the origin (Staff Tip vs Boss HRP) and the wrapping context (SpellRegistry adds cost; BossConfig adds phase).
 
+## Registry Lifecycle & Death Cleanup (Phase 5.1)
+
+Both per-Humanoid registries (`SkillEffects._freezeState`, `SkillInterrupt._active`/`_silenced`) used to be cleaned only by their happy timer/finish paths — a humanoid that died or despawned mid-freeze (or mid-cast) leaked its entries forever, including orphaned FreezeVfx ice shards. Since 5.1 each registry installs one-shot cleanup connections the first time a humanoid is tracked:
+
+- **`Humanoid.Died`** — real character deaths (players, NPCs, boss).
+- **`Humanoid.HealthChanged <= 0`** — backup for `Died`: the Dead state transition never fires on partial/synthetic rigs (verified empirically — even `ChangeState(Dead)` with a neck Motor6D sticks in `FallingDown`). Purges are idempotent, so both firing is harmless.
+- **`Humanoid.Destroying`** — despawns without death. Note the place runs **deferred signal behavior**: handlers run at the next resumption point, never synchronously — anything observing a purge must poll, not assert inline.
+
+`SkillEffects.isFrozen(target)` is a read-only probe added for tests/diagnostics. On purge, freeze restores WalkSpeed only on the timer path (`purgeFreeze(h, true)`); death/despawn paths skip the write and still stop FreezeVfx and unsilence.
+
+### Damage paths — decision (2026-07-27)
+
+`SkillEffects` writes `Humanoid.Health` directly for player spells while boss attacks route through `applyDamage.process`. This split stays for now: **hit zones/damage modifiers are out of scope for spells**. `applyDamage` lives in `ServerScriptService` (server-only) while player spells execute client-side, so real unification means moving casting server-side — which is exactly what Phase 5.4's server-trust hardening does. Unify then, not before.
+
+## Testing
+
+- `src/shared/Skills/__tests.luau` — smoke suite (`.run()` harness): token lifecycle, cancel/finish, silence/unsilence, and all four death/despawn purge races.
+- `src/shared/Tests/Suites/Skills/` — autorunner suite (`workspace:SetAttribute("RunTests", "Skills")`): wraps the smoke suite plus `SpellExecutor.__tests`, `CastAction.__tests`, and `stub_cast_refunds` (end-to-end drain → refuse → refund). 4/4 as of 2026-07-27.
+
 ## Where Do I Add New Content?
 
 ```mermaid
@@ -157,9 +176,10 @@ graph LR
 | Path | Role | Owns |
 |---|---|---|
 | `src/shared/Skills/SkillTypes.luau` | Pure types | `SkillSpec`, `EffectSpec`, `DeliveryCtx` |
-| `src/shared/Skills/SkillEffects.luau` | Effect handlers | `apply(spec, target, source)`, `handlers.{damage, heal, freeze, ...}` |
+| `src/shared/Skills/SkillEffects.luau` | Effect handlers | `apply(spec, target, source)`, `isFrozen(target)`, `handlers.{damage, heal, freeze, ...}`, freeze death-cleanup |
 | `src/shared/Skills/SkillDelivery.luau` | Delivery handlers | `deliver(skill, ctx)`, `handlers.{instant, projectile, aoe, world_spawn}` |
-| `src/shared/Skills/SkillInterrupt.luau` | Per-Humanoid cast interrupt registry | `begin(caster)`, `finish(caster, token)`, `cancelCastsBy(target)`, `silence(target)`, `unsilence(target)` |
+| `src/shared/Skills/SkillInterrupt.luau` | Per-Humanoid cast interrupt registry | `begin(caster)`, `finish(caster, token)`, `cancelCastsBy(target)`, `silence(target)`, `unsilence(target)`, death-cleanup hooks |
+| `src/shared/Skills/__tests.luau` | Smoke suite | Token lifecycle + death/despawn purge races (`.run()`) |
 | `src/shared/SpellRegistry/init.luau` | Player spell wrapper | `Spec { name, color, tier, cost, targetingMode, skill }` |
 | `src/shared/SpellExecutor/init.luau` | Player cast entry | `cast(spec, caster, target)`, `resolveSpellOrigin(caster)` |
 | `src/shared/CastAction/init.luau` | Player resource gate | drain → cast → refund |
@@ -175,9 +195,9 @@ The schema includes fields handlers currently ignore. They will activate when th
 
 - `SkillSpec.vfxName: string?` — fires named VFX on cast/impact (blocked on [[systems/VisualEffects]] Phase C: VfxController)
 - `SkillSpec.sfxName: string?` — plays named SFX on cast/impact (blocked on SFX module — no system exists yet, see [[systems/AudioSFX]])
-- `EffectSpec.kind = "shield"` — stub in SkillEffects; blocked on Health absorb-pool system
-- `EffectSpec.kind = "buff" / "debuff"` — blocked on status-effect manager (apply/tick/expire lifecycle)
-- `EffectSpec.kind = "wall"` — stub; blocked on placement targeting UX + world-instance lifecycle
+- `EffectSpec.kind = "shield"` — stub in SkillEffects (fails `unimplemented` → refund); blocked on Health absorb-pool system
+- `EffectSpec.kind = "buff" / "debuff"` — stub (fails `unimplemented` → refund); blocked on status-effect manager (apply/tick/expire lifecycle)
+- `EffectSpec.kind = "wall"` — the `world_spawn` *delivery* stub fails `unimplemented` (wall specs have empty `onImpact`); blocked on placement targeting UX + world-instance lifecycle
 
 Adding these later requires **only** wiring the handlers — no schema changes, no caller changes.
 
@@ -202,7 +222,7 @@ These are load-bearing. If you find yourself wanting to violate one, stop and re
 1. **Registries are pure.** No branching on caster type, no knowledge of staffs / boss rigs / cost / cooldown.
 2. **Origin is caller-resolved.** Callers compute `DeliveryCtx.origin` and pass it in. The delivery handler never asks "is this a Player?"
 3. **`SkillSpec` is data-only.** No functions, no behavior. Wrappers add context-specific fields outside `SkillSpec`.
-4. **`onImpact` is an array.** Multi-effect skills compose by listing entries. No nested effect specs. **`VfxController` plays one impact burst per unique `kind`** in the array, so multi-effect spells (e.g. Sanctuary `{ heal, shield }`) render layered VFX.
+4. **`onImpact` is an array.** Multi-effect skills compose by listing entries. No nested effect specs. **`VfxController` plays one impact burst per unique `kind`** in the array, so multi-effect spells (e.g. GroundSlam `{ damage, knockup }`; Sanctuary re-gains `{ heal, shield }` in 5.2) render layered VFX.
 5. **Single-write ownership.** Only `SkillEffects.handlers.freeze` writes to `Humanoid.WalkSpeed` for freeze. Only `SkillDelivery.handlers.projectile` spawns projectiles. Only `SkillInterrupt` owns the per-Humanoid cast-token registry that gates async delivery work. See [[concepts/SingleOwnership]].
 6. **VFX color flows through `VfxConfig.COLORS`.** No `Color3.fromRGB(…)` literals in status visuals or delivery visuals; pull from the palette. Burst VFX entries declare `color = C.<color>` in their `EmitterSpec`.
 

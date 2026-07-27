@@ -32,12 +32,56 @@ local _active: { [Humanoid]: { CastToken } } = {}
 -- pairing every `silence` with an `unsilence` when the effect ends.
 local _silenced: { [Humanoid]: boolean } = {}
 
+-- One-shot Died/Destroying cleanup connections, hooked the first time a
+-- humanoid enters either registry. Without them, a humanoid that dies
+-- mid-cast (or mid-silence) leaks its `_active`/`_silenced` entries —
+-- finish/unsilence only run on the happy timer paths.
+local _cleanupConns: { [Humanoid]: { RBXScriptConnection } } = {}
+
 local function resolveHumanoid(target: any): Humanoid?
 	if typeof(target) ~= "Instance" then return nil end
 	local inst = target :: Instance
 	if inst:IsA("Humanoid") then return inst :: Humanoid end
 	if inst:IsA("Model") then return (inst :: Model):FindFirstChildOfClass("Humanoid") end
 	return nil
+end
+
+-- Purge every registry entry for `h` and drop the cleanup hooks.
+-- Active tokens are cancelled (not just dropped) so pending task.delay
+-- callbacks holding a reference bail out instead of running headless.
+local function purge(h: Humanoid)
+	local conns = _cleanupConns[h]
+	if conns then
+		_cleanupConns[h] = nil
+		for _, conn in conns do
+			conn:Disconnect()
+		end
+	end
+	local list = _active[h]
+	if list then
+		for _, token in list do
+			token.cancelled = true
+		end
+		_active[h] = nil
+	end
+	_silenced[h] = nil
+end
+
+local function ensureCleanupHook(h: Humanoid)
+	if _cleanupConns[h] then return end
+	local conns: { RBXScriptConnection } = {}
+	_cleanupConns[h] = conns
+	table.insert(conns, h.Died:Connect(function()
+		purge(h)
+	end))
+	-- Backs up Died: the Dead state transition doesn't fire on
+	-- partial/synthetic rigs. purge is idempotent, so both firing is fine.
+	table.insert(conns, h.HealthChanged:Connect(function(health: number)
+		if health <= 0 then purge(h) end
+	end))
+	table.insert(conns, h.Destroying:Connect(function()
+		purge(h)
+	end))
 end
 
 local SkillInterrupt = {}
@@ -54,6 +98,7 @@ function SkillInterrupt.begin(caster: Instance?): CastToken
 	-- so a frozen boss can still cycle through its Attack state without
 	-- actually spawning projectiles.
 	if _silenced[h] then token.cancelled = true end
+	ensureCleanupHook(h)
 	local list = _active[h]
 	if not list then
 		list = {}
@@ -98,6 +143,7 @@ end
 function SkillInterrupt.silence(target: any)
 	local h = resolveHumanoid(target)
 	if not h then return end
+	ensureCleanupHook(h)
 	_silenced[h] = true
 end
 
