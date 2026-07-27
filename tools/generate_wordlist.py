@@ -26,6 +26,12 @@ import re
 import sys
 from pathlib import Path
 
+# Curated word lists merged in after SCOWL filtering, in order.
+SUPPLEMENT_PATHS = [
+    "tools/wordlists/proper-names.txt",
+    "tools/wordlists/playtest-additions.txt",
+]
+
 # Two-letter words to preserve even though they're below the length floor.
 TWO_LETTER_ALLOWLIST = frozenset(
     "am an as at be by do go he if in is it me my no of on or ok so to up us we".split()
@@ -233,19 +239,20 @@ def main() -> None:
         help="Path to offensive word blocklist (default: tools/wordlists/offensive.txt)",
     )
     parser.add_argument(
-        "--supplement", default="tools/wordlists/proper-names.txt",
-        help="Path to curated supplement word list merged after SCOWL filtering "
-             "(default: tools/wordlists/proper-names.txt)",
+        "--supplement", nargs="+", default=SUPPLEMENT_PATHS,
+        help="Curated supplement word lists merged after SCOWL filtering "
+             f"(default: {' '.join(SUPPLEMENT_PATHS)})",
     )
     args = parser.parse_args()
 
     scowl_dir = Path(args.scowl_dir)
     out_dir = Path(args.out_dir)
     offensive_path = Path(args.offensive)
-    supplement_path = Path(args.supplement)
 
     offensive = load_offensive(offensive_path)
-    supplement = load_supplement(supplement_path)
+    supplement: frozenset[str] = frozenset()
+    for path in args.supplement:
+        supplement |= load_supplement(Path(path))
     final_dir = _resolve_final_dir(scowl_dir)
     raw_words = collect_words(final_dir, args.size)
     filtered = filter_words(raw_words, offensive)

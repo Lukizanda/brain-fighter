@@ -1,0 +1,7 @@
+# Words found missing during playtesting.
+# Re-run `uv run tools/generate_wordlist.py` after editing to regenerate word files.
+# Rules: one word per line, lowercase, plain ASCII letters only (a-z).
+# Supplement words bypass the SCOWL length floor, so short words listed here are
+# kept as-is. Only the offensive blocklist still applies.
+
+zen

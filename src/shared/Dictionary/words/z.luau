@@ -32,6 +32,7 @@ zed
 zeds
 zeitgeist
 zeitgeists
+zen
 zenith
 zeniths
 zeolite

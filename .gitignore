@@ -22,8 +22,9 @@ __pycache__/
 # not committed. Re-run tools/generate_wordlist.py after cloning.
 tools/scowl/
 tools/wordlists/*
-# Exception: hand-curated supplement is version-controlled.
+# Exception: hand-curated supplements are version-controlled.
 !tools/wordlists/proper-names.txt
+!tools/wordlists/playtest-additions.txt
 
 # Obsidian vault — per-machine view state. App / appearance / core-plugins
 # are versioned for plugin + theme parity across machines; graph.json,
