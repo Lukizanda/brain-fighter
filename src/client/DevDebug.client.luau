@@ -13,6 +13,9 @@
 --   M  toggle mobile-input override (forces InputCategorizer to "Touch"
 --       so touch-only HUD widgets like the dash button appear on desktop)
 --   ;  toggle boss phase label visibility
+--
+-- Automation hook (no keyboard):
+--   workspace:SetAttribute("DevFillMana", <1-4>)  — same as pressing 1-4
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -43,6 +46,45 @@ local function fillReservoirsToAmount(amount: number)
 		end
 	end
 end
+
+----------------------------------------------------------------------
+-- Automation hook
+----------------------------------------------------------------------
+-- The 1-4 mana binds below are unreachable from tool-driven playtests:
+-- those keys are permanently bound to CoreGui hotbar actions and Studio's
+-- VirtualInput refuses to deliver them (it still refuses after the
+-- Backpack CoreGui is disabled). Driving the reservoirs directly from an
+-- injected script doesn't work either — injected code gets its own module
+-- instances, so it would fill a different PlayerSession than the HUD reads.
+--
+-- An attribute crosses both boundaries, because attributes are DataModel
+-- state rather than per-VM Luau state. Same pattern the test autorunner
+-- already uses with workspace:SetAttribute("RunTests", ...).
+--
+-- Self-clearing on purpose: RunTests has to be nil'd by hand and silently
+-- re-fires on the next playtest if you forget. This one can't accumulate
+-- that way.
+local DEV_FILL_MANA_ATTR = "DevFillMana"
+
+local function onDevFillMana()
+	local tier = workspace:GetAttribute(DEV_FILL_MANA_ATTR)
+	if tier == nil then return end
+
+	if typeof(tier) ~= "number" or tier ~= math.floor(tier) or tier < 1 or tier > #TIER_ENERGY then
+		log:warn(string.format("%s = %s ignored — want an integer 1-%d",
+			DEV_FILL_MANA_ATTR, tostring(tier), #TIER_ENERGY))
+	else
+		fillReservoirsToAmount(TIER_ENERGY[tier])
+		log:info(string.format("%s -> reservoirs set to T%d (%d each)",
+			DEV_FILL_MANA_ATTR, tier, TIER_ENERGY[tier]))
+	end
+
+	workspace:SetAttribute(DEV_FILL_MANA_ATTR, nil)
+end
+
+workspace:GetAttributeChangedSignal(DEV_FILL_MANA_ATTR):Connect(onDevFillMana)
+-- Honour an attribute that was already set before this script loaded.
+onDevFillMana()
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end

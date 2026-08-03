@@ -1,8 +1,8 @@
 ---
 type: system
 description: Visual effects — particle effects for spell casts/impacts (shipped via VfxController + spawnEffect + cross-client broadcast), UI feedback animations, and per-color theming. World cast/impact VFX are implemented; PERF guardrails and some lanes remain planned.
-status: implemented (core); planned (PERF guardrails, green casts, collect-pop)
-updated: 2026-06-05
+status: implemented (core); planned (PERF guardrails, collect-pop)
+updated: 2026-08-03
 ---
 
 # Visual Effects
@@ -16,10 +16,11 @@ updated: 2026-06-05
 > - `src/server/Vfx/VfxBroadcastService.server.luau` — validates + `SpellVfxEvent:FireAllClients`.
 > - `src/shared/Vfx/Remotes/*.model.json` — `BroadcastSpellVfx` / `SpellVfxEvent`.
 > - `src/shared/Vfx/StatusVisuals/FreezeVfx.luau` — the freeze ice-shard status visual (see [[systems/SkillPipeline]] § VFX Layers).
+> - `src/shared/Vfx/StatusVisuals/ShieldVfx.luau` + `src/client/Vfx/ShieldVfxController.client.luau` — the absorb-shield bubble. Unlike FreezeVfx it is **attribute-driven**: the controller watches `_shield` on each player character rather than being called from an effect handler, which is what gets it cross-client replication without a broadcast. See [[systems/SkillPipeline]] § "Shield — the bubble reads the attribute, not the cast".
 >
 > **Does NOT exist (fictional in the plan below):** `UiVfxController` (UI VFX live inline inside the HUD builders, not a standalone module), `src/shared/Vfx/init.luau` barrel, and `src/shared/Vfx/Templates/` (the `VfxTemplates` folder is Studio/MCP-managed, not Rojo `.model.json`).
 >
-> **Corrected contract facts:** the broadcast payload field is **`impactEffectIds: { string }`** (plural array), not `impactEffectId`; the server validates **`MAX_TIER = 4`** (not 3) and `MAX_IMPACT_EFFECT_IDS = 8`. Lifetime cleanup is **`Debris:AddItem` only** today — the §"PERF guardrails" cap/evict/throttle table and the `"VfxInstance"` Heartbeat sweep are **not implemented** (`PERF` data exists but `spawnEffect` reads none of it). Green cast entries and the LetterBlock collect-pop are still unbuilt.
+> **Corrected contract facts:** the broadcast payload field is **`impactEffectIds: { string }`** (plural array), not `impactEffectId`; the server validates **`MAX_TIER = 4`** (not 3) and `MAX_IMPACT_EFFECT_IDS = 8`. Lifetime cleanup is **`Debris:AddItem` only** today — the §"PERF guardrails" cap/evict/throttle table and the `"VfxInstance"` Heartbeat sweep are **not implemented** (`PERF` data exists but `spawnEffect` reads none of it). The LetterBlock collect-pop is still unbuilt. Green cast entries **were** unbuilt until 2026-08-03 — `cast_green_t1..t3` now exist, and `spawnEffect` plays `EffectSpec.sound` (it previously consumed only `emitters`, so every spell was silent); `.light` and `.beam` are still ignored.
 
 ## Scope
 

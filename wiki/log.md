@@ -359,3 +359,59 @@ refuses to send. Verified instead by resolving cast + impact ids for all 10
 spells against the live config, and by calling `spawnEffect` on real entries
 and confirming playing `Sound` instances with the right volume and per-play
 pitch jitter. Pages touched: [[systems/AudioSFX]], [[systems/VisualEffects]].
+
+## [2026-08-03] ingest | Shield spell gets a persistent bubble visual
+
+New `Vfx/StatusVisuals/ShieldVfx` — a ForceField-material ball welded to the
+holder's HumanoidRootPart, matching the spawn-protection ForceField the game
+already grants on respawn, tinted from `VfxConfig.COLORS.blue.glow` so it
+agrees with the existing `impact_shield` shimmer. Opacity tracks the remaining
+pool against its own high-water mark (the absorb pool has no declared maximum
+— Sanctuary layers on Shield), with a short opaque flare on each absorb.
+Driven by a new `client/Vfx/ShieldVfxController` watching the `_shield`
+character attribute rather than by `SkillEffects.handlers.shield`: the grant
+and the drain live in different systems (Skills vs Health), so a start-on-cast
+hook would have had no matching stop-on-absorb hook. Side benefit — the
+attribute already replicates, so the bubble reaches every client with no
+`BroadcastSpellVfx` round trip. Not yet playtest-verified: the playtest lock
+was held by another session. Pages touched: [[systems/SkillPipeline]],
+[[systems/VisualEffects]].
+
+## [2026-08-03] ingest | DevFillMana attribute — closing the cast-path verification gap
+
+The spell-polish entry above shipped with one link unverified: a real
+in-game cast producing burst + sound. Two walls blocked it. Injected
+`execute_luau` code gets its own module instances, so driving `CastAction`
+from it fires a bindable `VfxController` isn't listening on (a third
+`[SpellRegistry] Loaded` in the log is the tell). And DevDebug's 1-4
+mana-fill keys are permanently bound to CoreGui hotbar actions — Studio's
+VirtualInput refuses to send them, and still refuses after the Backpack
+CoreGui is disabled.
+
+Tried the zero-code route first — shoot letter blocks for real energy, by
+moving blocks onto the camera's look vector and clicking screen centre. It
+doesn't hold: the camera drifts between tool calls (once by ~100 studs), so
+the stack walks off the ray, and `BlockSpawner` respawns blocks underneath
+you mid-run. Abandoned.
+
+`DevDebug` now also accepts `workspace:SetAttribute("DevFillMana", 1-4)`,
+same effect as the keys. Attributes are DataModel state rather than per-VM
+Luau state, so they cross *both* boundaries at once. Same pattern the test
+autorunner already uses with `RunTests`, but **self-clearing** — `RunTests`
+has to be nil'd by hand and silently re-fires on the next playtest if you
+forget, which is a trap worth not reproducing.
+
+With that, the full path verified by clicking the actual HUD panel (mouse
+targeted by `instance_path`, so it doesn't care where the camera is
+pointing): `[VfxController] cast vfx: cast_green_t2 @ Tip` and
+`impact vfx: impact_heal @ HumanoidRootPart`, each cast creating 2 Sounds
+and 2 ParticleEmitters, with ids/volumes matching the authored specs
+(`4612374036 vol=0.75` heal chime, `131133470069125 speed=0.572` wall thud).
+Green casts, the sound path, and the impact resolver are all confirmed live.
+
+One diagnostic gotcha: a cast can look like it produced nothing when it
+didn't. `log:infoThrottled("cast_vfx", 2, ...)` suppresses the line for 2 s,
+so a second cast inside that window logs nothing while still playing fully —
+and the effects self-destruct fast (a 0.24 s sound is gone before a 0.9 s
+sample). Count instances from a `DescendantAdded` observer armed *before*
+the cast; don't infer absence from a poll after it.
