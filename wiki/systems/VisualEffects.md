@@ -10,7 +10,7 @@ updated: 2026-06-05
 > **Implementation status (2026-06-05).** The world-VFX core shipped — but with different module names than the plan below describes. Read this banner first; treat the rest of the page as the original design plan, accurate in intent but stale on specifics.
 >
 > **What exists on disk:**
-> - `src/shared/Vfx/VfxConfig.luau` — `COLORS`, `EFFECTS` (cast t1–t4 red, t1–t3 blue, `impact_damage/heal/freeze/shield/knockup/wall/buff`, `projectile_red_t1/t2/t4`), and a `PERF` table.
+> - `src/shared/Vfx/VfxConfig.luau` — `COLORS`, `SFX` (sound asset ids), `EFFECTS` (cast t1–t4 red, t1–t3 blue, **t1–t3 green**, `impact_damage/heal/freeze/shield/knockup/wall/buff`, **`impact_damage_t2`/`impact_damage_t3`**, `projectile_red_t1/t2/t4`), and a `PERF` table.
 > - `src/shared/Vfx/spawnEffect.luau` — **the shared spawn engine** (cast/impact/projectile), used by *both* the client `VfxController` and `SkillDelivery`. The plan's inline `VfxController.spawnCast/spawnImpact` methods were never built that way.
 > - `src/client/Vfx/VfxController.client.luau` — plays cast VFX locally on `CastAction.spellResolved`, relays to server.
 > - `src/server/Vfx/VfxBroadcastService.server.luau` — validates + `SpellVfxEvent:FireAllClients`.
@@ -150,10 +150,14 @@ export type Config = {
     COLORS: { red: ColorPalette, green: ColorPalette, blue: ColorPalette },
     EFFECTS: { [string]: EffectSpec },   -- effectId → spec
     -- Effect id resolution: VfxController calls
-    --     VfxConfig.resolveCastId(color, tier)   → "cast_red_t1" etc.
-    --     VfxConfig.resolveImpactId(effectKind)  → "impact_damage" etc.
+    --     VfxConfig.resolveCastId(color, tier)         → "cast_red_t1" etc.
+    --     VfxConfig.resolveImpactId(effectKind, tier?) → "impact_damage" etc.
+    -- resolveImpactId takes an OPTIONAL tier: when an "impact_<kind>_t<N>"
+    -- entry exists it wins, otherwise the shared per-kind entry is used.
+    -- Authoring a tiered variant is how you say "this tier should land
+    -- differently" (see Inferno, 2026-08-03).
     resolveCastId: (color: string, tier: number) -> string,
-    resolveImpactId: (effectKind: string) -> string,
+    resolveImpactId: (effectKind: string, tier: number?) -> string,
 }
 ```
 

@@ -207,8 +207,11 @@ function AttributeBarBuilder.build(config: Config): Handle
 			Size = UDim2.new(lastFraction, 0, 1, 0),
 		})
 		sweepTween:Play()
-		sweepTween.Completed:Connect(function(status: Enum.TweenStatus)
-			if status == Enum.TweenStatus.Cancelled then return end
+		-- Enum.PlaybackState, not the legacy Enum.TweenStatus — see the
+		-- same fix in SpellMenuBuilder. TweenStatus has no "Cancelled"
+		-- member, so this handler used to throw before doing any work.
+		sweepTween.Completed:Connect(function(status: Enum.PlaybackState)
+			if status == Enum.PlaybackState.Cancelled then return end
 			if not overlay.Parent then return end
 			local fadeTween = TweenService:Create(overlay, Defaults.GAIN_SWEEP_FADE, { BackgroundTransparency = 1 })
 			fadeTween:Play()

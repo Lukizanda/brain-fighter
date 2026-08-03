@@ -273,8 +273,14 @@ function SpellMenuBuilder.build(): Handle
 		local t1 = TweenService:Create(scaleInst, Defaults.AFFORD_BOUNCE_TWEEN, { Scale = Defaults.AFFORD_BOUNCE_SCALE })
 		t1:Play()
 		table.insert(vfxTweens, t1)
-		t1.Completed:Connect(function(status: Enum.TweenStatus)
-			if status == Enum.TweenStatus.Cancelled then return end
+		t1.-- TweenService's Completed fires with Enum.PlaybackState, not the
+		-- legacy Enum.TweenStatus (which is for :TweenSize/:TweenPosition
+		-- and spells its member "Canceled", one L). Indexing the missing
+		-- TweenStatus.Cancelled threw inside the handler, so everything
+		-- below it — including the tween back to the resting state — never
+		-- ran, and the panel stayed stuck at its bounced/dimmed scale.
+		Completed:Connect(function(status: Enum.PlaybackState)
+			if status == Enum.PlaybackState.Cancelled then return end
 			if not scaleInst.Parent then return end
 			local t2 = TweenService:Create(scaleInst, Defaults.AFFORD_BOUNCE_TWEEN, { Scale = 1 })
 			t2:Play()
@@ -310,8 +316,14 @@ function SpellMenuBuilder.build(): Handle
 		local dimTween = TweenService:Create(base, Defaults.FIRED_DIM_TWEEN, { BackgroundTransparency = 0.05 })
 		dimTween:Play()
 		table.insert(vfxTweens, dimTween)
-		dimTween.Completed:Connect(function(status: Enum.TweenStatus)
-			if status == Enum.TweenStatus.Cancelled then return end
+		dimTween.-- TweenService's Completed fires with Enum.PlaybackState, not the
+		-- legacy Enum.TweenStatus (which is for :TweenSize/:TweenPosition
+		-- and spells its member "Canceled", one L). Indexing the missing
+		-- TweenStatus.Cancelled threw inside the handler, so everything
+		-- below it — including the tween back to the resting state — never
+		-- ran, and the panel stayed stuck at its bounced/dimmed scale.
+		Completed:Connect(function(status: Enum.PlaybackState)
+			if status == Enum.PlaybackState.Cancelled then return end
 			if not base.Parent then return end
 			local recoverTween = TweenService:Create(base, Defaults.FIRED_DIM_TWEEN, { BackgroundTransparency = origTransp })
 			recoverTween:Play()

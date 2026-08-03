@@ -65,7 +65,7 @@ end
 -- effect kind in `skill.onImpact`). Dedupes by kind so a hypothetical
 -- "damage + damage" entry doesn't double-emit. Returns ids that have a
 -- matching `VfxConfig.EFFECTS` entry; missing ones are silently dropped.
-local function resolveImpactEffectIds(skill: any): { string }
+local function resolveImpactEffectIds(skill: any, tier: number?): { string }
 	local ids: { string } = {}
 	if not (skill and skill.onImpact) then return ids end
 	local seen: { [string]: true } = {}
@@ -73,7 +73,7 @@ local function resolveImpactEffectIds(skill: any): { string }
 		local kind = entry.kind
 		if kind and not seen[kind] then
 			seen[kind] = true
-			local id = VfxConfig.resolveImpactId(kind)
+			local id = VfxConfig.resolveImpactId(kind, tier)
 			if VfxConfig.EFFECTS[id] then
 				table.insert(ids, id)
 			end
@@ -113,7 +113,7 @@ CastAction.spellResolved:Connect(function(
 	local isProjectile = spec.skill and spec.skill.delivery == "projectile"
 	local impactEffectIds: { string } = if isProjectile
 		then {}
-		else resolveImpactEffectIds(spec.skill)
+		else resolveImpactEffectIds(spec.skill, spec.tier)
 	if impactTargetRoot then
 		for _, id in impactEffectIds do
 			spawnEffect(VfxConfig.EFFECTS[id], impactTargetRoot)

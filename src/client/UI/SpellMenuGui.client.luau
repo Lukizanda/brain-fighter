@@ -17,6 +17,7 @@ local SpellMenuBuilder  = require(ReplicatedStorage.Shared.Hud.SpellMenuBuilder)
 local CastAction        = require(ReplicatedStorage.Shared.CastAction)
 local SpellRegistry     = require(ReplicatedStorage.Shared.SpellRegistry)
 local NPCConstants      = require(ReplicatedStorage.Shared.NPC.NPCConstants)
+local VfxConfig         = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 local PlayerSession     = require(script.Parent.Parent.PlayerSession)
 
 local spellCastRemote = ReplicatedStorage.Shared.SpellCast.Remotes.SpellCastServer :: RemoteEvent
@@ -66,10 +67,15 @@ local function findAutoTarget(character: Model): Model?
 	return nearest
 end
 
+-- Pitched well below the cast swoosh it shares an asset with, so a
+-- refused cast is audibly a dud rather than a quieter success.
+local FIZZLE_PLAYBACK_SPEED = 0.55
+
 local fizzleSound = Instance.new("Sound")
-fizzleSound.SoundId = "rbxassetid://0" -- TODO: replace with fizzle SFX asset ID
-fizzleSound.Volume = 1
-fizzleSound.Parent = SoundService
+fizzleSound.SoundId       = VfxConfig.SFX.fizzle
+fizzleSound.Volume        = 1
+fizzleSound.PlaybackSpeed = FIZZLE_PLAYBACK_SPEED
+fizzleSound.Parent        = SoundService
 
 local player = Players.LocalPlayer
 local session = PlayerSession.get()

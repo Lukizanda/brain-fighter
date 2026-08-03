@@ -147,7 +147,10 @@ local SPELLS: { [Color]: { Spec } } = {
 					impactRadius = FIREBALL_IMPACT_RADIUS,
 					impactColor = FIREBALL_COLOR,
 					cosmeticEffectId = "projectile_red_t2",
-					impactEffectId = "impact_damage",
+					-- Heavier splash burst than the shared impact_damage a
+					-- T1 Firebolt uses, so the 7-stud blast reads as bigger
+					-- than a single-target poke.
+					impactEffectId = "impact_damage_t2",
 				},
 				onImpact = { { kind = "damage", fractionOfMaxHP = FIREBALL_DAMAGE_FRAC } },
 			},

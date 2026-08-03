@@ -24,6 +24,47 @@ local log = Logger.new("spawnEffect")
 
 local VfxTemplates: Instance? = ReplicatedStorage:WaitForChild("VfxTemplates", 10)
 
+-- A SoundSpec whose id is still the authoring placeholder. VfxConfig ships
+-- these for effects whose SFX hasn't been sourced yet; playing one would
+-- spam "Unable to load sound" every cast.
+local UNSET_SOUND_IDS: { [string]: true } = {
+	["rbxassetid://0"] = true,
+	[""] = true,
+}
+
+-- Ceiling on how long a spell Sound may sit in the world waiting for
+-- Ended. Ended never fires for an id that fails to load, so without this
+-- a bad asset leaks one Instance per cast.
+local SOUND_MAX_LIFETIME_SEC = 10
+
+local DEFAULT_SOUND_VOLUME = 0.8
+
+-- Sounds are parented to the anchor (a BasePart or Attachment), which is
+-- what makes them 3D-positional. Deliberately NOT parented to the emitter
+-- attachment: that one is destroyed on `totalDurationSec`, which is the
+-- length of the *particle* burst and is routinely shorter than the sound.
+local function playSound(spec: VfxConfig.SoundSpec, anchorPart: BasePart | Attachment)
+	if UNSET_SOUND_IDS[spec.soundId] then return end
+
+	local sound = Instance.new("Sound")
+	sound.Name     = "VfxSound"
+	sound.SoundId  = spec.soundId
+	sound.Volume   = spec.volume or DEFAULT_SOUND_VOLUME
+	-- One asset reused across every cast of a spell gets repetitive fast;
+	-- a per-play pitch jitter is the cheapest way to break that up.
+	if spec.pitchRange then
+		local r = spec.pitchRange
+		sound.PlaybackSpeed = r.Min + math.random() * (r.Max - r.Min)
+	end
+	sound.Parent = anchorPart
+	sound:Play()
+
+	sound.Ended:Once(function()
+		sound:Destroy()
+	end)
+	Debris:AddItem(sound, SOUND_MAX_LIFETIME_SEC)
+end
+
 local function applyEmitterOverrides(emitter: ParticleEmitter, spec: VfxConfig.EmitterSpec)
 	if spec.color then
 		emitter.Color = ColorSequence.new(spec.color.primary)
@@ -39,6 +80,13 @@ local function applyEmitterOverrides(emitter: ParticleEmitter, spec: VfxConfig.E
 end
 
 local function spawnEffect(effectSpec: VfxConfig.EffectSpec, anchorPart: BasePart | Attachment)
+	-- Audio first, and outside the emitters guard: several effects are
+	-- sound-only or particle-less (and the emitter-less early return used
+	-- to drop their sound silently).
+	if effectSpec.sound then
+		playSound(effectSpec.sound, anchorPart)
+	end
+
 	if not effectSpec.emitters then return end
 
 	local att = Instance.new("Attachment")

@@ -298,3 +298,64 @@ Playtest-caught: the wall's ground probe stopped on `SpawnZoneBox`, a non-collid
 Verified: Skills suite 11/11, SpellExecutor 11/11, CastAction + `cast_refund_on_failure` pass. Shield absorbs 25 with zero HP loss, then bleeds 10 through on the second 25. `cast_refund_on_failure` replaces `stub_cast_refunds`, which drove the refund guarantee through a stub that no longer exists; it now drives the same drain → refuse → refund path through a genuine rejection.
 
 **Still open in 5.2**: real SFX assets and the VFX gaps. **Deferred to 5.3**: the placement reticle (Stone Wall currently drops 12 studs ahead of the caster's facing) and a shield HUD — `BuffTray` already boots as an empty tray "awaiting adapter wiring", and this is its adapter.
+
+## [2026-08-03] ingest | Spell polish — audio path, green cast VFX, tiered impacts
+
+Picked up the "still open in 5.2" line above: real SFX and the VFX gaps.
+
+**Spells were silent because nothing played the sound.** `VfxConfig` has
+carried a `SoundSpec` on every cast/impact entry since Phase C, but
+`spawnEffect` only ever consumed `emitters` — `sound`, `light` and `beam`
+were declared in `EffectSpec` and never read. So the placeholder
+`rbxassetid://0` ids weren't the whole problem; even correct ids would have
+played nothing. `sound` is now implemented (`light`/`beam` still aren't).
+Two details worth keeping: the `if not effectSpec.emitters then return end`
+guard sat *above* where audio belongs, so particle-less effects would have
+stayed silent regardless; and the Sound is parented to the anchor rather
+than the emitter attachment, which Debris destroys at `totalDurationSec` —
+routinely shorter than the sound it would have cut off.
+
+**Green spells had no cast VFX at all.** `EFFECTS` defined `cast_red_t1..t4`
+and `cast_blue_t1..t3` but no green entries, so `resolveCastId("green", N)`
+returned an id with no match and `VfxController` silently skipped the burst.
+Mend, Stone Wall and Sanctuary cast with no muzzle effect and no sound since
+the day green shipped — a miss that reads as "no feedback", not as an error,
+which is why it survived this long. All 10 spells now resolve.
+
+**`resolveImpactId` takes an optional tier.** A tiered `impact_<kind>_t<N>`
+entry wins when authored, else the shared per-kind entry is used — opt-in,
+so most kinds keep one entry. Inferno (T3, 50% of max HP, the biggest single
+hit a player has) was landing the same 22-particle pop as a T1 Firebolt; it
+now gets `impact_damage_t3`, a two-layer upward eruption with the explosion
+SFX. Fireball points at `impact_damage_t2` through the registry instead,
+because projectile spells fire their own impact burst from `SkillDelivery`
+at the real hit position rather than through the client resolver.
+
+**Two bugs found while verifying, both fixed.** The `Failed to load sound
+rbxassetid://0` pair at every startup traced to `fizzleSound` in
+`SpellMenuGui` and `GameplayHudGui`; both now use `VfxConfig.SFX.fizzle`
+(the cast swoosh, pitched to 0.55 — a deflated cast is the clearest "that
+didn't happen"). Separately, `SpellMenuBuilder` and `AttributeBarBuilder`
+compared against `Enum.TweenStatus.Cancelled` in `Tween.Completed` handlers.
+`Completed` passes `Enum.PlaybackState`; `TweenStatus` is the legacy
+`:TweenSize` enum and spells its member `Canceled`, one L. Indexing the
+missing member threw *inside* the handler, so the tween back to the resting
+state never ran and the spell panel stayed stuck at its bounced/dimmed
+scale. Startup errors went 3 → 0.
+
+**All SFX ids are interim placeholders**, each verified to load
+(`PreloadAsync`, `IsLoaded` true, `TimeLength > 0`) but none purpose-made:
+the universe owns only the LaserTag template's gun sounds, and Creator Store
+audio search returns ripped music and meme clips. They live in one public
+`VfxConfig.SFX` table so a real pack is a one-line swap per entry. Sourcing
+that pack is now the top gap on [[systems/AudioSFX]].
+
+**Not verified end-to-end**: a real in-game cast producing burst + sound.
+`execute_luau` gets its own module instances (a third `[SpellRegistry]
+Loaded` appears when it requires one), so driving `CastAction` from it fires
+a different bindable than `VfxController` listens on; and the DevDebug
+mana-fill keys 1–4 are permanently bound to CoreGui, which VirtualInput
+refuses to send. Verified instead by resolving cast + impact ids for all 10
+spells against the live config, and by calling `spawnEffect` on real entries
+and confirming playing `Sound` instances with the right volume and per-play
+pitch jitter. Pages touched: [[systems/AudioSFX]], [[systems/VisualEffects]].
