@@ -32,6 +32,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
 
 local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
+local SkillBuffs     = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
 local SkillEffects   = require(ReplicatedStorage.Shared.Skills.SkillEffects)
 local SkillInterrupt = require(ReplicatedStorage.Shared.Skills.SkillInterrupt)
 local SkillTypes     = require(ReplicatedStorage.Shared.Skills.SkillTypes)
@@ -73,6 +74,54 @@ local function applyImpactEffects(skill: SkillSpec, hitTarget: any, source: any?
 		end
 	end
 	return firstFailure or { ok = true }
+end
+
+-- VfxConfig entry played where a projectile dies on a shield shell.
+local SHIELD_BLOCK_EFFECT_ID = "shield_block"
+
+-- What this skill's onImpact would have taken off `hum` — the price a
+-- shield shell pays to swallow the shot. Deliberately mirrors the
+-- arithmetic in SkillEffects.damage (flat `amount` vs `fractionOfMaxHP`,
+-- times the target's damage amp): a blocked shot has to cost the pool
+-- exactly what the same shot landing would have, or blocking becomes a
+-- way to launder damage up or down.
+local function impactDamageAgainst(skill: SkillSpec, hum: Humanoid): number
+	local total = 0
+	for _, effectSpec in skill.onImpact do
+		if effectSpec.kind ~= "damage" then continue end
+		if effectSpec.fractionOfMaxHP then
+			total += effectSpec.fractionOfMaxHP * hum.MaxHealth
+		else
+			total += effectSpec.amount or 0
+		end
+	end
+	return total * SkillBuffs.damageAmp(hum)
+end
+
+-- Distance along `delta` at which the segment starting at `from` first
+-- enters the sphere, or nil if it never does. Returns 0 when the segment
+-- starts inside — a projectile spawned within a shell is already blocked.
+--
+-- Analytic rather than a shapecast because the shell is a pure gameplay
+-- volume with no Part behind it: the bubble ShieldVfx draws is a local
+-- cosmetic on each client, invisible to the server that owns boss fire.
+local function segmentSphereEntry(from: Vector3, delta: Vector3, center: Vector3, radius: number): number?
+	local length = delta.Magnitude
+	if length <= 0 then return nil end
+	local dir = delta / length
+
+	local toStart = from - center
+	local proj    = toStart:Dot(dir)
+	local gap     = toStart:Dot(toStart) - radius * radius
+	-- Outside and travelling away.
+	if gap > 0 and proj > 0 then return nil end
+
+	local discriminant = proj * proj - gap
+	if discriminant < 0 then return nil end
+
+	local entry = -proj - math.sqrt(discriminant)
+	if entry > length then return nil end
+	return math.max(entry, 0)
 end
 
 -- CollectionService tags whose tagged Models carry a Humanoid+HRP and
@@ -304,6 +353,51 @@ SkillDelivery.handlers = {
 			part:Destroy()
 		end
 
+		-- A projectile that reaches a shielded rig's shell dies there. The
+		-- pool pays the shot's full damage and the Part is consumed, so
+		-- nothing reaches the holder — including splash, which is why a
+		-- shielded player also covers whoever is standing next to them.
+		--
+		-- Absorption is deliberately not partial: a pool with 5 left still
+		-- swallows a 20-damage shot whole and pops. "The shield saved you
+		-- and broke doing it" reads better than a shot that half-lands, and
+		-- the shell only ever sees projectiles, so this can't be used to eat
+		-- an instant-delivery nuke like Inferno. Damage that arrives any
+		-- other way still goes through applyDamage's shieldModifier, which
+		-- *does* split partially.
+		local function blockOnShell(part: BasePart, victim: Hittable, contact: Vector3)
+			local cost     = impactDamageAgainst(skill, victim.hum)
+			local absorbed = SkillBuffs.consumeShield(victim.hum, cost)
+			SkillVisuals.spawnEffectAtPoint(contact, SHIELD_BLOCK_EFFECT_ID)
+			log:info(("SkillProjectile blocked by shield on %s absorbed=%.1f left=%.1f (skill=%s)"):format(
+				victim.hum.Parent and victim.hum.Parent.Name or "?",
+				absorbed,
+				SkillBuffs.getShield(victim.hum),
+				skill.name
+			))
+			part:Destroy()
+		end
+
+		-- Nearest shell this frame's step enters, if any. Caster excluded
+		-- for the same reason they're excluded from the raycast: their own
+		-- bubble sits over the muzzle, and every shot would die in it.
+		local function nearestShellEntry(from: Vector3, step: Vector3, hittables: { Hittable }): (Hittable?, number, Vector3)
+			local nearest: Hittable? = nil
+			local nearestDist = math.huge
+			local contact = from
+			for _, h in hittables do
+				if h.hum.Parent == source then continue end
+				if SkillBuffs.getShield(h.hum) <= 0 then continue end
+				local entry = segmentSphereEntry(from, step, h.hrp.Position, SkillBuffs.SHELL_RADIUS_STUDS)
+				if entry and entry < nearestDist then
+					nearest     = h
+					nearestDist = entry
+					contact     = from + step.Unit * entry
+				end
+			end
+			return nearest, nearestDist, contact
+		end
+
 		-- Register a cancellation token tied to the caster so freeze (or any
 		-- future interrupt) can stop pending volley shots from launching.
 		-- In-flight projectiles are independent of the token by design.
@@ -401,6 +495,24 @@ SkillDelivery.handlers = {
 					local step = pos - lastPos
 					if step.Magnitude > 0 then
 						local rayHit = workspace:Raycast(lastPos, step, rayParams)
+						local rayDist = if rayHit
+							then (rayHit.Position - lastPos).Magnitude
+							else math.huge
+
+						-- Shield shells are swept against the same segment and
+						-- the nearer blocker wins. Tested here rather than after
+						-- the raycast because a shot that would clip a limb this
+						-- frame still had to cross the bubble to reach it — and
+						-- the shell is invisible to Raycast by construction (no
+						-- Part backs it; the bubble is a per-client cosmetic).
+						local shellVictim, shellDist, shellContact =
+							nearestShellEntry(lastPos, step, hittables)
+						if shellVictim and shellDist <= rayDist then
+							conn:Disconnect()
+							blockOnShell(projectile, shellVictim, shellContact)
+							return
+						end
+
 						if rayHit then
 							conn:Disconnect()
 							detonate(
@@ -418,7 +530,16 @@ SkillDelivery.handlers = {
 						if h.hum.Parent == source then continue end -- skip caster
 						if (h.hrp.Position - pos).Magnitude <= proximityRadius then
 							conn:Disconnect()
-							detonate(projectile, pos, h, "proximity")
+							-- The shell is wider than any proximity radius in the
+							-- roster, so a shielded rig is normally caught by the
+							-- swept test above. This is the degenerate case: a
+							-- projectile that materialised inside the shell with
+							-- no step to sweep (stationary target, first frame).
+							if SkillBuffs.getShield(h.hum) > 0 then
+								blockOnShell(projectile, h, pos)
+							else
+								detonate(projectile, pos, h, "proximity")
+							end
 							return
 						end
 					end

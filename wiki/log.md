@@ -415,3 +415,102 @@ so a second cast inside that window logs nothing while still playing fully —
 and the effects self-destruct fast (a 0.24 s sound is gone before a 0.9 s
 sample). Count instances from a `DescendantAdded` observer armed *before*
 the cast; don't infer absence from a poll after it.
+
+## [2026-08-03] ingest | Phase 5.4 server trust hardening — both gameplay remotes
+
+`ConsumeBlock` and `SpellCastServer` were the two client→server gameplay
+remotes and both accepted whatever arrived. `ConsumeBlock` destroyed any Model
+the client named at whatever rate it asked, so one loop could clear the arena
+of every other player's blocks. `SpellCastServer` took the client's word on
+spell, target and affordability alike.
+
+Both now validate cheapest-check-first and drop invalidly — log and return,
+never throw, so a malformed payload can't take the handler down for everyone
+else. `ConsumeBlock`: rate → `validateInstance` → in-workspace → LetterBlock
+tag → range. `SpellCastServer`: rate → registry spec → living caster → target
+shape and range, with target *liveness* dropped silently because a target
+dying mid-flight is ordinary play. The in-workspace check pays for itself
+twice — it rejects the ReplicatedStorage template and makes a double-consume
+race a no-op for free, since the first `Destroy` unparents the block.
+
+Thresholds are derived rather than picked, so tuning stays in step: consume
+range is `MAX_RAYCAST_DISTANCE` plus a camera-behind allowance (the client
+raycasts from the camera, the server can only measure from the character), and
+the sustained fire rate is exactly `1 / LetterBlasterConfig.COOLDOWN`. The
+limiter is a token bucket, not a flat interval — jitter routinely bunches two
+legitimately-spaced fires into one frame, and a flat interval would reject
+real play. New shared `server/Utility/RateLimiter`.
+
+Two bugs surfaced on the way. `SpellRegistry.getSpell` accepts any tier in
+1–4 but only red defines a T4, so `green/4` returned nil and the old handler
+errored indexing it — `resolveSpec` nil-checks the lookup instead of trusting
+the tier range. And `Logger:warnThrottled`'s second argument is a **call
+count**, not seconds (`count % interval == 0`) — passing 10 meant the first
+nine rejections logged nothing at all, so a single exploit probe was silent.
+Rejection logging now runs on a capacity-1 `RateLimiter` per (player, reason):
+first hit always reported, then one per window. Worth knowing repo-wide — the
+spell-VFX entry above reads the same argument as seconds.
+
+**Not delivered: server-side affordability.** `EnergyReservoirs` is
+instantiated in exactly one place, `client/PlayerSession`, and nothing under
+`src/server/` touches the energy, buffer or memorize chain — there is no
+server-side number to price a cast against. Closing it means either an
+energy-ceiling ledger off the blocks the server already sees, or a
+server-authoritative economy; the trade-off is written up rather than decided.
+The cast rate limit is a flood guard standing in for the price check, floored
+at one block per cast so it can never reject real play.
+
+Verified by the new `Hardening` suite (3/3) plus a live playtest: 5/5 blocks
+consumed at the weapon's real cadence, targeted Firebolt and Frost Nip landing
+on the boss, self-buff and placement casts taking the target-less path from
+5f42ab6 — and exactly 7 rejection logs across the session, all from deliberate
+probes, none from legitimate play. Pages touched: [[systems/BlockShoot]],
+[[systems/SpellCastService]] (new), [[systems/Tests]], [[design/build-plan]].
+
+## [2026-08-03] ingest | Shield shell blocks projectiles; alpha reads as its health bar
+
+The absorb pool now has geometry. `SkillBuffs.SHELL_RADIUS_STUDS` (4.2, centred
+on HumanoidRootPart) is the single source of truth for a spherical shell that
+`SkillDelivery.projectile` sweeps each frame's step against — nearer of
+{shell, world raycast} wins, so a shot that would clip a limb is still stopped
+at the bubble it had to cross. The test is analytic (`segmentSphereEntry`),
+not a Part, because the bubble is a per-client cosmetic and the server that
+owns boss fire can't see it; `ShieldVfx` reads the same constant for its
+diameter so what you see is what blocks. A blocked shot is fully consumed —
+pool pays `impactDamageAgainst` (mirrors `SkillEffects.damage` arithmetic
+including damage amp), Part destroyed, no splash and no effect handlers. That
+adds a second, deliberate drain site (`SkillBuffs.consumeShield`) alongside
+`DamageModifierRegistry.shieldModifier`: player spells write Health directly
+and never enter `applyDamage`, and a projectile stopped at the shell never
+runs an effect handler at all. Absorption at the shell is all-or-nothing by
+design call. Bubble alpha widened to 0.35→0.90 with a sub-1 curve exponent so
+it holds body early and thins hard near breaking; new `shield_block` VfxConfig
+entry (spark-off-glass, pitched above `impact_shield`) plays at the contact
+point via new `SkillVisuals.spawnEffectAtPoint`. Playtest-verified: 12 dmg
+into a 40 pool → absorbed=12 left=28, health untouched; 20 dmg into a 5 pool →
+shield 0, health untouched; unshielded → normal 12 dmg body impact. Known
+consequence logged: the shell doesn't ask who fired, so friendly projectiles
+are blocked and charged to the ally's pool. Pages touched:
+[[systems/SkillPipeline]], [[systems/VisualEffects]].
+
+## [2026-08-03] ingest | Shield break burst + SFX hook
+
+`ShieldVfx` now has two teardowns instead of one. `shatter` runs when the pool
+is drained to zero while the holder is alive: the shell flares outward ×1.15
+and vanishes (a pop, not a deflate — that alone separates "it broke" from "it
+was switched off" before the particles register), leaving a new `shield_break`
+burst at the root. Two emitter layers so it reads as glass rather than a puff:
+a fast 180° fragment spray that clears the body, plus slower glitter that
+hangs after the shell is gone. `stop` keeps the old quiet collapse for death,
+despawn and respawn — the controller picks between them on an `isAlive` check,
+because popping a bubble over a corpse reads as a reward the player didn't
+earn. Burst anchors to the root, not the bubble, since `spawnEffect` parents
+emitters and sound to its anchor and the bubble is destroyed a moment later.
+SFX hook is `VfxConfig.SFX.shieldBreak` — its own named entry even though it
+currently points at the same asset as `impactFreeze` (the only crack in the
+inventory), played pitched down 0.80–0.92 so the two read as different events;
+swapping in real glass-shatter audio is a one-line change. Playtest-verified:
+draining 40→0 alive popped the shell outward (8.4→9.42 studs mid-tween),
+spawned both emitter layers and played the break sound; dying with a full
+shield produced zero break sounds and a silent teardown. Pages touched:
+[[systems/SkillPipeline]], [[systems/VisualEffects]].

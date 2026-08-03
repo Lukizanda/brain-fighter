@@ -124,6 +124,15 @@ VfxConfig.SFX = {
 	-- snapping into place.
 	impactShield = "rbxassetid://17682723174",
 
+	-- The shield failing under the last hit. Its own named entry even
+	-- though it currently points at the same asset as `impactFreeze` —
+	-- that *is* the hook: a shell breaking wants a sharp crack, the freeze
+	-- crack is the only crack in the inventory, and swapping in a real
+	-- glass-shatter later is a one-line change here rather than an edit
+	-- inside the EFFECTS table. Callers play it pitched down from the
+	-- freeze use so the two still read as different events.
+	shieldBreak = "rbxassetid://88987851128257",
+
 	-- Cast fizzle (not enough mana / no target in range). Deliberately the
 	-- same swoosh as `cast`, and played pitched-down by the callers: a
 	-- deflated version of the cast sound is the clearest way to say "that
@@ -372,6 +381,79 @@ VfxConfig.EFFECTS = {
 		},
 		sound            = { soundId = SFX.impactShield, volume = 0.7, pitchRange = NumberRange.new(0.95, 1.05) },
 		totalDurationSec = 0.90,
+		anchor           = "targetHumanoidRootPart",
+	},
+
+	-- A projectile dying on a shield shell. Deliberately unlike the
+	-- `impact_shield` ward shimmer above, which marks the shield going
+	-- *up*: this one is a spark off glass, so it's faster, narrower and
+	-- pitched high. Anchored at the contact point on the bubble's surface
+	-- rather than on the holder's HRP — the whole point of the shell is
+	-- that the shot never reached the body.
+	shield_block = {
+		emitters = {
+			{
+				template    = "ImpactBurst",
+				color       = C.blue,
+				emitCount   = 24,
+				lifetime    = NumberRange.new(0.18, 0.35),
+				size        = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.45),
+					NumberSequenceKeypoint.new(1.0, 0.0),
+				}),
+				speed       = NumberRange.new(12, 22),
+				spreadAngle = Vector2.new(140, 140),
+				rotation    = NumberRange.new(-180, 180),
+			},
+		},
+		sound            = { soundId = SFX.impactShield, volume = 0.9, pitchRange = NumberRange.new(1.15, 1.35) },
+		totalDurationSec = 0.45,
+		anchor           = "worldPosition",
+	},
+
+	-- The shell failing under the last hit. Two layers so it reads as
+	-- glass rather than a puff: a fast outward spray of fragments that
+	-- clears the body in the first fraction of a second, and a slower
+	-- glitter that hangs in the air after the shell is already gone.
+	-- Emitted from the holder's root, so the fragments fly out through
+	-- where the bubble was.
+	shield_break = {
+		emitters = {
+			{
+				template    = "ImpactBurst",
+				color       = C.blue,
+				emitCount   = 40,
+				lifetime    = NumberRange.new(0.35, 0.70),
+				size        = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.55),
+					NumberSequenceKeypoint.new(1.0, 0.0),
+				}),
+				speed       = NumberRange.new(16, 30),
+				spreadAngle = Vector2.new(180, 180),
+				rotation    = NumberRange.new(-180, 180),
+			},
+			{
+				template    = "BurstSmall",
+				color       = C.blue,
+				emitCount   = 28,
+				lifetime    = NumberRange.new(0.7, 1.3),
+				size        = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.30),
+					NumberSequenceKeypoint.new(0.5, 0.18),
+					NumberSequenceKeypoint.new(1.0, 0.0),
+				}),
+				speed       = NumberRange.new(3, 9),
+				spreadAngle = Vector2.new(180, 180),
+				rotation    = NumberRange.new(-180, 180),
+				transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.10),
+					NumberSequenceKeypoint.new(0.6, 0.35),
+					NumberSequenceKeypoint.new(1.0, 1.00),
+				}),
+			},
+		},
+		sound            = { soundId = SFX.shieldBreak, volume = 1.0, pitchRange = NumberRange.new(0.80, 0.92) },
+		totalDurationSec = 1.5,
 		anchor           = "targetHumanoidRootPart",
 	},
 

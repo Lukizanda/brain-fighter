@@ -190,12 +190,51 @@ The absorb pool lives in the character Model's `_shield` attribute, **not** in a
 So ownership splits deliberately, and this is the one place it's allowed to:
 
 - **Skills grants** the pool (`SkillBuffs.grantShield`) — additive, so Sanctuary layered on Shield is worth both.
-- **Health drains** it (`DamageModifierRegistry.shieldModifier`).
+- **Health drains** it (`DamageModifierRegistry.shieldModifier`) for damage that reaches the body through `applyDamage`.
+- **Skills also drains** it (`SkillBuffs.consumeShield`) for damage that never gets there because the shell stopped it — see [Shell](#shield--the-shell-blocks-projectiles) below.
 - Nothing else writes the attribute.
+
+Two drain sites rather than one is deliberate, and player spells are what make it load-bearing: they write `Humanoid.Health` directly and never enter `applyDamage`, so a projectile blocked at the shell has no route to `shieldModifier` at all. A projectile stopped before impact also never runs an effect handler, so there is nothing downstream to charge the pool.
 
 The pool has **no expiry** (design call 2026-08-03): it lasts until damage eats it or the holder dies. That makes death cleanup the only thing standing between it and an indefinite leak, so `SkillBuffs` installs the same `Died` / `HealthChanged<=0` / `Destroying` hooks the other registries use. Give it a duration in `SpellRegistry` if playtest says it overstays.
 
 **The shield only works where `applyDamage` runs — the server.** A client-set attribute never replicates upward, so an unrelayed shield protects nothing. See [Self-cast relay](#self-cast-relay) below.
+
+### Shield — the shell blocks projectiles
+
+The pool projects a **spherical shell**, `SkillBuffs.SHELL_RADIUS_STUDS` (4.2) centred on the holder's HumanoidRootPart. `SkillDelivery.projectile` sweeps each frame's step against every shielded rig's shell and stops the shot at the surface:
+
+- The shell is swept **against the same segment as the world raycast, and the nearer blocker wins**. Tested before the raycast result is used, because a shot that would clip a limb this frame still had to cross the bubble to reach it.
+- The shell is **analytic, not a Part** — a ray/sphere intersection in `segmentSphereEntry`. It has to be: the bubble `ShieldVfx` draws is a per-client cosmetic, invisible to the server that owns boss fire, so there is no geometry for `workspace:Raycast` to find. This is also why `SkillBuffs.SHELL_RADIUS_STUDS` is the single source of truth for both — the visual reads it for its diameter, so what you see is exactly what blocks.
+- The radius is **fixed, not measured off the live rig**. A bounding box breathes with the walk animation, and a hit volume that grows and shrinks per frame is neither testable nor fair.
+- A blocked shot is **fully consumed**: the pool pays `impactDamageAgainst` (the same flat/`fractionOfMaxHP`/damage-amp arithmetic `SkillEffects.damage` uses, so blocking can't launder damage up or down) and the Part is destroyed. No splash, no effect handlers — which means a shielded player also covers whoever is standing next to them.
+- Absorption at the shell is **not partial** (design call 2026-08-03): a pool with 5 left swallows a 20-damage shot whole and pops. "The shield saved you and broke doing it" reads better than a shot that half-lands, and the shell only ever sees projectiles, so it can't be used to eat an instant-delivery nuke like Inferno. Damage arriving any other way still splits partially through `shieldModifier`.
+
+Verified in-playtest 2026-08-03: a 12-damage projectile into a 40 pool logged `blocked by shield … absorbed=12.0 left=28.0` with health untouched at 100; a 20-damage shot into a 5 pool left shield 0 / health 100; the same shot at an unshielded rig fell through to the normal body impact for 12.
+
+**Known consequence, not yet a decision:** the shell doesn't ask who fired. Friendly projectiles are blocked and charged to the ally's pool the same as boss fire. That is consistent with the pre-existing proximity shell (which already detonates player projectiles on teammates within `proximityRadius`), and PvP is gated off — but it is a wider volume than before, so revisit if friendly fire ever turns on.
+
+### Shield — the bubble reads the attribute, not the cast
+
+`Vfx/StatusVisuals/ShieldVfx` raises a ForceField-material ball around the holder — deliberately the same shader as the spawn-protection ForceField `GameModeService` grants on respawn, so "damage is being eaten right now" reads identically from either source. Its diameter is `SkillBuffs.SHELL_RADIUS_STUDS * 2`, centred on the HumanoidRootPart, so the bubble drawn is the volume that blocks.
+
+**Alpha is the shield's health bar** — the only readout the player gets for a pool with no HUD element. Transparency ramps from 0.35 at full to 0.90 at empty, measured against the bubble's own high-water mark (no declared maximum exists — Sanctuary layers on top of Shield). A `DEPLETION_CURVE` exponent below 1 bends the ramp so the shell keeps its body through the early hits and then thins hard over the last sliver, and a brief opaque flare fires on every absorb so chip damage is legible even when it barely moves the ramp.
+
+**Breaking and clearing are different teardowns.** `ShieldVfx` exposes two:
+
+| | `shatter` | `stop` |
+|---|---|---|
+| When | The pool is drained to zero while the holder is **alive** | Death, despawn, respawn — or nothing was up |
+| Shell | Flares outward ×1.15 and vanishes | Collapses to zero |
+| Extra | `shield_break` sparkle burst + break SFX at the holder's root | Silent |
+
+The controller picks between them in `refresh` on the `isAlive` check. The distinction matters both ways round: popping a bubble over a corpse reads as a reward the player didn't earn, and a shield that breaks under the last hit with no noise is the single most important thing that can happen to it going unannounced.
+
+`shatter` anchors the burst to the **root, not the bubble** — `spawnEffect` parents its emitters and its sound to whatever anchor it's handed, and the bubble is destroyed a fraction of a second later, which would cut the burst off mid-flight.
+
+It's driven by `src/client/Vfx/ShieldVfxController.client.luau` watching `GetAttributeChangedSignal(_shield)`, **not** by `SkillEffects.handlers.shield` calling into it the way `freeze` calls `FreezeVfx.start`. That's forced by the ownership split above: Skills grants the pool and Health drains it, so a start-on-cast hook would have had no matching stop-on-absorb hook. The attribute is the one place both systems meet.
+
+The same choice buys cross-client replication for free — the authoritative pool is a server write on a replicated character Model, so every client's watcher sees every player's shield with no `BroadcastSpellVfx` round trip. The casting client's own local write is what makes its bubble appear on the cast frame rather than after the relay.
 
 ### Buffs — lazy expiry
 
@@ -292,12 +331,12 @@ Three distinct VFX runtimes coexist. Knowing which lane a new visual belongs in 
 | Lane | Spawn site | Lifetime | Use when… |
 |---|---|---|---|
 | **Burst VFX** | `VfxController` clones from `VfxConfig.EFFECTS` via `Shared/Vfx/spawnEffect.luau` | Fire-and-forget; `totalDurationSec` from the EffectSpec | The visual is a one-shot particle burst at cast (staff tip) or impact (target HRP). |
-| **Status visuals** | `SkillEffects.handlers.<kind>` invokes a module under `src/shared/Vfx/StatusVisuals/` (e.g. `FreezeVfx`) | Persistent welded geometry, lives for the duration of the active status; cleanup is reciprocal (`start` + `stop`) | The effect is a persistent body decoration (ice shards, burn marks, poison cloud) that must follow limbs and survive a multi-second status. Burst particles can't carry these semantics. |
+| **Status visuals** | A module under `src/shared/Vfx/StatusVisuals/`, invoked either by `SkillEffects.handlers.<kind>` (`FreezeVfx`) or by a client watcher on the status's own attribute (`ShieldVfx` ← `client/Vfx/ShieldVfxController`) | Persistent welded geometry, lives for the duration of the active status; cleanup is reciprocal (`start` + `stop`) | The effect is a persistent body decoration (ice shards, burn marks, poison cloud) that must follow limbs and survive a multi-second status. Burst particles can't carry these semantics. |
 | **Delivery visuals** | Inline in `SkillDelivery.handlers.{projectile, aoe}` — the physical `Part` is the visual | Tied to the physics object (`Debris:AddItem`) | The visual IS the gameplay object (the projectile body, the shockwave geometry). For cosmetic upgrades (trail/glow/sound) on top, set `deliveryParams.cosmeticEffectId` and the handler attaches the corresponding `VfxConfig.EFFECTS` entry to the moving Part — physics still lives in `SkillDelivery`, the *cosmetic* layer routes through `VfxConfig`. |
 
 Color source is shared across all three lanes: `VfxConfig.COLORS.{red,green,blue}.{primary,glow,accent}`. Status visuals and delivery visuals should never hardcode a `Color3` — pull from the palette so a future red/blue retheme touches one table.
 
-Cross-client replication: only burst VFX replicate (via `BroadcastSpellVfx` → `SpellVfxEvent`). Delivery visuals are local to the firing client; status visuals are local to whichever VM ran the `freeze` handler. Replicating the latter two is a follow-up if/when it matters for gameplay readability.
+Cross-client replication: burst VFX replicate explicitly (via `BroadcastSpellVfx` → `SpellVfxEvent`). Delivery visuals are local to the firing client. Status visuals depend on which driver the lane uses — freeze is local to whichever VM ran the `freeze` handler, while the attribute-driven shield bubble reaches every client for free because the attribute it watches replicates. Replicating the remaining two is a follow-up if/when it matters for gameplay readability.
 
 ## Modularity Invariants
 

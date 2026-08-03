@@ -96,6 +96,18 @@ end
 
 local SkillBuffs = {}
 
+-- The pool projects a spherical shell around its holder, centred on
+-- HumanoidRootPart. Two systems have to agree on it exactly: SkillDelivery
+-- stops projectiles at its surface, and ShieldVfx draws the bubble. If they
+-- disagree, shots die on empty air or pass visibly through the glass.
+--
+-- Fixed rather than measured off the live rig: a bounding box breathes with
+-- the walk animation, and a hit volume that grows and shrinks per frame is
+-- neither testable nor fair. 4.2 studs comfortably contains an R15 rig (HRP
+-- sits mid-torso, ~2.8 studs below the top of the head) and matches the
+-- bubble that shipped with the visual.
+SkillBuffs.SHELL_RADIUS_STUDS = 4.2
+
 ----------------------------------------------------------------------
 -- Buffs
 ----------------------------------------------------------------------
@@ -170,8 +182,34 @@ function SkillBuffs.grantShield(target: any, amount: number): boolean
 	return true
 end
 
+-- Drain up to `amount` from the pool; returns how much was actually
+-- absorbed (0 when unshielded).
+--
+-- This is the second of exactly two drain sites. The other is
+-- `DamageModifierRegistry.shieldModifier`, which handles damage that
+-- reaches the body through `applyDamage`. This one handles damage that
+-- never gets there because the shell stopped it — a projectile eaten at
+-- the bubble never runs an effect handler at all, so it has no other way
+-- to charge the pool. Player spells make the split load-bearing rather
+-- than cosmetic: they write Humanoid.Health directly and never touch
+-- `applyDamage`, so without this a blocked player projectile would drain
+-- nothing. Still nothing else writes the attribute.
+function SkillBuffs.consumeShield(target: any, amount: number): number
+	if amount <= 0 then return 0 end
+	local h = resolveHumanoid(target)
+	if not h then return 0 end
+	local character = resolveCharacter(h)
+	if not character then return 0 end
+	local existing = character:GetAttribute(HealthConstants.SHIELD_ATTRIBUTE)
+	local current = typeof(existing) == "number" and (existing :: number) or 0
+	if current <= 0 then return 0 end
+	local absorbed = math.min(current, amount)
+	character:SetAttribute(HealthConstants.SHIELD_ATTRIBUTE, current - absorbed)
+	return absorbed
+end
+
 -- Remaining absorb pool, 0 when unshielded. Read-only — the drain side
--- belongs to DamageModifierRegistry.
+-- belongs to `consumeShield` and DamageModifierRegistry.
 function SkillBuffs.getShield(target: any): number
 	local h = resolveHumanoid(target)
 	if not h then return 0 end

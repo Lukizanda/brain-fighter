@@ -30,6 +30,10 @@ local SHOCKWAVE_TRANSPARENCY    = 0.35
 local SHOCKWAVE_LIFETIME_SEC    = 0.5
 local SHOCKWAVE_Y_OFFSET        = -2
 
+-- Floor on how long a point-effect anchor lives. Covers the sound tail,
+-- which outlasts the particle burst for most entries.
+local POINT_ANCHOR_MIN_LIFETIME_SEC = 4
+
 local BARRIER_DEFAULT_SIZE     = Vector3.new(16, 10, 2)
 local BARRIER_DEFAULT_COLOR    = Color3.fromRGB(120, 118, 110)
 local BARRIER_DEFAULT_LIFETIME = 6
@@ -50,6 +54,33 @@ export type BarrierOpts = {
 }
 
 local SkillVisuals = {}
+
+-- Play a VfxConfig effect at a bare world position.
+--
+-- `spawnEffect` parents its emitters and its sound to an Instance, so an
+-- effect that happens at a point in space — a shot dying on a shield
+-- shell, with no Part left to hang it on — needs a throwaway one. The
+-- anchor outlives the particle burst because it also carries the sound,
+-- which routinely runs longer than `totalDurationSec`.
+function SkillVisuals.spawnEffectAtPoint(position: Vector3, effectId: string)
+	local effect = VfxConfig.EFFECTS[effectId]
+	if not effect then return end
+
+	local anchor = Instance.new("Part")
+	anchor.Name         = "SkillEffectAnchor"
+	anchor.Size         = Vector3.one
+	anchor.CFrame       = CFrame.new(position)
+	anchor.Anchored     = true
+	anchor.Transparency = 1
+	anchor.CanCollide   = false
+	anchor.CanQuery     = false
+	anchor.CanTouch     = false
+	anchor.CastShadow   = false
+	anchor.Parent       = workspace
+
+	spawnEffect(effect, anchor)
+	Debris:AddItem(anchor, math.max(effect.totalDurationSec, POINT_ANCHOR_MIN_LIFETIME_SEC))
+end
 
 function SkillVisuals.spawnShockwave(center: Vector3, radius: number, opts: ShockwaveOpts?): BasePart
 	local o            = opts or {}
