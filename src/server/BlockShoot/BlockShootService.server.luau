@@ -3,32 +3,85 @@
 ----------------------------------------------------------------------
 -- BlockShootService
 ----------------------------------------------------------------------
--- Server handler for ConsumeBlock remote. Validates the block is a
--- tagged LetterBlock, then destroys it. The BlockSpawner's
--- CollectionService removed-signal handler auto-refills the arena.
+-- Server handler for the ConsumeBlock remote. Validates the payload,
+-- then destroys the block. The BlockSpawner's CollectionService
+-- removed-signal handler auto-refills the arena.
+--
+-- Phase 5.4 hardening — the remote used to destroy whatever Model the
+-- client named, as fast as the client asked. It now enforces:
+--   1. the payload is a real Instance, not a table wearing a Model's
+--      property names (see Utility/TypeValidation/validateInstance);
+--   2. the block is a live, tagged LetterBlock still parented to
+--      workspace — not the ReplicatedStorage template, not an already
+--      destroyed block, not an arbitrary world Model;
+--   3. it is within a sane radius of the firing player's character;
+--   4. the player is inside a token budget matched to the
+--      LetterBlaster's fire cooldown.
+--
+-- Every rejection drops the request and logs; nothing throws, so one
+-- malformed payload can never take the handler down for other players.
+-- Thresholds live in BlockShootConstants; checks in BlockShootValidation.
 ----------------------------------------------------------------------
 
-local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local BlockShootConstants = require(script.Parent.BlockShootConstants)
+local BlockShootValidation = require(script.Parent.BlockShootValidation)
+local RateLimiter = require(script.Parent.Parent.Utility.RateLimiter)
 
 local log = Logger.new("BlockShootService")
 
 local consumeRemote = ReplicatedStorage.Shared.BlockShoot.Remotes.ConsumeBlock :: RemoteEvent
 
-consumeRemote.OnServerEvent:Connect(function(_player: Player, block: any)
-	if typeof(block) ~= "Instance" then
+local consumeLimiter = RateLimiter.new(
+	BlockShootConstants.CONSUME_BURST_CAPACITY,
+	BlockShootConstants.CONSUME_REFILL_PER_SEC
+)
+
+-- One log budget token per player+reason, so the first instance of each
+-- rejection is always reported and a client looping the remote can't
+-- bury everyone else's warnings in the output window.
+--
+-- Deliberately not Logger:warnThrottled — its interval is a call count
+-- (`count % interval == 0`), so it would swallow the first N-1 hits and
+-- a single probe would leave no trace at all.
+local rejectionLogBudget = RateLimiter.new(1, 1 / BlockShootConstants.REJECTION_LOG_THROTTLE_SEC)
+
+local function reject(player: Player, reason: string)
+	local key = string.format("%d:%s", player.UserId, reason)
+	if rejectionLogBudget:consume(key) then
+		log:warn(string.format("rejected ConsumeBlock from %s — %s", player.Name, reason))
+	end
+end
+
+consumeRemote.OnServerEvent:Connect(function(player: Player, block: any)
+	-- Rate first: it is the cheapest check and the one an exploiter is
+	-- most likely to be hammering.
+	if not consumeLimiter:consume(player) then
+		reject(player, "rate limit")
 		return
 	end
-	if not block:IsA("Model") then
+
+	local model, blockReason = BlockShootValidation.checkBlock(block)
+	if not model then
+		reject(player, blockReason or "invalid block")
 		return
 	end
-	if not CollectionService:HasTag(block, LetterBlocks.TAG) then
+
+	local inRange, rangeReason = BlockShootValidation.checkRange(player.Character, model)
+	if not inRange then
+		reject(player, rangeReason or "out of range")
 		return
 	end
-	block:Destroy()
+
+	model:Destroy()
 end)
 
-log:info("BlockShootService ready")
+Players.PlayerRemoving:Connect(function(player: Player)
+	consumeLimiter:forget(player)
+	rejectionLogBudget:forgetPrefix(string.format("%d:", player.UserId))
+end)
+
+log:info("BlockShootService ready — payload, range and rate validation active")

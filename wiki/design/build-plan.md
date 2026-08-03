@@ -196,7 +196,7 @@ Release target decided 2026-07-27: **public soft launch** (unlisted first, then 
 
 | Item | Detail |
 |---|---|
-| **Server trust hardening** | Un-deferred (was "revisit if public release approaches" — it now is). Validate `ConsumeBlock` (block exists / in range / rate) and `SpellCastServer` (registry-known spell, server-side affordability) instead of trusting the client. Parallel-safe with 5.2 — different files. |
+| **Server trust hardening** | ✅ **Mostly done 2026-08-03.** `ConsumeBlock` validates payload / in-workspace / tag / range / rate; `SpellCastServer` validates spell / caster / target / range / rate. Covered by the `Hardening` suite (3/3) and a live playtest. See [[systems/BlockShoot]] § Trust model and [[systems/SpellCastService]] § Trust model. ⚠️ **Server-side affordability NOT delivered** — blocked, needs a decision: energy state lives only in `client/PlayerSession`, so the server has nothing to price a cast against. Options (ceiling-ledger vs server-authoritative economy) are written up in [[systems/SpellCastService]] § Blocked. The cast rate limit is a flood guard standing in for it, not a price check. |
 | **Game page assets** | Icon, thumbnails, description. Remember [[concepts/RobloxOpenCloudAuth]] and the `rbxthumb://` requirement for Open Cloud decals. |
 | **Analytics** | Added 2026-07-27 (from the persistence discussion): `AnalyticsService` onboarding funnel (join → first shoot → first memorize → first cast → first boss damage → boss kill) + custom loop-health events. Pulled into the gate because the soft launch exists to observe retention — unobservable without it. See [[design/persistence-progression]]. |
 | **Rollout** | Unlisted link → friends checkpoint → public listing. The friends checkpoint after 5.1 feeds tuning and the shield/wall/buff design pass before they're built. |
@@ -204,6 +204,8 @@ Release target decided 2026-07-27: **public soft launch** (unlisted first, then 
 **Sequencing:** 5.1 → friends-playtest checkpoint → 5.2 + hardening (parallel) → tutorial + tuning (5.3) → store assets → listing.
 
 **Milestone:** a cold player (no instructions) completes shoot → memorize → cast → boss damage inside their first session, with no placeholder audio and no client-trusted remotes.
+
+> The "no client-trusted remotes" half of this milestone is **not** met yet, and won't be by hardening alone: a client can still cast a spell it never earned the energy for. Whether that blocks the soft launch is a judgement call — it's a self-cheat in a PvE game, not a way to grief other players — but it should be a conscious decision rather than an assumption. See [[systems/SpellCastService]] § Blocked.
 
 ## Phase 5.5 — Persistence & progression (post-launch)
 
