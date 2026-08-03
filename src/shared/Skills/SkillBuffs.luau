@@ -108,6 +108,20 @@ local SkillBuffs = {}
 -- bubble that shipped with the visual.
 SkillBuffs.SHELL_RADIUS_STUDS = 4.2
 
+-- What deflecting one projectile costs the pool.
+--
+-- Flat, and deliberately far below what the shot would have dealt. The
+-- shell is a barrier that destroys projectiles, not a damage sponge that
+-- happens to stop them: charging full damage per deflection made a 40
+-- pool worth 2.6 of Brain's fireballs, which inside a 30-shot volley is
+-- indistinguishable from no shield at all.
+--
+-- Damage that arrives any other way — GroundSlam, melee, anything that
+-- reaches the body — still drains the pool at full value through
+-- `DamageModifierRegistry.shieldModifier`. The asymmetry is the point:
+-- deflection is cheap, absorption is not.
+SkillBuffs.SHELL_BLOCK_COST = 5
+
 ----------------------------------------------------------------------
 -- Buffs
 ----------------------------------------------------------------------

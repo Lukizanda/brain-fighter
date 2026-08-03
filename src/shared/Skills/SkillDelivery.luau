@@ -79,25 +79,6 @@ end
 -- VfxConfig entry played where a projectile dies on a shield shell.
 local SHIELD_BLOCK_EFFECT_ID = "shield_block"
 
--- What this skill's onImpact would have taken off `hum` — the price a
--- shield shell pays to swallow the shot. Deliberately mirrors the
--- arithmetic in SkillEffects.damage (flat `amount` vs `fractionOfMaxHP`,
--- times the target's damage amp): a blocked shot has to cost the pool
--- exactly what the same shot landing would have, or blocking becomes a
--- way to launder damage up or down.
-local function impactDamageAgainst(skill: SkillSpec, hum: Humanoid): number
-	local total = 0
-	for _, effectSpec in skill.onImpact do
-		if effectSpec.kind ~= "damage" then continue end
-		if effectSpec.fractionOfMaxHP then
-			total += effectSpec.fractionOfMaxHP * hum.MaxHealth
-		else
-			total += effectSpec.amount or 0
-		end
-	end
-	return total * SkillBuffs.damageAmp(hum)
-end
-
 -- Distance along `delta` at which the segment starting at `from` first
 -- enters the sphere, or nil if it never does. Returns 0 when the segment
 -- starts inside — a projectile spawned within a shell is already blocked.
@@ -353,21 +334,25 @@ SkillDelivery.handlers = {
 			part:Destroy()
 		end
 
-		-- A projectile that reaches a shielded rig's shell dies there. The
-		-- pool pays the shot's full damage and the Part is consumed, so
-		-- nothing reaches the holder — including splash, which is why a
+		-- The shell is measured to the projectile's centre, so without this a
+		-- fireball whose 2-stud body visibly clips the bubble — but whose
+		-- centre passes outside it — flies straight through. On screen that
+		-- is a shot hitting the shield and not being destroyed. Inflating by
+		-- the half-extent makes contact surface-to-surface, the way it looks.
+		local shellRadius = SkillBuffs.SHELL_RADIUS_STUDS
+			+ math.max(sizeVec.X, sizeVec.Y, sizeVec.Z) * 0.5
+
+		-- A projectile that reaches a shielded rig's shell is destroyed there.
+		-- Nothing reaches the holder — including splash, which is why a
 		-- shielded player also covers whoever is standing next to them.
 		--
-		-- Absorption is deliberately not partial: a pool with 5 left still
-		-- swallows a 20-damage shot whole and pops. "The shield saved you
-		-- and broke doing it" reads better than a shot that half-lands, and
-		-- the shell only ever sees projectiles, so this can't be used to eat
-		-- an instant-delivery nuke like Inferno. Damage that arrives any
-		-- other way still goes through applyDamage's shieldModifier, which
-		-- *does* split partially.
+		-- The pool is charged a flat `SHELL_BLOCK_COST` per deflection, not
+		-- the shot's damage. Deflecting is a barrier doing its job; only
+		-- damage that actually lands on the body drains the pool at full
+		-- value, and that path still runs through applyDamage's
+		-- shieldModifier untouched.
 		local function blockOnShell(part: BasePart, victim: Hittable, contact: Vector3)
-			local cost     = impactDamageAgainst(skill, victim.hum)
-			local absorbed = SkillBuffs.consumeShield(victim.hum, cost)
+			local absorbed = SkillBuffs.consumeShield(victim.hum, SkillBuffs.SHELL_BLOCK_COST)
 			SkillVisuals.spawnEffectAtPoint(contact, SHIELD_BLOCK_EFFECT_ID)
 			log:info(("SkillProjectile blocked by shield on %s absorbed=%.1f left=%.1f (skill=%s)"):format(
 				victim.hum.Parent and victim.hum.Parent.Name or "?",
@@ -388,7 +373,7 @@ SkillDelivery.handlers = {
 			for _, h in hittables do
 				if h.hum.Parent == source then continue end
 				if SkillBuffs.getShield(h.hum) <= 0 then continue end
-				local entry = segmentSphereEntry(from, step, h.hrp.Position, SkillBuffs.SHELL_RADIUS_STUDS)
+				local entry = segmentSphereEntry(from, step, h.hrp.Position, shellRadius)
 				if entry and entry < nearestDist then
 					nearest     = h
 					nearestDist = entry
@@ -435,6 +420,28 @@ SkillDelivery.handlers = {
 				lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
 				lv.MaxForce               = math.huge
 				lv.VectorVelocity         = dir * speed
+
+				-- Keep simulation on the server.
+				--
+				-- Roblox hands network ownership of a free-moving part to the
+				-- nearest player, so a shot aimed at someone ends up simulated
+				-- by the very client it is about to hit. Their copy runs ahead
+				-- of the server's, which means a projectile the server has
+				-- already destroyed on a shield shell keeps travelling on
+				-- screen — measured at up to 4.7 studs past the block point,
+				-- deep inside the bubble and frequently through the body. The
+				-- shield looked like it was being ignored even though nothing
+				-- ever landed.
+				--
+				-- It is also the wrong trust boundary independent of the
+				-- visuals: the client being shot at should not own the bullet.
+				if RunService:IsServer() then
+					-- Throws on parts with no simulated assembly; a projectile
+					-- that failed to set up is not worth taking the cast down.
+					pcall(function()
+						projectile:SetNetworkOwner(nil)
+					end)
+				end
 
 				Debris:AddItem(projectile, lifetimeSec + 1)
 

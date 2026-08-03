@@ -514,3 +514,47 @@ draining 40→0 alive popped the shell outward (8.4→9.42 studs mid-tween),
 spawned both emitter layers and played the break sound; dying with a full
 shield produced zero break sounds and a silent teardown. Pages touched:
 [[systems/SkillPipeline]], [[systems/VisualEffects]].
+
+## [2026-08-03] ingest | Shield shell: surface contact + flat deflection cost
+
+Reported as "boss projectiles aren't blocked". They were — the log showed
+three blocks per volley — but two things made it read as a failure. First a
+real defect: the shell was measured to the projectile's *centre*, so Brain's
+2-stud fireballs whose bodies visibly clipped the bubble while their centres
+passed outside flew straight through. The test now inflates the shell by the
+projectile's half-extent, making contact surface-to-surface the way it looks
+on screen. Second, the cost model was wrong for what a shield is: charging the
+shot's full damage per deflection made a 40 pool worth 2.6 fireballs, which
+inside a 30-shot 450-damage volley is indistinguishable from no shield.
+Replaced with a flat `SkillBuffs.SHELL_BLOCK_COST` (5), so a shield is worth 8
+deflections and the constant is the only tuning knob. `impactDamageAgainst`
+deleted with it. Damage that actually reaches the body still drains the pool
+at full value through `shieldModifier` — deflection is cheap, absorption is
+not, and that asymmetry is deliberate. Playtest-verified against the live
+boss: with a pool too large to run dry, 60 consecutive FireballVolley
+projectiles were destroyed on the shell with health untouched at 100/100, so
+the shell does not leak; health only moves once the pool is spent. Pages
+touched: [[systems/SkillPipeline]].
+
+## [2026-08-03] ingest | Projectiles server-simulated — the shield "pass through" was a rendering bug
+
+"Boss projectiles pass through the shield" persisted after the shell fixes, and
+server logs flatly contradicted it: every shot blocked, zero damage taken. The
+bug was only visible by instrumenting what the *client* rendered. Roblox hands
+network ownership of a free-moving part to the nearest player, so each shot
+aimed at the player was being simulated by that player's own client, running
+ahead of the server — the server destroyed it on the shell while the client
+kept drawing it forward. Measured on one boss engagement: 69 of 80 projectiles
+rendered inside the 4.2-stud bubble, 20 rendered through the body, closest
+approach 0.50 studs, all with health untouched at 100/100. Fixed with
+`SetNetworkOwner(nil)` on spawn (server only, pcall-guarded), which is also the
+right trust boundary — the client being shot at should not own the bullet.
+After: 0 of 90 inside the bubble, 0 through the body, closest rendered approach
+17.5 studs. Residual accepted and documented: the client renders server-owned
+parts behind the server, so a blocked shot now vanishes ~12 studs short of the
+bubble instead of at it; the shield_block spark still plays at the true contact
+point. Closing that gap means client-local projectile visuals over an invisible
+authoritative server copy, which is a refactor rather than a tweak. Lesson
+worth keeping: for anything cosmetic-critical involving replicated physics,
+server-side logs are not sufficient evidence — measure the client.
+Pages touched: [[systems/SkillPipeline]].

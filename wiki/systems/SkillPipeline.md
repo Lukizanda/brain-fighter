@@ -191,7 +191,7 @@ So ownership splits deliberately, and this is the one place it's allowed to:
 
 - **Skills grants** the pool (`SkillBuffs.grantShield`) — additive, so Sanctuary layered on Shield is worth both.
 - **Health drains** it (`DamageModifierRegistry.shieldModifier`) for damage that reaches the body through `applyDamage`.
-- **Skills also drains** it (`SkillBuffs.consumeShield`) for damage that never gets there because the shell stopped it — see [Shell](#shield--the-shell-blocks-projectiles) below.
+- **Skills also drains** it (`SkillBuffs.consumeShield`) at a flat cost per projectile the shell deflects — see [Shell](#shield--the-shell-blocks-projectiles) below.
 - Nothing else writes the attribute.
 
 Two drain sites rather than one is deliberate, and player spells are what make it load-bearing: they write `Humanoid.Health` directly and never enter `applyDamage`, so a projectile blocked at the shell has no route to `shieldModifier` at all. A projectile stopped before impact also never runs an effect handler, so there is nothing downstream to charge the pool.
@@ -207,10 +207,29 @@ The pool projects a **spherical shell**, `SkillBuffs.SHELL_RADIUS_STUDS` (4.2) c
 - The shell is swept **against the same segment as the world raycast, and the nearer blocker wins**. Tested before the raycast result is used, because a shot that would clip a limb this frame still had to cross the bubble to reach it.
 - The shell is **analytic, not a Part** — a ray/sphere intersection in `segmentSphereEntry`. It has to be: the bubble `ShieldVfx` draws is a per-client cosmetic, invisible to the server that owns boss fire, so there is no geometry for `workspace:Raycast` to find. This is also why `SkillBuffs.SHELL_RADIUS_STUDS` is the single source of truth for both — the visual reads it for its diameter, so what you see is exactly what blocks.
 - The radius is **fixed, not measured off the live rig**. A bounding box breathes with the walk animation, and a hit volume that grows and shrinks per frame is neither testable nor fair.
-- A blocked shot is **fully consumed**: the pool pays `impactDamageAgainst` (the same flat/`fractionOfMaxHP`/damage-amp arithmetic `SkillEffects.damage` uses, so blocking can't launder damage up or down) and the Part is destroyed. No splash, no effect handlers — which means a shielded player also covers whoever is standing next to them.
-- Absorption at the shell is **not partial** (design call 2026-08-03): a pool with 5 left swallows a 20-damage shot whole and pops. "The shield saved you and broke doing it" reads better than a shot that half-lands, and the shell only ever sees projectiles, so it can't be used to eat an instant-delivery nuke like Inferno. Damage arriving any other way still splits partially through `shieldModifier`.
+- The shell is **inflated by the projectile's half-extent**, so contact is measured surface-to-surface rather than centre-to-centre. Without this, Brain's 2-stud fireballs whose bodies visibly clipped the bubble but whose centres passed outside it flew straight through — on screen, a shot hitting the shield and not being destroyed.
+- A blocked shot is **destroyed outright**. No splash, no effect handlers — which means a shielded player also covers whoever is standing next to them.
+- The pool is charged a **flat `SkillBuffs.SHELL_BLOCK_COST`** (5) per deflection, *not* the shot's damage. The shell is a barrier that destroys projectiles, not a damage sponge that happens to stop them — charging full damage made a 40 pool worth 2.6 of Brain's fireballs, which inside a 30-shot volley is indistinguishable from having no shield. At 5 a shield is worth **8 deflections**, tunable by that constant alone.
+- The asymmetry is the point: **deflection is cheap, absorption is not.** Damage that actually reaches the body — GroundSlam, melee, anything non-projectile — still drains the pool at full value through `shieldModifier`, untouched.
 
-Verified in-playtest 2026-08-03: a 12-damage projectile into a 40 pool logged `blocked by shield … absorbed=12.0 left=28.0` with health untouched at 100; a 20-damage shot into a 5 pool left shield 0 / health 100; the same shot at an unshielded rig fell through to the normal body impact for 12.
+### Shield — why projectiles are server-simulated
+
+Projectiles call `SetNetworkOwner(nil)` on the server. Without it Roblox hands ownership of a free-moving part to the **nearest player** — so a shot aimed at someone is simulated by the very client it is about to hit, and that client's copy runs ahead of the server's. The server would destroy the shot on the shell while the client kept drawing it forward.
+
+This was reported as "boss projectiles pass through the shield" and is worth recording precisely, because server-side logs said the opposite (every shot blocked, no damage taken) and the bug was only visible by measuring what the *client* rendered:
+
+| Client-rendered, one boss engagement | Before | After |
+|---|---|---|
+| Projectiles rendered inside the bubble (<4.2) | 69 of 80 | **0 of 90** |
+| Projectiles rendered through the body (<2.0) | 20 | **0** |
+| Closest approach ever rendered | 0.50 studs | 17.5 studs |
+| Health lost | 0 | 0 |
+
+It is also the correct trust boundary independent of the visuals: the client being shot at should not own the bullet.
+
+**Residual, accepted for now:** the client renders server-owned parts behind the server, so a blocked shot now vanishes roughly 12 studs *short* of the bubble rather than at it. The `shield_block` spark still plays at the true contact point on the shell, which is what sells the block. Closing the gap properly means client-local projectile visuals over an invisible authoritative server copy — a real refactor, not a tweak.
+
+Earlier single-shot checks still hold: an unshielded rig takes the normal body impact, and a shot into a nearly-empty pool still deflects and pops the shield.
 
 **Known consequence, not yet a decision:** the shell doesn't ask who fired. Friendly projectiles are blocked and charged to the ally's pool the same as boss fire. That is consistent with the pre-existing proximity shell (which already detonates player projectiles on teammates within `proximityRadius`), and PvP is gated off — but it is a wider volume than before, so revisit if friendly fire ever turns on.
 
