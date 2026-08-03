@@ -14,7 +14,8 @@ updated: 2026-08-03
 > - `src/shared/Vfx/spawnEffect.luau` — **the shared spawn engine** (cast/impact/projectile), used by *both* the client `VfxController` and `SkillDelivery`. The plan's inline `VfxController.spawnCast/spawnImpact` methods were never built that way.
 > - `src/client/Vfx/VfxController.client.luau` — plays cast VFX locally on `CastAction.spellResolved`, relays to server.
 > - `src/server/Vfx/VfxBroadcastService.server.luau` — validates + `SpellVfxEvent:FireAllClients`.
-> - `src/shared/Vfx/Remotes/*.model.json` — `BroadcastSpellVfx` / `SpellVfxEvent`.
+> - `src/shared/Vfx/Remotes/*.model.json` — `BroadcastSpellVfx` / `SpellVfxEvent` / `ProjectileVfxEvent`.
+> - `src/shared/Vfx/CosmeticProjectile.luau` + `src/client/Vfx/ProjectileVfxController.client.luau` — the *seen* projectile. The authoritative shot is server-simulated and invisible; each client replays the broadcast launch parameters locally so a blocked shot dies on the shield bubble rather than ~12 studs short of it. See [[systems/SkillPipeline]] § "Projectile visuals are client-local".
 > - `src/shared/Vfx/StatusVisuals/FreezeVfx.luau` — the freeze ice-shard status visual (see [[systems/SkillPipeline]] § VFX Layers).
 > - `src/shared/Vfx/StatusVisuals/ShieldVfx.luau` + `src/client/Vfx/ShieldVfxController.client.luau` — the absorb-shield bubble. Unlike FreezeVfx it is **attribute-driven**: the controller watches `_shield` on each player character rather than being called from an effect handler, which is what gets it cross-client replication without a broadcast. See [[systems/SkillPipeline]] § "Shield — the bubble reads the attribute, not the cast".
 >

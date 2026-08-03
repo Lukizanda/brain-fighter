@@ -79,30 +79,19 @@ end
 -- VfxConfig entry played where a projectile dies on a shield shell.
 local SHIELD_BLOCK_EFFECT_ID = "shield_block"
 
--- Distance along `delta` at which the segment starting at `from` first
--- enters the sphere, or nil if it never does. Returns 0 when the segment
--- starts inside — a projectile spawned within a shell is already blocked.
---
--- Analytic rather than a shapecast because the shell is a pure gameplay
--- volume with no Part behind it: the bubble ShieldVfx draws is a local
--- cosmetic on each client, invisible to the server that owns boss fire.
-local function segmentSphereEntry(from: Vector3, delta: Vector3, center: Vector3, radius: number): number?
-	local length = delta.Magnitude
-	if length <= 0 then return nil end
-	local dir = delta / length
-
-	local toStart = from - center
-	local proj    = toStart:Dot(dir)
-	local gap     = toStart:Dot(toStart) - radius * radius
-	-- Outside and travelling away.
-	if gap > 0 and proj > 0 then return nil end
-
-	local discriminant = proj * proj - gap
-	if discriminant < 0 then return nil end
-
-	local entry = -proj - math.sqrt(discriminant)
-	if entry > length then return nil end
-	return math.max(entry, 0)
+-- Tells every client to draw its own copy of a shot. Resolved lazily:
+-- SkillDelivery is required during server boot (BossService), and a
+-- module-scope WaitForChild would stall that indefinitely if the remote
+-- were ever missing rather than failing one cast.
+local _projectileVfxEvent: RemoteEvent? = nil
+local function projectileVfxRemote(): RemoteEvent?
+	if _projectileVfxEvent then return _projectileVfxEvent end
+	local remotes = ReplicatedStorage.Shared.Vfx:FindFirstChild("Remotes")
+	local found = remotes and remotes:FindFirstChild("ProjectileVfxEvent")
+	if found and found:IsA("RemoteEvent") then
+		_projectileVfxEvent = found :: RemoteEvent
+	end
+	return _projectileVfxEvent
 end
 
 -- CollectionService tags whose tagged Models carry a Humanoid+HRP and
@@ -281,6 +270,16 @@ SkillDelivery.handlers = {
 		local source    = ctx.source
 		local onComplete = ctx.onComplete
 
+		-- Lets the casting client ignore the broadcast: it already drew its
+		-- own shot on the frame it fired, and replaying the broadcast would
+		-- put a second one alongside it. Nil for boss and NPC fire, so every
+		-- client draws those. Same pattern VfxController uses for bursts.
+		local casterUserId: number? = nil
+		if typeof(source) == "Instance" and (source :: Instance):IsA("Model") then
+			local casterPlayer = Players:GetPlayerFromCharacter(source :: Model)
+			casterUserId = casterPlayer and casterPlayer.UserId or nil
+		end
+
 		-- Resolve a projectile's impact at hitPos, then destroy the Part.
 		--   victim ~= nil → something was struck directly (proximity shell,
 		--                   or a swept ray that clipped its rig).
@@ -337,10 +336,9 @@ SkillDelivery.handlers = {
 		-- The shell is measured to the projectile's centre, so without this a
 		-- fireball whose 2-stud body visibly clips the bubble — but whose
 		-- centre passes outside it — flies straight through. On screen that
-		-- is a shot hitting the shield and not being destroyed. Inflating by
+		-- is a shot hitting the shield and not being destroyed. Padding by
 		-- the half-extent makes contact surface-to-surface, the way it looks.
-		local shellRadius = SkillBuffs.SHELL_RADIUS_STUDS
-			+ math.max(sizeVec.X, sizeVec.Y, sizeVec.Z) * 0.5
+		local shellPadding = math.max(sizeVec.X, sizeVec.Y, sizeVec.Z) * 0.5
 
 		-- A projectile that reaches a shielded rig's shell is destroyed there.
 		-- Nothing reaches the holder — including splash, which is why a
@@ -373,7 +371,7 @@ SkillDelivery.handlers = {
 			for _, h in hittables do
 				if h.hum.Parent == source then continue end
 				if SkillBuffs.getShield(h.hum) <= 0 then continue end
-				local entry = segmentSphereEntry(from, step, h.hrp.Position, shellRadius)
+				local entry = SkillBuffs.shellEntry(from, step, h.hrp.Position, shellPadding)
 				if entry and entry < nearestDist then
 					nearest     = h
 					nearestDist = entry
@@ -445,9 +443,42 @@ SkillDelivery.handlers = {
 
 				Debris:AddItem(projectile, lifetimeSec + 1)
 
-				-- Cosmetic layer: trail/glow/sound that travels with the Part.
-				-- Physics ownership stays here; visual layer lives in VfxConfig.
-				if cosmeticEffectId then
+				-- Visual/authority split. The server's shot is the one that
+				-- decides what happens, and it is never the one you see: it
+				-- is invisible and carries no trail, and every client draws
+				-- its own CosmeticProjectile from the broadcast below.
+				--
+				-- Two problems fall out of that. Clients render server-owned
+				-- parts behind the server, so the real shot vanished ~12
+				-- studs short of a shield bubble instead of on it. And
+				-- `projectile` delivery runs on both VMs — unlike
+				-- `world_spawn`, which guards for exactly this — so a player
+				-- cast produced a server Part *and* a client Part, two
+				-- fireballs that only looked like one while the caster's
+				-- client happened to own and simulate both in lockstep.
+				--
+				-- The client branch keeps drawing its own shot directly: it
+				-- is already frame-perfect for the caster, and it also does
+				-- the local gameplay pass.
+				if RunService:IsServer() then
+					projectile.Transparency = 1
+					local remote = projectileVfxRemote()
+					if remote then
+						remote:FireAllClients({
+							casterUserId     = casterUserId,
+							origin           = muzzlePos,
+							direction        = dir,
+							speed            = speed,
+							size             = sizeVec,
+							color            = color,
+							lifetimeSec      = lifetimeSec,
+							cosmeticEffectId = cosmeticEffectId,
+							source           = source,
+						})
+					end
+				elseif cosmeticEffectId then
+					-- Trail/glow/sound that travels with the Part. Physics
+					-- ownership stays here; the visual layer lives in VfxConfig.
 					local cosmeticEffect = VfxConfig.EFFECTS[cosmeticEffectId]
 					if cosmeticEffect then
 						spawnEffect(cosmeticEffect, projectile)

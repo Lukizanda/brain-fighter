@@ -227,7 +227,34 @@ This was reported as "boss projectiles pass through the shield" and is worth rec
 
 It is also the correct trust boundary independent of the visuals: the client being shot at should not own the bullet.
 
-**Residual, accepted for now:** the client renders server-owned parts behind the server, so a blocked shot now vanishes roughly 12 studs *short* of the bubble rather than at it. The `shield_block` spark still plays at the true contact point on the shell, which is what sells the block. Closing the gap properly means client-local projectile visuals over an invisible authoritative server copy — a real refactor, not a tweak.
+### Projectile visuals are client-local
+
+Server simulation fixed the penetration but introduced the mirror problem: clients render server-owned parts *behind* the server, so a blocked shot vanished ~12 studs short of the bubble instead of on it. The fix is a **visual/authority split**.
+
+| | Authoritative shot | Cosmetic shot |
+|---|---|---|
+| Where | Server only (`SkillDelivery.projectile`) | Every client (`Vfx/CosmeticProjectile`) |
+| Visible | No — `Transparency = 1`, no trail | Yes; this is the only one anyone sees |
+| Does | Raycast, shell block, damage, pool drain | Nothing but fly and die |
+| Physics | `LinearVelocity`, `SetNetworkOwner(nil)` | Anchored, hand-stepped per Heartbeat |
+
+The server broadcasts launch parameters over `ProjectileVfxEvent`; each client replays them locally. This is safe to predict because a shot is a **straight line at constant velocity** — the client reproduces the exact path from the launch parameters alone, with no correction traffic. It is not guessing at the outcome, it is evaluating the same geometry against state it already has (`_shield` replicates, and the bubble is drawn from it). Divergence is bounded by construction: if client and server disagree about a block, the client loses a cosmetic and the server still decides who took damage.
+
+`SkillBuffs.shellEntry` is shared by both paths deliberately — a second copy of the intersection maths on the other VM is a desync waiting to happen.
+
+**This also fixed a latent duplicate.** `projectile` delivery runs on *both* VMs — unlike `world_spawn`, which guards for exactly this reason — so a player cast always produced a server Part *and* a client Part. It went unnoticed because the caster's client owned and simulated both in lockstep, drawing them on top of each other; `SetNetworkOwner(nil)` broke that lockstep and would have shown the caster two fireballs. With the server copy invisible the caster sees one. The casting client skips its own broadcast (`casterUserId`, the same pattern `VfxController` uses for bursts) since its local shot is already frame-perfect.
+
+Measured client-side across the same boss engagement:
+
+| Client-rendered | Original | Server-simulated | Client-local visuals |
+|---|---|---|---|
+| Rendered inside the bubble (<4.2) | 69 of 80 | 0 of 90 | **0 of 78** |
+| Rendered through the body (<2.0) | 20 | 0 | **0** |
+| Closest approach rendered | 0.50 studs | 17.5 studs | **5.21 studs** |
+| Died on the shell surface | — | — | **60 of 78** |
+| Visible duplicates for the caster | 1 (masked) | 2 | **1** |
+
+5.21 studs is the shell surface itself (4.2 radius + 1.0 half-extent for a 2-stud fireball). The remaining 18 are shots that missed and died on walls or expiry.
 
 Earlier single-shot checks still hold: an unshielded rig takes the normal body impact, and a shot into a nearly-empty pool still deflects and pops the shield.
 

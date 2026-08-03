@@ -558,3 +558,38 @@ authoritative server copy, which is a refactor rather than a tweak. Lesson
 worth keeping: for anything cosmetic-critical involving replicated physics,
 server-side logs are not sufficient evidence — measure the client.
 Pages touched: [[systems/SkillPipeline]].
+
+## [2026-08-03] ingest | Projectile visuals split from projectile authority
+
+Server simulation had fixed shots penetrating the shield bubble but introduced
+the mirror problem — clients render server-owned parts behind the server, so a
+blocked shot vanished ~12 studs short of the bubble instead of on it. Split the
+two roles. The authoritative shot stays server-only and is now invisible
+(`Transparency = 1`, no trail); every client draws its own
+`Vfx/CosmeticProjectile` from launch parameters broadcast over the new
+`ProjectileVfxEvent`. Safe to predict because a shot is a straight line at
+constant velocity: the client reproduces the exact path from the launch
+parameters with no correction traffic, and evaluates the same geometry against
+state it already has. Divergence is bounded — disagree and the client loses a
+cosmetic while the server still decides damage. `SkillBuffs.shellEntry` is now
+shared by both paths so the intersection maths exists once.
+
+This also closed a latent duplicate: `projectile` delivery runs on both VMs
+(unlike `world_spawn`, which guards for exactly this), so a player cast always
+made a server Part *and* a client Part. It was invisible only because the
+caster's client owned and simulated both in lockstep; `SetNetworkOwner(nil)`
+broke that lockstep and would have shown two fireballs. Caster now sees one,
+and skips its own broadcast via `casterUserId`.
+
+Measured client-side, original → server-simulated → now: rendered inside the
+bubble 69/80 → 0/90 → 0/78; through the body 20 → 0 → 0; closest rendered
+approach 0.50 → 17.5 → 5.21 studs, where 5.21 *is* the shell surface (4.2
+radius + 1.0 half-extent); 60 of 78 died on that surface, the rest missed and
+died on walls or expiry. Caster-visible duplicates 1 (masked) → 2 → 1.
+
+Bug worth remembering, caught in playtest: with `shellDist` and `rayDist` both
+defaulting to `math.huge`, "nearest shell is no further than nearest wall" is
+true when there is neither, so every cosmetic deleted itself on its first
+frame. SkillDelivery is saved from the same shape only by its `shellVictim`
+nil-check. Sentinel distances need a companion nil flag. Pages touched:
+[[systems/SkillPipeline]], [[systems/VisualEffects]].

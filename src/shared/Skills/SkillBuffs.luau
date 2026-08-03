@@ -122,6 +122,39 @@ SkillBuffs.SHELL_RADIUS_STUDS = 4.2
 -- deflection is cheap, absorption is not.
 SkillBuffs.SHELL_BLOCK_COST = 5
 
+-- Distance along `delta` at which the segment starting at `from` first
+-- enters the shell around `center`, or nil if it never does. Returns 0
+-- when the segment starts inside — a projectile already within a shell
+-- is already blocked. `padding` widens the shell by the projectile's
+-- half-extent so contact is surface-to-surface rather than to its centre.
+--
+-- Analytic rather than a shapecast because the shell has no Part behind
+-- it: the bubble ShieldVfx draws is a per-client cosmetic, invisible to
+-- the server that owns boss fire. It lives here, next to the radius,
+-- because two systems on two VMs have to agree on the same sphere —
+-- SkillDelivery for the authoritative block and CosmeticProjectile for
+-- the visual one. A second copy of this maths is a desync waiting to
+-- happen.
+function SkillBuffs.shellEntry(from: Vector3, delta: Vector3, center: Vector3, padding: number): number?
+	local length = delta.Magnitude
+	if length <= 0 then return nil end
+	local dir = delta / length
+
+	local radius  = SkillBuffs.SHELL_RADIUS_STUDS + padding
+	local toStart = from - center
+	local proj    = toStart:Dot(dir)
+	local gap     = toStart:Dot(toStart) - radius * radius
+	-- Outside and travelling away.
+	if gap > 0 and proj > 0 then return nil end
+
+	local discriminant = proj * proj - gap
+	if discriminant < 0 then return nil end
+
+	local entry = -proj - math.sqrt(discriminant)
+	if entry > length then return nil end
+	return math.max(entry, 0)
+end
+
 ----------------------------------------------------------------------
 -- Buffs
 ----------------------------------------------------------------------
