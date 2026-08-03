@@ -52,10 +52,25 @@ Energy state lives entirely client-side. `EnergyReservoirs` is instantiated in e
 
 The rate limit is a flood guard standing in for the missing price check. Its floor is derived from what the economy physically permits — energy only enters a reservoir by memorizing a word, every letter in that word costs one LetterBlaster shot, and the weapon gates shots at `COOLDOWN` — taking the most generous possible reading of one block per cast so it can never reject real play. It stops a remote loop dead; it does not stop a client casting T4 Volley with an empty red bar.
 
-Two ways forward, for the user to choose:
+Two ways forward were put up:
 
 1. **Energy-ceiling ledger (cheap, sound, approximate).** The server already sees every `ConsumeBlock`, and each block carries `Block.Letter` / `Block.Color`. It can therefore track an *upper bound* on the energy each player could possibly have earned, and reject casts whose running cost exceeds it. One-sided by construction, so it never rejects legitimate play, and it needs no change to [[systems/EnergyReservoirs]] or [[systems/SpellRegistry]]. It would not catch a client that under-spends, only one that spends energy it never earned — which is the exploit that matters.
 2. **Server-authoritative economy (correct, expensive).** Mirror the whole memorize chain server-side: LetterBlock → WordBuffer → Dictionary → EnergyEconomy → EnergyReservoirs, with the client HUD reading replicated state. This is the real fix and roughly the shape [[design/persistence-progression]] will want anyway, since a server that can't price a cast also can't be trusted to record a personal best.
+
+> **Decided 2026-08-03: option 1, the energy-ceiling ledger.** Tracked as its own item in [[design/build-plan]] Phase 5.4.
+
+### Ledger design (not yet built)
+
+Credit on every *accepted* `ConsumeBlock`, debit on every *accepted* cast. Both hooks sit in files this pass already owns, so it needs no new cross-system coupling beyond one shared server module.
+
+The bound per consumed block is its best possible contribution: `EnergyEconomy.letterValue(letter) × 3`, where 3 is the top length multiplier (`LENGTH_MULTIPLIER_EPIC`, 9+ letters) — a block can never be worth more than being part of the longest-multiplier word. Contribution flows to the block's own colour, since [[systems/EnergyEconomy]] splits value-weighted per tile. A [[systems/Wildcard]] block credits `MAX_LETTER_VALUE × 3` to *all three* colours, because its energy spreads across all of them and the ceiling must be an upper bound for each independently.
+
+Two refinements keep the bound tight rather than useless:
+
+- Clamp each colour's running ceiling at `EnergyReservoirs.CAP_PER_COLOR` (60). Overflow above the cap is discarded by the real reservoir, so a player can never be holding more than that regardless of how much they've earned.
+- Debit `spec.cost` from the cast's colour on every accepted cast, so the ceiling tracks earned-minus-spent rather than lifetime-earned.
+
+Both are sound in the same direction: they can only ever lower the ceiling toward the true value, and the check is `ceiling[colour] >= spec.cost`, so a too-high ceiling merely fails to catch an exploit while a too-low one would reject real play. Whatever the suite asserts, it should assert that asymmetry explicitly.
 
 ## See also
 
