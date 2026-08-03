@@ -1,11 +1,17 @@
 --!strict
 
 ----------------------------------------------------------------------
--- stub_cast_refunds — Phase 5.1 refund milestone check
+-- cast_refund_on_failure — CastAction refund guarantee
 ----------------------------------------------------------------------
--- Casting a spell whose effect is still a stub (Blue T2 Shield) must
--- fail with reason="unimplemented" and leave the reservoir untouched:
--- CastAction drains, the executor refuses, CastAction refunds.
+-- When the executor refuses a cast, CastAction must hand the mana back:
+-- it drains before executing, so a downstream rejection would otherwise
+-- charge the player for nothing.
+--
+-- Phase 5.1 exercised this through the shield/wall/buff stubs, which
+-- always failed with reason="unimplemented". Those are real effects as
+-- of 5.2, so the refund path is driven here by a genuine rejection
+-- instead: Frost Nip is a targeted spell, and `freeze` refuses a cast
+-- with no Humanoid to freeze.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -14,6 +20,9 @@ local CastAction       = require(ReplicatedStorage.Shared.CastAction)
 local EnergyReservoirs = require(ReplicatedStorage.Shared.EnergyReservoirs)
 
 local INITIAL_BLUE = 30
+-- Blue T1 (Frost Nip). Its onImpact leads with `freeze`, which requires a
+-- Humanoid target and has no self-fallback.
+local TARGETED_TIER = 1
 
 type Ctx = {
 	model: Model?,
@@ -22,11 +31,11 @@ type Ctx = {
 }
 
 return {
-	name = "stub_cast_refunds",
+	name = "cast_refund_on_failure",
 
 	setup = function(ctx: Ctx)
 		local model = Instance.new("Model")
-		model.Name = "StubRefundTestDummy"
+		model.Name = "RefundTestDummy"
 		local humanoid = Instance.new("Humanoid")
 		humanoid.Parent = model
 		model.Parent = workspace
@@ -36,17 +45,14 @@ return {
 		reservoir:add("blue", INITIAL_BLUE)
 		ctx.reservoir = reservoir
 
-		ctx.result = CastAction.castSpecific("blue", 2, reservoir, humanoid, humanoid)
+		-- Caster present, target absent — the executor should refuse.
+		ctx.result = CastAction.castSpecific("blue", TARGETED_TIER, reservoir, humanoid, nil)
 	end,
 
 	verify = function(ctx: Ctx): (boolean, string?)
 		local res = ctx.result
 		if res.ok ~= false then
-			return false, "stub cast should fail, got ok=" .. tostring(res.ok)
-		end
-		local reason = tostring(res.reason)
-		if not string.find(reason, "unimplemented", 1, true) then
-			return false, "reason should mention unimplemented, got: " .. reason
+			return false, "targetless cast should fail, got ok=" .. tostring(res.ok)
 		end
 		local blue = ctx.reservoir:get("blue")
 		if blue ~= INITIAL_BLUE then
