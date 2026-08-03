@@ -12,7 +12,9 @@
 --
 -- Delivery kinds:
 --   instant     — apply onImpact immediately to ctx.target
---   projectile  — spawn N Parts flying toward ctx.target; onImpact on hit
+--   projectile  — spawn N Parts flying toward ctx.target; they detonate on
+--                 the first rig they touch, on world geometry, or on
+--                 lifetime expiry (see the handler's impactRadius notes)
 --   aoe         — after windup, scan ctx.aoeCenter for humanoids; onImpact each
 --   world_spawn — stub; used for Stone Wall / terrain placements
 --
@@ -107,6 +109,27 @@ local function collectHittables(): { Hittable }
 	return results
 end
 
+-- Map a raycast hit back to the rig that owns it, if any. Lets the swept
+-- segment test below count a limb/head clip as a real hit — the proximity
+-- shell only measures to HumanoidRootPart, so it misses tall or wide rigs
+-- the projectile visibly passed through.
+local function hittableFromPart(part: BasePart, hittables: { Hittable }): Hittable?
+	local node: Instance? = part
+	while node and node ~= workspace do
+		if node:IsA("Model") then
+			local hum = (node :: Model):FindFirstChildOfClass("Humanoid")
+			if hum then
+				for _, h in hittables do
+					if h.hum == hum then return h end
+				end
+				return nil
+			end
+		end
+		node = node.Parent
+	end
+	return nil
+end
+
 -- Resolve a position from any target value (BasePart, Humanoid, Model, Vector3).
 local function resolveTargetPosition(target: any): Vector3?
 	if typeof(target) == "Vector3" then return target :: Vector3 end
@@ -143,7 +166,22 @@ SkillDelivery.handlers = {
 	end,
 
 	-- "projectile": spawn deliveryParams.count Parts flying toward ctx.target.
-	-- On each hit: applyImpactEffects. After last launch: ctx.onComplete().
+	-- After last launch: ctx.onComplete().
+	--
+	-- A projectile detonates on whichever comes first each Heartbeat:
+	--   1. lifetime expiry              (cause="expiry")
+	--   2. a swept ray over this frame's step hitting world geometry or a
+	--      rig's limb — this is what stops the shot from passing through
+	--      walls and from tunnelling past a target on a frame hitch
+	--                                   (cause="impact")
+	--   3. an HRP within proximityRadius (cause="proximity")
+	--   4. closest approach to ctx.target while inside impactRadius — the
+	--      proximity fuze, splash spells only
+	--                                   (cause="fuze")
+	-- Every path routes through detonate(), so splash spells damage on all
+	-- four. When impactRadius == 0 the fuze is off and only a direct hit
+	-- (2 or 3) damages.
+	--
 	-- deliveryParams:
 	--   count, speed, spreadDegrees, lifetimeSec, proximityRadius, size,
 	--   color, staggerSec
@@ -153,10 +191,14 @@ SkillDelivery.handlers = {
 	--                       between fire-time and the staggered launch.
 	--                       In-flight projectiles do NOT curve after
 	--                       launch.
-	--   impactRadius      — if > 0, on hit applyImpactEffects fires for
-	--                       every player humanoid within this radius of
-	--                       the projectile's hit position (splash). 0 =
-	--                       single-target (legacy).
+	--   impactRadius      — if > 0, on detonation applyImpactEffects fires
+	--                       for every hittable within this radius of the
+	--                       detonation position (splash) — including when
+	--                       the projectile detonated on a wall or expired
+	--                       in mid-air, so a near-miss still deals damage.
+	--                       0 = single-target: only a directly struck
+	--                       humanoid takes damage, and a wall/expiry
+	--                       detonation deals none.
 	--   impactEffectId    — optional VfxConfig.EFFECTS key spawned at the
 	--                       impact position. For impactRadius == 0 the
 	--                       burst anchors to the hit humanoid's HRP; for
@@ -195,6 +237,59 @@ SkillDelivery.handlers = {
 		local baseDir   = (targetPos - muzzlePos).Unit
 		local source    = ctx.source
 		local onComplete = ctx.onComplete
+
+		-- Resolve a projectile's impact at hitPos, then destroy the Part.
+		--   victim ~= nil → something was struck directly (proximity shell,
+		--                   or a swept ray that clipped its rig).
+		--   victim == nil → world geometry or lifetime expiry.
+		-- A splash projectile detonates either way: the blast is what deals
+		-- the damage, so gating it behind a direct hit meant a Fireball
+		-- landing a stud wide of an enemy — or expiring in mid-air — dealt
+		-- nothing at all despite a 7-stud blast radius.
+		local function detonate(part: BasePart, hitPos: Vector3, victim: Hittable?, cause: string)
+			if impactRadius > 0 then
+				-- spawnShockwave anchors the impact burst to itself via
+				-- cosmeticEffectId. collectHittables() is frame-cached, so
+				-- this re-read returns the same snapshot the caller tested
+				-- against — a humanoid inside proximityRadius is guaranteed
+				-- to also be considered for splash.
+				SkillVisuals.spawnShockwave(hitPos, impactRadius, {
+					color            = impactColor,
+					cosmeticEffectId = impactEffectId,
+				})
+				local struck = 0
+				for _, h in collectHittables() do
+					if h.hum.Parent == source then continue end -- skip caster
+					if h.hum.Health <= 0 then continue end
+					if (h.hrp.Position - hitPos).Magnitude <= impactRadius then
+						applyImpactEffects(skill, h.hum, source)
+						struck += 1
+					end
+				end
+				log:info(("SkillProjectile splash @ %s r=%.1f struck=%d cause=%s (skill=%s)"):format(
+					tostring(hitPos), impactRadius, struck, cause, skill.name
+				))
+			elseif victim then
+				-- Single-target: apply effects to the struck humanoid only.
+				-- Anchor the impact burst on its HRP.
+				applyImpactEffects(skill, victim.hum, source)
+				if impactEffectId then
+					local impactEffect = VfxConfig.EFFECTS[impactEffectId]
+					if impactEffect then
+						spawnEffect(impactEffect, victim.hrp)
+					end
+				end
+				log:info(("SkillProjectile hit %s cause=%s (skill=%s)"):format(
+					victim.hum.Parent and victim.hum.Parent.Name or "?", cause, skill.name
+				))
+			else
+				-- Single-target projectile that stopped on nothing damageable.
+				log:info(("SkillProjectile spent @ %s cause=%s (skill=%s)"):format(
+					tostring(hitPos), cause, skill.name
+				))
+			end
+			part:Destroy()
+		end
 
 		-- Register a cancellation token tied to the caster so freeze (or any
 		-- future interrupt) can stop pending volley shots from launching.
@@ -245,69 +340,98 @@ SkillDelivery.handlers = {
 					end
 				end
 
-				local startTime  = os.clock()
+				local startTime = os.clock()
+				local lastPos   = muzzlePos
+				-- Seeded at infinity so the fuze can never fire on its first
+				-- sample — it needs a previous frame to compare against.
+				local lastTargetDist = math.huge
 				local conn: RBXScriptConnection
+
+				-- Swept-segment filter. The caster is excluded because the
+				-- muzzle sits inside their own rig (and the staff Tip is a
+				-- descendant of it); the projectile because a ray must not
+				-- stop on its own origin Part. Other in-flight projectiles
+				-- are already invisible to it (CanQuery = false), and
+				-- RespectCanCollide keeps shockwaves and decorative parts
+				-- from blocking the shot — only real geometry and rigs do.
+				local rayParams = RaycastParams.new()
+				rayParams.FilterType = Enum.RaycastFilterType.Exclude
+				rayParams.FilterDescendantsInstances = if source
+					then { projectile :: Instance, source :: Instance }
+					else { projectile :: Instance }
+				rayParams.IgnoreWater = true
+				rayParams.RespectCanCollide = true
 
 				conn = RunService.Heartbeat:Connect(function()
 					if not projectile or not projectile.Parent then
 						conn:Disconnect()
 						return
 					end
-					if os.clock() - startTime >= lifetimeSec then
-						conn:Disconnect()
-						projectile:Destroy()
-						return
-					end
 
 					local pos = projectile.Position
 					-- Snapshot all hittables this tick (players + tagged NPCs +
-					-- boss + Damageable rigs). Same snapshot is reused for the
-					-- splash radius loop if the projectile triggers a hit, so
-					-- a humanoid that's "inside proximityRadius" is guaranteed
-					-- to also be considered for splash on the same frame.
+					-- boss + Damageable rigs). detonate() re-reads the same
+					-- frame-cached table.
 					local hittables = collectHittables()
+
+					if os.clock() - startTime >= lifetimeSec then
+						conn:Disconnect()
+						detonate(projectile, pos, nil, "expiry")
+						return
+					end
+
+					-- Swept test before the endpoint test: it reports the
+					-- earliest blocker along this frame's step, which the
+					-- endpoint-only proximity shell can step clean over. At
+					-- Fireball's 55 studs/s a 55 ms frame advances further
+					-- than the 3-stud shell is wide.
+					local step = pos - lastPos
+					if step.Magnitude > 0 then
+						local rayHit = workspace:Raycast(lastPos, step, rayParams)
+						if rayHit then
+							conn:Disconnect()
+							detonate(
+								projectile,
+								rayHit.Position,
+								hittableFromPart(rayHit.Instance, hittables),
+								"impact"
+							)
+							return
+						end
+					end
+					lastPos = pos
+
 					for _, h in hittables do
 						if h.hum.Parent == source then continue end -- skip caster
 						if (h.hrp.Position - pos).Magnitude <= proximityRadius then
-							-- Hit. Resolve impact location BEFORE destroying anything.
 							conn:Disconnect()
-							local hitPos = projectile.Position
-
-							if impactRadius > 0 then
-								-- Splash: apply effects to every hittable in
-								-- radius. spawnShockwave anchors the impact
-								-- burst to itself via cosmeticEffectId.
-								SkillVisuals.spawnShockwave(hitPos, impactRadius, {
-									color            = impactColor,
-									cosmeticEffectId = impactEffectId,
-								})
-								for _, h2 in hittables do
-									if h2.hum.Parent == source then continue end -- skip caster
-									if h2.hum.Health <= 0 then continue end
-									if (h2.hrp.Position - hitPos).Magnitude <= impactRadius then
-										applyImpactEffects(skill, h2.hum, source)
-									end
-								end
-								log:info(("SkillProjectile splash @ %s r=%.1f (skill=%s)"):format(
-									tostring(hitPos), impactRadius, skill.name
-								))
-							else
-								-- Single-target: apply effects to the triggering
-								-- humanoid only. Anchor the impact burst on its HRP.
-								applyImpactEffects(skill, h.hum, source)
-								if impactEffectId then
-									local impactEffect = VfxConfig.EFFECTS[impactEffectId]
-									if impactEffect then
-										spawnEffect(impactEffect, h.hrp)
-									end
-								end
-								log:info(("SkillProjectile hit %s (skill=%s)"):format(
-									h.hum.Parent and h.hum.Parent.Name or "?", skill.name
-								))
-							end
-
-							projectile:Destroy()
+							detonate(projectile, pos, h, "proximity")
 							return
+						end
+					end
+
+					-- Proximity fuze — splash spells only, intended target only.
+					-- The shot is aimed where the target stood at launch and
+					-- never curves, so a target that strafes during the flight
+					-- is routinely missed by the 3-stud shell while still well
+					-- inside a 7-stud blast radius; expiry doesn't save it
+					-- either, since a Fireball outruns its target by ~80 studs
+					-- before the timer runs out. Detonating at closest approach
+					-- is what actually converts those near-misses into damage:
+					-- once we're inside impactRadius and the gap starts
+					-- widening, this frame is as close as the shot will get.
+					-- Restricted to ctx.target so a bystander standing near the
+					-- muzzle can't fuze the shot the moment it leaves the staff.
+					if impactRadius > 0 then
+						local livePos = resolveTargetPosition(ctx.target)
+						if livePos then
+							local dist = (livePos - pos).Magnitude
+							if dist <= impactRadius and dist > lastTargetDist then
+								conn:Disconnect()
+								detonate(projectile, pos, nil, "fuze")
+								return
+							end
+							lastTargetDist = dist
 						end
 					end
 				end)
