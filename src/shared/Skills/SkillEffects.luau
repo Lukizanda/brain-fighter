@@ -25,6 +25,7 @@ local RunService        = game:GetService("RunService")
 
 local DamageTypes    = require(ReplicatedStorage.Shared.Health.DamageTypes)
 local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
+local SkillBuffs     = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
 local SkillInterrupt = require(ReplicatedStorage.Shared.Skills.SkillInterrupt)
 local SkillTypes     = require(ReplicatedStorage.Shared.Skills.SkillTypes)
 local FreezeVfx      = require(ReplicatedStorage.Shared.Vfx.StatusVisuals.FreezeVfx)
@@ -100,20 +101,24 @@ SkillEffects.handlers = {
 	damage = function(spec: EffectSpec, target: any, source: any): Result
 		local h = resolveHumanoid(target)
 		if not h then return { ok = false, reason = "damage requires Humanoid target" } end
+		-- Stasis-style debuffs multiply damage dealt TO this target. Applied
+		-- here rather than in each branch's arithmetic so every damage path
+		-- (applyDamage, MaxHP fraction, flat) honours it identically.
+		local amp = SkillBuffs.damageAmp(h)
 		if spec.useApplyDamage and _applyDamage then
 			_applyDamage.process({
 				sourcePlayer   = nil,
 				targetHumanoid = h,
-				baseDamage     = spec.amount or 0,
+				baseDamage     = (spec.amount or 0) * amp,
 				damageType     = spec.damageType or DamageTypes.DamageType.Bullet,
 				hitZone        = spec.hitZone or DamageTypes.HitZone.Torso,
 				timestamp      = os.clock(),
 			})
 		elseif spec.fractionOfMaxHP then
 			local fraction: number = spec.fractionOfMaxHP
-			h.Health = math.max(0, h.Health - fraction * h.MaxHealth)
+			h.Health = math.max(0, h.Health - fraction * h.MaxHealth * amp)
 		else
-			h.Health = math.max(0, h.Health - (spec.amount or 0))
+			h.Health = math.max(0, h.Health - (spec.amount or 0) * amp)
 		end
 		return { ok = true }
 	end,
@@ -200,22 +205,38 @@ SkillEffects.handlers = {
 		return { ok = true }
 	end,
 
-	-- Stubs until Phase 5.2 implements the real effects. They fail with
-	-- reason="unimplemented" so CastAction's refund path returns the mana
-	-- instead of silently draining it on a no-op.
-	shield = function(spec: EffectSpec, _target: any, _source: any): Result
-		log:info(("shield stub — durationSec=%s"):format(tostring(spec.durationSec)))
-		return { ok = false, reason = "unimplemented" }
+	-- Grants a flat absorb pool. Falls back to the source the same way
+	-- heal does, so a self-cast Shield (target=nil) lands on the caster.
+	--
+	-- The pool is only authoritative where `applyDamage` runs — the
+	-- server. A client-set attribute never replicates upward, so a shield
+	-- that isn't relayed through SpellCastService protects nothing; see
+	-- wiki/systems/SkillPipeline.md § Damage paths.
+	shield = function(spec: EffectSpec, target: any, source: any): Result
+		local h = resolveHumanoid(target) or resolveHumanoid(source)
+		if not h then return { ok = false, reason = "shield requires a Humanoid" } end
+		local amount: number = spec.amount or 0
+		if amount <= 0 then return { ok = false, reason = "shield requires a positive amount" } end
+		if not SkillBuffs.grantShield(h, amount) then
+			return { ok = false, reason = "shield target has no character Model" }
+		end
+		return { ok = true }
 	end,
 
-	buff = function(spec: EffectSpec, _target: any, _source: any): Result
-		log:info(("buff stub — kind=%s"):format(tostring(spec.kind)))
-		return { ok = false, reason = "unimplemented" }
-	end,
-
-	wall = function(spec: EffectSpec, _target: any, _source: any): Result
-		log:info(("wall stub — durationSec=%s"):format(tostring(spec.durationSec)))
-		return { ok = false, reason = "unimplemented" }
+	-- Timed stat modifier. `buffKind` names the modifier (not `kind`,
+	-- which is already taken by the effect dispatch itself).
+	buff = function(spec: EffectSpec, target: any, source: any): Result
+		local h = resolveHumanoid(target) or resolveHumanoid(source)
+		if not h then return { ok = false, reason = "buff requires a Humanoid" } end
+		local buffKind = spec.buffKind
+		if typeof(buffKind) ~= "string" then
+			return { ok = false, reason = "buff requires a buffKind" }
+		end
+		local magnitude: number = spec.magnitude or 1
+		if not SkillBuffs.applyBuff(h, buffKind :: string, magnitude, spec.durationSec) then
+			return { ok = false, reason = "buff target not resolvable" }
+		end
+		return { ok = true }
 	end,
 }
 

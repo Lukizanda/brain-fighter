@@ -1,7 +1,7 @@
 ---
 type: system
-description: Thin origin-resolver that delegates spell casting to SkillDelivery (delivery) and SkillEffects (effects). All damage/heal/freeze/stub logic lives in src/shared/Skills/. Damage against server-owned targets (boss, NPCs) must run server-side — SpellCastService relays client casts via RemoteEvent.
-updated: 2026-06-05
+description: Thin origin-resolver that delegates spell casting to SkillDelivery (delivery) and SkillEffects (effects). All damage/heal/freeze/shield/buff logic lives in src/shared/Skills/. Damage against server-owned targets (boss, NPCs) must run server-side — SpellCastService relays client casts via RemoteEvent, including target-less self-buffs and placements.
+updated: 2026-08-03
 ---
 
 # SpellExecutor
@@ -43,9 +43,8 @@ SpellExecutor.cast(
 | `heal` | `Humanoid` / `Model` / `nil` | `nil` falls back to the caster's Humanoid (self-heal). |
 | `freeze` | `Humanoid` (or `Model` containing one) | Required. `nil` → `ok=false`. |
 | `knockup` | `Humanoid` (or `Model` containing one) | Required. Launches the target's HumanoidRootPart upward. |
-| `shield` | (ignored — stub) | Returns `ok=true`. |
-| `wall` | (ignored — stub) | Returns `ok=true`; logs `durationSec`. |
-| `buff` | (ignored — stub) | Returns `ok=true`. |
+| `shield` | `Humanoid` / `Model` / `nil` | `nil` falls back to the caster (self-shield), same as `heal`. |
+| `buff` | `Humanoid` / `Model` / `nil` | `nil` falls back to the caster. |
 
 `Model`-typed targets are resolved via `FindFirstChildOfClass("Humanoid")`. A `Humanoid` whose `Parent == nil` (destroyed) is treated as missing and fails the kind's target check.
 
@@ -59,9 +58,8 @@ See `SkillEffects.luau` for the implementation. `SpellExecutor` no longer contai
 | `heal` | `target.Health += fraction × target.MaxHealth`; clamp to ≤ MaxHealth | `fractionOfMaxHP` |
 | `freeze` | Save `target.WalkSpeed`, set to 0; restore via `task.delay(durationSec, …)`. Re-freeze extends the existing freeze. On the fresh-freeze branch: also calls `SkillInterrupt.cancelCastsBy(target)` to abort pending scheduled volley shots, and `SkillInterrupt.silence(target)` so any new casts started while frozen are born cancelled. | `durationSec` |
 | `knockup` | **Real handler.** Sets the target HRP's `AssemblyLinearVelocity.Y = force` (default 50) — launches the target straight up. No registry spell uses it yet, but it's callable end-to-end. | `force` |
-| `shield` | **Stub.** `log:info("shield stub — durationSec=…")`. | `durationSec` |
-| `wall` | **Stub.** `log:info("wall stub — durationSec=…")`. | `durationSec` |
-| `buff` | **Stub.** `log:info("buff stub — kind=…")`. | — |
+| `shield` | Adds `amount` to the target's `_shield` absorb pool via `SkillBuffs.grantShield`. Additive, no expiry — drained by [[systems/Health]]'s `DamageModifierRegistry` inside `applyDamage`. | `amount` |
+| `buff` | Applies a timed stat modifier via `SkillBuffs.applyBuff`. Currently only `buffKind = "damageAmp"`, read by the `damage` handler. Re-applying the same kind refreshes rather than stacks. | `buffKind`, `magnitude`, `durationSec` |
 | anything else | `{ok=false, reason="unknown effect kind: <kind>"}` | — |
 
 Effects never raise — bad inputs come back as `{ok=false, reason=…}` so the eventual cast-flow caller can surface failure to the HUD without a pcall.
@@ -84,15 +82,17 @@ Freeze isn't just a movement debuff — fresh freezes interrupt the target's pen
 
 In-flight projectiles already on `RunService.Heartbeat` are independent of the token — they keep flying. Only *scheduling* future work is blocked. Practical effect: a Stasis cast mid-FireballVolley stops the remaining staggered shots from launching, and any new FireballVolley the boss state machine starts during the freeze fires zero shots.
 
-## Stub status (shield / wall / buff)
+## Stub status — cleared (Phase 5.2, 2026-08-03)
 
-These three kinds are present in the registry today but the supporting systems aren't built:
+All effect kinds are real. The three former stubs resolved into two implementations and one deletion:
 
-- **Shield** (Blue T2 Shield, Sanctuary's nested buff) — needs a damage-absorb pool layered on top of [[systems/Health]]. To be implemented when the absorb layer lands.
-- **Wall** (Green T2 Stone Wall) — needs the placement targeting UX from [[design/gameplay-loop|gameplay-loop]] § "Targeting" and a wall-instance lifecycle (spawn → block hits for `durationSec` → despawn). Currently the call returns `ok=true` and logs the world position so the cast-menu can be exercised end-to-end.
-- **Buff** — no prototype spell currently uses `kind="buff"` at the top level (Sanctuary's `buffSpec` is a nested shield, dispatched separately when that lands). The stub branch exists so adding a buff-typed spell to the registry doesn't require an executor change to be callable.
+- **Shield** (Blue T2 Shield, Green T3 Sanctuary) — implemented as a flat absorb pool on the character's `_shield` attribute, which [[systems/Health]]'s `DamageModifierRegistry` was already draining inside `applyDamage`. Skills grants, Health drains.
+- **Buff** — implemented as a timed per-Humanoid modifier in `SkillBuffs`. Its first consumer is Stasis's damage amp, which the registry had been declaring while the freeze handler ignored it.
+- **Wall** — **deleted.** Nothing ever dispatched it. Stone Wall is a `world_spawn` *delivery* with an empty `onImpact`; the barrier Part is the effect.
 
-Replacing a stub is a single-function swap — handler signature is `(spec, target) -> CastResult`, same as the real handlers. No callers need to change.
+Full rationale and the ownership split: [[systems/SkillPipeline]] § Defensive layer.
+
+Still outstanding for Stone Wall: the placement targeting UX from [[design/gameplay-loop|gameplay-loop]] § "Targeting". `world_spawn` honours an explicit `Vector3` target, but no cast UI supplies one, so the wall drops a fixed distance ahead of the caster's facing.
 
 ## Test
 
@@ -100,7 +100,7 @@ Replacing a stub is a single-function swap — handler signature is `(spec, targ
 
 - Damage 20% on 100 → 80; damage on 0-HP clamps; heal 15% on 50 → 65; heal cap at MaxHealth; heal `target=nil` falls back to caster.
 - Freeze 1s → `WalkSpeed=0` immediately; after `task.wait(1.15)` → `WalkSpeed` restored.
-- Shield / Wall / Buff stubs → `ok=true`.
+- Shield grants a positive absorb pool; `world_spawn` (Stone Wall) succeeds at a placement point; `buff` applies a 2× `damageAmp`.
 - Unknown kind → `ok=false`, reason mentions the kind.
 - Damage with `target=nil` → `ok=false`, reason mentions target.
 

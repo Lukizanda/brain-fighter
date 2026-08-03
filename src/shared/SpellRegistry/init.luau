@@ -36,6 +36,13 @@ export type Spec = {
 	tier: number,
 	cost: number,
 	targetingMode: TargetingMode,
+	-- True for spells that resolve on the caster (Mend, Shield, Sanctuary).
+	-- The cast UI used to infer this from color — "green means self" — which
+	-- broke the moment a self-buff shipped in another school (blue Shield),
+	-- since blue spells demand an enemy in range and pass that enemy as the
+	-- target. Read it through needsEnemyTarget rather than branching on
+	-- color anywhere.
+	selfTarget: boolean?,
 	skill: SkillTypes.SkillSpec,
 }
 
@@ -61,6 +68,26 @@ local FIREBALL_SIZE = 1.0
 local FIREBALL_IMPACT_RADIUS = 7
 local FIREBALL_DAMAGE_FRAC = 0.20
 local FIREBALL_COLOR = Color3.fromRGB(255, 90, 30)
+
+-- Defensive tuning (Phase 5.2). The shield is a flat absorb pool with no
+-- expiry — it lasts until damage eats it or the holder dies (design call
+-- 2026-08-03; add a duration here if playtest says it overstays). 40
+-- absorbs roughly two boss hits (Slam 25, projectile 15). Sanctuary
+-- reuses the pool size: its T3 premium over Shield is the full heal, not
+-- a bigger bubble.
+local SHIELD_ABSORB_POOL = 40
+local SANCTUARY_HEAL_FRAC = 1.0
+
+local STONE_WALL_DURATION_SEC = 6
+local STONE_WALL_SIZE = Vector3.new(16, 10, 2)
+local STONE_WALL_COLOR = Color3.fromRGB(120, 118, 110)
+
+local STASIS_FREEZE_SEC = 5
+-- Stasis's payload is the amp, not the freeze: damage dealt to the frozen
+-- target is doubled for the duration. Delivered as a separate `buff`
+-- effect rather than a freeze parameter so the multiplier is reusable by
+-- any future spell that amplifies without freezing.
+local STASIS_DAMAGE_AMP = 2.0
 
 local VALID_COLORS: { [string]: true } = {
 	red = true,
@@ -169,6 +196,7 @@ local SPELLS: { [Color]: { Spec } } = {
 			tier = 1,
 			cost = TIER_COSTS[1],
 			targetingMode = "auto",
+			selfTarget = true,
 			skill = {
 				name = "Mend",
 				delivery = "instant",
@@ -185,7 +213,16 @@ local SPELLS: { [Color]: { Spec } } = {
 			skill = {
 				name = "Stone Wall",
 				delivery = "world_spawn",
-				deliveryParams = { durationSec = 6 },
+				deliveryParams = {
+					durationSec = STONE_WALL_DURATION_SEC,
+					size = STONE_WALL_SIZE,
+					color = STONE_WALL_COLOR,
+					-- Attaches to the barrier itself. The usual impact-VFX
+					-- route resolves from onImpact effect kinds, which this
+					-- spell has none of.
+					cosmeticEffectId = "impact_wall",
+				},
+				-- The barrier Part IS the effect; nothing to apply on impact.
 				onImpact = {},
 			},
 		},
@@ -195,15 +232,17 @@ local SPELLS: { [Color]: { Spec } } = {
 			tier = 3,
 			cost = TIER_COSTS[3],
 			targetingMode = "auto",
+			selfTarget = true,
 			skill = {
 				name = "Sanctuary",
 				delivery = "instant",
 				deliveryParams = {},
+				-- Full heal plus a bubble. The shield component was stripped in
+				-- 5.1 because the failing stub refunded the mana while the heal
+				-- still landed; restored now that `shield` is real.
 				onImpact = {
-					-- shield component removed until 5.2 implements it: with the
-					-- stub failing (ok=false) the real heal would land AND the
-					-- mana refund — a free full heal. Re-add with the 5.2 shield.
-					{ kind = "heal", fractionOfMaxHP = 1.0 },
+					{ kind = "heal", fractionOfMaxHP = SANCTUARY_HEAL_FRAC },
+					{ kind = "shield", amount = SHIELD_ABSORB_POOL },
 				},
 			},
 		},
@@ -228,11 +267,12 @@ local SPELLS: { [Color]: { Spec } } = {
 			tier = 2,
 			cost = TIER_COSTS[2],
 			targetingMode = "auto",
+			selfTarget = true,
 			skill = {
 				name = "Shield",
 				delivery = "instant",
 				deliveryParams = {},
-				onImpact = { { kind = "shield", durationSec = 5 } },
+				onImpact = { { kind = "shield", amount = SHIELD_ABSORB_POOL } },
 			},
 		},
 		{
@@ -246,7 +286,13 @@ local SPELLS: { [Color]: { Spec } } = {
 				delivery = "instant",
 				deliveryParams = {},
 				onImpact = {
-					{ kind = "freeze", durationSec = 5, damageAmpMultiplier = 2.0 },
+					{ kind = "freeze", durationSec = STASIS_FREEZE_SEC },
+					{
+						kind = "buff",
+						buffKind = "damageAmp",
+						magnitude = STASIS_DAMAGE_AMP,
+						durationSec = STASIS_FREEZE_SEC,
+					},
 				},
 			},
 		},
@@ -286,6 +332,17 @@ function SpellRegistry.getSpell(color: Color, tier: number): Spec
 	assertValidColor(color, "getSpell")
 	assertValidTier(tier, "getSpell")
 	return SPELLS[color][tier]
+end
+
+-- Does casting this spell require an enemy locked in range?
+--
+-- False for self-buffs (they resolve on the caster) and for placement
+-- spells (they resolve on a spot in the world). Callers should treat a
+-- false here as "cast with target = nil" — SkillEffects.heal and .shield
+-- both fall back to the source, and the world_spawn delivery places
+-- relative to the caster's origin.
+function SpellRegistry.needsEnemyTarget(spec: Spec): boolean
+	return not spec.selfTarget and spec.targetingMode ~= "placement"
 end
 
 -- Returns specs of the given color whose cost <= energy, sorted by tier

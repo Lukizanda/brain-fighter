@@ -16,7 +16,8 @@
 --                 the first rig they touch, on world geometry, or on
 --                 lifetime expiry (see the handler's impactRadius notes)
 --   aoe         — after windup, scan ctx.aoeCenter for humanoids; onImpact each
---   world_spawn — stub; used for Stone Wall / terrain placements
+--   world_spawn — place a solid barrier in the world (Stone Wall);
+--                 server-only, see the handler
 --
 -- ctx.onComplete is called when the delivery fully resolves. Async
 -- handlers (projectile, aoe) use task.delay to call it after the
@@ -44,6 +45,18 @@ type DeliveryCtx = SkillTypes.DeliveryCtx
 export type Result = { ok: boolean, reason: string? }
 
 local log = Logger.new("SkillDelivery")
+
+-- world_spawn fallbacks, used when a spec omits them. The placement
+-- distance only applies to target-less casts (no placement reticle yet);
+-- far enough ahead that the wall lands between the caster and whatever
+-- they're facing rather than on top of them.
+local WALL_PLACE_DISTANCE_STUDS = 12
+local WALL_DEFAULT_DURATION_SEC = 6
+-- Downward probe that settles the wall's base on the floor. Starts above
+-- the nominal foot so a placement point already resting on the ground
+-- still finds it.
+local WALL_GROUND_PROBE_UP_STUDS = 10
+local WALL_GROUND_PROBE_DOWN_STUDS = 60
 
 ----------------------------------------------------------------------
 -- Helpers
@@ -506,16 +519,102 @@ SkillDelivery.handlers = {
 		return { ok = true }
 	end,
 
-	-- "world_spawn": stub for Stone Wall and terrain placements until
-	-- Phase 5.2. onImpact is typically empty for walls (the Part IS the
-	-- effect), so this handler — not an effect stub — is what makes the
-	-- cast fail and triggers CastAction's mana refund.
+	-- "world_spawn": place a solid barrier in the world (Stone Wall).
+	-- The Part IS the effect, so onImpact is normally empty.
+	--
+	-- Server-only by design. An anchored Part created on a client is
+	-- local to that client — it wouldn't block the server-owned boss, and
+	-- the server's own copy replicates down anyway, so spawning on both
+	-- would double the wall. The client branch returns ok so CastAction
+	-- doesn't refund a cast that the server is about to honour.
+	--
+	-- deliveryParams: durationSec, size (Vector3), color,
+	--                 placeDistanceStuds, cosmeticEffectId.
 	world_spawn = function(skill: SkillSpec, ctx: DeliveryCtx): Result
-		log:info(("world_spawn stub — %s at %s"):format(
-			skill.name, tostring(ctx.target or ctx.origin.Position)
+		local params = skill.deliveryParams
+		local onComplete = ctx.onComplete
+
+		if not RunService:IsServer() then
+			if onComplete then onComplete() end
+			return { ok = true }
+		end
+
+		-- Placement mode hands us a Vector3; until the placement reticle
+		-- ships, a target-less cast drops the wall a fixed distance ahead
+		-- of the caster, standing across their facing.
+		local placeDistance: number = params.placeDistanceStuds or WALL_PLACE_DISTANCE_STUDS
+		local footCFrame: CFrame
+		local explicitPos = typeof(ctx.target) == "Vector3" and (ctx.target :: Vector3) or nil
+		if explicitPos then
+			-- Face the wall back toward the caster so its broad side blocks.
+			local flatToCaster = Vector3.new(
+				ctx.origin.Position.X - explicitPos.X,
+				0,
+				ctx.origin.Position.Z - explicitPos.Z
+			)
+			footCFrame = flatToCaster.Magnitude > 0
+				and CFrame.lookAt(explicitPos, explicitPos + flatToCaster.Unit)
+				or CFrame.new(explicitPos)
+		else
+			-- Face off the caster's rig, not ctx.origin: origin is the staff
+			-- Tip attachment, whose LookVector tracks wherever the weapon
+			-- happens to be swung rather than where the player is looking.
+			local placeFrom = ctx.origin
+			if ctx.source and ctx.source:IsA("Model") then
+				local hrp = (ctx.source :: Model):FindFirstChild("HumanoidRootPart")
+				if hrp and hrp:IsA("BasePart") then
+					placeFrom = (hrp :: BasePart).CFrame
+				end
+			end
+			local look = placeFrom.LookVector
+			local flatLook = Vector3.new(look.X, 0, look.Z)
+			flatLook = flatLook.Magnitude > 0 and flatLook.Unit or Vector3.new(0, 0, -1)
+			local footPos = placeFrom.Position + flatLook * placeDistance
+			footCFrame = CFrame.lookAt(footPos, footPos - flatLook)
+		end
+
+		-- Drop the foot onto whatever's underneath. Both branches above
+		-- derive their height from a rig's HumanoidRootPart or a reticle
+		-- hit, either of which can sit well above the floor — without this
+		-- the wall hovers and the boss walks under it.
+		local groundParams = RaycastParams.new()
+		groundParams.FilterType = Enum.RaycastFilterType.Exclude
+		groundParams.FilterDescendantsInstances = ctx.source and { ctx.source :: Instance } or {}
+		groundParams.IgnoreWater = true
+		-- Non-negotiable: the arena is full of non-collidable trigger volumes
+		-- (SpawnZoneBox, block spawn volumes) that sit metres above the floor.
+		-- Without this the probe stops on one of them and the wall hovers in
+		-- mid-air with a gap the boss walks straight under.
+		groundParams.RespectCanCollide = true
+		local groundHit = workspace:Raycast(
+			footCFrame.Position + Vector3.new(0, WALL_GROUND_PROBE_UP_STUDS, 0),
+			Vector3.new(0, -WALL_GROUND_PROBE_DOWN_STUDS, 0),
+			groundParams
+		)
+		if groundHit then
+			footCFrame = CFrame.lookAt(groundHit.Position, groundHit.Position + footCFrame.LookVector)
+		end
+
+		local barrier = SkillVisuals.spawnBarrier(footCFrame, {
+			size             = params.size,
+			color            = params.color,
+			lifetimeSec      = params.durationSec,
+			cosmeticEffectId = params.cosmeticEffectId,
+		})
+
+		-- Effects still run if a spec declares them (e.g. a future wall
+		-- that also knocks back whatever it materialises through).
+		local result = #skill.onImpact > 0
+			and applyImpactEffects(skill, ctx.target, ctx.source)
+			or { ok = true }
+
+		log:info(("world_spawn: %s placed at %s (lifetime=%.1fs)"):format(
+			skill.name,
+			tostring(barrier.Position),
+			(params.durationSec or WALL_DEFAULT_DURATION_SEC) :: number
 		))
-		if ctx.onComplete then ctx.onComplete() end
-		return { ok = false, reason = "unimplemented" }
+		if onComplete then onComplete() end
+		return result
 	end,
 }
 

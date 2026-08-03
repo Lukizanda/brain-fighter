@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-07-27
+updated: 2026-08-03
 ---
 
 # Build Plan
@@ -154,11 +154,32 @@ The audit's Tier 1 items that survived the template cut. Small scope, gates 5.2.
 
 Make the full spell roster and AV feedback real.
 
-| Item | Detail |
-|---|---|
-| **Implement shield / wall / buff** | Replace the 5.1 `ok=false` stubs with real effects (design pass with user on behavior first). |
-| **Real SFX assets** | Replace `rbxassetid://0` placeholders (SpellMenuGui, GameplayHudGui, VfxConfig fizzle sites); work the [[systems/AudioSFX]] gap priority list. |
-| **VFX gaps** | Green cast effects + PERF guardrails from [[systems/VisualEffects]]. |
+| Item | Detail | Status |
+|---|---|---|
+| **Implement shield / wall / buff** | Replace the 5.1 `ok=false` stubs with real effects (design pass with user on behavior first). | ✅ 2026-08-03 — see below |
+| **Real SFX assets** | Replace `rbxassetid://0` placeholders (SpellMenuGui, GameplayHudGui, VfxConfig fizzle sites); work the [[systems/AudioSFX]] gap priority list. | open |
+| **VFX gaps** | Green cast effects + PERF guardrails from [[systems/VisualEffects]]. | open |
+
+#### shield / wall / buff — design pass + implementation (2026-08-03)
+
+Design decisions taken with the user, then implemented and playtest-verified. Full engineering detail in [[systems/SkillPipeline]] § Defensive layer.
+
+The three stubs resolved into two real effects and one deletion — `wall` had no consumer at all (Stone Wall is a `world_spawn` *delivery* with empty `onImpact`; the effect handler was a decoy), while `buff` had no consumer either until Stasis's damage amp became its first.
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| **Shield mechanic** | Flat absorb pool, 40 HP, **no expiry** | Reuses the `_shield` attribute that Health's `DamageModifierRegistry` already drains inside `applyDamage` — the path boss attacks take. 40 ≈ two boss hits. Indefinite by user call; add a duration if playtest says it overstays. |
+| **Self-target identification** | `selfTarget` flag on `SpellRegistry.Spec` + `needsEnemyTarget(spec)` | The cast UI inferred it from colour ("green means self"), so blue Shield demanded an enemy in range and passed *that enemy* as the target — a naive shield would have shielded the boss. |
+| **Shield authority** | Extend the existing relay to self-casts | A client-set attribute never replicates upward, so an unrelayed shield protects nothing. Overlaps cleanly with 5.4 rather than fighting it. |
+| **buff / wall fate** | Delete `wall`; make `buff` real via Stasis | Stasis declared `damageAmpMultiplier = 2.0` that the freeze handler silently ignored — a live roster lie. It's now a composed `{ freeze, buff }`. |
+| **Stone Wall** | Solid blocker, blocks everything incl. the caster, 6 s | A wall you can walk through but the boss can't reads as broken; boxing yourself in is what makes placement a decision. |
+| **Sanctuary** | Restored to full heal + shield | Stripped in 5.1 only because the failing stub refunded mana while the heal still landed. |
+
+**Verified in playtest**: Skills suite 11/11, SpellExecutor 11/11, CastAction + refund suite pass; Shield pool absorbs 25 with zero HP loss then bleeds 10 through on the second hit; Stone Wall spawns collidable and flush with the floor.
+
+**Carried forward, not done here:**
+- **No placement reticle.** `world_spawn` honours an explicit `Vector3`, but no cast UI supplies one — Stone Wall drops 12 studs ahead of the caster's facing. Reticle UX belongs to 5.3 ([[design/gameplay-loop]] § Targeting).
+- **No shield HUD.** The pool is invisible to the player. `BuffTray` exists and boots as an empty tray "awaiting adapter wiring" — that's its adapter.
 
 ### Phase 5.3 — Polish & tutorial
 
@@ -202,6 +223,7 @@ First phase after the soft launch. Decisions and rationale live in [[design/pers
 
 ## Plan changelog
 
+- **2026-08-03**: Phase 5.2 shield/wall/buff design pass + implementation landed. `shield` (40 HP absorb pool, no expiry, reusing Health's `_shield` modifier) and `buff` (timed `damageAmp`, first consumer Stasis) are real; `wall` deleted as a decoy handler; Stone Wall implemented as a server-only collidable barrier via `world_spawn`; Sanctuary restored to heal + shield; self-target identification moved from a colour heuristic to `SpellRegistry.selfTarget` / `needsEnemyTarget`, and the cast relay extended to target-less casts. 5.2 remains open on SFX assets + VFX gaps. Placement reticle and shield HUD explicitly deferred to 5.3.
 - **2026-07-27**: Phase 5.1 complete — Skills leak fix (Died/HealthChanged/Destroying purge), stub-spell refunds (`unimplemented` failures incl. `world_spawn`), damage-path split documented (unify in 5.4), Skills test suite added (4/4 in playtest). Sanctuary temporarily heal-only. Next: friends-playtest checkpoint, then 5.2 + hardening.
 - **2026-07-27**: Persistence & progression decided ([[design/persistence-progression]]) — mastery-first, ProfileStore-backed PlayerData, added as Phase 5.5 (first post-launch). One change to the 5.4 bar: AnalyticsService funnel + custom events pulled into the release gate so the soft launch can measure retention.
 - **2026-07-27**: Release bar set — public soft launch. Added Phase 5.4 (release gate): server trust hardening un-deferred, game page assets added, rollout sequence pinned (5.1 → friends checkpoint → 5.2 + hardening → tutorial/tuning → listing). R-5..R-9 and Tier 3 debt explicitly excluded from the bar.

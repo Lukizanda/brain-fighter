@@ -278,3 +278,23 @@ The swept ray is a secondary win: it closes the tunnelling gap (at 55 studs/s an
 Playtest-verified on synthetic rigs: 5-stud miss → 20 damage (impossible via the 3-stud shell, so the fuze is provably the trigger), 10-stud miss → 0, rig 3 studs behind a wall → 20 via splash, rig 29 studs behind → 0. One test-harness gotcha found along the way: `HealthService` clones any `Damageable`-tagged rig into a respawn template, and that clone sits on the aim line — the first run's `struck=2 cause=proximity` was the clone, not the fuze. Purge duplicates before asserting.
 
 Not addressed (still open): the client executes the full spell locally and the server re-executes it from its own copy of caster/target positions, so under latency the two shots diverge; and `SpellCastService` silently drops a cast whose target died in flight, after the client already spent the mana. Both belong to Phase 5.4's server-trust hardening.
+
+## [2026-08-03] ingest | Phase 5.2 — shield / wall / buff design pass + implementation
+
+The last three `unimplemented` stubs from Phase 5.1 resolved into **two real effects and one deletion**. The headline finding from the design pass is that the stub names were misleading about what the roster actually needed:
+
+- **`wall` had no consumer at all.** Stone Wall is a `world_spawn` *delivery* with an empty `onImpact` — the Part is the effect. The `wall` effect handler was a decoy; deleted.
+- **`buff` had no consumer either** — until Stasis. The registry had been declaring `freeze.damageAmpMultiplier = 2.0` while the freeze handler silently ignored it, so the roster's advertised "2× damage amp" did nothing. Stasis is now a composed `{ freeze, buff }` and `buff` is a real timed-modifier handler.
+- **`shield` was 15 lines away the whole time.** `DamageModifierRegistry.shieldModifier` in shared/Health already read and drained a `_shield` character attribute inside `applyDamage.process` — the exact path boss attacks take. The effect handler just grants the pool.
+
+Ownership therefore splits deliberately: **Skills grants the pool, Health drains it**, nothing else writes the attribute. That's the one sanctioned cross-system split, and the new shield-absorb test exists specifically to catch the two ends drifting apart — if they stop agreeing on where the pool lives, the shield silently stops working and nothing else notices.
+
+Design calls taken with the user: absorb pool of 40 (≈ two boss hits) with **no expiry** — it lasts until damage eats it or the holder dies; Stone Wall blocks *everything including the caster*; Sanctuary restored to full heal + shield. The indefinite shield is why `SkillBuffs` installs the same Died/HealthChanged/Destroying purge hooks 5.1 built for freeze — with no timer, death cleanup is the only thing between the pool and an indefinite leak.
+
+**A latent bug surfaced on the way**: self-vs-enemy targeting was inferred from spell *colour* ("green means self"), which broke the moment a self-buff shipped outside green — blue Shield demanded an enemy in range and passed *that enemy* as the target, so a naive shield would have shielded the boss. Replaced with an explicit `SpellRegistry.selfTarget` flag behind a single `needsEnemyTarget(spec)` predicate; `CastAction.resolveTapSpec` lets the HUD see which spell a tap will fire before committing. The relay now carries target-less casts, which self-buffs need (a client-set attribute never replicates upward) and Stone Wall needs (a client-spawned Part can't block the server-owned boss, so `world_spawn` is server-only).
+
+Playtest-caught: the wall's ground probe stopped on `SpawnZoneBox`, a non-collidable trigger volume, leaving the wall hovering ~9 studs up with a gap the boss walks under. `RespectCanCollide = true` on the probe fixed it — the same flag the projectile work landed for the same class of reason on the same day.
+
+Verified: Skills suite 11/11, SpellExecutor 11/11, CastAction + `cast_refund_on_failure` pass. Shield absorbs 25 with zero HP loss, then bleeds 10 through on the second 25. `cast_refund_on_failure` replaces `stub_cast_refunds`, which drove the refund guarantee through a stub that no longer exists; it now drives the same drain → refuse → refund path through a genuine rejection.
+
+**Still open in 5.2**: real SFX assets and the VFX gaps. **Deferred to 5.3**: the placement reticle (Stone Wall currently drops 12 studs ahead of the caster's facing) and a shield HUD — `BuffTray` already boots as an empty tray "awaiting adapter wiring", and this is its adapter.

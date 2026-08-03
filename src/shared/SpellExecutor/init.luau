@@ -7,9 +7,13 @@
 -- SkillDelivery.deliver(spec.skill, ctx).
 --
 -- All spell effect logic now lives in SkillEffects (damage, heal,
--- freeze, knockup, shield stubs). All delivery logic lives in
+-- freeze, knockup, shield, buff). All delivery logic lives in
 -- SkillDelivery (instant, projectile, aoe, world_spawn). This
 -- module is a thin adapter: origin resolution + ctx construction.
+--
+-- `target` is legitimately nil for self-buffs and placement spells; the
+-- effect handlers fall back to ctx.source and world_spawn places
+-- relative to the caster.
 --
 -- Origin resolution order:
 --   1. Attachment named "Tip" on the active Tool's Handle

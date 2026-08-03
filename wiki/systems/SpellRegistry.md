@@ -1,7 +1,7 @@
 ---
 type: system
 description: Pure-Luau config layer for the spell roster (R/G/B × T1–T4) — name, color, tier, cost, targeting mode, skill:SkillSpec. Single source of truth consumed by SpellExecutor and the cast-menu HUD.
-updated: 2026-06-05
+updated: 2026-08-03
 ---
 
 # SpellRegistry
@@ -42,11 +42,18 @@ export type Spec = {
   tier: number,         -- 1 | 2 | 3 | 4
   cost: number,         -- equals TIER_COSTS[tier] by design (drain == threshold)
   targetingMode: TargetingMode,
+  selfTarget: boolean?,         -- resolves on the caster (Mend, Shield, Sanctuary)
   skill: SkillTypes.SkillSpec,  -- delivery + onImpact effects
 }
 ```
 
 `skill.onImpact` is a list of `EffectSpec` entries. `skill.delivery` selects a `SkillDelivery` handler (`"instant"`, `"projectile"`, `"aoe"`, `"world_spawn"`). Adding a new spell here only requires defining the `skill` shape — no executor changes needed.
+
+### Targeting: ask, don't infer
+
+`SpellRegistry.needsEnemyTarget(spec)` is the single predicate for "does this cast need an enemy locked in range?" — false for `selfTarget` spells *and* for `placement` spells, both of which cast with `target = nil`.
+
+It exists because the cast UI used to infer this from **colour** ("green means self"), which broke the moment a self-buff shipped outside green: blue Shield demanded an enemy in range and passed *that enemy* as the target. Nothing should branch on colour to decide targeting again.
 
 ## Tier thresholds
 
@@ -67,12 +74,12 @@ Declared as `TIER_COSTS = { 5, 10, 20, 40 }` in `init.luau`. Cost and drain are 
 | Red | T2 | Fireball | `auto` | `projectile` | `damage fractionOfMaxHP=0.20` |
 | Red | T3 | Inferno | `auto` | `instant` | `damage fractionOfMaxHP=0.50` |
 | Red | T4 | Volley | `auto` | `projectile` | `damage amount=12` (3 projectiles, `staggerSec=0.12`) |
-| Green | T1 | Mend | `auto` | `instant` | `heal fractionOfMaxHP=0.15` |
-| Green | T2 | Stone Wall | `placement` | `world_spawn` | _(none; `durationSec=6`)_ |
-| Green | T3 | Sanctuary | `auto` | `instant` | `heal 100% + shield 10s` |
-| Blue | T1 | Frost Nip | `auto` | `instant` | `freeze durationSec=1` |
-| Blue | T2 | Shield | `auto` | `instant` | `shield durationSec=5` |
-| Blue | T3 | Stasis | `auto` | `instant` | `freeze durationSec=5, damageAmpMultiplier=2.0` |
+| Green | T1 | Mend | self | `instant` | `heal fractionOfMaxHP=0.15` |
+| Green | T2 | Stone Wall | `placement` | `world_spawn` | _(none; the barrier Part is the effect — `durationSec=6`)_ |
+| Green | T3 | Sanctuary | self | `instant` | `heal fractionOfMaxHP=1.0 + shield amount=40` |
+| Blue | T1 | Frost Nip | `auto` | `instant` | `freeze durationSec=3 + damage fractionOfMaxHP=0.05` |
+| Blue | T2 | Shield | self | `instant` | `shield amount=40` (no expiry) |
+| Blue | T3 | Stasis | `auto` | `instant` | `freeze durationSec=5 + buff damageAmp ×2 for 5s` |
 
 These numbers are first-prototype starting points. Tuning is expected — see [[design/gameplay-loop]] § "Playtest verification".
 

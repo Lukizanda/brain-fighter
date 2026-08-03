@@ -33,7 +33,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/WordBuffer]] — Phase 1 pure-Luau 12-slot color-tagged buffer for the word being spelled; append-on-shot, reorder, double-tap-destroy; drains on Memorize
 - [[systems/MemorizeAction]] — Phase 2 action: validate buffered word → split per-color energy into reservoirs + clear buffer; fizzle on empty (no mutation) or invalid (buffer cleared, letters consumed)
 - [[systems/SpellRegistry]] — Phase 1 config layer for the spell roster (R/G/B × T1–T4); tier costs 5/10/20/40, name/color/cost/targeting/`skill:SkillSpec`; consumed by SpellExecutor + SpellMenu HUD
-- [[systems/SpellExecutor]] — Phase 2 effect runner; dispatches `damage`/`heal`/`freeze`/`knockup` (real) and `shield`/`wall`/`buff` (stubs) against caster/target
+- [[systems/SpellExecutor]] — Phase 2 effect runner; dispatches `damage`/`heal`/`freeze`/`knockup`/`shield`/`buff` against caster/target (all real as of 5.2)
 - [[systems/MindFullManager]] — Phase 2 transition watcher over WordBuffer: rising-edge `mindFull` / falling-edge `mindFreed` signals for the shoot gate + HUD indicator
 - [[systems/CastAction]] — Phase 2 cast pipeline: `tapReservoir` (highest affordable) / `castSpecific` (chosen tier); drains reservoir, refunds on executor failure, fires `spellResolved`
 - [[systems/LetterBlock]] — Phase 3 entity: floating block prefab with `Block.Letter` + `Block.Color` attributes; chunky 4×4×4 cube with 6-face SurfaceGui letter glyph + colored ParticleEmitter; CollectionService tag drives the client bob/rotation animator (6°/s, sinusoidal bob)

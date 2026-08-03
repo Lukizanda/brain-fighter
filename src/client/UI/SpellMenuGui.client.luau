@@ -15,6 +15,7 @@ local Logger            = require(ReplicatedStorage.Shared.Core.Logger)
 local HudLayoutManager  = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
 local SpellMenuBuilder  = require(ReplicatedStorage.Shared.Hud.SpellMenuBuilder)
 local CastAction        = require(ReplicatedStorage.Shared.CastAction)
+local SpellRegistry     = require(ReplicatedStorage.Shared.SpellRegistry)
 local NPCConstants      = require(ReplicatedStorage.Shared.NPC.NPCConstants)
 local PlayerSession     = require(script.Parent.Parent.PlayerSession)
 
@@ -91,27 +92,41 @@ menu.castRequested:Connect(function(color: string)
 		return
 	end
 
-	-- Green spells (heal) self-target; red/blue need the nearest enemy.
+	-- Resolve which spell the tap will fire *before* casting, because
+	-- whether we need an enemy locked depends on the spell, not the
+	-- colour — blue Shield is a self-buff, green Stone Wall is a
+	-- placement. Asking the registry keeps that rule in one place.
+	local spec = CastAction.resolveTapSpec(color :: CastAction.Color, session.energyReservoirs)
+	if not spec then
+		log:info(string.format("Cast fizzle (%s) — reservoir below T1", color))
+		fizzleSound:Play()
+		return
+	end
+
 	local target: Model? = nil
-	if color ~= "green" then
+	if SpellRegistry.needsEnemyTarget(spec) then
 		target = findAutoTarget(character)
 		if not target then
-			log:info(string.format("Cast fizzle (%s) — no target in range", color))
+			log:info(string.format("Cast fizzle (%s) — no target in range", spec.name))
 			fizzleSound:Play()
 			return
 		end
 	end
 
-	local result = CastAction.tapReservoir(
+	local result = CastAction.castSpecific(
 		color :: CastAction.Color,
+		spec.tier,
 		session.energyReservoirs,
 		character,
 		target
 	)
 	if result.ok then
-		-- Relay to server so damage applies to the server-owned Humanoid.
-		-- Client Health writes on server-created NPCs/boss don't replicate.
-		if target and result.cast then
+		-- Relay every successful cast to the server. Offensive spells need
+		-- it because client Health writes on server-owned rigs don't
+		-- replicate; self-buffs need it because the shield pool is read by
+		-- applyDamage server-side; Stone Wall needs it because a
+		-- client-spawned Part can't block the server-owned boss.
+		if result.cast then
 			spellCastRemote:FireServer(result.cast.color, result.cast.tier, target)
 		end
 		log:info(string.format("Cast: %s -> %s", result.cast and result.cast.name or "?",

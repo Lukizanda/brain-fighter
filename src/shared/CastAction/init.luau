@@ -124,6 +124,23 @@ local function drainAndCast(
 	return fail(reason)
 end
 
+-- Which spell would a tap on this reservoir fire right now? Returns nil
+-- when the reservoir can't afford even T1.
+--
+-- Exposed because the caller has to know the spell *before* the cast in
+-- order to prepare for it — the HUD needs it to decide whether to hunt
+-- for an enemy target (see SpellRegistry.needsEnemyTarget). Keeping the
+-- selection rule here means the HUD can't drift out of sync with what
+-- tapReservoir actually picks.
+function CastAction.resolveTapSpec(
+	color: Color,
+	reservoirs: EnergyReservoirs.EnergyReservoirs
+): SpellRegistry.Spec?
+	local affordable = SpellRegistry.listAffordableSpells(color, reservoirs:get(color))
+	-- listAffordableSpells is sorted ascending; highest affordable is last.
+	return affordable[#affordable]
+end
+
 -- Tap-cast: fire the highest currently-affordable tier of `color`.
 -- Returns `{ ok = false, reason = "no affordable tier" }` when the
 -- reservoir can't even afford T1 (cost 5) — the HUD can decide
@@ -134,16 +151,12 @@ function CastAction.tapReservoir(
 	caster: Humanoid | Model,
 	target: Humanoid | Model | Vector3 | nil
 ): CastResult
-	local energy = reservoirs:get(color)
-	local affordable = SpellRegistry.listAffordableSpells(color, energy)
-	if #affordable == 0 then
-		log:info(string.format("tap fizzle — %s reservoir below T1 (energy=%d)", color, energy))
+	local spec = CastAction.resolveTapSpec(color, reservoirs)
+	if not spec then
+		log:info(string.format("tap fizzle — %s reservoir below T1 (energy=%d)", color, reservoirs:get(color)))
 		return fail(NO_AFFORDABLE_TIER)
 	end
 
-	-- listAffordableSpells is sorted ascending; highest affordable is
-	-- the last entry.
-	local spec = affordable[#affordable]
 	return drainAndCast(spec, reservoirs, caster, target)
 end
 

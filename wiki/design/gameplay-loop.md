@@ -1,7 +1,7 @@
 ---
 type: design
 description: Canonical core loop — aim, shoot letter blocks, spell words in a 12-slot buffer, cast color-typed spells that drain per-color energy reservoirs to defeat the level monster
-updated: 2026-06-05
+updated: 2026-08-03
 ---
 
 # Gameplay Loop
@@ -138,13 +138,20 @@ T4 exists for red only (Volley). Other colors top out at T3.
 | Red | T3 | Inferno | ~50% boss HP damage | instant | `auto` |
 | Red | T4 | Volley | 3 × flat-12 damage projectiles | projectile | `auto` |
 | Green | T1 | Mend | ~15% self-heal | instant | `auto` |
-| Green | T2 | Stone Wall | ~6 s wall, player-placed (stub) | world_spawn | `placement` |
-| Green | T3 | Sanctuary | Full heal + shield 10 s | instant | `auto` |
-| Blue | T1 | Frost Nip | 1 s freeze on target | instant | `auto` |
-| Blue | T2 | Shield | ~5 s damage absorb on self (stub) | instant | `auto` |
+| Green | T2 | Stone Wall | 6 s solid barrier, blocks everything | world_spawn | `placement` |
+| Green | T3 | Sanctuary | Full heal + 40 absorb | instant | self |
+| Blue | T1 | Frost Nip | 3 s freeze + 5% damage on target | instant | `auto` |
+| Blue | T2 | Shield | 40 damage absorbed on self, no expiry | instant | self |
 | Blue | T3 | Stasis | 5 s freeze + 2× damage amp | instant | `auto` |
 
 Numbers are starting points for first-prototype tuning, not final balance.
+
+All ten are implemented as of Phase 5.2 (2026-08-03). Two notes where the shipped behavior differs from the original sketch:
+
+- **The shield is an absorb pool, not a timed bubble** — 40 damage soaked, with *no* expiry; it lasts until damage eats it or you die. Sanctuary's pool is the same size, so its T3 premium over Shield is the full heal rather than a bigger bubble.
+- **Self-cast spells are marked in the registry** (`selfTarget`), not inferred from colour. Mend, Shield and Sanctuary are self-resolving and never need an enemy in range; the table's `targeting` column reads "self" for those.
+
+**Stone Wall has no placement reticle yet** — it currently drops 12 studs ahead of where the caster is facing. The ⌖ marker and second aim step described under Targeting are still outstanding (Phase 5.3).
 
 ## Worked examples
 

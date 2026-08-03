@@ -3,14 +3,19 @@
 ----------------------------------------------------------------------
 -- SkillVisuals
 ----------------------------------------------------------------------
--- Visual primitives reused across SkillDelivery handlers. Currently
--- exposes spawnShockwave(center, radius, opts): a thin neon cylinder
--- lying on the ground plane, with an optional cosmetic-effect overlay
--- attached via spawnEffect.
+-- Visual primitives reused across SkillDelivery handlers:
+--
+--   spawnShockwave(center, radius, opts) — a thin neon cylinder lying on
+--     the ground plane, with an optional cosmetic-effect overlay.
+--   spawnBarrier(footCFrame, opts)       — an anchored collidable slab
+--     standing on the ground; the Stone Wall body.
 --
 -- Lives next to SkillDelivery so handlers that need the same visual
 -- (aoe windup, projectile splash impact) share one source of truth
 -- instead of duplicating the Part construction inline.
+--
+-- spawnBarrier is the only primitive here that collides. Everything
+-- else is CanCollide = false cosmetics.
 ----------------------------------------------------------------------
 
 local Debris            = game:GetService("Debris")
@@ -25,12 +30,23 @@ local SHOCKWAVE_TRANSPARENCY    = 0.35
 local SHOCKWAVE_LIFETIME_SEC    = 0.5
 local SHOCKWAVE_Y_OFFSET        = -2
 
+local BARRIER_DEFAULT_SIZE     = Vector3.new(16, 10, 2)
+local BARRIER_DEFAULT_COLOR    = Color3.fromRGB(120, 118, 110)
+local BARRIER_DEFAULT_LIFETIME = 6
+
 export type ShockwaveOpts = {
 	color: Color3?,
 	transparency: number?,
 	lifetimeSec: number?,
 	cosmeticEffectId: string?,
 	yOffset: number?,
+}
+
+export type BarrierOpts = {
+	size: Vector3?,
+	color: Color3?,
+	lifetimeSec: number?,
+	cosmeticEffectId: string?,
 }
 
 local SkillVisuals = {}
@@ -64,6 +80,42 @@ function SkillVisuals.spawnShockwave(center: Vector3, radius: number, opts: Shoc
 	end
 
 	return shockwave
+end
+
+-- Anchored, collidable slab standing on the ground. `footCFrame` is the
+-- position and facing of the wall's *base* — the slab is raised by half
+-- its height so it rests on that point instead of being buried to the
+-- waist in it.
+--
+-- Collides with everything, including the caster. That's deliberate
+-- (design call 2026-08-03): a wall you can walk through but the boss
+-- can't reads as broken, and being able to box yourself in is what makes
+-- placement a decision.
+function SkillVisuals.spawnBarrier(footCFrame: CFrame, opts: BarrierOpts?): BasePart
+	local o           = opts or {}
+	local size        = o.size        or BARRIER_DEFAULT_SIZE
+	local color       = o.color       or BARRIER_DEFAULT_COLOR
+	local lifetimeSec = o.lifetimeSec or BARRIER_DEFAULT_LIFETIME
+
+	local barrier = Instance.new("Part")
+	barrier.Name       = "SkillBarrier"
+	barrier.Size       = size
+	barrier.CFrame     = footCFrame * CFrame.new(0, size.Y / 2, 0)
+	barrier.Anchored   = true
+	barrier.CanCollide = true
+	barrier.Color      = color
+	barrier.Material   = Enum.Material.Slate
+	barrier.Parent     = workspace
+	Debris:AddItem(barrier, lifetimeSec)
+
+	if o.cosmeticEffectId then
+		local cosmeticEffect = VfxConfig.EFFECTS[o.cosmeticEffectId]
+		if cosmeticEffect then
+			spawnEffect(cosmeticEffect, barrier)
+		end
+	end
+
+	return barrier
 end
 
 return SkillVisuals

@@ -1,12 +1,16 @@
 --!strict
 
 ----------------------------------------------------------------------
--- Skills __tests — SkillInterrupt smoke suite
+-- Skills __tests — interrupt, freeze, shield and buff registries
 ----------------------------------------------------------------------
 -- Smoke tests for the cast-token registry: begin/finish lifecycle,
 -- cancelCastsBy, silence/unsilence, and the Phase 5.1 death-cleanup
 -- hooks (Humanoid.Died / Destroying purge both registries so a
 -- mid-cast death can't leak entries).
+--
+-- Phase 5.2 adds the defensive layer: the shield absorb pool (granted by
+-- Skills, drained by Health's DamageModifierRegistry) and timed stat
+-- buffs (the damageAmp behind Stasis).
 --
 -- Run from an MCP/console harness:
 --   require(game.ReplicatedStorage.Shared.Skills.__tests).run()
@@ -17,8 +21,11 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local SkillEffects   = require(ReplicatedStorage.Shared.Skills.SkillEffects)
-local SkillInterrupt = require(ReplicatedStorage.Shared.Skills.SkillInterrupt)
+local DamageModifierRegistry = require(ReplicatedStorage.Shared.Health.DamageModifierRegistry)
+local DamageTypes            = require(ReplicatedStorage.Shared.Health.DamageTypes)
+local SkillBuffs             = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
+local SkillEffects           = require(ReplicatedStorage.Shared.Skills.SkillEffects)
+local SkillInterrupt         = require(ReplicatedStorage.Shared.Skills.SkillInterrupt)
 
 -- Died is asynchronous (state machine transition); poll up to this long.
 local DIED_TIMEOUT_SEC = 2
@@ -184,6 +191,106 @@ function M.run()
 		end
 	end
 	print("[Skills.__tests] freeze-despawn-race ok")
+
+	-- 8. Shield grants an absorb pool that DamageModifierRegistry actually
+	-- drains. This is the whole point of storing it as the `_shield`
+	-- attribute rather than in a Skills-local table — if these two ever
+	-- stop agreeing on where the pool lives, the shield silently stops
+	-- working and nothing else notices.
+	do
+		local model, humanoid = makeDummy()
+		local granted = SkillEffects.apply({ kind = "shield", amount = 40 } :: any, humanoid)
+		if not granted.ok then
+			fail("shield-absorb", "shield apply should succeed: " .. tostring(granted.reason))
+		end
+		if SkillBuffs.getShield(humanoid) ~= 40 then
+			fail("shield-absorb", "pool should read 40, got " .. tostring(SkillBuffs.getShield(humanoid)))
+		end
+
+		local finalDamage = DamageModifierRegistry.resolve({
+			sourcePlayer   = nil,
+			targetHumanoid = humanoid,
+			baseDamage     = 25,
+			damageType     = DamageTypes.DamageType.Bullet,
+			hitZone        = DamageTypes.HitZone.Torso,
+			timestamp      = os.clock(),
+		} :: any)
+		if finalDamage ~= 0 then
+			fail("shield-absorb", "25 damage into a 40 pool should reach Health as 0, got " .. tostring(finalDamage))
+		end
+		if SkillBuffs.getShield(humanoid) ~= 15 then
+			fail("shield-absorb", "pool should be 15 after absorbing 25, got " .. tostring(SkillBuffs.getShield(humanoid)))
+		end
+		model:Destroy()
+	end
+	print("[Skills.__tests] shield-absorb ok")
+
+	-- 9. Shield stacks additively (Sanctuary layered on Shield) and purges
+	-- on death. The pool has no expiry timer, so death cleanup is the only
+	-- thing standing between it and an indefinite leak.
+	do
+		local model, humanoid = makeDummy()
+		SkillEffects.apply({ kind = "shield", amount = 40 } :: any, humanoid)
+		SkillEffects.apply({ kind = "shield", amount = 40 } :: any, humanoid)
+		if SkillBuffs.getShield(humanoid) ~= 80 then
+			fail("shield-purge", "two 40 pools should stack to 80, got " .. tostring(SkillBuffs.getShield(humanoid)))
+		end
+		killDummy(humanoid)
+		if not pollUntil(function() return SkillBuffs.getShield(humanoid) == 0 end, DIED_TIMEOUT_SEC) then
+			fail("shield-purge", "shield pool should clear on death (Health <= 0)")
+		end
+		model:Destroy()
+	end
+	print("[Skills.__tests] shield-purge ok")
+
+	-- 10. A damageAmp buff multiplies damage dealt TO the target — Stasis's
+	-- actual payload. Before 5.2 the registry declared the multiplier and
+	-- the freeze handler quietly ignored it.
+	do
+		local model, humanoid = makeDummy()
+		humanoid.MaxHealth = 100
+		humanoid.Health = 100
+
+		SkillEffects.apply({ kind = "damage", amount = 10 } :: any, humanoid)
+		if humanoid.Health ~= 90 then
+			fail("damage-amp", "unbuffed 10 damage should leave 90, got " .. tostring(humanoid.Health))
+		end
+
+		local buffed = SkillEffects.apply(
+			{ kind = "buff", buffKind = "damageAmp", magnitude = 2.0, durationSec = 30 } :: any,
+			humanoid
+		)
+		if not buffed.ok then
+			fail("damage-amp", "buff apply should succeed: " .. tostring(buffed.reason))
+		end
+		SkillEffects.apply({ kind = "damage", amount = 10 } :: any, humanoid)
+		if humanoid.Health ~= 70 then
+			fail("damage-amp", "2x-amped 10 damage should leave 70, got " .. tostring(humanoid.Health))
+		end
+		model:Destroy()
+	end
+	print("[Skills.__tests] damage-amp ok")
+
+	-- 11. Buffs expire. Expiry is lazy (evaluated on read), so this also
+	-- covers the read path clearing the entry rather than leaking it.
+	do
+		local model, humanoid = makeDummy()
+		SkillEffects.apply(
+			{ kind = "buff", buffKind = "damageAmp", magnitude = 2.0, durationSec = 0.2 } :: any,
+			humanoid
+		)
+		if not SkillBuffs.hasBuff(humanoid, "damageAmp") then
+			fail("buff-expiry", "buff should be live immediately after apply")
+		end
+		if not pollUntil(function() return not SkillBuffs.hasBuff(humanoid, "damageAmp") end, DIED_TIMEOUT_SEC) then
+			fail("buff-expiry", "buff should lapse after its duration")
+		end
+		if SkillBuffs.damageAmp(humanoid) ~= 1.0 then
+			fail("buff-expiry", "lapsed buff should read back as 1.0 amp")
+		end
+		model:Destroy()
+	end
+	print("[Skills.__tests] buff-expiry ok")
 
 	print("[Skills.__tests] all scenarios passed")
 end

@@ -19,6 +19,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local SpellExecutor = require(ReplicatedStorage.Shared.SpellExecutor)
 local SpellRegistry = require(ReplicatedStorage.Shared.SpellRegistry)
+local SkillBuffs = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
 local log = Logger.new("SpellExecutor.Tests")
@@ -208,39 +209,43 @@ local cases: { { any } } = {
 			model:Destroy()
 		end,
 	},
-	-- Phase 5.1: unimplemented stubs fail (ok=false, reason="unimplemented")
-	-- so CastAction refunds the mana instead of draining it on a no-op.
-	-- 5.2 flips these expectations back when the real effects land.
+	-- Phase 5.2: shield / world_spawn / buff are real. These three were the
+	-- 5.1 "fails with unimplemented so the cast refunds" cases.
 	{
-		"shield stub (Blue T2 Shield) fails with unimplemented so cast refunds",
+		"shield (Blue T2 Shield) grants an absorb pool on the caster",
 		function()
 			local model, humanoid = makeDummy()
 			local res = SpellExecutor.cast(SpellRegistry.getSpell("blue", 2), humanoid, humanoid)
-			expectEq(res.ok, false, "ok")
-			expectContains(res.reason, "unimplemented", "reason")
+			expectEq(res.ok, true, "ok")
+			if SkillBuffs.getShield(humanoid) <= 0 then
+				error("expected a positive shield pool after casting Shield", 2)
+			end
 			model:Destroy()
 		end,
 	},
 	{
-		"wall stub (Green T2 Stone Wall) fails with unimplemented so cast refunds",
+		"world_spawn (Green T2 Stone Wall) succeeds at a placement point",
 		function()
 			local model, humanoid = makeDummy()
 			local res = SpellExecutor.cast(SpellRegistry.getSpell("green", 2), humanoid, Vector3.new(10, 0, 10))
-			expectEq(res.ok, false, "ok")
-			expectContains(res.reason, "unimplemented", "reason")
+			-- Succeeds on both VMs, but only the server spawns the barrier:
+			-- a client-side Part can't block the server-owned boss, and the
+			-- server's copy replicates down. The client branch returns ok so
+			-- CastAction doesn't refund a cast the server is about to honour.
+			expectEq(res.ok, true, "ok")
 			model:Destroy()
 		end,
 	},
 	{
-		"buff stub fails with unimplemented so cast refunds",
+		"buff applies a damageAmp that multiplies subsequent damage",
 		function()
 			local model, humanoid = makeDummy()
-			-- No pure 'buff' spell exists in the prototype roster, so we
-			-- synthesize a spec to cover the stub branch.
-			local spec = makeSpec("buff", { durationSec = 5 }, "TestBuff")
+			-- No pure 'buff' spell exists in the roster (Stasis pairs it with
+			-- a freeze), so synthesize a spec to isolate the branch.
+			local spec = makeSpec("buff", { buffKind = "damageAmp", magnitude = 2.0, durationSec = 5 }, "TestBuff")
 			local res = SpellExecutor.cast(spec, humanoid, humanoid)
-			expectEq(res.ok, false, "ok")
-			expectContains(res.reason, "unimplemented", "reason")
+			expectEq(res.ok, true, "ok")
+			expectEq(SkillBuffs.damageAmp(humanoid), 2.0, "damageAmp")
 			model:Destroy()
 		end,
 	},

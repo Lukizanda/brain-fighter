@@ -4,8 +4,8 @@
 -- spellexecutor_tests — autorunner wrapper for SpellExecutor.__tests
 ----------------------------------------------------------------------
 -- Runs the SpellExecutor case table (damage/heal/freeze plus the
--- Phase 5.1 stub expectations: shield/wall/buff fail with
--- reason="unimplemented" so casts refund).
+-- Phase 5.2 defensive effects: shield grants an absorb pool, buff
+-- applies a damageAmp, and world_spawn places a barrier).
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
