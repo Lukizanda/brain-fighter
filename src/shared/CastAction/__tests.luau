@@ -47,8 +47,8 @@ end
 -- Build a fresh dummy Model+Humanoid+HumanoidRootPart parented to `script`
 -- so it's discoverable in the explorer during a debug session but cleans
 -- up when the test calls model:Destroy(). The HRP lets resolveTargetPosition
--- succeed for projectile-delivery spells, so the executor returns ok=true
--- instead of refunding on "no resolvable target position".
+-- succeed for projectile-delivery spells, so the cast is allowed through
+-- instead of being refused on "no resolvable target position".
 local function makeDummy(initialHealth: number?): (Model, Humanoid)
 	local model = Instance.new("Model")
 	model.Name = "CastActionTestDummy"
@@ -213,23 +213,29 @@ function M.run()
 	end
 
 	-- 8. tapReservoir red=15 target=nil → Fireball is projectile; with
-	-- target=nil there's no resolvable target position, so the executor
-	-- refuses ({ok=false, reason="projectile requires a target …"}) and
-	-- CastAction REFUNDS so red ends back at 15.
+	-- target=nil there's no resolvable target position, so `canCast`
+	-- refuses ({ok=false, reason="projectile requires a target …"}) BEFORE
+	-- the drain and red is never touched.
+	--
+	-- Phase 5.6 Stage 5 inverted this: it used to drain, run the spell,
+	-- and refund on the executor's refusal. The player-visible outcome is
+	-- identical, which is why the assertions below are unchanged — see
+	-- Suites/Skills/cast_rejected_before_drain for the one that actually
+	-- distinguishes the two.
 	do
 		local model, humanoid = makeDummy()
 		local r = EnergyReservoirs.new()
 		r:add("red", 15)
 		local res = CastAction.tapReservoir("red", r, humanoid, nil)
-		assert(res.ok == false, "refund: ok should be false")
-		assert(res.reason ~= nil, "refund: reason should be present")
+		assert(res.ok == false, "refused cast: ok should be false")
+		assert(res.reason ~= nil, "refused cast: reason should be present")
 		local reason = res.reason :: string
 		assert(
 			string.find(reason, "target", 1, true) ~= nil,
-			`refund: reason should mention "target", got "{reason}"`
+			`refused cast: reason should mention "target", got "{reason}"`
 		)
-		assert(r:get("red") == 15, `refund: reservoir.red should be refunded back to 15, got {r:get("red")}`)
-		assert(nearly(humanoid.Health, TEST_MAX_HEALTH), "refund: Health untouched")
+		assert(r:get("red") == 15, `refused cast: reservoir.red should still be 15, got {r:get("red")}`)
+		assert(nearly(humanoid.Health, TEST_MAX_HEALTH), "refused cast: Health untouched")
 		model:Destroy()
 		r:destroy()
 	end

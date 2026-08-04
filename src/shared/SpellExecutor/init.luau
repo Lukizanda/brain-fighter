@@ -69,6 +69,27 @@ end
 
 local SpellExecutor = {}
 
+-- Resolve the caster Model the same way `cast` does, so a precondition
+-- check and the cast it guards agree about what the source is.
+local function resolveSource(caster: Humanoid | Model): Instance?
+	if typeof(caster) ~= "Instance" then return nil end
+	local inst = caster :: Instance
+	return if inst:IsA("Humanoid") then (inst :: Humanoid).Parent :: Instance? else inst
+end
+
+-- "Would this cast be refused?", without casting it.
+--
+-- Lets CastAction decide before it drains rather than after. Pure — no
+-- state is read that a cast would change, and nothing is written — so it
+-- is safe to call from anywhere, including a predicted run.
+function SpellExecutor.canCast(
+	spec: SpellRegistry.Spec,
+	caster: Humanoid | Model,
+	target: Humanoid | Model | Vector3 | nil
+): CastResult
+	return SkillDelivery.canDeliver(spec.skill, target, resolveSource(caster))
+end
+
 -- `run` is required rather than defaulted. A default would mean a new call
 -- site silently picks a side, which is the exact ad-hoc-ness it exists to
 -- remove — the caller always knows which run it is starting, so it says
@@ -83,11 +104,7 @@ function SpellExecutor.cast(
 ): CastResult
 	local origin = resolveSpellOrigin(caster)
 
-	local source: Instance? = nil
-	if typeof(caster) == "Instance" then
-		local inst = caster :: Instance
-		source = if inst:IsA("Humanoid") then (inst :: Humanoid).Parent :: Instance? else inst
-	end
+	local source = resolveSource(caster)
 
 	local ctx: SkillTypes.DeliveryCtx = {
 		origin = origin,

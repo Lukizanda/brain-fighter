@@ -879,3 +879,33 @@ cast broadcasting `predictedBy = <that UserId>` while the boss's 30-projectile V
 playtest broadcast `predictedBy = nil`, with the retired key absent throughout. Two-client visual
 confirmation still outstanding. Pages touched: [[design/client-server-boundary]],
 [[design/build-plan]].
+
+## [2026-08-04] ingest | Phase 5.6 Stage 5 landed + hitscan folded into the plan
+
+Two things. **(1) Hitscan.** The user flagged that hitscan spells are likely later, which directly
+undercut the stated rationale for server-only delivery ("Brain Fighter has no hitscan, so prediction
+buys ~nothing"). It changes the cost of Stage 4 for zero-travel skills but not the architecture:
+authority/prediction/presentation is exactly what hitscan needs. Consequence recorded in
+[[design/client-server-boundary]] § Zero-travel skills — Stage 6 is promoted from optional to
+**required** and becomes the prerequisite for shipping any zero-travel skill, its interface must
+carry a predicted endpoint from the start, and a contract table for a future `hitscan` delivery kind
+is pinned (prediction raycasts for a Vector3 only; never resolves a victim, never writes, never
+emits a damage number). General rule: the shorter a skill's time-to-effect, the more of its feel
+depends on predicted presentation.
+
+**(2) Stage 5 landed, ahead of Stage 3.** `SkillEffects.canApply` and `SkillDelivery.canDeliver` are
+pure precondition predicates mirroring each handler's guards; `SpellExecutor.canCast` composes them;
+`CastAction` now validates before it drains instead of draining and refunding.
+`cast_refund_on_failure` is superseded by `cast_rejected_before_drain`, which watches
+`EnergyReservoirs.changed` and asserts zero fires — the old suite compared before/after totals and
+could not distinguish "never drained" from "drained then refunded". `canDeliver` checks `onImpact`
+only for `instant` and `world_spawn`, since `projectile`/`aoe` resolve effect targets at impact and
+pre-checking them against `ctx.target` would refuse a Fireball aimed at open ground. The refund path
+survives as a warning backstop rather than being deleted, so a precondition that drifts from its
+handler is loud instead of silent. **Ordering correction:** Stage 5 had to precede Stage 3 — Stage 3
+makes predicted effects return `ok = true`, which is exactly what the refund read, so the original
+order would have silently eaten mana on unresolvable casts. Found while implementing, not by
+playtest; a single-player Studio session cannot see it, because the cast still looks refused.
+Verified: Skills suite 4/4, plus `canCast` exercised against the live registry (targeted spells
+refused with real reasons on nil target; Mend's self-fallback and Stone Wall's placement still
+allowed). Pages touched: [[design/client-server-boundary]], [[design/build-plan]].

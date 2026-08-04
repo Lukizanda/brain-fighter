@@ -925,6 +925,72 @@ SkillDelivery.handlers = {
 }
 
 ----------------------------------------------------------------------
+-- Preconditions
+----------------------------------------------------------------------
+-- "Would this delivery be refused?", answered without running it.
+--
+-- One entry per delivery kind, mirroring the guards its handler runs
+-- before it commits to anything. The split that matters is WHERE each kind
+-- applies its onImpact effects:
+--
+--   instant / world_spawn — against ctx.target, synchronously. So their
+--     effects can be checked here, and their handler's return value is the
+--     effect result.
+--   projectile / aoe      — against whatever the shot or the scan finds at
+--     impact, which is not known yet and is usually not ctx.target at all.
+--     Pre-checking their effects against ctx.target would refuse a Fireball
+--     aimed at a point in space, which is legal. So they check only their
+--     own precondition; a splash that lands on nobody is a miss, not a
+--     refusal, and costs the caster their mana exactly as it does today.
+--
+-- Pure. Reads only.
+local function checkImpactEffects(skill: SkillSpec, target: any, source: any?): Result
+	for _, effectSpec in skill.onImpact do
+		local result = SkillEffects.canApply(effectSpec, target, source)
+		if not result.ok then return result end
+	end
+	return { ok = true }
+end
+
+SkillDelivery.preconditions = {
+	instant = function(skill: SkillSpec, target: any, source: any?): Result
+		return checkImpactEffects(skill, target, source)
+	end,
+
+	projectile = function(_skill: SkillSpec, target: any, _source: any?): Result
+		if not resolveTargetPosition(target) then
+			return { ok = false, reason = "projectile requires a target with a position" }
+		end
+		return { ok = true }
+	end,
+
+	-- Falls back to ctx.origin.Position when no centre is given, so there is
+	-- nothing it can be missing.
+	aoe = function(_skill: SkillSpec, _target: any, _source: any?): Result
+		return { ok = true }
+	end,
+
+	-- Places relative to the caster when target is nil, so likewise. Its
+	-- handler only runs onImpact when the spec declares any.
+	world_spawn = function(skill: SkillSpec, target: any, source: any?): Result
+		if #skill.onImpact > 0 then return checkImpactEffects(skill, target, source) end
+		return { ok = true }
+	end,
+}
+
+-- Pure precondition check for a whole skill. Takes target/source rather
+-- than a DeliveryCtx because it needs no origin, no aoeCenter and no
+-- completion callback — and because building a throwaway ctx just to ask a
+-- question would mean inventing a `mode` for a run that isn't happening.
+function SkillDelivery.canDeliver(skill: SkillSpec, target: any, source: any?): Result
+	local check = SkillDelivery.preconditions[skill.delivery]
+	if not check then
+		return { ok = false, reason = "unknown delivery kind: " .. tostring(skill.delivery) }
+	end
+	return check(skill, target, source)
+end
+
+----------------------------------------------------------------------
 -- Public API
 ----------------------------------------------------------------------
 

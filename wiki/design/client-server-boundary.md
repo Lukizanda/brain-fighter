@@ -76,7 +76,7 @@ Four concrete failure modes, each traceable to "two simulations, no marker".
 
 - **Removes:** `drawnLocallyBy` entirely; `casterUserIdFrom`; the `IsServer()` branches in `SkillVisuals` (it becomes client-draw + a thin server-side broadcast shim); the invisible-server-shot / cosmetic-client-shot split (there is only ever one Part and one cosmetic); the `world_spawn` fake-success; the `_freezeState` divergence (one VM owns it).
 - **Costs:** the caster sees their own projectile one round-trip late.
-- **Why that cost is small here:** Brain Fighter has no hitscan. Every offensive spell is a travelling projectile or a windup AoE — `aoe` has an explicit `windupSec`. A 30–100 ms delay on an object that takes 0.5–1.5 s to reach its target is inside the noise. This is the single fact that makes A viable; it would not be for a twitch shooter.
+- **Why that cost is small *for the current roster*:** Brain Fighter has no hitscan today. Every offensive spell is a travelling projectile or a windup AoE — `aoe` has an explicit `windupSec`. A 30–100 ms delay on an object that takes 0.5–1.5 s to reach its target is inside the noise. **This premise is time-limited — see "Zero-travel skills" below.**
 - **Real cost:** the refund-on-failure contract has to change. See below.
 
 ### Option B — keep the shared module, pass `mode: "authoritative" | "predicted"`
@@ -117,6 +117,34 @@ Replace it with **validate-before-drain**. Every `ok = false` reason the pipelin
 
 None depends on simulation outcome. `SpellRegistry.needsEnemyTarget` already encodes most of the target rule and `SpellCastService.server.luau:97` already uses it. So `drainAndCast`'s refund path becomes a pure precondition check that runs *before* the drain, and the refund branch — plus `world_spawn`'s fake success — both delete. Fewer moving parts than today, not more.
 
+## Zero-travel skills (hitscan)
+
+Added 2026-08-04, after the user flagged that hitscan spells are likely later. This is the one input that could have invalidated the recommendation, so it is worth being precise about what it does and does not change.
+
+**What breaks.** Option A's cost — "the caster sees their own effect one round trip late" — is negligible for a fireball that flies for 1.2 s and unacceptable for a hitscan bolt that resolves instantly. With zero travel time, the entire perceived responsiveness of the spell *is* the round trip. Click → 60 ms of nothing → tracer is read as input lag in a way no projectile ever is.
+
+**What doesn't break: the architecture.** Authority / prediction / presentation is exactly the split a hitscan skill needs; it just needs the prediction layer to actually exist, which today it doesn't. The rule generalises cleanly:
+
+> The shorter a skill's time-to-effect, the more of its feel depends on predicted presentation. A projectile can afford to have none. Hitscan cannot.
+
+So hitscan does not argue for keeping the dual simulation — it argues for finishing the job, because the dual simulation is precisely what makes a *correct* prediction layer impossible to write.
+
+**The contract for a future `hitscan` delivery kind:**
+
+| Layer | Does | Must not |
+|---|---|---|
+| Prediction (caster's client) | raycast locally **for a Vector3 only**; draw tracer muzzle→endpoint, muzzle flash, cast SFX, speculative impact spark | resolve a victim, call `SkillEffects`, write any state, emit a damage number |
+| Authority (server) | raycast authoritatively, apply damage, broadcast the real impact to everyone except `predictedBy` | assume the client's endpoint is true |
+| Presentation (all clients) | draw the broadcast impact | feed anything back into gameplay |
+
+**Why no reconciliation is needed.** A mispredicted tracer is a cosmetic with a ~100 ms lifetime. It expires before a correction could arrive, and the authoritative impact lands on its own. There is nothing to roll back because prediction never wrote anything — which is the whole point of the "prediction may only write what the predicting client already owns" rule. A mispredicted *hit marker* would be worse (it lies to the player about damage), so hit markers and damage numbers are authoritative-only, driven by the server's broadcast.
+
+**Consequences for this plan:**
+
+1. **Stage 6 is promoted from optional to required**, and is the prerequisite for shipping any hitscan skill. It is no longer "add this if Stage 4 feels bad" — it is the prediction layer, and hitscan is unshippable without it.
+2. **Its interface has to carry a predicted endpoint**, not just "play a muzzle flash". Designing it as flash-and-SFX-only would mean rewriting it when hitscan lands.
+3. `aoe` with `windupSec = 0`, and any future instant-damage spell, sit in the same bucket. The trigger is *time-to-effect*, not the literal word "hitscan".
+
 ## Migration path
 
 Each stage leaves the game shippable and is independently revertable. Stages 1–2 are safe to land before the soft launch; 3–5 are post-launch.
@@ -141,10 +169,17 @@ Each stage leaves the game shippable and is independently revertable. Stages 1�
 **Stage 4 — Make delivery authoritative-only.** `projectile` and `aoe` early-return on `predicted`, as `world_spawn` already does. The client-side Part, its swept ray, and its parallel hit detection all delete. The invisible-server-shot split collapses: there is one Part, it is the server's, it is authoritative, and every client draws its own cosmetic from the broadcast — including the caster. The three `IsServer()` guards in the projectile handler (`:419`, `:529`, `:556`) and the four in `SkillVisuals` all delete with it.
 *Done when:* a two-client playtest shows one projectile per cast on both screens, hitting the same target, with the shield block landing on the bubble surface. This is the stage that must be measured, not eyeballed.
 
-**Stage 5 — Validate before drain.** Replace the refund path in `CastAction.drainAndCast` with a precondition predicate. Delete `world_spawn`'s fake-success client branch (the whole client branch goes with Stage 4 anyway). Update the `cast_refund_on_failure` suite to a `cast_rejected_before_drain` suite.
-*Done when:* the reservoir is untouched — not drained-then-restored — for every rejection case the old suite covered.
+**Stage 5 — Validate before drain.** ✅ **Done 2026-08-04, and moved ahead of Stage 3** — see the ordering note below. `SkillEffects.canApply` and `SkillDelivery.canDeliver` are pure precondition predicates mirroring each handler's guards; `SpellExecutor.canCast` composes them; `CastAction.drainAndCast` checks before it drains. `cast_refund_on_failure` is replaced by `cast_rejected_before_drain`, which watches `EnergyReservoirs.changed` and asserts **zero** fires — the old suite compared before/after totals and so could not tell "never drained" from "drained then refunded".
 
-**Stage 6 (optional, post-5.5) — Predicted cast feedback.** If Stage 3/4 latency reads poorly, add a deliberate, minimal prediction layer: the caster's client plays muzzle flash + cast SFX + HUD drain immediately, marked `predicted`, writing nothing but its own cosmetics. This is the *only* prediction the design sanctions, and it is additive on top of a clean boundary rather than a shortcut through it.
+One subtlety worth keeping: `canDeliver` validates `onImpact` effects **only** for `instant` and `world_spawn`, because those apply them against `ctx.target` synchronously. `projectile` and `aoe` resolve their effect targets at impact, so pre-checking their effects against `ctx.target` would refuse a Fireball aimed at a patch of ground, which is legal. A splash that lands on nobody stays a miss, not a refusal.
+
+The refund path is not deleted outright as originally planned — it survives as a guarded backstop that warns. It should be unreachable (`canCast` just approved the cast); if it ever fires, a precondition has drifted from the handler it mirrors, and a silent refund would hide that indefinitely.
+
+*Done:* Skills suite 4/4 including the new one. `canCast` verified directly against the live registry — targeted spells refused with their real reasons when target is nil, self-fallback (Mend) and placement (Stone Wall) still allowed with no target.
+
+> **Ordering correction.** Stage 5 must precede Stage 3, which the original sequence had backwards. Stage 3 makes a predicted run's effects a no-op returning `ok = true`; `CastAction`'s refund read exactly that return value, so doing 3 first would have silently eaten a player's mana on every cast that could not resolve. Discovered while implementing, not by playtest — the failure is invisible in a single-player Studio session because the cast still *looks* refused.
+
+**Stage 6 — The prediction layer.** **Required, not optional** (see "Zero-travel skills"). Stage 4 deletes the client branch that currently raises the caster's muzzle flash and cast SFX (`SkillDelivery.luau:588`), so without this the caster's own cast goes quiet until the broadcast arrives — a regression that needs no playtest to predict. Build a deliberate, minimal prediction layer: on cast, the caster's client immediately plays muzzle flash, cast SFX and HUD drain, marked `predicted`, writing nothing but its own cosmetics. Give it a predicted-endpoint parameter from the start so a future `hitscan` skill can draw a tracer through it without a redesign. This is the *only* prediction the design sanctions, and it is additive on top of a clean boundary rather than a shortcut through it.
 
 ## Risks
 

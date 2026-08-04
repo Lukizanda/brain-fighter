@@ -271,6 +271,88 @@ function SkillEffects.isFrozen(target: any): boolean
 	return h ~= nil and _freezeState[h] ~= nil
 end
 
+----------------------------------------------------------------------
+-- Preconditions
+----------------------------------------------------------------------
+-- "Would this effect be refused?", answered without applying it.
+--
+-- Every reason an effect handler can return `ok = false` is knowable from
+-- (spec, target, source) alone — none of them depends on the outcome of a
+-- simulation. That is what lets CastAction check affordability and
+-- resolvability BEFORE it drains, instead of draining, running the whole
+-- thing, and refunding when it turns out the cast had nowhere to land.
+--
+-- These mirror the guards at the top of each handler exactly. They must
+-- never be STRICTER than the handler, or a cast the game would have
+-- honoured gets refused. Looser is survivable — the handler still refuses,
+-- and CastAction's backstop refunds — but the pair is meant to agree, and
+-- the Skills suite pins the ones that matter.
+--
+-- Pure. Reads only. Safe to call from a predicted run.
+local function needsTargetHumanoid(reason: string)
+	return function(_spec: EffectSpec, target: any, _source: any): Result
+		if not resolveHumanoid(target) then return { ok = false, reason = reason } end
+		return { ok = true }
+	end
+end
+
+SkillEffects.preconditions = {
+	damage  = needsTargetHumanoid("damage requires Humanoid target"),
+	freeze  = needsTargetHumanoid("freeze requires Humanoid target"),
+
+	-- knockup also needs somewhere to put the velocity.
+	knockup = function(_spec: EffectSpec, target: any, _source: any): Result
+		local h = resolveHumanoid(target)
+		if not h then return { ok = false, reason = "knockup requires Humanoid target" } end
+		local char = h.Parent
+		local hrp = char and (char :: Model):FindFirstChild("HumanoidRootPart")
+		if not hrp or not hrp:IsA("BasePart") then return { ok = false, reason = "no HumanoidRootPart" } end
+		return { ok = true }
+	end,
+
+	-- heal, shield and buff all fall back to the source, so a self-cast
+	-- with target = nil is legal for them and not for the two above.
+	heal = function(_spec: EffectSpec, target: any, source: any): Result
+		if not (resolveHumanoid(target) or resolveHumanoid(source)) then
+			return { ok = false, reason = "heal requires a Humanoid" }
+		end
+		return { ok = true }
+	end,
+
+	shield = function(spec: EffectSpec, target: any, source: any): Result
+		local h = resolveHumanoid(target) or resolveHumanoid(source)
+		if not h then return { ok = false, reason = "shield requires a Humanoid" } end
+		if (spec.amount or 0) <= 0 then
+			return { ok = false, reason = "shield requires a positive amount" }
+		end
+		-- SkillBuffs.grantShield hangs the pool off the character Model, so
+		-- a Humanoid with no Model ancestor cannot hold one.
+		if not h:FindFirstAncestorOfClass("Model") then
+			return { ok = false, reason = "shield target has no character Model" }
+		end
+		return { ok = true }
+	end,
+
+	buff = function(spec: EffectSpec, target: any, source: any): Result
+		if not (resolveHumanoid(target) or resolveHumanoid(source)) then
+			return { ok = false, reason = "buff requires a Humanoid" }
+		end
+		if typeof(spec.buffKind) ~= "string" then
+			return { ok = false, reason = "buff requires a buffKind" }
+		end
+		return { ok = true }
+	end,
+}
+
+-- Pure precondition check for one effect spec. Never mutates.
+function SkillEffects.canApply(spec: EffectSpec, target: any, source: any?): Result
+	local check = SkillEffects.preconditions[spec.kind]
+	if not check then
+		return { ok = false, reason = "unknown effect kind: " .. tostring(spec.kind) }
+	end
+	return check(spec, target, source)
+end
+
 function SkillEffects.apply(spec: EffectSpec, target: any, source: any?): Result
 	local handler = SkillEffects.handlers[spec.kind]
 	if not handler then

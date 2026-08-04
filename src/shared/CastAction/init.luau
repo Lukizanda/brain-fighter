@@ -81,9 +81,16 @@ local function success(spec: SpellRegistry.Spec): CastResult
 	}
 end
 
--- Drain → execute → refund-on-failure pipeline. Used by both
--- tapReservoir and castSpecific once the caller has nailed down a
--- concrete `spec`.
+-- Validate → drain → execute pipeline. Used by both tapReservoir and
+-- castSpecific once the caller has nailed down a concrete `spec`.
+--
+-- The order used to be drain → execute → refund if the executor refused.
+-- That worked only because the caster's client ran the whole spell itself
+-- and could see the refusal. It doesn't survive the delivery moving
+-- server-side, and it was never necessary: every reason a cast can be
+-- refused is knowable up front from (spec, target). So the check happens
+-- before the reservoir is touched, and a refused cast costs nothing
+-- because nothing was ever taken.
 --
 -- Drain MUST be guaranteed affordable by the caller before invocation
 -- (we assert with the EnergyReservoirs contract — if `drain` returns
@@ -94,6 +101,13 @@ local function drainAndCast(
 	caster: Humanoid | Model,
 	target: Humanoid | Model | Vector3 | nil
 ): CastResult
+	local resolvable = SpellExecutor.canCast(spec, caster, target)
+	if not resolvable.ok then
+		local reason = resolvable.reason or "cast cannot resolve"
+		log:info(string.format("cast refused — %s (%s)", spec.name, reason))
+		return fail(reason)
+	end
+
 	local drained = reservoirs:drain(spec.color, spec.cost)
 	if not drained then
 		-- Caller bug: didn't gate on canAfford before invoking. Report
@@ -122,11 +136,18 @@ local function drainAndCast(
 		return success(spec)
 	end
 
-	-- SpellExecutor refused (e.g. damage spell with target=nil). Refund
-	-- so the player doesn't lose mana to a downstream rejection.
+	-- Backstop, and it should be unreachable: canCast just said this would
+	-- resolve. Reaching here means a precondition in SkillEffects or
+	-- SkillDelivery disagrees with the handler it mirrors. Refund anyway —
+	-- the player shouldn't pay for our bug — and warn, because a silent
+	-- refund here would hide the drift indefinitely.
 	reservoirs:add(spec.color, spec.cost)
 	local reason = executorResult.reason or "executor returned ok=false without a reason"
-	log:info(string.format("cast refunded — %s (%s)", spec.name, reason))
+	log:warn(string.format(
+		"cast refunded — %s (%s). canCast passed but the cast refused; " ..
+		"a precondition has drifted from its handler.",
+		spec.name, reason
+	))
 	return fail(reason)
 end
 
