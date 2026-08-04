@@ -99,7 +99,7 @@ spellCastRemote.OnServerEvent:Connect(function(player: Player, color: any, tier:
 			return
 		end
 		log:info(string.format("%s cast %s on self (server apply)", player.Name, spec.name))
-		SpellExecutor.cast(spec, character, nil)
+		SpellExecutor.cast(spec, character, nil, "authoritative")
 		return
 	end
 
@@ -117,7 +117,7 @@ spellCastRemote.OnServerEvent:Connect(function(player: Player, color: any, tier:
 	end
 
 	log:info(string.format("%s cast %s on %s (server apply)", player.Name, spec.name, targetModel.Name))
-	SpellExecutor.cast(spec, character, targetModel)
+	SpellExecutor.cast(spec, character, targetModel, "authoritative")
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)

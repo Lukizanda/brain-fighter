@@ -823,3 +823,38 @@ desyncs them — the next freeze takes the extend branch and correctly declines
 to rewrite a flag it believes is already set. Drive freeze through
 `SkillEffects.apply`. Pages touched: [[systems/VisualEffects]],
 [[systems/SkillPipeline]].
+
+## [2026-08-04] ingest | Client/server boundary audit — root cause of the VFX bug streak
+
+Follow-up to `a7d4638`, in answer to "are we trying to work around the problem?" — partly yes.
+New [[design/client-server-boundary]] audits every system for dual-VM gameplay execution from the
+`require` graph plus per-file guard inspection. **Finding:** the caster's client runs the whole
+spell simulation (`CastAction/init.luau:112`) and the server runs it again
+(`SpellCastService.server.luau:102,120`); both reach the same `SkillDelivery`, spawn projectiles,
+raycast, damage and write status, with nothing marking which run is which. That is implicit client
+prediction with authoritative re-simulation, never designed as one — `drawnLocallyBy`, the
+`IsServer()` branches in `SkillVisuals`, the invisible-server-shot split and `world_spawn`'s fake
+success are all accidental complexity leaking from it. Duplication is confined to the Skills chain:
+`BlockShoot` (pure read-only helpers), `LetterBlaster` (client → remote → server destroy) and
+`BlockSpawner` (server-only) all audited clean. **Recommendation:** explicit
+authority / prediction / presentation split, server-only delivery as the destination, an explicit
+`mode: "authoritative" | "predicted"` field as the scaffold that gets there in revertable steps —
+viable because the game has no hitscan. Refund-on-failure becomes validate-before-drain, which
+deletes code rather than adding it. Recorded as Phase 5.6 in [[design/build-plan]] (six stages,
+1–2 pre-launch safe, 4 the one that can regress feel). Pages touched:
+[[design/client-server-boundary]] (new), [[design/build-plan]], [[index]]. No code changed.
+
+## [2026-08-04] ingest | Phase 5.6 Stage 1 landed — `mode` on DeliveryCtx
+
+First stage of the client/server boundary refactor ([[design/client-server-boundary]]). `SkillTypes`
+gains `DeliveryMode = "authoritative" | "predicted"` and a required `mode` field on `DeliveryCtx`;
+`SpellExecutor.cast` takes it as a required 4th argument. Deliberately no default — a default would
+let a new call site silently pick a side, which is the ad-hoc inference the field exists to remove.
+Set once per entry point: `CastAction/init.luau:112` → `"predicted"` (it is the client cast path by
+construction, draining the client-owned reservoir), `SpellCastService.server.luau:102,120` and
+`BossStates.luau:231` → `"authoritative"`. Audit confirmed only those two `DeliveryCtx` construction
+sites exist, so making the field required is total. **No behaviour change** — nothing reads `mode`
+yet and all four `RunService:IsServer()` guards in `SkillDelivery` (`:419`, `:529`, `:556`, `:855`)
+are untouched. Verified in playtest: Skills suite 4/4, SpellExecutor 11/11, CastAction refund suite
+pass, clean boot with all systems initialising. Pages touched: [[design/build-plan]] (Stage 1 marked
+done), [[design/client-server-boundary]].

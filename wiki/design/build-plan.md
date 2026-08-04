@@ -224,8 +224,32 @@ First phase after the soft launch. Decisions and rationale live in [[design/pers
 
 **Milestone:** rejoin after a session and see settings + personal bests intact; a second-device login is safely locked out mid-session (ProfileStore session lock verified).
 
+## Phase 5.6 — Client/server boundary (post-launch refactor)
+
+Added 2026-08-04 after four consecutive VFX/SFX bugs traced to one root cause. Full audit, architecture and stage-by-stage plan in [[design/client-server-boundary]].
+
+**The finding:** the caster's client runs the entire spell simulation (`CastAction` → `SpellExecutor` → `SkillDelivery`), and then the server runs it again from `SpellCastService`. Both VMs spawn projectiles, run hit detection, apply damage and write status. It is implicit client-side prediction with authoritative re-simulation that was never designed as one — no prediction layer, no reconciliation, no marker saying which run is which. The audit confirmed the duplication is confined to the Skills chain; `BlockShoot`, `LetterBlaster` and `BlockSpawner` all came back clean.
+
+**The recommendation:** an explicit **authority / prediction / presentation** split, with server-only delivery as the destination and an explicit `mode: "authoritative" | "predicted"` field as the scaffold that gets there safely. Viable because Brain Fighter has no hitscan — every offensive spell is a travelling projectile or a windup AoE, so prediction buys ~nothing.
+
+| Stage | Item | Ship window |
+|---|---|---|
+| 1 | ✅ **Done 2026-08-04.** `mode` field on `DeliveryCtx`, set once at each entry point. No behaviour change — nothing reads it yet and every `IsServer()` guard is untouched. `SpellExecutor.cast` takes it as a required 4th arg (no default: a default would let a new call site silently pick a side). `CastAction` → `"predicted"`, `SpellCastService` + `BossStates` → `"authoritative"`. Verified: Skills suite 4/4, SpellExecutor 11/11, clean boot. | Pre-launch safe (can fold into 5.3) |
+| 2 | Route visuals off `mode`; delete `drawnLocallyBy` + `casterUserIdFrom`. | Pre-launch safe |
+| 3 | `SkillEffects` / `SkillBuffs` early-return on `predicted` — damage/freeze/shield stop running twice. | Post-launch |
+| 4 | `projectile` / `aoe` early-return on `predicted` (as `world_spawn` already does). Collapses the invisible-server-shot split; deletes the `IsServer()` branches in `SkillVisuals`. **The one stage that can regress feel** — needs a friends checkpoint. | Post-launch |
+| 5 | Replace refund-on-failure with validate-before-drain. Every current `ok = false` reason is statically knowable from `(spec, target)`. | Post-launch |
+| 6 | *Optional* — deliberate predicted cast feedback (muzzle flash / SFX / HUD drain only), if Stage 4 latency reads poorly. | Post-launch, only if needed |
+
+**Not in scope:** the client-trusted affordability hole. That is a separate problem with a separate decided answer (the energy-ceiling ledger, Phase 5.4) and the two are compatible — the ledger prices casts at the remote boundary, which none of this changes.
+
+**Survives untouched:** attribute-driven status visuals (`_shield`, `_frozen`), `VfxBroadcast`, the server-side refusals in `spawnEffect` / `FreezeVfx.start`, and server-owned gameplay objects like the Stone Wall slab.
+
+**Milestone:** a two-client playtest shows exactly one projectile and one impact burst per cast on both screens, with no `RunService:IsServer()` guard remaining in `SkillVisuals`.
+
 ## Plan changelog
 
+- **2026-08-04**: Phase 5.6 added — client/server boundary refactor ([[design/client-server-boundary]]). Root-cause follow-up to the four VFX replication bugs; audit found the dual-VM simulation is confined to the Skills chain. Six stages, each independently shippable; stages 1–2 are pre-launch safe, 3–5 post-launch. Recommendation: server-only delivery as the destination, explicit `mode` field as the scaffold.
 - **2026-08-03**: Phase 5.2 shield/wall/buff design pass + implementation landed. `shield` (40 HP absorb pool, no expiry, reusing Health's `_shield` modifier) and `buff` (timed `damageAmp`, first consumer Stasis) are real; `wall` deleted as a decoy handler; Stone Wall implemented as a server-only collidable barrier via `world_spawn`; Sanctuary restored to heal + shield; self-target identification moved from a colour heuristic to `SpellRegistry.selfTarget` / `needsEnemyTarget`, and the cast relay extended to target-less casts. 5.2 remains open on SFX assets + VFX gaps. Placement reticle and shield HUD explicitly deferred to 5.3.
 - **2026-07-27**: Phase 5.1 complete — Skills leak fix (Died/HealthChanged/Destroying purge), stub-spell refunds (`unimplemented` failures incl. `world_spawn`), damage-path split documented (unify in 5.4), Skills test suite added (4/4 in playtest). Sanctuary temporarily heal-only. Next: friends-playtest checkpoint, then 5.2 + hardening.
 - **2026-07-27**: Persistence & progression decided ([[design/persistence-progression]]) — mastery-first, ProfileStore-backed PlayerData, added as Phase 5.5 (first post-launch). One change to the 5.4 bar: AnalyticsService funnel + custom events pulled into the release gate so the soft launch can measure retention.

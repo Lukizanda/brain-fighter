@@ -233,6 +233,8 @@ local AttackState: StateDefinition = {
 			target     = bossbb.targetRootPart,
 			aoeCenter  = hrp.Position,
 			source     = bossbb.npc,
+			-- Boss fire is server-only; no client predicts it.
+			mode       = "authoritative",
 			onComplete = function()
 				bbany.attackComplete = true
 			end,

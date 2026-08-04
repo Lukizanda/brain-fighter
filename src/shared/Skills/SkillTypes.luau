@@ -14,11 +14,30 @@ export type EffectSpec = {
 	[string]: any,      -- free-form params per kind
 }
 
+-- Which of the two runs of a cast this is.
+--
+-- The caster's client runs the whole pipeline and then the server runs it
+-- again (see wiki/design/client-server-boundary.md). Both runs reach the
+-- same handlers, so a handler that needs to know which one it is has had
+-- to re-derive it from RunService:IsServer(), or from "is the source a
+-- player character". This field says it outright, set once at the entry
+-- point instead of inferred at each branch.
+--
+--   "authoritative" — the run whose results are real. Owns hit detection,
+--                     damage, and every status write. Server today.
+--   "predicted"     — the caster's local run, for immediate feedback.
+--                     May only write things that client already owns.
+--
+-- Stage 1 of the migration only *carries* this; nothing reads it yet and
+-- every existing IsServer() guard is untouched.
+export type DeliveryMode = "authoritative" | "predicted"
+
 export type DeliveryCtx = {
 	origin: CFrame,         -- where the delivery starts from
 	target: any?,           -- Humanoid | Model | BasePart | Vector3 | nil
 	aoeCenter: Vector3?,    -- override for AoE center; defaults to origin.Position
 	source: Instance?,      -- the caster (Humanoid parent Model or Boss Model)
+	mode: DeliveryMode,     -- authoritative run, or the caster's predicted one
 	onComplete: (() -> ())?, -- called when the delivery fully resolves (async attacks)
 }
 
