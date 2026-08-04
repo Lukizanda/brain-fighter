@@ -12,10 +12,14 @@
 -- instances (Studio-side). Missing templates are logged once per call
 -- and skipped — the system gracefully degrades when a template was
 -- never authored for a given EffectSpec.
+--
+-- CLIENT ONLY. Calling this on the server is refused outright — see the
+-- guard below for why, and use VfxBroadcast instead.
 ----------------------------------------------------------------------
 
 local Debris            = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
 
 local Logger    = require(ReplicatedStorage.Shared.Core.Logger)
 local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
@@ -56,6 +60,10 @@ local function playSound(spec: VfxConfig.SoundSpec, anchorPart: BasePart | Attac
 		local r = spec.pitchRange
 		sound.PlaybackSpeed = r.Min + math.random() * (r.Max - r.Min)
 	end
+	-- Left at the engine defaults unless a spec asks otherwise, so tuning
+	-- one long-range cue can't quietly re-balance every close-range spell.
+	if spec.emitterSize        then sound.EmitterSize        = spec.emitterSize        end
+	if spec.rollOffMaxDistance then sound.RollOffMaxDistance = spec.rollOffMaxDistance end
 	sound.Parent = anchorPart
 	sound:Play()
 
@@ -80,6 +88,28 @@ local function applyEmitterOverrides(emitter: ParticleEmitter, spec: VfxConfig.E
 end
 
 local function spawnEffect(effectSpec: VfxConfig.EffectSpec, anchorPart: BasePart | Attachment)
+	-- Hard stop on the server, and loudly.
+	--
+	-- `ParticleEmitter:Emit()` does not replicate, so the burst that is the
+	-- whole point of most EFFECTS entries renders for nobody when this runs
+	-- server-side. What *does* replicate is the anchor, the emitter
+	-- instance, the Sound, and any rate-based emitter — enough that a
+	-- server-side call looks almost right in a playtest and completely
+	-- right in Studio's server view. Three separate fixes shipped against
+	-- that illusion before it was named (wiki/log.md, 2026-08-04).
+	--
+	-- Refusing rather than silently degrading is the point: a warning with
+	-- a traceback turns the next occurrence into a five-second fix instead
+	-- of another playtest bisect. Server callers want VfxBroadcast.
+	if RunService:IsServer() then
+		log:warnThrottled("server_call", 5, string.format(
+			"refused on the server — ParticleEmitter:Emit() does not replicate, " ..
+			"so this would render for nobody. Use VfxBroadcast.playAt/playOn instead.\n%s",
+			debug.traceback()
+		))
+		return
+	end
+
 	-- Audio first, and outside the emitters guard: several effects are
 	-- sound-only or particle-less (and the emitter-less early return used
 	-- to drop their sound silently).

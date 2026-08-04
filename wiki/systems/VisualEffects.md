@@ -2,7 +2,7 @@
 type: system
 description: Visual effects — particle effects for spell casts/impacts (shipped via VfxController + spawnEffect + cross-client broadcast), UI feedback animations, and per-color theming. World cast/impact VFX are implemented; PERF guardrails and some lanes remain planned.
 status: implemented (core); planned (PERF guardrails, collect-pop)
-updated: 2026-08-03
+updated: 2026-08-04
 ---
 
 # Visual Effects
@@ -10,11 +10,12 @@ updated: 2026-08-03
 > **Implementation status (2026-06-05).** The world-VFX core shipped — but with different module names than the plan below describes. Read this banner first; treat the rest of the page as the original design plan, accurate in intent but stale on specifics.
 >
 > **What exists on disk:**
-> - `src/shared/Vfx/VfxConfig.luau` — `COLORS`, `SFX` (sound asset ids), `EFFECTS` (cast t1–t4 red, t1–t3 blue, **t1–t3 green**, `impact_damage/heal/freeze/shield/knockup/wall/buff`, **`shield_block`**, **`shield_break`**, **`impact_damage_t2`/`impact_damage_t3`**, `projectile_red_t1/t2/t4`), and a `PERF` table.
+> - `src/shared/Vfx/VfxConfig.luau` — `COLORS`, `SFX` (sound asset ids), `EFFECTS` (cast t1–t4 red, t1–t3 blue, **t1–t3 green**, `impact_damage/heal/freeze/shield/knockup/wall/buff`, **`shield_block`**, **`shield_break`**, **`impact_damage_t2`/`impact_damage_t3`**, `projectile_red_t1/t2/t4`, **`projectile_boss_fireball`**, **`aoe_boss_groundslam`**, **`projectile_destroy`** — 2026-08-04: every `EFFECTS` entry now carries an audible placeholder `sound`, none left `UNSET`), and a `PERF` table.
 > - `src/shared/Vfx/spawnEffect.luau` — **the shared spawn engine** (cast/impact/projectile), used by *both* the client `VfxController` and `SkillDelivery`. The plan's inline `VfxController.spawnCast/spawnImpact` methods were never built that way.
 > - `src/client/Vfx/VfxController.client.luau` — plays cast VFX locally on `CastAction.spellResolved`, relays to server.
 > - `src/server/Vfx/VfxBroadcastService.server.luau` — validates + `SpellVfxEvent:FireAllClients`.
-> - `src/shared/Vfx/Remotes/*.model.json` — `BroadcastSpellVfx` / `SpellVfxEvent` / `ProjectileVfxEvent`.
+> - `src/shared/Vfx/VfxBroadcast.luau` + `src/client/Vfx/WorldVfxController.client.luau` — **the server's only legal way to make a player see or hear something** (2026-08-04). See § "Nothing player-facing runs on the server" below.
+> - `src/shared/Vfx/Remotes/*.model.json` — `BroadcastSpellVfx` / `SpellVfxEvent` / `ProjectileVfxEvent` / `WorldVfxEvent`.
 > - `src/shared/Vfx/CosmeticProjectile.luau` + `src/client/Vfx/ProjectileVfxController.client.luau` — the *seen* projectile. The authoritative shot is server-simulated and invisible; each client replays the broadcast launch parameters locally so a blocked shot dies on the shield bubble rather than ~12 studs short of it. See [[systems/SkillPipeline]] § "Projectile visuals are client-local".
 > - `src/shared/Vfx/StatusVisuals/FreezeVfx.luau` — the freeze ice-shard status visual (see [[systems/SkillPipeline]] § VFX Layers).
 > - `src/shared/Vfx/StatusVisuals/ShieldVfx.luau` + `src/client/Vfx/ShieldVfxController.client.luau` — the absorb-shield bubble. Unlike FreezeVfx it is **attribute-driven**: the controller watches `_shield` on each player character rather than being called from an effect handler, which is what gets it cross-client replication without a broadcast. See [[systems/SkillPipeline]] § "Shield — the bubble reads the attribute, not the cast".
@@ -22,6 +23,50 @@ updated: 2026-08-03
 > **Does NOT exist (fictional in the plan below):** `UiVfxController` (UI VFX live inline inside the HUD builders, not a standalone module), `src/shared/Vfx/init.luau` barrel, and `src/shared/Vfx/Templates/` (the `VfxTemplates` folder is Studio/MCP-managed, not Rojo `.model.json`).
 >
 > **Corrected contract facts:** the broadcast payload field is **`impactEffectIds: { string }`** (plural array), not `impactEffectId`; the server validates **`MAX_TIER = 4`** (not 3) and `MAX_IMPACT_EFFECT_IDS = 8`. Lifetime cleanup is **`Debris:AddItem` only** today — the §"PERF guardrails" cap/evict/throttle table and the `"VfxInstance"` Heartbeat sweep are **not implemented** (`PERF` data exists but `spawnEffect` reads none of it). The LetterBlock collect-pop is still unbuilt. Green cast entries **were** unbuilt until 2026-08-03 — `cast_green_t1..t3` now exist, and `spawnEffect` plays `EffectSpec.sound` (it previously consumed only `emitters`, so every spell was silent); `.light` and `.beam` are still ignored.
+
+## Nothing player-facing runs on the server
+
+*Added 2026-08-04, after the same bug shipped three times in a row (eb0e579, a6b94b3, b14a8c2).*
+
+The server has no screen and no speakers. Every visual and every sound a player is meant to perceive is drawn on each client.
+
+This page has said "Server creates NO Parts/Emitters" since the design landed, and it still went wrong three times — because the engine only fails at it *partially*:
+
+| Called on the server | Reaches players? |
+|---|---|
+| `ParticleEmitter:Emit()` | **No** — not replicated. This is most of `EFFECTS`. |
+| Emitter with `Enabled = true` (rate-based) | Yes — it's a property write, not a method call |
+| `Sound:Play()` on a workspace Part | Yes |
+| Creating the anchor / cosmetic Part | Yes, a replication frame late |
+
+A server-spawned effect therefore gives you the anchor, the ring and the audio but not the burst. It reads as ~80% correct in a playtest, 100% correct in Studio's server view, and leaves clean server logs. That combination is what let it survive three fix attempts.
+
+**How it's prevented now — three layers:**
+
+1. **`spawnEffect` refuses on the server** with a throttled `debug.traceback()` warning. There is no silent-degrade path left.
+2. **`VfxBroadcast` gives the server a legal alternative** — the missing piece, and the actual root cause. Before it existed, `VfxBroadcastService` only relayed *client → server → clients* for spell casts, so server-owned code (boss fire, Stone Wall) had nothing correct to reach for.
+   - `VfxBroadcast.playAt(effectId, position, drawnLocallyBy?)` — one-shot at a point
+   - `VfxBroadcast.playOn(effectId, target, drawnLocallyBy?)` — one-shot on an existing Instance
+   - `VfxBroadcast.shockwave(center, radius, opts)` — ground ring + burst
+3. **The VM branch lives in `SkillVisuals`, not at call sites.** `spawnEffectAtPoint` / `spawnEffectOn` / `spawnShockwave` broadcast on the server and draw on a client. Handlers say *what* should happen; the routing is one decision in one module rather than a guard to remember twelve times.
+
+**The one thing a caller still decides: `drawnLocallyBy`.** Delivery handlers that run on **both** VMs (`projectile`, `aoe`) pass the casting player's UserId — that player's client runs the same code and already drew the effect frame-perfectly, so the broadcast must skip them or they see two. Server-only paths (`world_spawn`, boss fire) pass nothing, so everyone receives it. Same skip `VfxController` does with `senderUserId` and `ProjectileVfxController` with `casterUserId`.
+
+**Gameplay objects are the exception, and they split rather than move.** A Stone Wall slab is collidable — it must be one server-owned object or it blocks the boss on one machine and not another. So `spawnBarrier` creates the Part server-side as before and broadcasts only its cosmetic overlay.
+
+**Broadcast fresh Parts by position, not by reference.** An Instance argument the receiving client hasn't replicated yet arrives as `nil`, and the barrier overlay fires on the same frame the Part is created — squarely inside that window. `playOn` is for long-lived targets (a character's HumanoidRootPart); `playAt` is for anything just created.
+
+**Verification standard.** A VFX/SFX change is **not** verified by server logs, `[Server]` console output, or Studio's server view. Only by what a client renders — a client-side count, a client screenshot, or the effect appearing for a second player. All three prior bugs had clean server logs while players saw nothing. a6b94b3's own commit message names it: *"the bug was only visible by measuring what the client renders."*
+
+**The other lane is fixed too (2026-08-04).** `StatusVisuals/FreezeVfx` was never *invisible* — welded Parts and tweens do replicate — but `SkillEffects.handlers.freeze` runs on both VMs and called `FreezeVfx.start` directly, so a player-cast freeze built one set of shards on the server (replicating down) and another locally on the caster, welded to the same limbs. Two overlapping ice shells read as "slightly too opaque", which is why it went unnoticed.
+
+It's now attribute-driven like `ShieldVfx`: `SkillEffects` writes `SkillConstants.FROZEN_ATTRIBUTE` (`_frozen`) on the character Model and draws nothing; `client/Vfx/FreezeVfxController` watches that flag and owns every Instance. `FreezeVfx.start` refuses on the server with a traceback, matching `spawnEffect`.
+
+Both VMs deliberately still *write* the flag. The server's write is the one that replicates, so everyone sees a frozen rig; the caster's local write never leaves that machine but paints its shards on the cast frame rather than after the round trip. When the server's value lands it matches, so no second signal fires.
+
+Unlike `ShieldVfxController` — which only binds player characters, because a shield only ever sits on a player — `FreezeVfxController` also binds every rig carrying a `SkillConstants.DAMAGEABLE_TAGS` tag. Freeze is aimed at the boss more often than at anything else. That tag list is now shared by `SkillDelivery`, `CosmeticProjectile` and the controller (it was three hand-kept copies, two of which carried comments warning they had to agree).
+
+Measured: freezing the boss draws **15** shards on the client — one set, where the old path gave 30 — and **0** on the server. Expiry through `purgeFreeze` clears the flag, the shards, and restores WalkSpeed.
 
 ## Scope
 

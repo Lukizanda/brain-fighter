@@ -1,7 +1,7 @@
 ---
 title: Audio SFX
 description: Sound effect inventory, wiring patterns, placeholder locations, and gap list for Brain Fighter
-updated: 2026-08-03
+updated: 2026-08-04
 ---
 
 # Audio SFX
@@ -70,6 +70,82 @@ the anchor (BasePart or Attachment) for 3D positional audio — deliberately
 *not* to the emitter attachment, which is destroyed on `totalDurationSec` and
 is routinely shorter than the sound. A `pitchRange` jitters `PlaybackSpeed`
 per play so one asset reused every cast doesn't get repetitive.
+
+---
+
+### Two traps that make a world SFX inaudible
+
+Both of these were live bugs, found when boss fire turned out to be silent
+despite being correctly wired. Check them before concluding an id is wrong.
+
+**1. A Sound is a child of its anchor, so it dies when the anchor dies.**
+`spawnEffect` parents its Sound to the anchor part. Hanging a *one-shot* cue
+on `cosmeticEffectId` therefore ties it to the projectile: destroy the shot
+on impact and the sound is destroyed mid-play. `cosmeticEffectId` is for
+trails, which are supposed to stop when the shot stops. One-shot cues want
+`launchEffectId` (fired at the muzzle on its own throwaway anchor, via
+`SkillVisuals.spawnEffectAtPoint`) or `destroyEffectId`.
+
+**2. Roblox's default 3D attenuation is tuned for effects that happen on
+top of you.** Default `EmitterSize` is 10 studs with Inverse rolloff, so a
+sound roughly scales by `EmitterSize / distance`. Brain engages from up to
+100 studs — that is about a tenth volume, i.e. inaudible, which is exactly
+what boss fire did. `SoundSpec` takes `emitterSize` and `rollOffMaxDistance`
+for this; both are left at engine defaults unless a spec sets them, so
+tuning a long-range cue can't quietly re-balance every close-range spell.
+
+Current long-range entries: `projectile_boss_fireball` and
+`aoe_boss_groundslam` at `emitterSize = 120` / `rollOffMaxDistance = 400`
+(past Brain's 100-stud engagement range, so attenuation stays flat across
+the arena); `projectile_destroy` at a more modest 40 / 300, since the wall a
+player is hiding behind is right next to them anyway.
+
+---
+
+### Projectile death cue (`projectile_destroy`) — 2026-08-04
+
+**Every projectile now makes a sound where it dies**, whatever killed it.
+This is an audio-readability requirement, not decoration: a player in cover
+with no line of sight to the boss needs to hear the volley land — and stop
+landing — to know when it is safe to break out. The impact burst only ever
+fired on a *direct hit*, so precisely the case where the listener can't see
+the shot (it struck the wall they're hiding behind) was the silent one.
+
+Wiring is `deliveryParams.destroyEffectId`, defaulted in `SkillDelivery` to
+`DEFAULT_DESTROY_EFFECT_ID = "projectile_destroy"`, so it covers the whole
+roster with no per-spell config. Two deliberate suppressions, both to avoid
+double-cueing a single death:
+
+| Case | Cue | Why |
+|---|---|---|
+| Splash shot (`impactRadius > 0`, e.g. Fireball) | none | `spawnShockwave` already fires on *every* detonation cause, server-side |
+| Single-target direct rig hit **with** `impactEffectId` | none | the server's impact burst already covers it |
+| Single-target direct rig hit **without** `impactEffectId` (player Volley) | `projectile_destroy` | previously silent |
+| Stopped on world geometry | `projectile_destroy` | previously silent — **the cover case** |
+| Expired mid-air | `projectile_destroy` | previously silent |
+| Died on a shield shell | `shield_block` | unchanged; already had its own cue |
+
+**Which VM plays it** matters, because both VMs run the `projectile` handler
+for a player cast (the server via `SpellCastService` → `SpellExecutor`) and
+double-playing is the easy mistake here:
+
+- `SkillDelivery.detonate()` plays it **client-VM only** — that covers the
+  caster's own shot, which is the one client that skips the broadcast.
+- Every *other* client hears it from its own `CosmeticProjectile`, which
+  reproduces the cue from `destroyEffectId` / `hasImpactCue` on the launch
+  payload.
+- Boss fire is server-only, so it never reaches the `detonate` branch at all
+  and the cosmetic is the sole source — which is what makes the boss audible
+  through a wall.
+
+`CosmeticProjectile` distinguishes wall-from-rig with a Humanoid-ancestor
+walk (`hitARig`) so a body hit stays on the server's burst while a wall
+still thuds.
+
+**Tuning note**: Brain's `FireballVolley` is `count = 30`, so this plays up
+to 30 times ~0.15 s apart. Kept quiet (`volume = 0.40`) and pitched low
+deliberately; if a volley reads as a machine-gun patter in playtest, drop
+the volume further or add a rate cap rather than removing the cue.
 
 ---
 
@@ -151,8 +227,11 @@ No sounds wired for any player lifecycle event. `CharacterSystemsLoader.client.l
 | High | FizzleSound SoundId in Studio (LetterBlaster) | 1 min — just paste ID |
 | High | Firearm empty-click (dry fire) | small — add Sound child + 2 lines in shot validation |
 | Medium | `EffectSpec.light` and `.beam` are declared but still unimplemented in `spawnEffect` (only `emitters` + `sound` are consumed) | moderate |
-| Medium | Projectile trails (`projectile_red_t1/t2/t4`) have no sound — a fireball has no whoosh in flight | needs a loopable asset |
-| Low | `impact_knockup` left at `UNSET` — no asset reads as a launch, and knockup has no gameplay handler yet either | — |
+| Medium | Projectile trails (`projectile_red_t1/t2/t4`) — 2026-08-04: now play a quiet one-shot `SFX.cast` layer at launch (no looping path in `spawnEffect`) instead of nothing; still no real continuous in-flight whoosh | needs a loopable asset |
+| Medium | Boss `FireballVolley` launch (`projectile_boss_fireball`, `SFX.bossProjectileLaunch`) and impact (`impactEffectId = "impact_damage"`) — 2026-08-04: both hooks now wired in `BossConfig` (Brain + Wizard) with an audible reused-asset stand-in, no longer `UNSET`/silent | needs purpose-made launch + hit assets |
+| Medium | Boss `GroundSlam` shockwave (`aoe_boss_groundslam`, reuses `SFX.impactHeavy`) — 2026-08-04: wired in `BossConfig.Brain`, was previously silent | needs a ground-thud asset |
+| Low | `impact_knockup` — 2026-08-04: **correction**, `knockup` has a real gameplay handler (`SkillEffects.knockup`, used by boss GroundSlam); sound was the only stub, now reuses `SFX.impactDamage` pitched up instead of `UNSET` | needs a real "launched skyward" asset |
+| ~~Low~~ **Done 2026-08-04** | Single-target projectiles that hit a wall or expired mid-air were silent — `detonate()` only played `impactEffectId` on a direct victim hit. Now every projectile death is audible via `projectile_destroy`; see "Projectile death cue" below | done |
 | Medium | Memorize success chime | new Sound in GameplayHudGui |
 | Medium | Spell cast success sound | new Sound in SpellMenuGui |
 | Medium | Firearm reload start/complete | new Sounds + wiring in weapon state machine |

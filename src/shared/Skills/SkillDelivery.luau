@@ -33,6 +33,7 @@ local RunService        = game:GetService("RunService")
 
 local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillBuffs     = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
+local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
 local SkillEffects   = require(ReplicatedStorage.Shared.Skills.SkillEffects)
 local SkillInterrupt = require(ReplicatedStorage.Shared.Skills.SkillInterrupt)
 local SkillTypes     = require(ReplicatedStorage.Shared.Skills.SkillTypes)
@@ -79,6 +80,13 @@ end
 -- VfxConfig entry played where a projectile dies on a shield shell.
 local SHIELD_BLOCK_EFFECT_ID = "shield_block"
 
+-- VfxConfig entry played where a projectile dies with nothing else to
+-- announce it — see the entry's own comment for why every shot needs an
+-- audible death. Overridable per-spell via deliveryParams.destroyEffectId;
+-- the default is what makes it apply to the whole roster without touching
+-- every spec.
+local DEFAULT_DESTROY_EFFECT_ID = "projectile_destroy"
+
 -- Tells every client to draw its own copy of a shot. Resolved lazily:
 -- SkillDelivery is required during server boot (BossService), and a
 -- module-scope WaitForChild would stall that indefinitely if the remote
@@ -94,12 +102,30 @@ local function projectileVfxRemote(): RemoteEvent?
 	return _projectileVfxEvent
 end
 
+-- UserId of the player who cast this, or nil for boss and NPC fire.
+--
+-- Every cosmetic raised from a dual-VM handler needs it. `projectile` and
+-- `aoe` run on the caster's client as well as the server, so that client
+-- draws the effect locally on the frame it fired; the server's broadcast
+-- must skip them or they see two of everything. Nil for a non-player
+-- source means no client drew anything, so everyone gets the broadcast.
+local function casterUserIdFrom(source: any): number?
+	if typeof(source) ~= "Instance" then return nil end
+	if not (source :: Instance):IsA("Model") then return nil end
+	local casterPlayer = Players:GetPlayerFromCharacter(source :: Model)
+	return casterPlayer and casterPlayer.UserId or nil
+end
+
 -- CollectionService tags whose tagged Models carry a Humanoid+HRP and
 -- should be hittable by projectile collision / splash. The project tags
 -- spawned NPCs ("NPC"), the active boss ("Boss"), and dev-mode rigs
 -- ("Damageable") — anything carrying any of these counts as a target.
 -- Player characters are NOT tagged; they're enumerated via Players.
-local DAMAGEABLE_TAGS: { string } = { "Damageable", "NPC", "Boss" }
+--
+-- Shared with FreezeVfxController, which watches the same set for the
+-- `_frozen` flag. A rig in one list but not the other would be hittable
+-- without ever drawing its status visual.
+local DAMAGEABLE_TAGS: { string } = SkillConstants.DAMAGEABLE_TAGS
 
 type Hittable = { hum: Humanoid, hrp: BasePart }
 
@@ -238,7 +264,21 @@ SkillDelivery.handlers = {
 	--   impactColor       — optional shockwave color tint. impactRadius > 0
 	--                       only.
 	--   cosmeticEffectId  — optional VfxConfig.EFFECTS key attached to
-	--                       each moving Part as a trail/glow.
+	--                       each moving Part as a trail/glow. Its Sound is
+	--                       a child of that Part, so it is cut off when the
+	--                       shot dies — trails only, not one-shot cues.
+	--   launchEffectId    — optional VfxConfig.EFFECTS key fired once at the
+	--                       muzzle, on its own anchor so the shot's death
+	--                       can't truncate it. Where a firing cue belongs.
+	--   destroyEffectId   — optional VfxConfig.EFFECTS key for a death that
+	--                       nothing else announces (wall, expiry). Defaults
+	--                       to DEFAULT_DESTROY_EFFECT_ID; ignored entirely
+	--                       for splash shots, which always cue themselves.
+	--   consumeOnHit      — default true: the first rig the shot reaches
+	--                       consumes it. False pierces — onImpact lands once
+	--                       per rig and the shot flies on. Walls, shields
+	--                       and expiry still end it. Forced true when
+	--                       impactRadius > 0.
 	projectile = function(skill: SkillSpec, ctx: DeliveryCtx): Result
 		local params = skill.deliveryParams
 		local count:          number  = params.count          or 1
@@ -253,6 +293,34 @@ SkillDelivery.handlers = {
 		local cosmeticEffectId: string? = params.cosmeticEffectId
 		local impactEffectId:   string? = params.impactEffectId
 		local impactColor:      Color3? = params.impactColor
+		-- Fired once at the muzzle, and deliberately NOT folded into
+		-- cosmeticEffectId: that one parents its Sound to the moving Part,
+		-- so the shot's own destruction cuts the sound off mid-play. A
+		-- launch cue also belongs where the shot was fired from, not
+		-- wherever it happens to be when it dies.
+		local launchEffectId: string? = params.launchEffectId
+
+		-- Does the shot end on the rig it hits?
+		--
+		-- True — the default, and what the entire roster does today — means
+		-- the first rig a shot reaches consumes it. False makes it pierce:
+		-- onImpact lands on that rig once, the rig stops blocking it, and it
+		-- carries on to whatever is behind. Walls, shield shells and expiry
+		-- still end the shot either way.
+		--
+		-- Forced true for splash, which is not a coherent piercing weapon: a
+		-- blast that re-detonates on every rig it passes through would stack
+		-- its own damage, and impactRadius already reaches past the rig that
+		-- triggered it.
+		local consumeOnHit: boolean = if impactRadius > 0
+			then true
+			else params.consumeOnHit ~= false
+		-- Splash projectiles spawn a shockwave on *every* detonation cause,
+		-- so they already announce their own death and want no second cue.
+		-- Only single-target shots can die silently, so only they get this.
+		local destroyEffectId: string? = if impactRadius > 0
+			then nil
+			else (params.destroyEffectId or DEFAULT_DESTROY_EFFECT_ID)
 		local sizeRaw                 = params.size            or 1.5
 		local sizeVec: Vector3        = typeof(sizeRaw) == "Vector3"
 			and (sizeRaw :: Vector3)
@@ -274,11 +342,7 @@ SkillDelivery.handlers = {
 		-- own shot on the frame it fired, and replaying the broadcast would
 		-- put a second one alongside it. Nil for boss and NPC fire, so every
 		-- client draws those. Same pattern VfxController uses for bursts.
-		local casterUserId: number? = nil
-		if typeof(source) == "Instance" and (source :: Instance):IsA("Model") then
-			local casterPlayer = Players:GetPlayerFromCharacter(source :: Model)
-			casterUserId = casterPlayer and casterPlayer.UserId or nil
-		end
+		local casterUserId: number? = casterUserIdFrom(source)
 
 		-- Resolve a projectile's impact at hitPos, then destroy the Part.
 		--   victim ~= nil → something was struck directly (proximity shell,
@@ -289,6 +353,12 @@ SkillDelivery.handlers = {
 		-- landing a stud wide of an enemy — or expiring in mid-air — dealt
 		-- nothing at all despite a 7-stud blast radius.
 		local function detonate(part: BasePart, hitPos: Vector3, victim: Hittable?, cause: string)
+			-- Did anything below already make this death audible? Drives the
+			-- fallback cue at the end. Splash never reaches it (destroyEffectId
+			-- is nil for impactRadius > 0), so only the direct-hit branch sets
+			-- it — a single-target spec with no impactEffectId lands silently
+			-- and wants the fallback.
+			local cued = false
 			if impactRadius > 0 then
 				-- spawnShockwave anchors the impact burst to itself via
 				-- cosmeticEffectId. collectHittables() is frame-cached, so
@@ -298,6 +368,10 @@ SkillDelivery.handlers = {
 				SkillVisuals.spawnShockwave(hitPos, impactRadius, {
 					color            = impactColor,
 					cosmeticEffectId = impactEffectId,
+					-- Both VMs reach this for a player cast; the caster's
+					-- client draws its own. Nil for boss splash, which is
+					-- server-only, so every client gets it from the broadcast.
+					drawnLocallyBy   = casterUserId,
 				})
 				local struck = 0
 				for _, h in collectHittables() do
@@ -315,11 +389,13 @@ SkillDelivery.handlers = {
 				-- Single-target: apply effects to the struck humanoid only.
 				-- Anchor the impact burst on its HRP.
 				applyImpactEffects(skill, victim.hum, source)
-				if impactEffectId then
-					local impactEffect = VfxConfig.EFFECTS[impactEffectId]
-					if impactEffect then
-						spawnEffect(impactEffect, victim.hrp)
-					end
+				-- Presence in EFFECTS still gates `cued`, not just a non-nil
+				-- id: a spec pointing at an entry that was never authored
+				-- announces nothing, and should still fall through to the
+				-- destroy cue below rather than dying silently.
+				if impactEffectId and VfxConfig.EFFECTS[impactEffectId] then
+					SkillVisuals.spawnEffectOn(impactEffectId, victim.hrp, casterUserId)
+					cued = true
 				end
 				log:info(("SkillProjectile hit %s cause=%s (skill=%s)"):format(
 					victim.hum.Parent and victim.hum.Parent.Name or "?", cause, skill.name
@@ -329,6 +405,19 @@ SkillDelivery.handlers = {
 				log:info(("SkillProjectile spent @ %s cause=%s (skill=%s)"):format(
 					tostring(hitPos), cause, skill.name
 				))
+			end
+
+			-- Give the death a sound when nothing above already did.
+			--
+			-- Client VM only, and deliberately so. Both VMs run this handler
+			-- for a player cast (see the broadcast note below), so playing it
+			-- server-side too would double it for the caster — and every
+			-- *other* client hears this shot die through its own
+			-- CosmeticProjectile, which fires the same id from the payload.
+			-- Boss fire never runs this branch at all: it is server-only, so
+			-- the cosmetic is the sole source there.
+			if destroyEffectId and not cued and not RunService:IsServer() then
+				SkillVisuals.spawnEffectAtPoint(hitPos, destroyEffectId, casterUserId)
 			end
 			part:Destroy()
 		end
@@ -351,7 +440,11 @@ SkillDelivery.handlers = {
 		-- shieldModifier untouched.
 		local function blockOnShell(part: BasePart, victim: Hittable, contact: Vector3)
 			local absorbed = SkillBuffs.consumeShield(victim.hum, SkillBuffs.SHELL_BLOCK_COST)
-			SkillVisuals.spawnEffectAtPoint(contact, SHIELD_BLOCK_EFFECT_ID)
+			-- The spark that proves the bubble worked. Boss fire is
+			-- server-only, so before the broadcast existed this burst was
+			-- emitted on the server and rendered for nobody — the shield
+			-- looked like it was doing nothing even when it was.
+			SkillVisuals.spawnEffectAtPoint(contact, SHIELD_BLOCK_EFFECT_ID, casterUserId)
 			log:info(("SkillProjectile blocked by shield on %s absorbed=%.1f left=%.1f (skill=%s)"):format(
 				victim.hum.Parent and victim.hum.Parent.Name or "?",
 				absorbed,
@@ -473,15 +566,34 @@ SkillDelivery.handlers = {
 							color            = color,
 							lifetimeSec      = lifetimeSec,
 							cosmeticEffectId = cosmeticEffectId,
+							launchEffectId   = launchEffectId,
+							proximityRadius  = proximityRadius,
+							consumeOnHit     = consumeOnHit,
+							-- nil for splash shots, which already announce
+							-- every death server-side via the shockwave.
+							destroyEffectId  = destroyEffectId,
+							-- Not for playback — it tells the cosmetic whether
+							-- a *direct rig hit* is already covered by the
+							-- server's impact burst, so it can stay quiet for
+							-- that one cause and still thud on walls.
+							hasImpactCue     = impactEffectId ~= nil,
 							source           = source,
 						})
 					end
-				elseif cosmeticEffectId then
-					-- Trail/glow/sound that travels with the Part. Physics
-					-- ownership stays here; the visual layer lives in VfxConfig.
-					local cosmeticEffect = VfxConfig.EFFECTS[cosmeticEffectId]
-					if cosmeticEffect then
-						spawnEffect(cosmeticEffect, projectile)
+				else
+					-- The caster's own shot: this client skips its broadcast,
+					-- so both cues have to be raised here or the person firing
+					-- is the only one who doesn't hear it.
+					if launchEffectId then
+						SkillVisuals.spawnEffectAtPoint(muzzlePos, launchEffectId)
+					end
+					if cosmeticEffectId then
+						-- Trail/glow that travels with the Part. Physics
+						-- ownership stays here; the visual layer lives in VfxConfig.
+						local cosmeticEffect = VfxConfig.EFFECTS[cosmeticEffectId]
+						if cosmeticEffect then
+							spawnEffect(cosmeticEffect, projectile)
+						end
 					end
 				end
 
@@ -506,6 +618,38 @@ SkillDelivery.handlers = {
 					else { projectile :: Instance }
 				rayParams.IgnoreWater = true
 				rayParams.RespectCanCollide = true
+
+				-- Rigs this shot has already spent its effects on. Piercing
+				-- only. Without it a rig sitting inside proximityRadius is
+				-- re-damaged on every frame the shot is still overlapping it,
+				-- which for a 3-stud radius is several frames of free hits.
+				local pierced: { [Humanoid]: true } = {}
+
+				-- Land the shot's effects on a rig and keep flying. Adding the
+				-- rig to the ray filter is what physically lets it through:
+				-- otherwise the very next sweep stops on the same body again.
+				local function pierceThrough(victim: Hittable)
+					if pierced[victim.hum] then return end
+					pierced[victim.hum] = true
+
+					applyImpactEffects(skill, victim.hum, source)
+					if impactEffectId then
+						SkillVisuals.spawnEffectOn(impactEffectId, victim.hrp, casterUserId)
+					end
+
+					local rig = victim.hum.Parent
+					if rig then
+						local filter = rayParams.FilterDescendantsInstances
+						table.insert(filter, rig)
+						-- Reassigned, not mutated in place: the property returns
+						-- a copy, so appending to it alone changes nothing.
+						rayParams.FilterDescendantsInstances = filter
+					end
+
+					log:info(("SkillProjectile pierced %s (skill=%s)"):format(
+						rig and rig.Name or "?", skill.name
+					))
+				end
 
 				conn = RunService.Heartbeat:Connect(function()
 					if not projectile or not projectile.Parent then
@@ -552,33 +696,44 @@ SkillDelivery.handlers = {
 						end
 
 						if rayHit then
-							conn:Disconnect()
-							detonate(
-								projectile,
-								rayHit.Position,
-								hittableFromPart(rayHit.Instance, hittables),
-								"impact"
-							)
-							return
+							local rayVictim = hittableFromPart(rayHit.Instance, hittables)
+							-- A piercing shot passes through rigs only. Anything
+							-- the ray stopped on that isn't a rig is a wall, and
+							-- a wall ends every shot.
+							if rayVictim and not consumeOnHit then
+								pierceThrough(rayVictim)
+							else
+								conn:Disconnect()
+								detonate(projectile, rayHit.Position, rayVictim, "impact")
+								return
+							end
 						end
 					end
 					lastPos = pos
 
 					for _, h in hittables do
 						if h.hum.Parent == source then continue end -- skip caster
+						if pierced[h.hum] then continue end
 						if (h.hrp.Position - pos).Magnitude <= proximityRadius then
-							conn:Disconnect()
 							-- The shell is wider than any proximity radius in the
 							-- roster, so a shielded rig is normally caught by the
 							-- swept test above. This is the degenerate case: a
 							-- projectile that materialised inside the shell with
 							-- no step to sweep (stationary target, first frame).
+							--
+							-- A shell stops a piercing shot too: the bubble is a
+							-- barrier, not a body, and nothing gets past it.
 							if SkillBuffs.getShield(h.hum) > 0 then
+								conn:Disconnect()
 								blockOnShell(projectile, h, pos)
-							else
-								detonate(projectile, pos, h, "proximity")
+								return
 							end
-							return
+							if consumeOnHit then
+								conn:Disconnect()
+								detonate(projectile, pos, h, "proximity")
+								return
+							end
+							pierceThrough(h)
 						end
 					end
 
@@ -651,6 +806,10 @@ SkillDelivery.handlers = {
 			-- only chooses what to render.
 			SkillVisuals.spawnShockwave(center, radius, {
 				cosmeticEffectId = cosmeticEffectId,
+				-- aoe runs on both VMs like projectile does, so a player-cast
+				-- slam is drawn locally by its caster. The boss's own slam
+				-- has no player source and so reaches every client.
+				drawnLocallyBy   = casterUserIdFrom(source),
 			})
 
 			-- Apply onImpact to all players in radius

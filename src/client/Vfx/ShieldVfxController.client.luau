@@ -6,9 +6,9 @@
 -- Raises and drops the ShieldVfx bubble on every player character in
 -- sight, driven purely by the `_shield` character attribute.
 --
--- Attribute-driven rather than called from SkillEffects.shield (the way
--- freeze calls FreezeVfx.start) because the *grant* and the *drain* live
--- in different systems: SkillBuffs adds to the pool, and
+-- Attribute-driven rather than called from SkillEffects.shield because
+-- the *grant* and the *drain* live in different systems: SkillBuffs adds
+-- to the pool, and
 -- DamageModifierRegistry.shieldModifier subtracts from it inside
 -- applyDamage. A start-on-cast hook would have no matching stop-on-
 -- absorb hook. The attribute is the one place both sides meet, so

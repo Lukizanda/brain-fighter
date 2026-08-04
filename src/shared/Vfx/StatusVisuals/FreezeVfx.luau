@@ -13,12 +13,27 @@
 -- (VfxConfig.COLORS) but use a different runtime because the
 -- ParticleEmitter pipeline doesn't carry "weld parts to limbs for N
 -- seconds" semantics.
+--
+-- CLIENT ONLY, and driven by the `_frozen` attribute rather than called
+-- from the freeze handler. `client/Vfx/FreezeVfxController` is the sole
+-- caller; nothing else should invoke start/stop directly.
+--
+-- This used to run on whichever VM applied the effect, which meant a
+-- player-cast freeze built one set of shards on the server (replicating
+-- down) and another on the caster's client, welded to the same limbs.
+-- It looked *almost* right — two identical ice shells overlapping — which
+-- is why it survived so long. Welded Parts and tweens do replicate, so
+-- unlike a ParticleEmitter burst this was never invisible; it was double.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
 local TweenService      = game:GetService("TweenService")
 
+local Logger    = require(ReplicatedStorage.Shared.Core.Logger)
 local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
+
+local log = Logger.new("FreezeVfx")
 
 -- Per-limb shards are emitted on every visible BasePart of the character.
 -- Rig-agnostic by design: R15 players, the Patroller-based bosses, and the
@@ -57,6 +72,17 @@ end
 local FreezeVfx = {}
 
 function FreezeVfx.start(humanoid: Humanoid, _durationSec: number)
+	-- Server shards would replicate down and land on top of the caster's
+	-- own local set. Refuse rather than degrade, matching `spawnEffect`:
+	-- the flag is the contract, and only clients render it.
+	if RunService:IsServer() then
+		log:warnThrottled("server_call", 5, string.format(
+			"refused on the server — freeze shards are client-drawn from the " ..
+			"`_frozen` attribute. Set the flag via SkillEffects instead.\n%s",
+			debug.traceback()
+		))
+		return
+	end
 	if _active[humanoid] then return end
 
 	local character = humanoid.Parent

@@ -28,7 +28,7 @@ local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillBuffs     = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
 local SkillInterrupt = require(ReplicatedStorage.Shared.Skills.SkillInterrupt)
 local SkillTypes     = require(ReplicatedStorage.Shared.Skills.SkillTypes)
-local FreezeVfx      = require(ReplicatedStorage.Shared.Vfx.StatusVisuals.FreezeVfx)
+local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
 
 type EffectSpec = SkillTypes.EffectSpec
 
@@ -65,6 +65,25 @@ local _freezeState: { [Humanoid]: FreezeState } = {}
 -- deadline" as expired so an extend-then-restore race can't strand state.
 local RESTORE_EPSILON_SEC = 0.01
 
+-- Raise or drop the flag that drives the ice shards.
+--
+-- This handler runs on both VMs, and deliberately writes on both. The
+-- server's write is the one that replicates, so every client sees a
+-- frozen rig; the casting client's own write never leaves that machine
+-- but paints its shards on the cast frame instead of after the round
+-- trip. When the server's value lands it matches, so no second signal
+-- fires. Same arrangement `_shield` uses — see [[systems/VisualEffects]].
+--
+-- Nothing here draws. `FreezeVfxController` owns every Instance.
+local function setFrozenFlag(h: Humanoid, frozen: boolean)
+	local character = h.Parent
+	if not character then return end
+	-- nil rather than false to clear: an attribute set to false still
+	-- exists, and a rig would accumulate one dead flag per freeze it ever
+	-- survived.
+	character:SetAttribute(SkillConstants.FROZEN_ATTRIBUTE, if frozen then true else nil)
+end
+
 -- Single teardown path for a freeze: timer expiry passes
 -- restoreSpeed=true, death/removal passes false (no point writing
 -- WalkSpeed on a dead or destroyed humanoid).
@@ -78,7 +97,7 @@ local function purgeFreeze(h: Humanoid, restoreSpeed: boolean)
 	if restoreSpeed and h.Parent then
 		h.WalkSpeed = state.originalSpeed
 	end
-	FreezeVfx.stop(h)
+	setFrozenFlag(h, false)
 	SkillInterrupt.unsilence(h)
 end
 
@@ -178,7 +197,7 @@ SkillEffects.handlers = {
 			-- already silenced when the first freeze landed.
 			SkillInterrupt.cancelCastsBy(target)
 			SkillInterrupt.silence(target)
-			FreezeVfx.start(h, duration)
+			setFrozenFlag(h, true)
 			task.delay(duration, function()
 				local s = _freezeState[h]
 				if s and os.clock() >= s.restoreAt - RESTORE_EPSILON_SEC then

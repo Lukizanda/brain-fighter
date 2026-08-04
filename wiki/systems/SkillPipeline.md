@@ -1,7 +1,7 @@
 ---
 type: system
 description: Unified data + dispatch pipeline shared by player spells and boss attacks. SkillSpec (data) + SkillEffects (effects) + SkillDelivery (deliveries), with caller-resolved origin so any caster (player, boss, future NPC) plugs in the same way.
-updated: 2026-08-03
+updated: 2026-08-04
 ---
 
 # Skill Pipeline
@@ -171,7 +171,9 @@ Both per-Humanoid registries (`SkillEffects._freezeState`, `SkillInterrupt._acti
 - **`Humanoid.HealthChanged <= 0`** — backup for `Died`: the Dead state transition never fires on partial/synthetic rigs (verified empirically — even `ChangeState(Dead)` with a neck Motor6D sticks in `FallingDown`). Purges are idempotent, so both firing is harmless.
 - **`Humanoid.Destroying`** — despawns without death. Note the place runs **deferred signal behavior**: handlers run at the next resumption point, never synchronously — anything observing a purge must poll, not assert inline.
 
-`SkillEffects.isFrozen(target)` is a read-only probe added for tests/diagnostics. On purge, freeze restores WalkSpeed only on the timer path (`purgeFreeze(h, true)`); death/despawn paths skip the write and still stop FreezeVfx and unsilence.
+`SkillEffects.isFrozen(target)` is a read-only probe added for tests/diagnostics. On purge, freeze restores WalkSpeed only on the timer path (`purgeFreeze(h, true)`); death/despawn paths skip the write and still clear the `_frozen` flag (which is what tears down the shards) and unsilence.
+
+Note the flag and `_freezeState` are separate: `_freezeState` is per-VM gameplay state, the attribute is the replicated render signal, and `setFrozenFlag` is the only thing that writes the latter. Clearing the attribute by hand — as a debug script might — desyncs them, and the next freeze takes the *extend* branch, which correctly doesn't rewrite a flag it believes is already set. Drive freeze through `SkillEffects.apply`, not through the attribute.
 
 ## Defensive layer: shield / buff / wall (Phase 5.2)
 
@@ -235,8 +237,27 @@ Server simulation fixed the penetration but introduced the mirror problem: clien
 |---|---|---|
 | Where | Server only (`SkillDelivery.projectile`) | Every client (`Vfx/CosmeticProjectile`) |
 | Visible | No — `Transparency = 1`, no trail | Yes; this is the only one anyone sees |
-| Does | Raycast, shell block, damage, pool drain | Nothing but fly and die |
+| Does | Raycast, shell block, damage, pool drain | Nothing but fly, die, and *sound* its death |
 | Physics | `LinearVelocity`, `SetNetworkOwner(nil)` | Anchored, hand-stepped per Heartbeat |
+
+The cosmetic owning the **death cue** (2026-08-04) follows from the same split: boss fire never runs a client `detonate`, so the cosmetic is the only thing that can make a shot audible to someone who can't see it. See [[systems/AudioSFX]] § "Projectile death cue" for the per-cause suppression table and the which-VM-plays-it rule — the trap being that `projectile` runs on both VMs, so an unguarded cue double-plays for the caster.
+
+### `consumeOnHit` — does the shot end on the rig it hits?
+
+`deliveryParams.consumeOnHit`, **default `true`** (2026-08-04). True is what the whole roster does and what the code always did implicitly; making it a named option is what allows a piercing shot without a second delivery kind.
+
+| | `true` (default) | `false` (pierce) |
+|---|---|---|
+| First rig reached | detonates, shot destroyed | `onImpact` lands **once**, shot flies on |
+| Walls / world geometry | ends the shot | ends the shot |
+| Shield shell | blocked, charged `SHELL_BLOCK_COST` | **also blocked** — a bubble is a barrier, not a body |
+| Expiry | ends the shot | ends the shot |
+
+Forced `true` when `impactRadius > 0`: a blast that re-detonates on every rig it passes through would stack its own damage, and the radius already reaches past whatever triggered it.
+
+Piercing needs two things that are easy to miss. A **per-shot `pierced` set**, because a rig sitting inside `proximityRadius` is otherwise re-damaged every frame the shot overlaps it — several free hits at a 3-stud radius. And the pierced rig must be **added to the ray filter**, which is what physically lets the shot continue; note `FilterDescendantsInstances` returns a *copy*, so it has to be reassigned rather than appended to in place. Both sides do this, and `CosmeticProjectile.rigFromPart` deliberately resolves the Model carrying the Humanoid rather than the nearest Model ancestor — filtering a nested accessory model would leave the rest of the body still blocking.
+
+**Every termination rule has to exist on both sides.** The authoritative shot dies on four rules — swept raycast, shield shell, an HRP within `proximityRadius`, and expiry — and the cosmetic originally implemented only the first, second and fourth. The gap was visible in play: a boss fireball is 2 studs wide against a 3-stud proximity radius, so a shot whose *centre line* passed beside a player detonated and dealt damage server-side while the copy everyone could see flew on through them. `proximityRadius` now crosses on the launch payload and the cosmetic checks it at the same point in the frame the server does. Anything added to one side's termination rules from here needs adding to the other, or damage and visuals desync again — the same coupling already called out for `SkillBuffs.shellEntry`.
 
 The server broadcasts launch parameters over `ProjectileVfxEvent`; each client replays them locally. This is safe to predict because a shot is a **straight line at constant velocity** — the client reproduces the exact path from the launch parameters alone, with no correction traffic. It is not guessing at the outcome, it is evaluating the same geometry against state it already has (`_shield` replicates, and the bubble is drawn from it). Divergence is bounded by construction: if client and server disagree about a block, the client loses a cosmetic and the server still decides who took damage.
 
@@ -278,7 +299,7 @@ The controller picks between them in `refresh` on the `isAlive` check. The disti
 
 `shatter` anchors the burst to the **root, not the bubble** — `spawnEffect` parents its emitters and its sound to whatever anchor it's handed, and the bubble is destroyed a fraction of a second later, which would cut the burst off mid-flight.
 
-It's driven by `src/client/Vfx/ShieldVfxController.client.luau` watching `GetAttributeChangedSignal(_shield)`, **not** by `SkillEffects.handlers.shield` calling into it the way `freeze` calls `FreezeVfx.start`. That's forced by the ownership split above: Skills grants the pool and Health drains it, so a start-on-cast hook would have had no matching stop-on-absorb hook. The attribute is the one place both systems meet.
+It's driven by `src/client/Vfx/ShieldVfxController.client.luau` watching `GetAttributeChangedSignal(_shield)`, **not** by `SkillEffects.handlers.shield` calling into it. That's forced by the ownership split above: Skills grants the pool and Health drains it, so a start-on-cast hook would have had no matching stop-on-absorb hook. The attribute is the one place both systems meet. Freeze was converted to the same shape on 2026-08-04 — see [[systems/VisualEffects]] — so this is now the pattern for every status visual rather than a shield-specific workaround.
 
 The same choice buys cross-client replication for free — the authoritative pool is a server write on a replicated character Model, so every client's watcher sees every player's shield with no `BroadcastSpellVfx` round trip. The casting client's own local write is what makes its bubble appear on the cast frame rather than after the relay.
 
@@ -377,12 +398,22 @@ Three distinct VFX runtimes coexist. Knowing which lane a new visual belongs in 
 | Lane | Spawn site | Lifetime | Use when… |
 |---|---|---|---|
 | **Burst VFX** | `VfxController` clones from `VfxConfig.EFFECTS` via `Shared/Vfx/spawnEffect.luau` | Fire-and-forget; `totalDurationSec` from the EffectSpec | The visual is a one-shot particle burst at cast (staff tip) or impact (target HRP). |
-| **Status visuals** | A module under `src/shared/Vfx/StatusVisuals/`, invoked either by `SkillEffects.handlers.<kind>` (`FreezeVfx`) or by a client watcher on the status's own attribute (`ShieldVfx` ← `client/Vfx/ShieldVfxController`) | Persistent welded geometry, lives for the duration of the active status; cleanup is reciprocal (`start` + `stop`) | The effect is a persistent body decoration (ice shards, burn marks, poison cloud) that must follow limbs and survive a multi-second status. Burst particles can't carry these semantics. |
+| **Status visuals** | A module under `src/shared/Vfx/StatusVisuals/`, always driven by a client watcher on the status's own attribute — `ShieldVfx` ← `client/Vfx/ShieldVfxController` (`_shield`), `FreezeVfx` ← `client/Vfx/FreezeVfxController` (`_frozen`). Never called from `SkillEffects.handlers.<kind>` directly; both modules refuse on the server. | Persistent welded geometry, lives for the duration of the active status; cleanup is reciprocal (`start` + `stop`) | The effect is a persistent body decoration (ice shards, burn marks, poison cloud) that must follow limbs and survive a multi-second status. Burst particles can't carry these semantics. |
 | **Delivery visuals** | Inline in `SkillDelivery.handlers.{projectile, aoe}` — the physical `Part` is the visual | Tied to the physics object (`Debris:AddItem`) | The visual IS the gameplay object (the projectile body, the shockwave geometry). For cosmetic upgrades (trail/glow/sound) on top, set `deliveryParams.cosmeticEffectId` and the handler attaches the corresponding `VfxConfig.EFFECTS` entry to the moving Part — physics still lives in `SkillDelivery`, the *cosmetic* layer routes through `VfxConfig`. |
 
 Color source is shared across all three lanes: `VfxConfig.COLORS.{red,green,blue}.{primary,glow,accent}`. Status visuals and delivery visuals should never hardcode a `Color3` — pull from the palette so a future red/blue retheme touches one table.
 
-Cross-client replication: burst VFX replicate explicitly (via `BroadcastSpellVfx` → `SpellVfxEvent`). Delivery visuals are local to the firing client. Status visuals depend on which driver the lane uses — freeze is local to whichever VM ran the `freeze` handler, while the attribute-driven shield bubble reaches every client for free because the attribute it watches replicates. Replicating the remaining two is a follow-up if/when it matters for gameplay readability.
+Cross-client replication: burst VFX replicate explicitly (via `BroadcastSpellVfx` → `SpellVfxEvent`, or `VfxBroadcast` → `WorldVfxEvent` for server-raised ones). Delivery visuals are local to the firing client. **Status visuals ride attribute replication** — the authoritative value is written on a replicated character Model, so every client's watcher sees it without a RemoteEvent, and a late joiner sees an already-frozen or already-shielded rig because the value is simply there when they arrive. As of 2026-08-04 both status visuals work this way; freeze used to be local to whichever VM ran the handler, which double-drew it for the caster.
+
+### Cosmetics never run on the server (2026-08-04)
+
+The rule and the full rationale live on [[systems/VisualEffects]] § "Nothing player-facing runs on the server". What matters when writing a delivery handler:
+
+- **Don't reach for `spawnEffect` directly.** It refuses on the server now (`ParticleEmitter:Emit()` doesn't replicate, so a server-side burst renders for nobody) and warns with a traceback. Use the `SkillVisuals` primitives — `spawnEffectAtPoint`, `spawnEffectOn`, `spawnShockwave` — which broadcast on the server and draw on a client. You don't branch on the VM; they do.
+- **Pass `drawnLocallyBy` from any handler that runs on both VMs.** `projectile` and `aoe` do, so the casting player's client already drew the effect and must be skipped or they see two. `casterUserIdFrom(source)` returns the right value — nil for boss/NPC fire, which is exactly when every client should receive it. `world_spawn` is server-only and passes nothing.
+- **Collidable objects stay server-owned.** `spawnBarrier` still builds the Stone Wall slab on the server (it has to be one solid object for everyone) and broadcasts only its cosmetic overlay — by position, because an Instance reference created on the same frame arrives `nil` on clients that haven't replicated it yet.
+
+Six sites were fixed when this landed, the loudest being the shield-block spark: boss fire is server-only, so that burst had been emitted where no player could see it and the bubble looked inert while it was in fact blocking every shot.
 
 ## Modularity Invariants
 

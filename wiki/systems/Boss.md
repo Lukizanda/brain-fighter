@@ -121,11 +121,11 @@ Implementations live in [[systems/SkillPipeline|SkillDelivery]] (`handlers.proje
 
 ### FireballVolley (`delivery = "projectile"`)
 
-3 Part projectiles in spread. Each is `CanCollide = false` with a `LinearVelocity` constraint — Touched doesn't fire so hit detection is a per-Heartbeat proximity check (`≤ 3 studs`). 0.15 s stagger between projectiles; `attackComplete` set via `ctx.onComplete` after all are in flight. Brain's tuning: `count=3`, `speed=40`, damage `15 HP` (`onImpact = [{kind="damage", amount=15, useApplyDamage=true}]`).
+Part projectiles in spread. Each is `CanCollide = false` with a `LinearVelocity` constraint — Touched doesn't fire so hit detection is a per-Heartbeat proximity check (`≤ 3 studs`). 0.15 s stagger between projectiles; `attackComplete` set via `ctx.onComplete` after all are in flight. Brain's tuning: `count=30`, `speed=90`, damage `15 HP` (`onImpact = [{kind="damage", amount=15, useApplyDamage=true}]`). SFX hooks added 2026-08-04, both Brain and Wizard: `deliveryParams.launchEffectId = "projectile_boss_fireball"` (fired at the muzzle on every client) and `deliveryParams.impactEffectId = "impact_damage"`. Both `VfxConfig.EFFECTS` entries are audible reused-asset stubs, not final art. The launch cue was initially hung on `cosmeticEffectId` and was inaudible for two compounding reasons — see [[systems/AudioSFX]] § "Two traps that make a world SFX inaudible"; the short version is that a Sound is a child of its anchor (so the shot's death truncated it) and default 3D rolloff scales a 100-stud-away sound to roughly a tenth volume.
 
 ### GroundSlam (`delivery = "aoe"`)
 
-0.8 s windup delay, then AOE within 12 studs. Spawns a flat Cylinder shockwave visual (Neon yellow, Debris 0.5 s). All humanoids in radius take damage and receive a knockup. `attackComplete` set via `ctx.onComplete` after total cycle. Brain's tuning: `radius=12`, `onImpact = [{kind="damage", amount=25, useApplyDamage=true}, {kind="knockup", force=...}]` — multi-effect composition.
+0.8 s windup delay, then AOE within `radius=22` studs. Spawns a flat Cylinder shockwave visual (Neon yellow, Debris 0.5 s). All humanoids in radius take damage and receive a knockup. `attackComplete` set via `ctx.onComplete` after total cycle. Brain's tuning: `onImpact = [{kind="damage", amount=25, useApplyDamage=true}, {kind="knockup", force=60}]` — multi-effect composition. `deliveryParams.cosmeticEffectId = "aoe_boss_groundslam"` (added 2026-08-04) gives the shockwave a sound stub (reuses `SFX.impactHeavy` pitched down) — was previously silent.
 
 ## Client HUD
 

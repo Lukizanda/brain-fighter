@@ -59,6 +59,25 @@ ProjectileVfxEvent.OnClientEvent:Connect(function(payload: any)
 		color            = payload.color,
 		lifetimeSec      = payload.lifetimeSec,
 		cosmeticEffectId = payload.cosmeticEffectId,
+		launchEffectId   = if typeof(payload.launchEffectId) == "string"
+			then payload.launchEffectId
+			else nil,
+		-- Guarded because it drives a per-frame distance test: a non-number
+		-- here would throw inside the Heartbeat loop rather than just
+		-- dropping one cosmetic.
+		proximityRadius  = if typeof(payload.proximityRadius) == "number"
+			then payload.proximityRadius
+			else nil,
+		-- Defaults to consuming, matching SkillDelivery: only an explicit
+		-- `false` over the wire makes the drawn shot pierce.
+		consumeOnHit     = payload.consumeOnHit ~= false,
+		-- Both optional and both only ever read as "is it set" / "is it
+		-- true", so a malformed value degrades to a missing death cue
+		-- rather than anything that can error mid-Heartbeat.
+		destroyEffectId  = if typeof(payload.destroyEffectId) == "string"
+			then payload.destroyEffectId
+			else nil,
+		hasImpactCue     = payload.hasImpactCue == true,
 		source           = payload.source,
 	})
 end)

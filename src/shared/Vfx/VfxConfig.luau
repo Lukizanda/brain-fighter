@@ -41,6 +41,13 @@ export type SoundSpec = {
 	soundId: string,
 	volume: number?,
 	pitchRange: NumberRange?,
+	-- 3D attenuation. Roblox defaults (EmitterSize 10, Inverse rolloff)
+	-- are tuned for effects that happen on top of you: at the boss's
+	-- 100-stud attack range they scale a sound to roughly a tenth of its
+	-- volume, which is what made boss fire inaudible from cover. Set both
+	-- on anything that must carry across the arena.
+	emitterSize: number?,
+	rollOffMaxDistance: number?,
 }
 
 export type EffectSpec = {
@@ -91,10 +98,11 @@ local C = VfxConfig.COLORS
 -- is the whole reason these are named constants here instead of literals
 -- buried in the EFFECTS table.
 --
--- `UNSET` is honoured by spawnEffect, which skips playback rather than
--- spamming "Unable to load sound" once per cast. Use it for anything
--- that has no defensible stand-in yet.
-local UNSET = "rbxassetid://0"
+-- 2026-08-04: every entry now points at a real (if reused/mismatched)
+-- asset rather than sitting silent — spawnEffect would skip playback for
+-- `"rbxassetid://0"`, but a stub you can't hear defeats the point of a
+-- stub. If a future effect genuinely has no defensible stand-in, that
+-- literal id is still the honoured "silent" sentinel.
 
 -- Public so UI code that plays spell feedback outside the EFFECTS table
 -- (the cast-fizzle buzzer in SpellMenuGui / GameplayHudGui) resolves its
@@ -138,6 +146,12 @@ VfxConfig.SFX = {
 	-- deflated version of the cast sound is the clearest way to say "that
 	-- cast didn't happen" without a dedicated buzzer asset.
 	fizzle = "rbxassetid://134677020800886",
+
+	-- Boss FireballVolley launch. No owned or findable asset reads as a
+	-- boss projectile whoosh yet, so this deliberately reuses the same
+	-- asset as `cast` rather than sitting UNSET/silent — callers pitch it
+	-- down so a boss launch doesn't sound identical to a player cast.
+	bossProjectileLaunch = "rbxassetid://134677020800886",
 }
 
 local SFX = VfxConfig.SFX
@@ -457,8 +471,11 @@ VfxConfig.EFFECTS = {
 		anchor           = "targetHumanoidRootPart",
 	},
 
-	-- Stubs for effect kinds whose gameplay handlers are also stubs.
-	-- Authored so the resolver doesn't no-op the day those effects ship.
+	-- knockup's gameplay handler is real (SkillEffects.knockup — an upward
+	-- AssemblyLinearVelocity shove), used today by boss GroundSlam. The
+	-- sound was left UNSET pending a real "launch" asset; no owned or
+	-- findable asset reads as one, so this reuses impactDamage's percussive
+	-- hit pitched up, standing in for the whump of being thrown skyward.
 	impact_knockup = {
 		emitters = {
 			{
@@ -474,10 +491,7 @@ VfxConfig.EFFECTS = {
 				spreadAngle = Vector2.new(60, 60),
 			},
 		},
-		-- Still genuinely unmapped: no owned or findable asset reads as a
-		-- launch. spawnEffect skips UNSET rather than erroring, and knockup
-		-- has no gameplay handler yet either.
-		sound            = { soundId = UNSET },
+		sound            = { soundId = SFX.impactDamage, volume = 0.85, pitchRange = NumberRange.new(1.15, 1.30) },
 		totalDurationSec = 0.50,
 		anchor           = "targetHumanoidRootPart",
 	},
@@ -531,6 +545,12 @@ VfxConfig.EFFECTS = {
 	-- each spell's lifetimeSec so the trail emits for the whole flight.
 
 	-- Firebolt (T1) — small, fast, low-rate trail.
+	--
+	-- `sound` plays once at launch (spawnEffect has no looping path, so it
+	-- can't cover the whole 1.5 s flight — the wiki still lists a proper
+	-- in-flight whoosh as a gap). It deliberately layers under the
+	-- cast_red_t1 staff-tip whoosh that fires the same instant, so it's
+	-- kept quiet rather than a second full-volume copy of the same asset.
 	projectile_red_t1 = {
 		emitters = {
 			{
@@ -546,11 +566,13 @@ VfxConfig.EFFECTS = {
 				spreadAngle = Vector2.new(12, 12),
 			},
 		},
+		sound            = { soundId = SFX.cast, volume = 0.35, pitchRange = NumberRange.new(1.10, 1.25) },
 		totalDurationSec = 1.7,
 		anchor           = "worldPosition",
 	},
 
-	-- Fireball (T2) — denser, larger, longer-lived trail.
+	-- Fireball (T2) — denser, larger, longer-lived trail. Same layering
+	-- caveat as T1; slightly louder/lower to read as the bigger shot.
 	projectile_red_t2 = {
 		emitters = {
 			{
@@ -566,11 +588,13 @@ VfxConfig.EFFECTS = {
 				spreadAngle = Vector2.new(18, 18),
 			},
 		},
+		sound            = { soundId = SFX.cast, volume = 0.45, pitchRange = NumberRange.new(0.95, 1.05) },
 		totalDurationSec = 2.2,
 		anchor           = "worldPosition",
 	},
 
 	-- Volley (T4) — existing, longer-lived trail for the staggered stream.
+	-- Loudest/lowest of the three so a T4 volley reads as heavier per-shot.
 	projectile_red_t4 = {
 		emitters = {
 			{
@@ -586,7 +610,83 @@ VfxConfig.EFFECTS = {
 				spreadAngle = Vector2.new(20, 20),
 			},
 		},
+		sound            = { soundId = SFX.cast, volume = 0.55, pitchRange = NumberRange.new(0.80, 0.90) },
 		totalDurationSec = 3.2,
+		anchor           = "worldPosition",
+	},
+
+	-- Boss FireballVolley launch (Brain + Wizard), fired at the muzzle via
+	-- deliveryParams.launchEffectId. Sound-only: the boss projectile has no
+	-- trail authored yet.
+	--
+	-- The rolloff is the point of this entry, not the asset. Brain engages
+	-- from up to 100 studs and the whole reason a launch cue exists is to be
+	-- heard by someone in cover who cannot see the boss — at Roblox's
+	-- default EmitterSize of 10 that sound arrives at roughly a tenth
+	-- volume, i.e. inaudible, which is exactly what it did. EmitterSize is
+	-- set past the engagement range so attenuation stays flat across the
+	-- arena instead of falling off before it reaches the listener.
+	--
+	-- Volume is held down because a Brain volley is 30 shots: this plays 30
+	-- times, ~0.15 s apart, and at full volume with a flat rolloff that is a
+	-- wall of noise rather than a readable cue.
+	projectile_boss_fireball = {
+		sound = {
+			soundId            = SFX.bossProjectileLaunch,
+			volume             = 0.55,
+			pitchRange         = NumberRange.new(0.70, 0.82),
+			emitterSize        = 120,
+			rollOffMaxDistance = 400,
+		},
+		totalDurationSec = 0.1,
+		anchor           = "worldPosition",
+	},
+
+	-- A projectile dying with nothing else to announce it — stopped by a
+	-- wall, or spent on expiry in mid-air.
+	--
+	-- This is an audio-readability requirement, not decoration: a player
+	-- in cover with no line of sight to the boss needs to hear the volley
+	-- stop landing to know when it is safe to break out. The impact burst
+	-- only fires on a direct hit, so precisely the case where the listener
+	-- cannot see the shot — it struck the wall they are hiding behind —
+	-- was the silent one.
+	--
+	-- Deliberately quiet, short and pitched below `impactDamage`: it reads
+	-- as a dull thud against cover rather than a hit on a body, and a
+	-- 30-shot Brain volley plays it up to 30 times ~0.15 s apart.
+	projectile_destroy = {
+		sound = {
+			soundId    = SFX.impactDamage,
+			volume     = 0.40,
+			pitchRange = NumberRange.new(0.62, 0.78),
+			-- Modest, unlike the launch cue: the wall a player is hiding
+			-- behind is right next to them, so this mostly plays at close
+			-- range anyway. The bump is for shots landing further off, so
+			-- "the volley is still coming down over there" still registers.
+			emitterSize        = 40,
+			rollOffMaxDistance = 300,
+		},
+		totalDurationSec = 0.1,
+		anchor           = "worldPosition",
+	},
+
+	-- Boss GroundSlam impact shockwave (Brain). Sound-only stub reusing
+	-- the same T3-Inferno explosion asset, pitched down for a duller
+	-- ground thud instead of a fiery blast — no owned/findable asset reads
+	-- as a slam yet.
+	aoe_boss_groundslam = {
+		sound = {
+			soundId    = SFX.impactHeavy,
+			volume     = 0.9,
+			pitchRange = NumberRange.new(0.60, 0.72),
+			-- Same reasoning as the launch cue: it happens at the boss, and
+			-- a slam you can't hear from across the arena tells you nothing.
+			-- Only one plays per attack, so it can afford to be loud.
+			emitterSize        = 120,
+			rollOffMaxDistance = 400,
+		},
+		totalDurationSec = 0.1,
 		anchor           = "worldPosition",
 	},
 }

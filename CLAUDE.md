@@ -57,6 +57,30 @@ These five patterns silent-fail or invalidate Rojo sync. The pre-commit validato
 2. Start playtest via MCP → wait → read output via MCP → iterate.
 3. Log state transitions immediately, per-frame data throttled.
 
+## Player-Facing Output (VFX / SFX)
+
+**The server has no screen and no speakers. Anything a player must see or hear is drawn on every client, never on the server.**
+
+This has shipped as a bug three separate times (see `wiki/log.md` 2026-08-04), because the engine fails at it *partially*:
+
+| Server-side call | Reaches players? |
+|---|---|
+| `ParticleEmitter:Emit()` | **No** — not replicated. This is most of `VfxConfig.EFFECTS`. |
+| Emitter with `Enabled = true` (rate-based) | Yes — it's a property write |
+| `Sound:Play()` on a workspace part | Yes |
+| Creating the anchor Part / cosmetic Part | Yes, a replication frame late |
+
+So a server-spawned effect gives you the anchor, the ring and the audio but not the burst — it looks ~80% right in a playtest and 100% right in Studio's server view. Don't trust either.
+
+**The rule:**
+- `spawnEffect` refuses on the server and warns with a traceback. Don't work around it.
+- Server code that needs a player to see something calls `VfxBroadcast.playAt` / `playOn` / `shockwave`, or the `SkillVisuals` primitives that wrap them. The routing lives in `SkillVisuals`, not at the call site.
+- Delivery handlers that run on **both** VMs (`projectile`, `aoe`) pass `drawnLocallyBy = casterUserId` so the casting client doesn't draw it twice. Server-only paths (`world_spawn`, boss fire) pass nothing.
+- Gameplay-authoritative objects still get created on the server — a collidable Stone Wall must be one solid object for everyone. Split it: server owns the Part, broadcast owns the cosmetic overlay (`SkillVisuals.spawnBarrier`).
+- Passing an Instance the server created *this frame* over a RemoteEvent arrives as `nil` on clients that haven't replicated it yet. Use `playAt` with a position for fresh Parts; `playOn` is for long-lived targets like a character's HRP.
+
+**Verification standard.** A VFX/SFX change is **not** verified by server logs, by `[Server]` console output, or by watching Studio's server view. It is verified only by what a client renders — a client-side count, a client screenshot, or the effect appearing for a second player. The last three bugs all had clean server logs while players saw nothing.
+
 ## Playtest Lock
 
 Multiple sessions may attempt playtests concurrently, causing them to interfere with each other. Always acquire the lock before starting a playtest and release it after stopping.

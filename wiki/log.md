@@ -593,3 +593,233 @@ true when there is neither, so every cosmetic deleted itself on its first
 frame. SkillDelivery is saved from the same shape only by its `shellVictim`
 nil-check. Sentinel distances need a companion nil flag. Pages touched:
 [[systems/SkillPipeline]], [[systems/VisualEffects]].
+
+## [2026-08-04] ingest | Boss FireballVolley launch SFX hook stubbed
+
+`deliveryParams.cosmeticEffectId` was never wired into `BossConfig`'s
+`FireballVolley` for either boss type, so boss fireballs carried no trail and
+no sound — silent gap not previously called out anywhere. Added
+`projectile_boss_fireball` to `VfxConfig.EFFECTS` (sound-only stub, no
+emitters yet) and `SFX.bossProjectileLaunch = UNSET`, then set
+`cosmeticEffectId = "projectile_boss_fireball"` on both Brain's and Wizard's
+`FireballVolley`. Placeholder only — `spawnEffect` skips playback while the
+id is `UNSET`; needs a real launch/whoosh asset before it's audible. Also
+corrected Boss.md's stale Brain tuning numbers (`count=3`/`speed=40` →
+actual `count=30`/`speed=90`) while touching that section. Pages touched:
+[[systems/Boss]], [[systems/AudioSFX]], [[systems/VisualEffects]].
+
+## [2026-08-04] ingest | Every VfxConfig SFX entry now audible (no more UNSET stubs)
+
+Follow-up to the boss-launch stub: swept the whole `VfxConfig.EFFECTS` table
+for silent hooks. Found four more — `impact_knockup` (`UNSET`, despite
+`knockup` having a real handler in `SkillEffects.luau`, correcting a stale
+"no gameplay handler yet" claim), and `projectile_red_t1/t2/t4` (no `sound`
+field at all, so player Firebolt/Fireball/Volley trails were silent in
+flight). All four now play a quiet reused-asset placeholder instead of
+nothing. Also found two boss hooks that exist in `SkillDelivery`/`BossConfig`
+but were never pointed at anything: `GroundSlam`'s `deliveryParams` had no
+`cosmeticEffectId` (shockwave was silent) and neither boss type's
+`FireballVolley` set `impactEffectId` (a landed hit was silent — only the
+launch had been wired). Added `aoe_boss_groundslam` (reuses `SFX.impactHeavy`
+pitched down) and wired `impactEffectId = "impact_damage"` on both Brain's
+and Wizard's `FireballVolley`. Removed the now-dead `local UNSET` in
+`VfxConfig.luau` — nothing references the silent sentinel by name anymore,
+though the literal `"rbxassetid://0"` is still honoured by `spawnEffect` if a
+future entry needs it.
+
+Known remaining gap, not fixed here (a logic change, not just data):
+`SkillDelivery.projectile`'s `detonate()` only plays `impactEffectId` when a
+projectile lands on a victim — a single-target shot (Firebolt, boss
+`FireballVolley`) that hits a wall or expires mid-air still plays nothing,
+even with an id set. Splash projectiles (`impactRadius > 0`, e.g. Fireball)
+don't have this gap — their shockwave already fires regardless of a direct
+hit. Pages touched: [[systems/AudioSFX]], [[systems/VisualEffects]],
+[[systems/Boss]].
+
+## [2026-08-04] ingest | Every projectile death is now audible
+
+Closes the gap logged in the entry above. Rationale is audio readability,
+stated by the user: a player in cover with no line of sight to the boss
+needs to hear the volley land — and stop landing — to know when to break
+out. The silent case was exactly the informative one, since `detonate()`
+only cued a *direct hit* and a shot stopping on the wall you are hiding
+behind cued nothing.
+
+New `projectile_destroy` entry in `VfxConfig.EFFECTS`, wired as a default
+(`DEFAULT_DESTROY_EFFECT_ID` in `SkillDelivery`) so it covers the roster
+with no per-spell config; `deliveryParams.destroyEffectId` overrides.
+
+The design work here was all in *not double-playing it*. `projectile`
+delivery runs on both VMs for a player cast (server via SpellCastService →
+SpellExecutor), and three different things can already cue a death, so the
+cue is suppressed for splash shots (`spawnShockwave` fires on every
+detonation cause anyway) and for direct rig hits that have an
+`impactEffectId`. `detonate()` plays it client-VM-only — covering the caster,
+who is the one client that skips the broadcast — while every other client
+reproduces it from `destroyEffectId` / `hasImpactCue` on the launch payload
+via `CosmeticProjectile`. Boss fire is server-only and so never reaches the
+`detonate` branch at all, making the cosmetic its sole source, which is what
+makes the boss audible through a wall. `CosmeticProjectile.hitARig` walks
+Humanoid ancestors to tell a body hit from a wall hit.
+
+Side effect worth noting: player Volley (T4) had no `impactEffectId`, so its
+*direct hits* were silent too — the fallback covers those now.
+
+Not addressed, observed while tracing the VMs: both server and client run
+`detonate` for a player cast, so a direct hit appears to spawn the impact
+burst twice for the caster (server copy replicates, client copy is local);
+`shield_block` looks doubled the same way. Pre-existing, unverified in
+playtest, and untouched here. Pages touched: [[systems/AudioSFX]],
+[[systems/SkillPipeline]], [[systems/VisualEffects]].
+
+## [2026-08-04] ingest | Two playtest bugs: silent boss fire, shots passing through players
+
+Both reported from play, both real, both fixed.
+
+**Boss fire was silent** despite `projectile_boss_fireball` being correctly
+wired. Two compounding causes, neither about the asset id. First, the cue
+was hung on `cosmeticEffectId`, which parents its Sound to the moving
+projectile Part — a Sound is a *child* of its anchor, so destroying the shot
+destroyed the sound mid-play. Second, and the reason it was inaudible even
+when it survived: Roblox's default `EmitterSize` of 10 with Inverse rolloff
+scales a sound by roughly `EmitterSize / distance`, and Brain engages from
+up to 100 studs, so the cue arrived at about a tenth volume. Fixed with a
+new `launchEffectId` param — fired once at the muzzle on its own throwaway
+anchor, which is where a firing cue belongs anyway — plus `emitterSize` /
+`rollOffMaxDistance` on `SoundSpec`, left at engine defaults unless a spec
+opts in so long-range tuning can't re-balance close-range spells.
+
+**Projectiles were not destroyed on impact with a player.** The
+authoritative shot dies on four rules; `CosmeticProjectile` implemented
+three. The missing one was the `proximityRadius` check against HRP, and it
+is the rule that matters most here: a boss fireball is 2 studs wide against
+a 3-stud radius, so a shot whose centre line passed *beside* a player
+detonated and dealt damage server-side while the copy everyone could see
+sailed on through them. `proximityRadius` now crosses on the launch payload
+and is checked at the same point in the frame. Mirrored
+`collectHittables` as `collectRigs`, frame-cached for the same reason the
+server caches: a Brain volley is 30 cosmetics in the air at once and an
+uncached `CollectionService:GetTagged` per shot per Heartbeat is 30× the
+query load.
+
+The general lesson, now recorded on [[systems/SkillPipeline]]: with the
+visual/authority split, every termination rule has to exist on both sides or
+damage and visuals desync. Pages touched: [[systems/AudioSFX]],
+[[systems/SkillPipeline]], [[systems/Boss]].
+
+## [2026-08-04] ingest | consumeOnHit option on projectile delivery
+
+`deliveryParams.consumeOnHit`, default `true`. The default is exactly what
+the code already did implicitly — the first rig a shot reaches detonates it
+— so nothing in the roster changes behaviour. Naming it is what makes a
+piercing shot possible without inventing a second delivery kind.
+
+`false` pierces: `onImpact` lands once per rig and the shot carries on.
+Walls, shield shells and expiry still end it — a bubble is a barrier, not a
+body, so it stops a piercing shot too. Forced `true` when `impactRadius > 0`,
+since a blast re-detonating on every rig it passes through would stack its
+own damage and the radius already reaches past whatever triggered it.
+
+Two non-obvious requirements, both now on [[systems/SkillPipeline]]. A
+per-shot `pierced` set, because a rig inside `proximityRadius` is otherwise
+re-damaged every frame the shot overlaps it — several free hits at a 3-stud
+radius. And the pierced rig has to be added to the ray filter, which is what
+physically lets the shot through; `FilterDescendantsInstances` returns a
+copy, so it must be reassigned rather than appended in place. Implemented on
+both VMs, since a piercing shot drawn as consumed contradicts the damage.
+Refactored `CosmeticProjectile.hitARig` into `rigFromPart` while wiring
+this: it now returns the Model carrying the Humanoid rather than the nearest
+Model ancestor, because filtering a nested accessory model would leave the
+rest of the body blocking the shot. Pages touched: [[systems/SkillPipeline]].
+
+## [2026-08-04] ingest | Server-side cosmetics made structurally impossible
+
+Three consecutive fixes (eb0e579, a6b94b3, b14a8c2) each ended up being the
+same mistake wearing a different hat: player-facing visuals and audio raised
+on the server, where no player can perceive them. `wiki/systems/VisualEffects`
+had said "Server creates NO Parts/Emitters" since the design landed, so this
+was never a knowledge gap — it was a structural one, and it got closed rather
+than restated.
+
+Root cause was a missing affordance, not a forgotten rule. `spawnEffect` and
+`SkillVisuals` sit in `shared/` and `SkillDelivery` runs on both VMs, so
+correctness rested on remembering an `IsServer()` guard at every call site —
+present at four, missing at six. And the server had no legal way to say "play
+this for everyone": `VfxBroadcastService` only relays client→server→clients
+for spell casts, so server-owned code (boss fire, Stone Wall) had nothing to
+reach for but the wrong thing.
+
+What made it survive three rounds is that the engine fails at this only
+partially. `ParticleEmitter:Emit()` does not replicate from the server, which
+is most of `VfxConfig.EFFECTS` — but the anchor Part, the emitter instance,
+`Sound:Play()`, and any rate-based `Enabled = true` emitter all do. A
+server-spawned effect therefore delivers the ring and the audio but not the
+burst: ~80% right in a playtest, 100% right in Studio's server view, and the
+server logs clean. a6b94b3's own note — "the bug was only visible by measuring
+what the client renders" — is the tell.
+
+Three changes. `VfxBroadcast` (`playAt` / `playOn` / `shockwave`) plus
+`WorldVfxEvent` and a receiving `WorldVfxController` give the server the
+affordance it lacked. `spawnEffect` now refuses outright on the server with a
+throttled traceback, so the next occurrence is a five-second fix instead of a
+playtest bisect. And the VM branch moved *into* `SkillVisuals` — handlers now
+call `spawnEffectAtPoint` / `spawnEffectOn` / `spawnShockwave` without caring
+which VM they're on, leaving `drawnLocallyBy` as the single remaining
+decision (set it from dual-VM handlers so the caster doesn't draw twice; omit
+it for server-only paths).
+
+Six live sites fixed: the shield-block spark (boss fire is server-only, so
+that burst had been rendering for nobody — the bubble looked inert while it
+was working), the boss ground-slam shockwave, the Stone Wall overlay, and the
+splash / direct-hit / pierce impacts. `spawnBarrier` is deliberately split
+rather than moved: the slab is collidable gameplay and must stay one
+server-owned object, while its overlay broadcasts. That broadcast goes by
+position, not Instance reference — an Instance the server created on the same
+frame arrives `nil` on clients that haven't replicated it yet.
+
+Also added to `CLAUDE.md`: the replication table above, and a verification
+standard — a VFX/SFX change is not verified by server logs or Studio's server
+view, only by what a client renders. Known gap left open: `FreezeVfx` is the
+other visual lane (welded geometry, no `Emit`) and still runs on whichever VM
+applies the effect, so a player-cast freeze likely builds shards twice.
+Pages touched: [[systems/VisualEffects]], [[systems/SkillPipeline]].
+
+## [2026-08-04] ingest | Freeze shards moved onto attribute replication
+
+Closes the gap the previous entry left open, and confirms it was real: the
+freeze handler runs on both VMs and called `FreezeVfx.start` directly, so a
+player cast built one set of shards on the server — replicating down — and a
+second locally on the caster, welded to the same limbs. Never invisible, the
+way an `Emit()` burst is; just doubled, which reads as slightly-too-opaque ice
+and is why nobody caught it.
+
+Converted to the shape `ShieldVfx` already used. `SkillEffects` writes
+`SkillConstants.FROZEN_ATTRIBUTE` (`_frozen`) on the character Model and draws
+nothing; the new `client/Vfx/FreezeVfxController` watches that flag and owns
+every Instance. `FreezeVfx.start` now refuses on the server with a traceback,
+matching `spawnEffect`. Both VMs still deliberately *write* the flag — the
+server's write replicates so everyone sees it, the caster's local write paints
+on the cast frame instead of after the round trip, and the values match so no
+second signal fires.
+
+`FreezeVfxController` watches more than its shield sibling does. A shield only
+ever sits on a player, but freeze is aimed at the boss more often than at
+anything else, so it binds player characters *and* every rig carrying a
+damageable tag — including the case where a rig is tagged before its Humanoid
+is parented, which would otherwise drop it. That tag list moved into a new
+`SkillConstants` module: it had been three hand-maintained copies across
+`SkillDelivery`, `CosmeticProjectile` and now the controller, two of them
+carrying comments warning that the lists had to agree.
+
+Measured on a live boss: 15 shards drawn on the client (one set; the old path
+gave 30), 0 on the server, and expiry through `purgeFreeze` clears flag,
+shards and WalkSpeed together. A direct server-side `FreezeVfx.start` draws
+nothing on either VM.
+
+One sharp edge found while testing and now documented: `_freezeState` is
+per-VM gameplay state and the attribute is the replicated render signal, with
+`setFrozenFlag` the only writer of the latter. Clearing the attribute by hand
+desyncs them — the next freeze takes the extend branch and correctly declines
+to rewrite a flag it believes is already set. Drive freeze through
+`SkillEffects.apply`. Pages touched: [[systems/VisualEffects]],
+[[systems/SkillPipeline]].

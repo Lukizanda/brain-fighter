@@ -16,13 +16,28 @@
 --
 -- spawnBarrier is the only primitive here that collides. Everything
 -- else is CanCollide = false cosmetics.
+--
+-- Which VM you're on is handled here, once, not at every call site.
+-- Cosmetics can't be drawn server-side at all (spawnEffect refuses, and
+-- the comment there says why), so the two cosmetic primitives broadcast
+-- when called on the server and draw when called on a client. Handlers
+-- just say what should happen and let this module route it.
+--
+-- The one thing a caller still has to decide is `drawnLocallyBy`. Delivery
+-- handlers that run on BOTH VMs — projectile, aoe — must pass the casting
+-- player's UserId, because that player's own client is running the same
+-- code and already drew the effect frame-perfectly; without it they see
+-- two. Server-only paths (boss fire, world_spawn) pass nothing, because
+-- no client drew anything locally.
 ----------------------------------------------------------------------
 
 local Debris            = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
 
-local VfxConfig   = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
-local spawnEffect = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
+local VfxBroadcast = require(ReplicatedStorage.Shared.Vfx.VfxBroadcast)
+local VfxConfig    = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
+local spawnEffect  = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
 local SHOCKWAVE_THICKNESS_STUDS = 0.4
 local SHOCKWAVE_DEFAULT_COLOR   = Color3.fromRGB(255, 210, 0)
@@ -44,6 +59,9 @@ export type ShockwaveOpts = {
 	lifetimeSec: number?,
 	cosmeticEffectId: string?,
 	yOffset: number?,
+	-- UserId of the one client that draws this itself. Set it from
+	-- dual-VM handlers; leave nil for server-only ones. See the header.
+	drawnLocallyBy: number?,
 }
 
 export type BarrierOpts = {
@@ -62,7 +80,15 @@ local SkillVisuals = {}
 -- shell, with no Part left to hang it on — needs a throwaway one. The
 -- anchor outlives the particle burst because it also carries the sound,
 -- which routinely runs longer than `totalDurationSec`.
-function SkillVisuals.spawnEffectAtPoint(position: Vector3, effectId: string)
+function SkillVisuals.spawnEffectAtPoint(position: Vector3, effectId: string, drawnLocallyBy: number?)
+	-- Server: describe it and let every client build its own anchor. A
+	-- server-built one would replicate the Part and the Sound but not the
+	-- burst, which is the failure this routing exists to prevent.
+	if RunService:IsServer() then
+		VfxBroadcast.playAt(effectId, position, drawnLocallyBy)
+		return
+	end
+
 	local effect = VfxConfig.EFFECTS[effectId]
 	if not effect then return end
 
@@ -82,8 +108,50 @@ function SkillVisuals.spawnEffectAtPoint(position: Vector3, effectId: string)
 	Debris:AddItem(anchor, math.max(effect.totalDurationSec, POINT_ANCHOR_MIN_LIFETIME_SEC))
 end
 
-function SkillVisuals.spawnShockwave(center: Vector3, radius: number, opts: ShockwaveOpts?): BasePart
+-- Play a VfxConfig effect parented to an existing Instance — an impact
+-- burst on the victim's HumanoidRootPart, a glow on a moving Part.
+--
+-- Only for targets that have existed for more than a frame. The server
+-- sends an Instance reference, which arrives nil on any client that
+-- hasn't replicated it yet; rigs and characters are long-lived, a Part
+-- created this frame is not. For those, use spawnEffectAtPoint.
+function SkillVisuals.spawnEffectOn(
+	effectId: string,
+	target: BasePart | Attachment,
+	drawnLocallyBy: number?
+)
+	if RunService:IsServer() then
+		VfxBroadcast.playOn(effectId, target, drawnLocallyBy)
+		return
+	end
+
+	local effect = VfxConfig.EFFECTS[effectId]
+	if not effect then return end
+	spawnEffect(effect, target)
+end
+
+-- Returns the ring Part on a client, and nil on the server — the server
+-- doesn't build one, it asks the clients to. No caller uses the return
+-- value today; the type says so rather than handing back a fake Part.
+function SkillVisuals.spawnShockwave(center: Vector3, radius: number, opts: ShockwaveOpts?): BasePart?
 	local o            = opts or {}
+
+	-- Purely cosmetic — CanCollide = false, no gameplay reads it — so
+	-- unlike spawnBarrier there is no reason for the server to own one.
+	-- Drawing it on each client also puts the ring exactly where that
+	-- client saw the impact, instead of a replication frame behind.
+	if RunService:IsServer() then
+		VfxBroadcast.shockwave(center, radius, {
+			color            = o.color,
+			transparency     = o.transparency,
+			lifetimeSec      = o.lifetimeSec,
+			cosmeticEffectId = o.cosmeticEffectId,
+			yOffset          = o.yOffset,
+			drawnLocallyBy   = o.drawnLocallyBy,
+		})
+		return nil
+	end
+
 	local color        = o.color        or SHOCKWAVE_DEFAULT_COLOR
 	local transparency = o.transparency or SHOCKWAVE_TRANSPARENCY
 	local lifetimeSec  = o.lifetimeSec  or SHOCKWAVE_LIFETIME_SEC
@@ -122,6 +190,13 @@ end
 -- (design call 2026-08-03): a wall you can walk through but the boss
 -- can't reads as broken, and being able to box yourself in is what makes
 -- placement a decision.
+--
+-- The one primitive here that stays server-built, and the split is the
+-- point: the slab is gameplay — it has to be the same solid object for
+-- everyone or it stops the boss on one machine and not another — while
+-- the cosmetic overlay hanging off it is not. So the Part is created
+-- here and replicates as normal, and the overlay is broadcast so each
+-- client attaches its own emitters to its own copy of that Part.
 function SkillVisuals.spawnBarrier(footCFrame: CFrame, opts: BarrierOpts?): BasePart
 	local o           = opts or {}
 	local size        = o.size        or BARRIER_DEFAULT_SIZE
@@ -140,9 +215,19 @@ function SkillVisuals.spawnBarrier(footCFrame: CFrame, opts: BarrierOpts?): Base
 	Debris:AddItem(barrier, lifetimeSec)
 
 	if o.cosmeticEffectId then
-		local cosmeticEffect = VfxConfig.EFFECTS[o.cosmeticEffectId]
-		if cosmeticEffect then
-			spawnEffect(cosmeticEffect, barrier)
+		if RunService:IsServer() then
+			-- By position, not by Instance reference, even though the Part
+			-- is right here. An Instance argument that hasn't replicated to
+			-- a given client yet arrives as nil, and this fires on the same
+			-- frame the Part is created — the exact window where that bites.
+			-- The barrier is anchored and never moves, so its centre is a
+			-- stable anchor and the race just doesn't exist.
+			VfxBroadcast.playAt(o.cosmeticEffectId, barrier.Position)
+		else
+			local cosmeticEffect = VfxConfig.EFFECTS[o.cosmeticEffectId]
+			if cosmeticEffect then
+				spawnEffect(cosmeticEffect, barrier)
+			end
 		end
 	end
 
