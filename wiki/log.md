@@ -909,3 +909,28 @@ playtest; a single-player Studio session cannot see it, because the cast still l
 Verified: Skills suite 4/4, plus `canCast` exercised against the live registry (targeted spells
 refused with real reasons on nil target; Mend's self-fallback and Stone Wall's placement still
 allowed). Pages touched: [[design/client-server-boundary]], [[design/build-plan]].
+
+## [2026-08-04] ingest | Phase 5.6 Stage 3 landed — effects stop running twice
+
+Damage, heal, freeze, knockup, shield and buff now apply only on the authoritative run.
+`SkillDelivery.applyImpactEffects` takes the mode and returns `{ok = true}` without doing anything
+when it is `predicted`. Both VMs used to apply all of it; that appeared to work only because a
+client's writes to a server-owned rig are local and get corrected by replication a moment later —
+which is not agreement, it is the server overwriting a second unrelated simulation.
+
+The gate deliberately sits in `SkillDelivery`, not inside `SkillEffects` as the plan had it.
+`SkillEffects` is the layer performing the writes; whether a write should happen at all belongs to
+its caller, which is the one holding the run context. It also keeps `SkillEffects` directly testable
+— the Skills suite calls `SkillEffects.apply` straight through and is untouched by this stage. The
+predicted path does not validate either: Stage 5 already asked `canCast` before draining.
+
+Verified by a direct A/B on one VM, same spells and rigs, mode the only variable — predicted wrote
+nothing (health 100, WalkSpeed 16, `_frozen` nil, freeze registry empty, `_shield` nil);
+authoritative wrote everything (health 45, WalkSpeed 0, `_frozen` true, registry true, `_shield`
+40). Skills suite 4/4.
+
+Knock-on: `CastAction/__tests` could no longer assert damage or healing, because CastAction *is* the
+predicted run. Those two assertions were inverted to "the predicted run must not touch Health" —
+strictly stronger than what they replaced, since a regression reinstating double-application now
+fails them. Effect application stays covered by the SpellExecutor suite, which casts
+authoritatively. Pages touched: [[design/client-server-boundary]], [[design/build-plan]].

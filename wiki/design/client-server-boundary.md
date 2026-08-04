@@ -163,8 +163,20 @@ Each stage leaves the game shippable and is independently revertable. Stages 1�
 
 *Still outstanding:* the two-client visual confirmation (one burst for the caster, one for the observer). The wire check proves the right UserId is on the payload and that `ProjectileVfxController` tests the right field, which is the part that could regress silently; seeing it with two players is cheap and worth doing at the next friends checkpoint.
 
-**Stage 3 — Make effects authoritative-only.** `SkillEffects` and `SkillBuffs` early-return on `mode == "predicted"`. Damage, heal, freeze, shield and buff stop running twice. The caster loses the local pre-flash of a frozen rig; `_frozen` now arrives from replication (~one round trip). If that reads badly in playtest, the fix is a *presentation* one — `FreezeVfxController` gets an optimistic local hint — not a return to double simulation.
-*Done when:* `SkillEffects.isFrozen` is false on the client and true on the server for the same cast, and the ice shards still appear.
+**Stage 3 — Make effects authoritative-only.** ✅ **Done 2026-08-04.** Damage, heal, freeze, knockup, shield and buff stop running twice. The caster loses the local pre-flash of a frozen rig; `_frozen` now arrives from replication (~one round trip). If that reads badly in playtest, the fix is a *presentation* one — `FreezeVfxController` gets an optimistic local hint — not a return to double simulation.
+
+The gate sits in `SkillDelivery.applyImpactEffects`, **not** inside `SkillEffects` as originally written. `SkillEffects` is the layer that performs the writes; whether a write should happen at all is its caller's business, and the caller is the one holding the run context. Keeping `SkillEffects` mode-agnostic also leaves it directly testable — the Skills suite calls `SkillEffects.apply` straight and is unaffected by this stage.
+
+The predicted path does not validate either. Stage 5 already asked `canCast` before draining, so re-deriving the same answer at impact would tell nobody anything.
+
+*Done:* Skills suite 4/4, and a direct A/B on one VM — same spells, same rigs, mode as the only variable:
+
+| Run | Health | WalkSpeed | `_frozen` | freeze registry | `_shield` |
+|---|---|---|---|---|---|
+| `predicted` | 100 (untouched) | 16 | nil | false | nil |
+| `authoritative` | 45 | 0 | true | true | 40 |
+
+*Consequence for tests:* `CastAction/__tests` could no longer assert damage or healing, because `CastAction` **is** the predicted run. Those two assertions were inverted to "the predicted run must not touch Health" — which is a stronger check than what they replaced, since a regression that reinstated double-application now fails them. Effect application itself stays covered by the SpellExecutor suite, which casts authoritatively.
 
 **Stage 4 — Make delivery authoritative-only.** `projectile` and `aoe` early-return on `predicted`, as `world_spawn` already does. The client-side Part, its swept ray, and its parallel hit detection all delete. The invisible-server-shot split collapses: there is one Part, it is the server's, it is authoritative, and every client draws its own cosmetic from the broadcast — including the caster. The three `IsServer()` guards in the projectile handler (`:419`, `:529`, `:556`) and the four in `SkillVisuals` all delete with it.
 *Done when:* a two-client playtest shows one projectile per cast on both screens, hitting the same target, with the shield block landing on the bubble surface. This is the stage that must be measured, not eyeballed.

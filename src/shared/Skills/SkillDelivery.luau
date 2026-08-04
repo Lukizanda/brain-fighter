@@ -66,7 +66,33 @@ local WALL_GROUND_PROBE_DOWN_STUDS = 60
 
 -- Apply every onImpact effect spec to hitTarget.
 -- Returns the first failure encountered, or { ok = true } if all succeed.
-local function applyImpactEffects(skill: SkillSpec, hitTarget: any, source: any?): SkillEffects.Result
+--
+-- Only the authoritative run applies anything. Damage, heals, freezes,
+-- shields and buffs all write state that belongs to somebody else — the
+-- victim's Humanoid, their character's attributes — and a predicted run
+-- may only write what its own client already owns. Both runs used to do
+-- all of it, and it appeared to work solely because a client's writes to a
+-- server-owned rig are local and get corrected by replication a moment
+-- later. That is not agreement; it is the server overwriting a second,
+-- unrelated simulation.
+--
+-- Nothing is validated here on the predicted path either. CastAction has
+-- already asked `SpellExecutor.canCast` whether this could land, before it
+-- drained (see wiki/design/client-server-boundary.md, Stage 5), so
+-- re-deriving the same answer at impact would tell nobody anything.
+--
+-- The gate is here rather than inside SkillEffects deliberately.
+-- SkillEffects is the layer that does the writing; whether a write should
+-- happen at all is its caller's business, and the caller is the one
+-- holding the run context.
+local function applyImpactEffects(
+	skill: SkillSpec,
+	hitTarget: any,
+	source: any?,
+	mode: SkillTypes.DeliveryMode
+): SkillEffects.Result
+	if mode ~= "authoritative" then return { ok = true } end
+
 	local firstFailure: SkillEffects.Result? = nil
 	for _, effectSpec in skill.onImpact do
 		local result = SkillEffects.apply(effectSpec, hitTarget, source)
@@ -204,7 +230,7 @@ SkillDelivery.handlers = {
 	-- Used by Inferno, Mend, Frost Nip, Stasis, Shield, Sanctuary.
 	-- (Firebolt and Fireball are projectile delivery — see below.)
 	instant = function(skill: SkillSpec, ctx: DeliveryCtx): Result
-		local result = applyImpactEffects(skill, ctx.target, ctx.source)
+		local result = applyImpactEffects(skill, ctx.target, ctx.source, ctx.mode)
 		if ctx.onComplete then ctx.onComplete() end
 		return result
 	end,
@@ -330,6 +356,9 @@ SkillDelivery.handlers = {
 		-- every client draws those. Set at the entry point — see
 		-- SkillTypes.RunContext.
 		local predictedBy: number? = ctx.predictedBy
+		-- Captured for the detonation closures below, which outlive this
+		-- call by whole seconds and must not reach back through ctx.
+		local mode = ctx.mode
 
 		-- Resolve a projectile's impact at hitPos, then destroy the Part.
 		--   victim ~= nil → something was struck directly (proximity shell,
@@ -365,7 +394,7 @@ SkillDelivery.handlers = {
 					if h.hum.Parent == source then continue end -- skip caster
 					if h.hum.Health <= 0 then continue end
 					if (h.hrp.Position - hitPos).Magnitude <= impactRadius then
-						applyImpactEffects(skill, h.hum, source)
+						applyImpactEffects(skill, h.hum, source, mode)
 						struck += 1
 					end
 				end
@@ -375,7 +404,7 @@ SkillDelivery.handlers = {
 			elseif victim then
 				-- Single-target: apply effects to the struck humanoid only.
 				-- Anchor the impact burst on its HRP.
-				applyImpactEffects(skill, victim.hum, source)
+				applyImpactEffects(skill, victim.hum, source, mode)
 				-- Presence in EFFECTS still gates `cued`, not just a non-nil
 				-- id: a spec pointing at an entry that was never authored
 				-- announces nothing, and should still fall through to the
@@ -619,7 +648,7 @@ SkillDelivery.handlers = {
 					if pierced[victim.hum] then return end
 					pierced[victim.hum] = true
 
-					applyImpactEffects(skill, victim.hum, source)
+					applyImpactEffects(skill, victim.hum, source, mode)
 					if impactEffectId then
 						SkillVisuals.spawnEffectOn(impactEffectId, victim.hrp, predictedBy)
 					end
@@ -810,7 +839,7 @@ SkillDelivery.handlers = {
 				if not hum or hum.Health <= 0 then continue end
 				local dist = ((hrp :: BasePart).Position - center).Magnitude
 				if dist > radius then continue end
-				applyImpactEffects(skill, hum, source)
+				applyImpactEffects(skill, hum, source, ctx.mode)
 				log:info(("aoe hit %s dist=%.1f (skill=%s)"):format(player.Name, dist, skill.name))
 			end
 		end)
@@ -911,7 +940,7 @@ SkillDelivery.handlers = {
 		-- Effects still run if a spec declares them (e.g. a future wall
 		-- that also knocks back whatever it materialises through).
 		local result = #skill.onImpact > 0
-			and applyImpactEffects(skill, ctx.target, ctx.source)
+			and applyImpactEffects(skill, ctx.target, ctx.source, ctx.mode)
 			or { ok = true }
 
 		log:info(("world_spawn: %s placed at %s (lifetime=%.1fs)"):format(

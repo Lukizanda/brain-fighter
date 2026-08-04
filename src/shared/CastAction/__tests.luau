@@ -109,8 +109,15 @@ function M.run()
 		r:destroy()
 	end
 
-	-- 3. tapReservoir red=30 → Inferno (T3, cost 20); red=10; HP 100→50.
-	-- Inferno is instant delivery — synchronous damage applies.
+	-- 3. tapReservoir red=30 → Inferno (T3, cost 20); red=10.
+	--
+	-- Health is deliberately NOT asserted to drop. CastAction is the
+	-- predicted run (Phase 5.6 Stage 3), and a predicted run no longer
+	-- applies effects — damage is the authoritative run's job, and it
+	-- arrives via SpellCastService. What CastAction owes the caller is the
+	-- tier selection, the drain and the summary, and those are what this
+	-- asserts. Damage itself is covered by the SpellExecutor suite, which
+	-- casts authoritatively.
 	do
 		local model, humanoid = makeDummy()
 		local r = EnergyReservoirs.new()
@@ -122,7 +129,10 @@ function M.run()
 		assert(cast.tier == 3, `tap red=30: tier should be 3, got {tostring(cast.tier)}`)
 		assert(res.drained == 20, `tap red=30: drained should be 20, got {tostring(res.drained)}`)
 		assert(r:get("red") == 10, `tap red=30: reservoir.red should be 10, got {r:get("red")}`)
-		assert(nearly(humanoid.Health, 50), `tap red=30: Health should be 50 after Inferno (0.5×MaxHP), got {humanoid.Health}`)
+		assert(
+			nearly(humanoid.Health, TEST_MAX_HEALTH),
+			`tap red=30: predicted run must not damage; Health should still be {TEST_MAX_HEALTH}, got {humanoid.Health}`
+		)
 		model:Destroy()
 		r:destroy()
 	end
@@ -241,8 +251,15 @@ function M.run()
 	end
 
 	-- 9. castSpecific(green, 1) target=nil → Mend (T1 heal, cost 5).
-	-- Heal target=nil falls back to caster; pass the dummy as caster and
-	-- set its Health to 50 so the +15% MaxHealth heal lands observably.
+	--
+	-- The point of this case is that a target-less heal is ACCEPTED: `heal`
+	-- falls back to the caster, so unlike Frost Nip in case 8 the cast
+	-- resolves and the mana is spent. That distinction lives in
+	-- SkillEffects.canApply and is what CastAction now gates on.
+	--
+	-- The heal landing is again not asserted here — predicted runs don't
+	-- apply effects (Stage 3). Health starts at 50 anyway so that a
+	-- regression putting the heal back would be visible as 65.
 	-- (Why castSpecific instead of tapReservoir: green=15 affords both
 	-- Mend T1 and Stone Wall T2; tap would pick T2 which has no heal.)
 	do
@@ -256,8 +273,10 @@ function M.run()
 		assert(cast.color == "green", `specific(green,1): color should be "green", got "{tostring(cast.color)}"`)
 		assert(res.drained == 5, `specific(green,1): drained should be 5, got {tostring(res.drained)}`)
 		assert(r:get("green") == 10, `specific(green,1): reservoir.green should be 10, got {r:get("green")}`)
-		-- Mend = +15% MaxHealth = +15. 50 + 15 = 65.
-		assert(nearly(humanoid.Health, 65), `specific(green,1): Health should be 65 after Mend, got {humanoid.Health}`)
+		assert(
+			nearly(humanoid.Health, 50),
+			`specific(green,1): predicted run must not heal; Health should still be 50, got {humanoid.Health}`
+		)
 		model:Destroy()
 		r:destroy()
 	end
