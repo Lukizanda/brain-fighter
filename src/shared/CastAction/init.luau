@@ -113,7 +113,9 @@ local function drainAndCast(
 	-- construction — it drains the client-owned reservoir, and the server
 	-- enters the pipeline through SpellCastService instead. The
 	-- authoritative run of this same cast happens there.
-	local executorResult = SpellExecutor.cast(spec, caster, target, "predicted")
+	-- No predictedBy: this run IS the prediction, and it draws directly
+	-- rather than broadcasting, so there is nobody to exclude.
+	local executorResult = SpellExecutor.cast(spec, caster, target, { mode = "predicted" })
 	if executorResult.ok then
 		log:info(string.format("cast ok — %s (color=%s tier=%d cost=%d)", spec.name, spec.color, spec.tier, spec.cost))
 		_spellResolvedBindable:Fire(spec, caster, target)

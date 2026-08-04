@@ -32,12 +32,32 @@ export type EffectSpec = {
 -- every existing IsServer() guard is untouched.
 export type DeliveryMode = "authoritative" | "predicted"
 
+-- Which of the two runs of a cast this is, and who — if anyone — already
+-- ran it as a prediction.
+--
+-- `predictedBy` is only meaningful on an authoritative run: it is the
+-- UserId of the client whose predicted run already drew this cast's
+-- cosmetics on the frame it fired, so the broadcast has to skip them or
+-- they see two of everything. It is nil when nothing predicted this cast
+-- — boss fire, NPC fire, anything the server originates. A predicted run
+-- never carries one, because it *is* the prediction.
+--
+-- This is a fact, not an inference. The authoritative run learns it from
+-- the remote it was woken by (SpellCastService knows which player fired,
+-- and SpellMenuGui only relays a cast its predicted run already accepted),
+-- rather than guessing from "is the source a player character".
+export type RunContext = {
+	mode: DeliveryMode,
+	predictedBy: number?,
+}
+
 export type DeliveryCtx = {
 	origin: CFrame,         -- where the delivery starts from
 	target: any?,           -- Humanoid | Model | BasePart | Vector3 | nil
 	aoeCenter: Vector3?,    -- override for AoE center; defaults to origin.Position
 	source: Instance?,      -- the caster (Humanoid parent Model or Boss Model)
 	mode: DeliveryMode,     -- authoritative run, or the caster's predicted one
+	predictedBy: number?,   -- UserId that already drew this locally; see RunContext
 	onComplete: (() -> ())?, -- called when the delivery fully resolves (async attacks)
 }
 

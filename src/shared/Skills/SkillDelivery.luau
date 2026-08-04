@@ -102,20 +102,6 @@ local function projectileVfxRemote(): RemoteEvent?
 	return _projectileVfxEvent
 end
 
--- UserId of the player who cast this, or nil for boss and NPC fire.
---
--- Every cosmetic raised from a dual-VM handler needs it. `projectile` and
--- `aoe` run on the caster's client as well as the server, so that client
--- draws the effect locally on the frame it fired; the server's broadcast
--- must skip them or they see two of everything. Nil for a non-player
--- source means no client drew anything, so everyone gets the broadcast.
-local function casterUserIdFrom(source: any): number?
-	if typeof(source) ~= "Instance" then return nil end
-	if not (source :: Instance):IsA("Model") then return nil end
-	local casterPlayer = Players:GetPlayerFromCharacter(source :: Model)
-	return casterPlayer and casterPlayer.UserId or nil
-end
-
 -- CollectionService tags whose tagged Models carry a Humanoid+HRP and
 -- should be hittable by projectile collision / splash. The project tags
 -- spawned NPCs ("NPC"), the active boss ("Boss"), and dev-mode rigs
@@ -338,11 +324,12 @@ SkillDelivery.handlers = {
 		local source    = ctx.source
 		local onComplete = ctx.onComplete
 
-		-- Lets the casting client ignore the broadcast: it already drew its
-		-- own shot on the frame it fired, and replaying the broadcast would
-		-- put a second one alongside it. Nil for boss and NPC fire, so every
-		-- client draws those. Same pattern VfxController uses for bursts.
-		local casterUserId: number? = casterUserIdFrom(source)
+		-- Lets the predicting client ignore the broadcast: it already drew
+		-- its own shot on the frame it fired, and replaying the broadcast
+		-- would put a second one alongside it. Nil for boss and NPC fire, so
+		-- every client draws those. Set at the entry point — see
+		-- SkillTypes.RunContext.
+		local predictedBy: number? = ctx.predictedBy
 
 		-- Resolve a projectile's impact at hitPos, then destroy the Part.
 		--   victim ~= nil → something was struck directly (proximity shell,
@@ -371,7 +358,7 @@ SkillDelivery.handlers = {
 					-- Both VMs reach this for a player cast; the caster's
 					-- client draws its own. Nil for boss splash, which is
 					-- server-only, so every client gets it from the broadcast.
-					drawnLocallyBy   = casterUserId,
+					drawnLocallyBy   = predictedBy,
 				})
 				local struck = 0
 				for _, h in collectHittables() do
@@ -394,7 +381,7 @@ SkillDelivery.handlers = {
 				-- announces nothing, and should still fall through to the
 				-- destroy cue below rather than dying silently.
 				if impactEffectId and VfxConfig.EFFECTS[impactEffectId] then
-					SkillVisuals.spawnEffectOn(impactEffectId, victim.hrp, casterUserId)
+					SkillVisuals.spawnEffectOn(impactEffectId, victim.hrp, predictedBy)
 					cued = true
 				end
 				log:info(("SkillProjectile hit %s cause=%s (skill=%s)"):format(
@@ -417,7 +404,7 @@ SkillDelivery.handlers = {
 			-- Boss fire never runs this branch at all: it is server-only, so
 			-- the cosmetic is the sole source there.
 			if destroyEffectId and not cued and not RunService:IsServer() then
-				SkillVisuals.spawnEffectAtPoint(hitPos, destroyEffectId, casterUserId)
+				SkillVisuals.spawnEffectAtPoint(hitPos, destroyEffectId, predictedBy)
 			end
 			part:Destroy()
 		end
@@ -444,7 +431,7 @@ SkillDelivery.handlers = {
 			-- server-only, so before the broadcast existed this burst was
 			-- emitted on the server and rendered for nobody — the shield
 			-- looked like it was doing nothing even when it was.
-			SkillVisuals.spawnEffectAtPoint(contact, SHIELD_BLOCK_EFFECT_ID, casterUserId)
+			SkillVisuals.spawnEffectAtPoint(contact, SHIELD_BLOCK_EFFECT_ID, predictedBy)
 			log:info(("SkillProjectile blocked by shield on %s absorbed=%.1f left=%.1f (skill=%s)"):format(
 				victim.hum.Parent and victim.hum.Parent.Name or "?",
 				absorbed,
@@ -558,7 +545,7 @@ SkillDelivery.handlers = {
 					local remote = projectileVfxRemote()
 					if remote then
 						remote:FireAllClients({
-							casterUserId     = casterUserId,
+							predictedBy      = predictedBy,
 							origin           = muzzlePos,
 							direction        = dir,
 							speed            = speed,
@@ -634,7 +621,7 @@ SkillDelivery.handlers = {
 
 					applyImpactEffects(skill, victim.hum, source)
 					if impactEffectId then
-						SkillVisuals.spawnEffectOn(impactEffectId, victim.hrp, casterUserId)
+						SkillVisuals.spawnEffectOn(impactEffectId, victim.hrp, predictedBy)
 					end
 
 					local rig = victim.hum.Parent
@@ -807,9 +794,10 @@ SkillDelivery.handlers = {
 			SkillVisuals.spawnShockwave(center, radius, {
 				cosmeticEffectId = cosmeticEffectId,
 				-- aoe runs on both VMs like projectile does, so a player-cast
-				-- slam is drawn locally by its caster. The boss's own slam
-				-- has no player source and so reaches every client.
-				drawnLocallyBy   = casterUserIdFrom(source),
+				-- slam is drawn locally by the client that predicted it. The
+				-- boss's own slam was predicted by nobody and so reaches
+				-- every client.
+				drawnLocallyBy   = ctx.predictedBy,
 			})
 
 			-- Apply onImpact to all players in radius

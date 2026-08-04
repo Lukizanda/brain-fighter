@@ -23,12 +23,17 @@
 -- when called on the server and draw when called on a client. Handlers
 -- just say what should happen and let this module route it.
 --
--- The one thing a caller still has to decide is `drawnLocallyBy`. Delivery
--- handlers that run on BOTH VMs — projectile, aoe — must pass the casting
--- player's UserId, because that player's own client is running the same
--- code and already drew the effect frame-perfectly; without it they see
--- two. Server-only paths (boss fire, world_spawn) pass nothing, because
--- no client drew anything locally.
+-- The one thing a caller still has to supply is `drawnLocallyBy`: the
+-- UserId of a client that already drew this effect itself, so the
+-- broadcast can skip it. Delivery handlers read it straight off
+-- `ctx.predictedBy` — a fact set once at the entry point, not something
+-- this layer or its callers work out. Server-originated paths (boss fire,
+-- world_spawn) leave it nil, because nobody predicted those.
+--
+-- Callers outside delivery — WorldVfxController drawing a received
+-- broadcast, CosmeticProjectile drawing its own impacts — are already on
+-- a client and pass nothing. They are presentation, and have no run
+-- context to speak of.
 ----------------------------------------------------------------------
 
 local Debris            = game:GetService("Debris")

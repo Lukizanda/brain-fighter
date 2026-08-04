@@ -99,7 +99,10 @@ spellCastRemote.OnServerEvent:Connect(function(player: Player, color: any, tier:
 			return
 		end
 		log:info(string.format("%s cast %s on self (server apply)", player.Name, spec.name))
-		SpellExecutor.cast(spec, character, nil, "authoritative")
+		SpellExecutor.cast(spec, character, nil, {
+			mode = "authoritative",
+			predictedBy = player.UserId,
+		})
 		return
 	end
 
@@ -117,7 +120,14 @@ spellCastRemote.OnServerEvent:Connect(function(player: Player, color: any, tier:
 	end
 
 	log:info(string.format("%s cast %s on %s (server apply)", player.Name, spec.name, targetModel.Name))
-	SpellExecutor.cast(spec, character, targetModel, "authoritative")
+	-- predictedBy is known here rather than guessed: this handler only runs
+	-- because `player`'s client fired the relay, and SpellMenuGui only
+	-- relays a cast its own predicted run already accepted. So that client
+	-- has drawn this cast's cosmetics and must be skipped by the broadcast.
+	SpellExecutor.cast(spec, character, targetModel, {
+		mode = "authoritative",
+		predictedBy = player.UserId,
+	})
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)

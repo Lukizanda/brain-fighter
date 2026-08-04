@@ -69,15 +69,17 @@ end
 
 local SpellExecutor = {}
 
--- `mode` is required rather than defaulted. A default would mean a new
--- call site silently picks a side, which is the exact ad-hoc-ness this
--- field exists to remove — the caller always knows which run it is
--- starting, so it says so. See wiki/design/client-server-boundary.md.
+-- `run` is required rather than defaulted. A default would mean a new call
+-- site silently picks a side, which is the exact ad-hoc-ness it exists to
+-- remove — the caller always knows which run it is starting, so it says
+-- so. It is a table rather than positional arguments because its two
+-- fields constrain each other: only an authoritative run can have been
+-- predicted by someone. See wiki/design/client-server-boundary.md.
 function SpellExecutor.cast(
 	spec: SpellRegistry.Spec,
 	caster: Humanoid | Model,
 	target: Humanoid | Model | Vector3 | nil,
-	mode: SkillTypes.DeliveryMode
+	run: SkillTypes.RunContext
 ): CastResult
 	local origin = resolveSpellOrigin(caster)
 
@@ -91,7 +93,8 @@ function SpellExecutor.cast(
 		origin = origin,
 		target = target,
 		source = source,
-		mode = mode,
+		mode = run.mode,
+		predictedBy = run.predictedBy,
 	}
 
 	return SkillDelivery.deliver(spec.skill, ctx)

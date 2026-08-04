@@ -858,3 +858,24 @@ yet and all four `RunService:IsServer()` guards in `SkillDelivery` (`:419`, `:52
 are untouched. Verified in playtest: Skills suite 4/4, SpellExecutor 11/11, CastAction refund suite
 pass, clean boot with all systems initialising. Pages touched: [[design/build-plan]] (Stage 1 marked
 done), [[design/client-server-boundary]].
+
+## [2026-08-04] ingest | Phase 5.6 Stage 2 landed — the exclusion is a fact, not a guess
+
+Second stage of the client/server boundary refactor ([[design/client-server-boundary]]).
+`casterUserIdFrom` is deleted. It inferred "did a client already draw this?" from "is the source a
+player character" — a proxy that breaks as soon as an NPC casts a player spell or a spell is
+triggered server-side. `DeliveryCtx` now carries `predictedBy: number?`, set at the entry point:
+`SpellCastService.server.luau` supplies `player.UserId` because it knows — that handler only runs
+because that client fired the relay, and `SpellMenuGui.client.luau:136` only relays a cast its own
+predicted run already accepted. Boss and NPC fire leave it nil. `SpellExecutor.cast`'s 4th argument
+became a `RunContext` table (`{ mode, predictedBy }`) rather than a second positional, since the two
+fields constrain each other. Two deviations from the planned stage, both recorded on the design
+page: **(1)** `SkillVisuals` does *not* take `mode` and keeps its `IsServer()` branch until Stage 4 —
+`WorldVfxController` and `CosmeticProjectile` call it as pure presentation and have no run context,
+so that is a real domain seam rather than an oversight; **(2)** the `ProjectileVfxEvent` payload key
+`casterUserId` was renamed `predictedBy` (`VfxBroadcast`'s own wire is unchanged as planned).
+Verified: Skills suite 4/4, SpellExecutor 11/11, plus a live client-side wire check showing a player
+cast broadcasting `predictedBy = <that UserId>` while the boss's 30-projectile Volley in the same
+playtest broadcast `predictedBy = nil`, with the retired key absent throughout. Two-client visual
+confirmation still outstanding. Pages touched: [[design/client-server-boundary]],
+[[design/build-plan]].

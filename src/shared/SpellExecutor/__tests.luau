@@ -143,7 +143,7 @@ local cases: { { any } } = {
 			local targetModel, targetHumanoid = makeRig("FireballTestTarget", PROJECTILE_TARGET_DISTANCE)
 			CollectionService:AddTag(targetModel, "Damageable")
 
-			local res = SpellExecutor.cast(SpellRegistry.getSpell("red", 2), casterHumanoid, targetHumanoid, "authoritative")
+			local res = SpellExecutor.cast(SpellRegistry.getSpell("red", 2), casterHumanoid, targetHumanoid, { mode = "authoritative" })
 			expectEq(res.ok, true, "ok")
 
 			local deadline = os.clock() + PROJECTILE_HIT_TIMEOUT_SEC
@@ -160,7 +160,7 @@ local cases: { { any } } = {
 		"damage on already-dead target clamps at 0",
 		function()
 			local model, humanoid = makeDummy(0)
-			local res = SpellExecutor.cast(SpellRegistry.getSpell("red", 3), humanoid, humanoid, "authoritative")
+			local res = SpellExecutor.cast(SpellRegistry.getSpell("red", 3), humanoid, humanoid, { mode = "authoritative" })
 			expectEq(res.ok, true, "ok")
 			expectNear(humanoid.Health, 0, HEALTH_TOLERANCE, "Health clamped")
 			model:Destroy()
@@ -170,7 +170,7 @@ local cases: { { any } } = {
 		"heal 15% (Mend) on 50/100 -> 65",
 		function()
 			local model, humanoid = makeDummy(50)
-			local res = SpellExecutor.cast(SpellRegistry.getSpell("green", 1), humanoid, humanoid, "authoritative")
+			local res = SpellExecutor.cast(SpellRegistry.getSpell("green", 1), humanoid, humanoid, { mode = "authoritative" })
 			expectEq(res.ok, true, "ok")
 			expectNear(humanoid.Health, 65, HEALTH_TOLERANCE, "Health after Mend")
 			model:Destroy()
@@ -181,7 +181,7 @@ local cases: { { any } } = {
 		function()
 			local model, humanoid = makeDummy(95)
 			local spec = makeSpec("heal", { fractionOfMaxHP = 0.50 }, "TestBigHeal")
-			local res = SpellExecutor.cast(spec, humanoid, humanoid, "authoritative")
+			local res = SpellExecutor.cast(spec, humanoid, humanoid, { mode = "authoritative" })
 			expectEq(res.ok, true, "ok")
 			expectNear(humanoid.Health, 100, HEALTH_TOLERANCE, "Health capped at MaxHealth")
 			model:Destroy()
@@ -191,7 +191,7 @@ local cases: { { any } } = {
 		"heal with nil target falls back to caster",
 		function()
 			local model, humanoid = makeDummy(50)
-			local res = SpellExecutor.cast(SpellRegistry.getSpell("green", 1), humanoid, nil, "authoritative")
+			local res = SpellExecutor.cast(SpellRegistry.getSpell("green", 1), humanoid, nil, { mode = "authoritative" })
 			expectEq(res.ok, true, "ok")
 			expectNear(humanoid.Health, 65, HEALTH_TOLERANCE, "Heal applied to caster")
 			model:Destroy()
@@ -201,7 +201,7 @@ local cases: { { any } } = {
 		"freeze (Frost Nip) sets WalkSpeed=0, restores after registry duration",
 		function()
 			local model, humanoid = makeDummy()
-			local res = SpellExecutor.cast(SpellRegistry.getSpell("blue", 1), humanoid, humanoid, "authoritative")
+			local res = SpellExecutor.cast(SpellRegistry.getSpell("blue", 1), humanoid, humanoid, { mode = "authoritative" })
 			expectEq(res.ok, true, "ok")
 			expectEq(humanoid.WalkSpeed, 0, "WalkSpeed during freeze")
 			task.wait(frostNipFreezeSec() + FREEZE_RESTORE_SLACK_SEC)
@@ -215,7 +215,7 @@ local cases: { { any } } = {
 		"shield (Blue T2 Shield) grants an absorb pool on the caster",
 		function()
 			local model, humanoid = makeDummy()
-			local res = SpellExecutor.cast(SpellRegistry.getSpell("blue", 2), humanoid, humanoid, "authoritative")
+			local res = SpellExecutor.cast(SpellRegistry.getSpell("blue", 2), humanoid, humanoid, { mode = "authoritative" })
 			expectEq(res.ok, true, "ok")
 			if SkillBuffs.getShield(humanoid) <= 0 then
 				error("expected a positive shield pool after casting Shield", 2)
@@ -227,7 +227,7 @@ local cases: { { any } } = {
 		"world_spawn (Green T2 Stone Wall) succeeds at a placement point",
 		function()
 			local model, humanoid = makeDummy()
-			local res = SpellExecutor.cast(SpellRegistry.getSpell("green", 2), humanoid, Vector3.new(10, 0, 10), "authoritative")
+			local res = SpellExecutor.cast(SpellRegistry.getSpell("green", 2), humanoid, Vector3.new(10, 0, 10), { mode = "authoritative" })
 			-- Succeeds on both VMs, but only the server spawns the barrier:
 			-- a client-side Part can't block the server-owned boss, and the
 			-- server's copy replicates down. The client branch returns ok so
@@ -243,7 +243,7 @@ local cases: { { any } } = {
 			-- No pure 'buff' spell exists in the roster (Stasis pairs it with
 			-- a freeze), so synthesize a spec to isolate the branch.
 			local spec = makeSpec("buff", { buffKind = "damageAmp", magnitude = 2.0, durationSec = 5 }, "TestBuff")
-			local res = SpellExecutor.cast(spec, humanoid, humanoid, "authoritative")
+			local res = SpellExecutor.cast(spec, humanoid, humanoid, { mode = "authoritative" })
 			expectEq(res.ok, true, "ok")
 			expectEq(SkillBuffs.damageAmp(humanoid), 2.0, "damageAmp")
 			model:Destroy()
@@ -254,7 +254,7 @@ local cases: { { any } } = {
 		function()
 			local model, humanoid = makeDummy()
 			local spec = makeSpec("lightning", {}, "WeirdSpell")
-			local res = SpellExecutor.cast(spec, humanoid, humanoid, "authoritative")
+			local res = SpellExecutor.cast(spec, humanoid, humanoid, { mode = "authoritative" })
 			expectEq(res.ok, false, "ok")
 			expectContains(res.reason, "lightning", "reason mentions kind")
 			model:Destroy()
@@ -264,7 +264,7 @@ local cases: { { any } } = {
 		"damage with nil target returns ok=false",
 		function()
 			local model, humanoid = makeDummy()
-			local res = SpellExecutor.cast(SpellRegistry.getSpell("red", 1), humanoid, nil, "authoritative")
+			local res = SpellExecutor.cast(SpellRegistry.getSpell("red", 1), humanoid, nil, { mode = "authoritative" })
 			expectEq(res.ok, false, "ok")
 			expectContains(res.reason, "target", "reason mentions target")
 			model:Destroy()

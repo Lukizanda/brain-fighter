@@ -11,9 +11,9 @@
 -- to make directly, except now it happens on a VM that has a renderer.
 --
 -- Skips a payload carrying `drawnLocallyBy == LocalPlayer.UserId`: the
--- dual-VM delivery handlers run on the casting player's client too and
+-- dual-VM delivery handlers run on the predicting player's client too and
 -- already drew it on the frame it fired. Same skip the VfxController and
--- ProjectileVfxController do with `senderUserId` / `casterUserId`.
+-- ProjectileVfxController do with `senderUserId` / `predictedBy`.
 ----------------------------------------------------------------------
 
 local Players           = game:GetService("Players")

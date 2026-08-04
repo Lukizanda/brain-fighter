@@ -12,10 +12,11 @@
 -- clients render server-owned parts behind the server, so the real shot
 -- was vanishing ~12 studs short of a shield bubble instead of on it.
 --
--- Skips the casting player's own shots. `SkillDelivery`'s client branch
--- already drew those on the frame they fired — replaying the broadcast
--- would stack a second projectile alongside the first. Boss and NPC fire
--- carries no `casterUserId`, so it is drawn by everyone.
+-- Skips the shots of the client that predicted them. `SkillDelivery`'s
+-- predicted run already drew those on the frame they fired — replaying the
+-- broadcast would stack a second projectile alongside the first. Boss and
+-- NPC fire is predicted by nobody and carries no `predictedBy`, so it is
+-- drawn by everyone.
 ----------------------------------------------------------------------
 
 local Players           = game:GetService("Players")
@@ -49,7 +50,7 @@ ProjectileVfxEvent.OnClientEvent:Connect(function(payload: any)
 		log:warnThrottled("bad_payload", 5, "dropped malformed projectile payload")
 		return
 	end
-	if payload.casterUserId == LocalPlayer.UserId then return end
+	if payload.predictedBy == LocalPlayer.UserId then return end
 
 	CosmeticProjectile.launch({
 		origin           = payload.origin,
