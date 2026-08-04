@@ -16,8 +16,17 @@
 --                 the first rig they touch, on world geometry, or on
 --                 lifetime expiry (see the handler's impactRadius notes)
 --   aoe         — after windup, scan ctx.aoeCenter for humanoids; onImpact each
---   world_spawn — place a solid barrier in the world (Stone Wall);
---                 server-only, see the handler
+--   world_spawn — place a solid barrier in the world (Stone Wall)
+--
+-- EVERY handler is authoritative-only (Phase 5.6 Stage 4). A run with
+-- ctx.mode == "predicted" returns ok immediately, having spawned nothing,
+-- hit-tested nothing and written nothing. `world_spawn` was the first to
+-- work this way and is now simply the least surprising of the four.
+--
+-- That means this module no longer branches on RunService:IsServer() at
+-- all. It runs on the server, or it does nothing. Anything a player has to
+-- see is described to the clients via VfxBroadcast / ProjectileVfxEvent
+-- and drawn there — see wiki/design/client-server-boundary.md.
 --
 -- ctx.onComplete is called when the delivery fully resolves. Async
 -- handlers (projectile, aoe) use task.delay to call it after the
@@ -39,7 +48,6 @@ local SkillInterrupt = require(ReplicatedStorage.Shared.Skills.SkillInterrupt)
 local SkillTypes     = require(ReplicatedStorage.Shared.Skills.SkillTypes)
 local SkillVisuals   = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 local VfxConfig      = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
-local spawnEffect    = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
 type SkillSpec   = SkillTypes.SkillSpec
 type DeliveryCtx = SkillTypes.DeliveryCtx
@@ -292,6 +300,23 @@ SkillDelivery.handlers = {
 	--                       and expiry still end it. Forced true when
 	--                       impactRadius > 0.
 	projectile = function(skill: SkillSpec, ctx: DeliveryCtx): Result
+		-- Authoritative only, the same way world_spawn already was.
+		--
+		-- A predicted run used to spawn its own Part here and run a full
+		-- swept-ray hit-detection loop against it, in parallel with the
+		-- server doing the same against a different Part on a different
+		-- physics timeline. Two rigid bodies, two answers, and the one the
+		-- player watched was not the one that counted — which is what made
+		-- a shot appear to sail 4.7 studs through a shield bubble before
+		-- commit a6b94b3 papered over it.
+		--
+		-- Now there is one shot. The server owns it, and every client draws
+		-- its own cosmetic from the broadcast below.
+		if ctx.mode ~= "authoritative" then
+			if ctx.onComplete then ctx.onComplete() end
+			return { ok = true }
+		end
+
 		local params = skill.deliveryParams
 		local count:          number  = params.count          or 1
 		local speed:          number  = params.speed          or 30
@@ -350,12 +375,22 @@ SkillDelivery.handlers = {
 		local source    = ctx.source
 		local onComplete = ctx.onComplete
 
-		-- Lets the predicting client ignore the broadcast: it already drew
-		-- its own shot on the frame it fired, and replaying the broadcast
-		-- would put a second one alongside it. Nil for boss and NPC fire, so
-		-- every client draws those. Set at the entry point — see
-		-- SkillTypes.RunContext.
-		local predictedBy: number? = ctx.predictedBy
+		-- Every cosmetic below goes to EVERY client, the caster included,
+		-- and that is why `ctx.predictedBy` is deliberately not consulted
+		-- here despite being available.
+		--
+		-- `predictedBy` means "that client already drew this itself". Until
+		-- Stage 4 it did: the predicted run spawned its own visible shot on
+		-- the frame it fired, so the broadcast had to skip the caster or
+		-- they saw two. The predicted run now returns above without drawing
+		-- anything, so skipping them would leave the caster staring at an
+		-- invisible shot — the exact class of bug this pipeline has shipped
+		-- four times.
+		--
+		-- Stage 6 reintroduces the exclusion for precisely the cues its
+		-- prediction layer draws (the muzzle flash and cast SFX), and for
+		-- nothing else.
+		--
 		-- Captured for the detonation closures below, which outlive this
 		-- call by whole seconds and must not reach back through ctx.
 		local mode = ctx.mode
@@ -384,10 +419,6 @@ SkillDelivery.handlers = {
 				SkillVisuals.spawnShockwave(hitPos, impactRadius, {
 					color            = impactColor,
 					cosmeticEffectId = impactEffectId,
-					-- Both VMs reach this for a player cast; the caster's
-					-- client draws its own. Nil for boss splash, which is
-					-- server-only, so every client gets it from the broadcast.
-					drawnLocallyBy   = predictedBy,
 				})
 				local struck = 0
 				for _, h in collectHittables() do
@@ -410,7 +441,7 @@ SkillDelivery.handlers = {
 				-- announces nothing, and should still fall through to the
 				-- destroy cue below rather than dying silently.
 				if impactEffectId and VfxConfig.EFFECTS[impactEffectId] then
-					SkillVisuals.spawnEffectOn(impactEffectId, victim.hrp, predictedBy)
+					SkillVisuals.spawnEffectOn(impactEffectId, victim.hrp)
 					cued = true
 				end
 				log:info(("SkillProjectile hit %s cause=%s (skill=%s)"):format(
@@ -423,18 +454,16 @@ SkillDelivery.handlers = {
 				))
 			end
 
-			-- Give the death a sound when nothing above already did.
+			-- The death cue is raised by every client's own
+			-- CosmeticProjectile, which fires `destroyEffectId` straight from
+			-- the payload. Before Stage 4 this branch existed to cover the
+			-- caster, whose client skipped the broadcast because it was
+			-- drawing its own shot. Nobody skips it now, so raising it here
+			-- as well would simply double it for everyone.
 			--
-			-- Client VM only, and deliberately so. Both VMs run this handler
-			-- for a player cast (see the broadcast note below), so playing it
-			-- server-side too would double it for the caster — and every
-			-- *other* client hears this shot die through its own
-			-- CosmeticProjectile, which fires the same id from the payload.
-			-- Boss fire never runs this branch at all: it is server-only, so
-			-- the cosmetic is the sole source there.
-			if destroyEffectId and not cued and not RunService:IsServer() then
-				SkillVisuals.spawnEffectAtPoint(hitPos, destroyEffectId, predictedBy)
-			end
+			-- `cued` still matters: it is read by the shield-block and
+			-- impact paths above to decide whether this shot already
+			-- announced itself.
 			part:Destroy()
 		end
 
@@ -460,7 +489,7 @@ SkillDelivery.handlers = {
 			-- server-only, so before the broadcast existed this burst was
 			-- emitted on the server and rendered for nobody — the shield
 			-- looked like it was doing nothing even when it was.
-			SkillVisuals.spawnEffectAtPoint(contact, SHIELD_BLOCK_EFFECT_ID, predictedBy)
+			SkillVisuals.spawnEffectAtPoint(contact, SHIELD_BLOCK_EFFECT_ID)
 			log:info(("SkillProjectile blocked by shield on %s absorbed=%.1f left=%.1f (skill=%s)"):format(
 				victim.hum.Parent and victim.hum.Parent.Name or "?",
 				absorbed,
@@ -542,39 +571,33 @@ SkillDelivery.handlers = {
 				--
 				-- It is also the wrong trust boundary independent of the
 				-- visuals: the client being shot at should not own the bullet.
-				if RunService:IsServer() then
-					-- Throws on parts with no simulated assembly; a projectile
-					-- that failed to set up is not worth taking the cast down.
-					pcall(function()
-						projectile:SetNetworkOwner(nil)
-					end)
-				end
+				-- Throws on parts with no simulated assembly; a projectile
+				-- that failed to set up is not worth taking the cast down.
+				pcall(function()
+					projectile:SetNetworkOwner(nil)
+				end)
 
 				Debris:AddItem(projectile, lifetimeSec + 1)
 
-				-- Visual/authority split. The server's shot is the one that
-				-- decides what happens, and it is never the one you see: it
-				-- is invisible and carries no trail, and every client draws
-				-- its own CosmeticProjectile from the broadcast below.
+				-- Visual/authority split. This shot decides what happens and
+				-- is never the one you see: invisible, no trail, while every
+				-- client draws its own CosmeticProjectile from the broadcast.
 				--
-				-- Two problems fall out of that. Clients render server-owned
-				-- parts behind the server, so the real shot vanished ~12
-				-- studs short of a shield bubble instead of on it. And
-				-- `projectile` delivery runs on both VMs — unlike
-				-- `world_spawn`, which guards for exactly this — so a player
-				-- cast produced a server Part *and* a client Part, two
-				-- fireballs that only looked like one while the caster's
-				-- client happened to own and simulate both in lockstep.
+				-- The reason is that clients render server-owned parts a beat
+				-- behind the server, so the real shot used to vanish ~12 studs
+				-- short of a shield bubble instead of on it. Drawing the
+				-- cosmetic locally on each client puts the visible shot where
+				-- that client sees the block happen.
 				--
-				-- The client branch keeps drawing its own shot directly: it
-				-- is already frame-perfect for the caster, and it also does
-				-- the local gameplay pass.
-				if RunService:IsServer() then
+				-- `predictedBy` is not sent. Nothing is drawn by prediction
+				-- any more, so every client — the caster included — needs this
+				-- payload. Stage 6 will send it again once its prediction
+				-- layer starts drawing the muzzle cue locally.
+				do
 					projectile.Transparency = 1
 					local remote = projectileVfxRemote()
 					if remote then
 						remote:FireAllClients({
-							predictedBy      = predictedBy,
 							origin           = muzzlePos,
 							direction        = dir,
 							speed            = speed,
@@ -595,21 +618,6 @@ SkillDelivery.handlers = {
 							hasImpactCue     = impactEffectId ~= nil,
 							source           = source,
 						})
-					end
-				else
-					-- The caster's own shot: this client skips its broadcast,
-					-- so both cues have to be raised here or the person firing
-					-- is the only one who doesn't hear it.
-					if launchEffectId then
-						SkillVisuals.spawnEffectAtPoint(muzzlePos, launchEffectId)
-					end
-					if cosmeticEffectId then
-						-- Trail/glow that travels with the Part. Physics
-						-- ownership stays here; the visual layer lives in VfxConfig.
-						local cosmeticEffect = VfxConfig.EFFECTS[cosmeticEffectId]
-						if cosmeticEffect then
-							spawnEffect(cosmeticEffect, projectile)
-						end
 					end
 				end
 
@@ -650,7 +658,7 @@ SkillDelivery.handlers = {
 
 					applyImpactEffects(skill, victim.hum, source, mode)
 					if impactEffectId then
-						SkillVisuals.spawnEffectOn(impactEffectId, victim.hrp, predictedBy)
+						SkillVisuals.spawnEffectOn(impactEffectId, victim.hrp)
 					end
 
 					local rig = victim.hum.Parent
@@ -797,6 +805,15 @@ SkillDelivery.handlers = {
 	--                 cosmeticEffectId (optional VfxConfig.EFFECTS key —
 	--                 attached to the shockwave Part at impact).
 	aoe = function(skill: SkillSpec, ctx: DeliveryCtx): Result
+		-- Authoritative only, for the same reason as projectile: a predicted
+		-- run scanned the same radius against the same rigs and applied the
+		-- same effects, in parallel with the server doing it. The windup ring
+		-- is broadcast, so every client still sees the telegraph.
+		if ctx.mode ~= "authoritative" then
+			if ctx.onComplete then ctx.onComplete() end
+			return { ok = true }
+		end
+
 		local params       = skill.deliveryParams
 		local radius:       number = params.radius      or 12
 		local windupSec:    number = params.windupSec   or 0.5
@@ -822,11 +839,8 @@ SkillDelivery.handlers = {
 			-- only chooses what to render.
 			SkillVisuals.spawnShockwave(center, radius, {
 				cosmeticEffectId = cosmeticEffectId,
-				-- aoe runs on both VMs like projectile does, so a player-cast
-				-- slam is drawn locally by the client that predicted it. The
-				-- boss's own slam was predicted by nobody and so reaches
-				-- every client.
-				drawnLocallyBy   = ctx.predictedBy,
+				-- Reaches every client. Nothing draws this locally any more
+				-- — see the note in the projectile handler.
 			})
 
 			-- Apply onImpact to all players in radius
@@ -869,7 +883,7 @@ SkillDelivery.handlers = {
 		local params = skill.deliveryParams
 		local onComplete = ctx.onComplete
 
-		if not RunService:IsServer() then
+		if ctx.mode ~= "authoritative" then
 			if onComplete then onComplete() end
 			return { ok = true }
 		end

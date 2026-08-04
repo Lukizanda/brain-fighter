@@ -178,8 +178,16 @@ The predicted path does not validate either. Stage 5 already asked `canCast` bef
 
 *Consequence for tests:* `CastAction/__tests` could no longer assert damage or healing, because `CastAction` **is** the predicted run. Those two assertions were inverted to "the predicted run must not touch Health" — which is a stronger check than what they replaced, since a regression that reinstated double-application now fails them. Effect application itself stays covered by the SpellExecutor suite, which casts authoritatively.
 
-**Stage 4 — Make delivery authoritative-only.** `projectile` and `aoe` early-return on `predicted`, as `world_spawn` already does. The client-side Part, its swept ray, and its parallel hit detection all delete. The invisible-server-shot split collapses: there is one Part, it is the server's, it is authoritative, and every client draws its own cosmetic from the broadcast — including the caster. The three `IsServer()` guards in the projectile handler (`:419`, `:529`, `:556`) and the four in `SkillVisuals` all delete with it.
-*Done when:* a two-client playtest shows one projectile per cast on both screens, hitting the same target, with the shield block landing on the bubble surface. This is the stage that must be measured, not eyeballed.
+**Stage 4 — Make delivery authoritative-only.** ✅ **Done 2026-08-04.** `projectile` and `aoe` early-return on `predicted`, as `world_spawn` already did — and `world_spawn`'s own guard moved from `RunService:IsServer()` to `ctx.mode`, so all four handlers now say the same thing the same way. The client-side Part, its swept ray and its parallel hit detection are gone. **`SkillDelivery` no longer calls `RunService:IsServer()` anywhere**: it runs on the server or it does nothing. The `spawnEffect` require went with the deleted client branch.
+
+**The trap in this stage, and it is the four-shipped-bugs trap again:** once the predicted run draws nothing, `predictedBy` must stop excluding the caster from broadcasts, or the caster sees *no* shot at all. Every `drawnLocallyBy` argument in delivery is therefore removed, and the `ProjectileVfxEvent` payload no longer carries `predictedBy`. The exclusion returns in Stage 6, for exactly the cues its prediction layer draws and nothing else.
+
+*Verified, client-side:* the predicted run spawned **0** `SkillProjectile` parts (it used to spawn one), while still returning ok and draining correctly; and the casting client **received its own shot's payload** (`cosmetic=projectile_red_t2`, `predictedBy=nil`) where it had previously been excluded and received nothing. Skills suite 4/4.
+
+> **Two corrections to what this page previously claimed about Stage 4.**
+>
+> 1. **It does not delete the `IsServer()` branch in `SkillVisuals`, and nothing later will.** Same reason Stage 2 hit: that module has two permanent kinds of caller — the server *describing* an effect (`SkillDelivery`) and a client *drawing* one (`WorldVfxController`, `CosmeticProjectile`). Routing on which VM you are is the honest question there. It was only a workaround inside `SkillDelivery`, where it stood in for "which of two simultaneous runs is this".
+> 2. **It causes no cast-feel regression, and the justification given for Stage 6 was wrong.** The claim was that Stage 4 deletes the branch raising the caster's muzzle flash. In fact no player spell configures `launchEffectId` at all — it is boss-only — and the caster's cast burst and SFX come from `VfxController.client.luau:89` listening to `CastAction.spellResolved`, a client-side bindable the predicted run still fires. Measured at **0.39 ms** from the cast call, with no round trip, after Stage 4. See the revised Stage 6 below.
 
 **Stage 5 — Validate before drain.** ✅ **Done 2026-08-04, and moved ahead of Stage 3** — see the ordering note below. `SkillEffects.canApply` and `SkillDelivery.canDeliver` are pure precondition predicates mirroring each handler's guards; `SpellExecutor.canCast` composes them; `CastAction.drainAndCast` checks before it drains. `cast_refund_on_failure` is replaced by `cast_rejected_before_drain`, which watches `EnergyReservoirs.changed` and asserts **zero** fires — the old suite compared before/after totals and so could not tell "never drained" from "drained then refunded".
 
@@ -191,7 +199,17 @@ The refund path is not deleted outright as originally planned — it survives as
 
 > **Ordering correction.** Stage 5 must precede Stage 3, which the original sequence had backwards. Stage 3 makes a predicted run's effects a no-op returning `ok = true`; `CastAction`'s refund read exactly that return value, so doing 3 first would have silently eaten a player's mana on every cast that could not resolve. Discovered while implementing, not by playtest — the failure is invisible in a single-player Studio session because the cast still *looks* refused.
 
-**Stage 6 — The prediction layer.** **Required, not optional** (see "Zero-travel skills"). Stage 4 deletes the client branch that currently raises the caster's muzzle flash and cast SFX (`SkillDelivery.luau:588`), so without this the caster's own cast goes quiet until the broadcast arrives — a regression that needs no playtest to predict. Build a deliberate, minimal prediction layer: on cast, the caster's client immediately plays muzzle flash, cast SFX and HUD drain, marked `predicted`, writing nothing but its own cosmetics. Give it a predicted-endpoint parameter from the start so a future `hitscan` skill can draw a tracer through it without a redesign. This is the *only* prediction the design sanctions, and it is additive on top of a clean boundary rather than a shortcut through it.
+**Stage 6 — The prediction layer.** **Required, not optional** (see "Zero-travel skills") — but smaller than planned, because *it already exists and nobody had named it*.
+
+`VfxController.client.luau:89` listens to `CastAction.spellResolved` and draws the caster's cast burst and SFX immediately on the frame they cast. That is a prediction layer by every criterion this design sets: it fires on the predicted run, it is local, it is cosmetic-only, and it writes nothing but its own effects. It survived Stage 4 untouched and measures 0.39 ms.
+
+So Stage 6 is not "build one". It is:
+
+1. **Name it.** It is currently an incidental consequence of `CastAction` firing a bindable. Nothing marks it as the sanctioned prediction path, so the next person to add a `spellResolved` listener has no way to know the rule it must obey.
+2. **Pin the rule it must obey** — a predicted listener may draw, play sound and update the caster's own HUD; it may not write another entity's state, resolve a victim, or emit a damage number.
+3. **Give it a predicted endpoint.** `spellResolved` currently carries `(spec, caster, target)`. A hitscan skill needs "where would this have hit?" to draw a tracer, and that is a client-side raycast producing a `Vector3` **for drawing only**. Adding it now is what stops hitscan needing a redesign later.
+
+Nothing here changes behaviour; it is the contract that keeps the boundary from eroding.
 
 ## Risks
 

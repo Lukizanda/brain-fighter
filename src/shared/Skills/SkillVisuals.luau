@@ -23,17 +23,28 @@
 -- when called on the server and draw when called on a client. Handlers
 -- just say what should happen and let this module route it.
 --
--- The one thing a caller still has to supply is `drawnLocallyBy`: the
--- UserId of a client that already drew this effect itself, so the
--- broadcast can skip it. Delivery handlers read it straight off
--- `ctx.predictedBy` — a fact set once at the entry point, not something
--- this layer or its callers work out. Server-originated paths (boss fire,
--- world_spawn) leave it nil, because nobody predicted those.
+-- `drawnLocallyBy` is the UserId of a client that has already drawn this
+-- effect itself, so the broadcast can skip it and avoid showing them two.
 --
--- Callers outside delivery — WorldVfxController drawing a received
--- broadcast, CosmeticProjectile drawing its own impacts — are already on
--- a client and pass nothing. They are presentation, and have no run
--- context to speak of.
+-- **No caller passes it today** (Phase 5.6 Stage 4). Delivery is
+-- authoritative-only and draws nothing on any client, so every effect
+-- belongs to every client. It stays on the signature for Stage 6, whose
+-- prediction layer will draw the caster's muzzle cue locally and will need
+-- exactly this to stop the broadcast duplicating that one cue.
+--
+-- The `RunService:IsServer()` branch below is NOT a leftover of the old
+-- dual-VM delivery, and does not go away with it. This module has two
+-- kinds of caller and always will:
+--
+--   server, describing  — SkillDelivery raising an impact or a shockwave
+--   client, drawing     — WorldVfxController rendering a received
+--                         broadcast, CosmeticProjectile rendering its own
+--                         impacts
+--
+-- The second kind is presentation. It is already on a machine with a
+-- renderer and has no run context to consult, so routing on which VM we
+-- are is the honest question here — unlike in SkillDelivery, where it was
+-- standing in for "which of two simultaneous runs is this".
 ----------------------------------------------------------------------
 
 local Debris            = game:GetService("Debris")

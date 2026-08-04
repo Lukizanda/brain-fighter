@@ -934,3 +934,34 @@ predicted run. Those two assertions were inverted to "the predicted run must not
 strictly stronger than what they replaced, since a regression reinstating double-application now
 fails them. Effect application stays covered by the SpellExecutor suite, which casts
 authoritatively. Pages touched: [[design/client-server-boundary]], [[design/build-plan]].
+
+## [2026-08-04] ingest | Phase 5.6 Stage 4 landed — one shot, owned by the server
+
+`projectile` and `aoe` now early-return on a predicted run, as `world_spawn` already did, and
+`world_spawn`'s own guard moved from `RunService:IsServer()` to `ctx.mode` so all four handlers say
+the same thing the same way. The client-side Part, its swept ray and its parallel hit detection are
+deleted. **`SkillDelivery` no longer calls `RunService:IsServer()` anywhere** — it runs on the server
+or it does nothing; the `spawnEffect` require went with the deleted client branch.
+
+The trap in this stage was the four-shipped-bugs trap again: once prediction draws nothing,
+`predictedBy` must stop excluding the caster from broadcasts or the caster sees no shot at all. Every
+`drawnLocallyBy` argument in delivery is removed and the `ProjectileVfxEvent` payload no longer
+carries `predictedBy`. Verified client-side: the predicted run spawned 0 `SkillProjectile` parts
+(it used to spawn one) while still returning ok and draining, and the casting client received its own
+shot's payload where it had previously been excluded and got nothing. Skills suite 4/4.
+
+**Two corrections to earlier claims on [[design/client-server-boundary]], both now recorded there.**
+(1) Stage 4 does *not* delete `SkillVisuals`' `IsServer()` branch and nothing later will — that
+module has two permanent kinds of caller, the server *describing* an effect and a client *drawing*
+one, so routing on VM is the honest question there. It was only a workaround inside `SkillDelivery`,
+where it stood in for "which of two simultaneous runs is this". (2) Stage 4 causes no cast-feel
+regression, and the stated justification for Stage 6 was wrong: no player spell configures
+`launchEffectId` (boss-only), and the caster's cast burst comes from `VfxController.client.luau:89`
+listening to `CastAction.spellResolved`, a client-side bindable the predicted run still fires —
+measured at 0.39 ms with no round trip after Stage 4.
+
+That second correction reshapes Stage 6: **the prediction layer already exists, unnamed.**
+`VfxController` ← `spellResolved` meets every criterion the design sets for one. Stage 6 becomes
+naming it as the sanctioned prediction path, pinning the rule it must obey, and giving it a
+predicted endpoint for a future hitscan tracer — not building one. Pages touched:
+[[design/client-server-boundary]], [[design/build-plan]].
