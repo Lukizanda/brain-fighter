@@ -9,6 +9,22 @@
 --
 -- Also broadcasts via BroadcastSpellVfx so other clients see the
 -- effect, and receives SpellVfxEvent to play effects cast by others.
+--
+-- **This is the prediction layer** (Phase 5.6 Stage 6). It is the only
+-- thing in the game that reacts to a cast before the server has confirmed
+-- it, and it is why a spell feels instant: the burst lands ~0.4ms after
+-- the tap while damage and status arrive replicated a round trip later.
+--
+-- Everything here must stay cosmetic and local. The full contract — what a
+-- `spellResolved` listener may and may not do, and why a mispredicted hit
+-- marker is a different kind of wrong from a mispredicted spark — is on
+-- the signal itself in CastAction. Read it before adding a listener.
+--
+-- Note the deliberate gap at the impact burst below: projectile spells are
+-- skipped, because their impact is raised by SkillDelivery at the real hit
+-- position on the server. Predicting an impact *location* is a claim this
+-- layer is not entitled to make; predicting that the caster's staff
+-- flashed is not.
 ----------------------------------------------------------------------
 
 local Players           = game:GetService("Players")

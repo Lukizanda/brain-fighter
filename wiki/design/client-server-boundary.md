@@ -209,7 +209,20 @@ So Stage 6 is not "build one". It is:
 2. **Pin the rule it must obey** — a predicted listener may draw, play sound and update the caster's own HUD; it may not write another entity's state, resolve a victim, or emit a damage number.
 3. **Give it a predicted endpoint.** `spellResolved` currently carries `(spec, caster, target)`. A hitscan skill needs "where would this have hit?" to draw a tracer, and that is a client-side raycast producing a `Vector3` **for drawing only**. Adding it now is what stops hitscan needing a redesign later.
 
-Nothing here changes behaviour; it is the contract that keeps the boundary from eroding.
+✅ **Done 2026-08-04.** (1) and (2) landed as documentation on `CastAction.spellResolved` and `VfxController`'s header, plus a new suite. (3) is **deliberately not built**: adding an endpoint argument no skill consumes would be dead API, and the contract for it is pinned above, which is what "plan for hitscan" actually requires.
+
+The substantive part turned out to be a fourth item nobody listed: **nothing automated pinned the invariant.** Stages 3 and 4 rested on ad-hoc checks run by hand. `Suites/Skills/predicted_run_writes_nothing` now casts four spells (instant damage, freeze, shield, projectile) twice against fresh rigs — once predicted, once authoritative — and asserts in both directions:
+
+| Run | health | walkSpeed | `_frozen` | `_shield` | projectile Parts |
+|---|---|---|---|---|---|
+| `predicted` | 100 | 16 | false | 0 | 0 |
+| `authoritative` | 45 | 0 | true | 40 | 1 |
+
+The second row is the point. A suite that only asserts "nothing happened" passes perfectly against a registry where the spells are inert or a `SkillEffects` that early-returns unconditionally — so every negative assertion is paired with a positive control proving the spell was supposed to do something.
+
+That control earned its keep immediately: the first draft placed both rigs at the origin, making `(targetPos - muzzlePos).Unit` a zero-length vector and the projectile direction NaN. The negative half passed happily; the control failed and named it.
+
+Nothing here changes behaviour. It is the contract, and now the enforcement, that keeps the boundary from eroding.
 
 ## Risks
 

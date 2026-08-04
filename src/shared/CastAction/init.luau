@@ -62,6 +62,33 @@ local CastAction = {}
 
 -- Fires on the casting client's VM after every successful cast.
 -- Server VM creates the same BindableEvent but no listener connects there.
+--
+-- THIS SIGNAL IS THE PREDICTION LAYER.
+--
+-- It is the one place in the game sanctioned to react to a cast before the
+-- server has confirmed anything, and the reason the caster's spell feels
+-- instant: `VfxController` draws the cast burst and plays its SFX from
+-- here, ~0.4ms after the tap, with no round trip. Everything else about a
+-- cast — damage, status, the projectile itself — happens on the server and
+-- comes back replicated (see wiki/design/client-server-boundary.md).
+--
+-- That makes the contract for a listener narrow, and worth stating,
+-- because nothing about a BindableEvent enforces it:
+--
+--   MAY   draw effects, play sound, animate, update the caster's own HUD
+--         — anything owned by this client and visible only here.
+--   MUST NOT write another entity's state, resolve a victim, apply damage,
+--         or show a damage number / hit marker. Those are claims about what
+--         happened, and this signal fires before anything has.
+--
+-- The distinction is not pedantry. A mispredicted cosmetic expires on its
+-- own in a fraction of a second and nobody notices; a mispredicted hit
+-- marker tells the player they hit something they didn't.
+--
+-- A future hitscan skill draws its tracer from here too, off a client-side
+-- raycast that yields a Vector3 for drawing and nothing else. The contract
+-- for that is pinned in the design doc under "Zero-travel skills"; the
+-- endpoint argument is deliberately NOT added until a skill needs it.
 local _spellResolvedBindable = Instance.new("BindableEvent")
 CastAction.spellResolved = _spellResolvedBindable.Event :: RBXScriptSignal
 

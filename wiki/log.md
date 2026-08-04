@@ -965,3 +965,31 @@ That second correction reshapes Stage 6: **the prediction layer already exists, 
 naming it as the sanctioned prediction path, pinning the rule it must obey, and giving it a
 predicted endpoint for a future hitscan tracer — not building one. Pages touched:
 [[design/client-server-boundary]], [[design/build-plan]].
+
+## [2026-08-04] ingest | Phase 5.6 Stage 6 landed — the prediction layer, named and pinned
+
+Last stage of the client/server boundary refactor. It turned out far smaller than planned, because
+**the prediction layer already existed and nobody had named it**: `VfxController.client.luau:89`
+listens to `CastAction.spellResolved` and draws the caster's cast burst and SFX ~0.39 ms after the
+tap, with no round trip. That meets every criterion this design sets for prediction — fires on the
+predicted run, local, cosmetic-only, writes nothing but its own effects — and it survived Stage 4
+untouched.
+
+So the stage became: document the contract on the signal itself (a listener MAY draw, play sound and
+update the caster's own HUD; MUST NOT write another entity's state, resolve a victim, apply damage
+or show a hit marker — a mispredicted spark expires unnoticed, a mispredicted hit marker lies to the
+player), and mark `VfxController` as the sanctioned implementation. The planned predicted-endpoint
+argument was **deliberately not added** — no skill consumes one, and the hitscan contract is already
+pinned in [[design/client-server-boundary]] § Zero-travel skills. Dead API is not planning.
+
+The substantive gap was a fourth item nobody had listed: **nothing automated pinned the invariant.**
+Stages 3 and 4 rested on checks run by hand. New suite
+`Tests/Suites/Skills/predicted_run_writes_nothing` casts four spells (instant damage, freeze, shield,
+projectile) twice against fresh rigs and asserts in both directions — predicted wrote nothing
+(health 100, WalkSpeed 16, `_frozen` false, `_shield` 0, 0 projectile Parts); authoritative wrote
+everything (45, 0, true, 40, 1). The positive control is the load-bearing half: without it the suite
+passes against inert spells or an unconditionally early-returning `SkillEffects`. It earned its keep
+on the first run — the initial draft placed both rigs at the origin, making the projectile direction
+NaN, and the control caught what the negative assertions cheerfully missed.
+
+Skills suite now 5/5. Pages touched: [[design/client-server-boundary]], [[design/build-plan]].
