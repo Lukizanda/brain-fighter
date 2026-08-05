@@ -100,13 +100,9 @@ function LetterBlaster:_onActivated()
 		return
 	end
 
-	-- Laser blast from Muzzle attachment (crook) toward the block.
-	local handle = self._tool:FindFirstChild("Handle") :: BasePart?
-	if handle then
-		local muzzle = handle:FindFirstChild("Muzzle") :: Attachment?
-		local origin = if muzzle then muzzle.WorldPosition else handle.Position
-		laserBeamEffect(origin, block:GetPivot().Position)
-	end
+	-- Read before firing: the server destroys the block, and we want the
+	-- beam endpoint from where it stood, not from a Model mid-teardown.
+	local blockPos = block:GetPivot().Position
 
 	local appended = self._session.wordBuffer:append(letter, color)
 	if not appended then
@@ -118,6 +114,23 @@ function LetterBlaster:_onActivated()
 
 	consumeRemote:FireServer(block)
 	log:info(string.format("consumed %s (%s)", letter, color))
+
+	-- Laser blast from the Muzzle attachment (crook) toward the block.
+	--
+	-- Drawn here rather than waiting for the server's copy to arrive: this
+	-- is the prediction layer, cosmetic-only, and the shot should leave the
+	-- staff on the frame the player clicked. BlockShootService redraws this
+	-- same beam for every OTHER client once it has validated the consume,
+	-- and excludes us so we never see it twice.
+	--
+	-- Deliberately below the buffer check, not above it as it was: a shot
+	-- the buffer rejected used to draw a beam for the shooter that no other
+	-- player could ever have a matching beam for, because the consume that
+	-- triggers the broadcast never happened.
+	local origin = BlockShoot.muzzlePosition(self._tool)
+	if origin then
+		laserBeamEffect(origin, blockPos)
+	end
 
 	local hitSound = self._tool:FindFirstChild(LetterBlasterConfig.HIT_SOUND_NAME) :: Sound?
 	if hitSound then hitSound:Play() end

@@ -27,9 +27,11 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local BlockShoot = require(ReplicatedStorage.Shared.BlockShoot)
 local BlockShootConstants = require(script.Parent.BlockShootConstants)
 local BlockShootValidation = require(script.Parent.BlockShootValidation)
 local RateLimiter = require(script.Parent.Parent.Utility.RateLimiter)
+local VfxBroadcast = require(ReplicatedStorage.Shared.Vfx.VfxBroadcast)
 
 local log = Logger.new("BlockShootService")
 
@@ -56,6 +58,27 @@ local function reject(player: Player, reason: string)
 	end
 end
 
+-- Show the shot to everyone who isn't the shooter.
+--
+-- The blaster's laser used to be drawn only by the client that fired it,
+-- into its own Workspace, where it stayed: client-created instances never
+-- replicate upward, so every other player watched blocks vanish in silence
+-- with nothing connecting them to the player who shot them. The beam is
+-- cosmetic, so the server does not draw it either — it describes it, and
+-- each client draws its own (see VfxBroadcast).
+--
+-- `drawnLocallyBy` excludes the shooter, who drew this beam on the frame
+-- they clicked and must not get a second one a round trip later. That
+-- exclusion is only safe because the client's draw is unconditional on the
+-- same branch that fires this remote.
+local function broadcastShot(player: Player, character: Model, blockPos: Vector3)
+	local tool = character:FindFirstChildWhichIsA("Tool")
+	if not tool then return end
+	local origin = BlockShoot.muzzlePosition(tool)
+	if not origin then return end
+	VfxBroadcast.beam(origin, blockPos, player.UserId)
+end
+
 consumeRemote.OnServerEvent:Connect(function(player: Player, block: any)
 	-- Rate first: it is the cheapest check and the one an exploiter is
 	-- most likely to be hammering.
@@ -70,13 +93,17 @@ consumeRemote.OnServerEvent:Connect(function(player: Player, block: any)
 		return
 	end
 
-	local inRange, rangeReason = BlockShootValidation.checkRange(player.Character, model)
+	local character = player.Character
+	local inRange, rangeReason = BlockShootValidation.checkRange(character, model)
 	if not inRange then
 		reject(player, rangeReason or "out of range")
 		return
 	end
 
+	-- Read the endpoint before the block stops existing.
+	local blockPos = model:GetPivot().Position
 	model:Destroy()
+	broadcastShot(player, character :: Model, blockPos)
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)

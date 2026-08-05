@@ -1,7 +1,7 @@
 ---
 type: system
-description: Shared helpers and server handler for block consumption. Client input is handled by LetterBlaster (Phase 4.6) — see [[systems/LetterBlaster]]. Server-trust validation added in 5.4.
-updated: 2026-08-03
+description: Shared helpers and server handler for block consumption. Client input is handled by LetterBlaster (Phase 4.6) — see [[systems/LetterBlaster]]. Server-trust validation added in 5.4; the server broadcasts the shot's beam as of 2026-08-05.
+updated: 2026-08-05
 ---
 
 # BlockShoot
@@ -10,7 +10,7 @@ Shared library and server handler for the letter-block consume pipeline. The cli
 
 ## Files
 
-- `src/shared/BlockShoot/init.luau` — shared helpers: `findLetterBlock` (ancestor traversal), `readBlock` (attribute reader), `MAX_RAYCAST_DISTANCE` constant.
+- `src/shared/BlockShoot/init.luau` — shared helpers: `findLetterBlock` (ancestor traversal), `readBlock` (attribute reader), `muzzlePosition` (where a shot leaves the staff), `MAX_RAYCAST_DISTANCE` constant.
 - `src/shared/BlockShoot/Remotes/ConsumeBlock.model.json` — RemoteEvent for client→server block destruction.
 - `src/server/BlockShoot/BlockShootService.server.luau` — server handler: validates the payload, destroys the block (triggers BlockSpawner auto-refill).
 - `src/server/BlockShoot/BlockShootConstants.luau` — trust thresholds, each derived from a client-side number rather than picked.
@@ -31,7 +31,21 @@ The input side now runs inside the [[systems/LetterBlaster]] controller (`Letter
 5. `WordBuffer:append(letter, color)` on the local session buffer.
 6. Fire `ConsumeBlock` remote to the server with the block Model reference.
 7. Server handler validates the payload (rate, Instance, in-workspace, tagged, in-range — see § Trust model) and calls `block:Destroy()`.
-8. The `CollectionService` removed signal triggers [[systems/BlockSpawner]]'s auto-refill to maintain target count.
+8. Server calls `VfxBroadcast.beam` so every player *other* than the shooter sees the laser (see § Showing the shot).
+9. The `CollectionService` removed signal triggers [[systems/BlockSpawner]]'s auto-refill to maintain target count.
+
+## Showing the shot (2026-08-05)
+
+A validated consume ends with `broadcastShot`, which resolves the firing player's muzzle via `BlockShoot.muzzlePosition(tool)` and calls `VfxBroadcast.beam(origin, blockPos, player.UserId)`.
+
+Two properties are load-bearing:
+
+- **The endpoint is read before `model:Destroy()`.** A Vector3 captured from the live block, not an Instance reference — an Instance for something that no longer exists arrives as `nil` on the receiving client.
+- **The origin is derived server-side, never sent by the client.** `ConsumeBlock`'s payload is unchanged, so the trust model below is untouched and the Hardening suite still describes reality. A client can lie about *which block* it shot and is checked for it; it never gets to name a position at all.
+
+`drawnLocallyBy = player.UserId` excludes the shooter, who drew the beam locally on the frame they clicked. That exclusion is only safe because the client's draw is unconditional on the same branch that fires the remote — see [[systems/LetterBlaster]] § Laser blast.
+
+If the player has no Tool equipped, or the Tool has no Handle, the broadcast is skipped and the block is still consumed. A missing cosmetic never blocks gameplay.
 
 ## MindFull gate
 

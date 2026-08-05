@@ -19,10 +19,11 @@
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Logger       = require(ReplicatedStorage.Shared.Core.Logger)
-local SkillVisuals = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
-local VfxConfig    = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
-local spawnEffect  = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
+local Logger          = require(ReplicatedStorage.Shared.Core.Logger)
+local SkillVisuals    = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
+local VfxConfig       = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
+local laserBeamEffect = require(ReplicatedStorage.Shared.Weapon.Scripts.Effects.laserBeamEffect)
+local spawnEffect     = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
 local log         = Logger.new("WorldVfxController")
 local LocalPlayer = Players.LocalPlayer
@@ -51,6 +52,12 @@ local handlers: { [string]: (payload: any) -> () } = {
 		local effect = VfxConfig.EFFECTS[payload.effectId]
 		if not effect then return end
 		spawnEffect(effect, target :: BasePart | Attachment)
+	end,
+
+	beam = function(payload: any)
+		if typeof(payload.origin) ~= "Vector3" then return end
+		if typeof(payload.endPoint) ~= "Vector3" then return end
+		laserBeamEffect(payload.origin, payload.endPoint)
 	end,
 
 	shockwave = function(payload: any)

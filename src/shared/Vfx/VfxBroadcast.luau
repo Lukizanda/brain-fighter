@@ -19,12 +19,21 @@
 --   VfxBroadcast.playAt(effectId, position)        — one-shot at a point
 --   VfxBroadcast.playOn(effectId, target)          — one-shot on a Part
 --   VfxBroadcast.shockwave(center, radius, opts)   — ground ring + burst
+--   VfxBroadcast.beam(origin, endPoint)            — laser from A to B
 --
--- Each takes an optional `drawnLocallyBy: number?` (a UserId). Pass it
--- when the calling code ALSO runs on that player's client — the dual-VM
--- delivery handlers do — so they aren't sent a second copy of something
--- they already drew frame-perfectly. Omit it for anything server-only
--- (boss fire, Stone Wall) or that client sees nothing at all.
+-- Each takes an optional `drawnLocallyBy: number?` (a UserId): don't send
+-- this to that player, they already have it. Exactly one situation earns
+-- it — a client drew the cosmetic itself, immediately, as prediction, and
+-- the server is now catching everyone else up. The LetterBlaster beam is
+-- the case it exists for: the shooter's beam leaves the staff on the frame
+-- they clicked, and a second copy a round trip later would be a visible
+-- double-flash.
+--
+-- Omit it for anything the server originates alone (boss fire, Stone Wall).
+-- And only pass it when the local draw is *unconditional* — if the client
+-- might skip its own draw, excluding it means that player is the one
+-- person who sees nothing, which is the exact bug class this module exists
+-- to end (see wiki/design/client-server-boundary.md, Stage 4).
 --
 -- Calling any of these from a client is a no-op plus a warning: a client
 -- cannot fire to other clients, and reaching for this from the client is
@@ -112,6 +121,24 @@ function VfxBroadcast.playOn(effectId: string, target: Instance, drawnLocallyBy:
 		kind           = "attached",
 		effectId       = effectId,
 		target         = target,
+		drawnLocallyBy = drawnLocallyBy,
+	})
+end
+
+-- A laser beam travelling from `origin` to `endPoint` — the LetterBlaster
+-- shot, and anything else that wants a visible line between two points.
+--
+-- Positions rather than Instances on purpose. The endpoint is usually a
+-- LetterBlock the server is about to destroy, and an Instance argument for
+-- a thing that no longer exists by the time the payload lands arrives as
+-- nil; a Vector3 still draws the shot that was actually taken.
+function VfxBroadcast.beam(origin: Vector3, endPoint: Vector3, drawnLocallyBy: number?)
+	local r = outbound("beam")
+	if not r then return end
+	r:FireAllClients({
+		kind           = "beam",
+		origin         = origin,
+		endPoint       = endPoint,
 		drawnLocallyBy = drawnLocallyBy,
 	})
 end

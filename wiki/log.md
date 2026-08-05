@@ -993,3 +993,59 @@ on the first run — the initial draft placed both rigs at the origin, making th
 NaN, and the control caught what the negative assertions cheerfully missed.
 
 Skills suite now 5/5. Pages touched: [[design/client-server-boundary]], [[design/build-plan]].
+
+## [2026-08-05] ingest | The LetterBlaster's laser finally leaves the shooter's screen
+
+Reported plainly: "the player's letter blaster effect does not replicate properly." It didn't, and
+it never had. `LetterBlaster:_onActivated` called `laserBeamEffect` directly, which clones a Part
+into `Workspace` — on the client. Client-created instances never replicate upward, so the shot
+existed only for the person who fired it. Every other player watched letter blocks silently vanish
+with nothing connecting them to the shooter. The sounds are the same story: `Sound:Play()` on a
+client plays on that client alone.
+
+This is the same failure the four bugs behind [[design/client-server-boundary]] were, arriving from
+the opposite direction. Those were *server* code drawing where no player could see. This is *client*
+code drawing where only one player could see. The blaster predates the Skills pipeline and simply
+never got the split, so nobody had asked the question for it.
+
+The fix is the shape Phase 5.6 settled on, applied to a weapon instead of a spell:
+
+| Layer | Who | What |
+|---|---|---|
+| Prediction | shooter's client | draws its own beam on the frame it clicks — cosmetic, no round trip |
+| Authority | `BlockShootService` | validates, destroys the block, then *describes* the shot |
+| Presentation | every other client | `WorldVfxController`'s new `beam` handler draws it |
+
+New: `VfxBroadcast.beam(origin, endPoint, drawnLocallyBy)` and its `WorldVfxController` handler;
+`BlockShoot.muzzlePosition(tool)`, shared so both VMs get the same answer and cannot disagree.
+
+**The server derives the muzzle itself rather than accepting one in the payload.** `ConsumeBlock`'s
+signature is unchanged, `BlockShootValidation` is untouched, and the Hardening suite still describes
+reality. A cosmetic fix that widened a remote hardened in 5.4 would have been a bad trade.
+
+Two smaller corrections rode along. The local draw moved **below** the `WordBuffer:append` check —
+it used to fire on any block hit, so a shot the buffer rejected drew a beam for the shooter that no
+other player could ever have a matching beam for. And `VfxBroadcast`'s header still described
+`drawnLocallyBy` as being for "the dual-VM delivery handlers", which Phase 5.6 deleted; it now
+describes the one situation that actually earns it, which this change is the first instance of.
+
+**Verification.** A screenshot could not adjudicate this — the beam is thin, dark and lives
+`distance/200` seconds, and a control that drew it *locally* (the unchanged shooter path) was
+equally invisible in a capture, while a magenta neon marker placed the same way showed up fine. So
+the instrument was the client-side count CLAUDE.md sanctions, plus a wire capture:
+
+- Real shot through the real remote: one `kind = "beam"` payload, `origin` (255.3, 209.1, 24.5) at
+  the equipped staff's muzzle, `endPoint` matching the block's pivot to 4 decimal places,
+  `drawnLocallyBy` = the shooter and nobody else. Block destroyed.
+- A/B on a live client, exclusion the only variable: 5 unexcluded broadcasts → **5** `LaserBeam`
+  parts drawn; 5 broadcasts excluding that player → **0**.
+
+**Not done, deliberately.** The sounds still don't reach other players. Fixing that needs a design
+call, not a patch: the Sounds are parented to the Tool rather than a BasePart, so they are
+non-positional, and replaying one verbatim would put another player's blaster at full volume across
+the map. `FireSound` also fires on misses the server never hears about. Both options — move the
+Sounds onto the Handle, or clone them onto the shooter's Handle at playback — change something the
+player already feels, so it goes to the user. Recorded in [[systems/LetterBlaster]] § Sounds, along
+with the incidental find that `FizzleSound` has an empty `SoundId` and is silent for everyone today.
+
+Pages touched: [[systems/LetterBlaster]], [[systems/BlockShoot]].
