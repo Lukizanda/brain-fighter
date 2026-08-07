@@ -47,6 +47,22 @@ function LetterBlaster.new(tool: Tool, session: ISession): Controller
 	return self
 end
 
+-- Play one of the staff's own Sounds.
+--
+-- They hang off the Handle, not the Tool. A Sound parented to a BasePart
+-- is 3D-positional; one parented to the Tool is not, and would reach a
+-- bystander at full volume from anywhere on the map. That distinction is
+-- what makes the fire sound safe to replicate at all — see
+-- BlockShootService.broadcastShot.
+function LetterBlaster:_playSound(soundName: string)
+	local handle = BlockShoot.resolveHandle(self._tool)
+	if not handle then return end
+	local sound = handle:FindFirstChild(soundName)
+	if sound and sound:IsA("Sound") then
+		sound:Play()
+	end
+end
+
 function LetterBlaster:_onActivated()
 	local now = os.clock()
 	if now - self._lastFired < LetterBlasterConfig.COOLDOWN then
@@ -56,8 +72,7 @@ function LetterBlaster:_onActivated()
 	self._lastFired = now
 
 	if self._session.mindFullManager:isMindFull() then
-		local fizzleSound = self._tool:FindFirstChild(LetterBlasterConfig.FIZZLE_SOUND_NAME) :: Sound?
-		if fizzleSound then fizzleSound:Play() end
+		self:_playSound(LetterBlasterConfig.FIZZLE_SOUND_NAME)
 		log:info("blocked: mind is full")
 		return
 	end
@@ -79,8 +94,7 @@ function LetterBlaster:_onActivated()
 	local ray = camera:ViewportPointToRay(mousePos.X, mousePos.Y)
 	local result = workspace:Raycast(ray.Origin, ray.Direction * BlockShoot.MAX_RAYCAST_DISTANCE, params)
 
-	local fireSound = self._tool:FindFirstChild(LetterBlasterConfig.FIRE_SOUND_NAME) :: Sound?
-	if fireSound then fireSound:Play() end
+	self:_playSound(LetterBlasterConfig.FIRE_SOUND_NAME)
 
 	if not result then
 		log:info("raycast miss — nothing in crosshair within range")
@@ -106,8 +120,7 @@ function LetterBlaster:_onActivated()
 
 	local appended = self._session.wordBuffer:append(letter, color)
 	if not appended then
-		local fizzleSound = self._tool:FindFirstChild(LetterBlasterConfig.FIZZLE_SOUND_NAME) :: Sound?
-		if fizzleSound then fizzleSound:Play() end
+		self:_playSound(LetterBlasterConfig.FIZZLE_SOUND_NAME)
 		log:info(string.format("buffer rejected '%s' (%s)", letter, color))
 		return
 	end
@@ -132,8 +145,11 @@ function LetterBlaster:_onActivated()
 		laserBeamEffect(origin, blockPos)
 	end
 
-	local hitSound = self._tool:FindFirstChild(LetterBlasterConfig.HIT_SOUND_NAME) :: Sound?
-	if hitSound then hitSound:Play() end
+	-- Hit confirmation, and deliberately not broadcast. This is the same
+	-- thing a hit marker is: feedback telling the shooter their shot landed.
+	-- Other players get the fire sound, which is the event that happened in
+	-- the world; whether it connected is the shooter's business.
+	self:_playSound(LetterBlasterConfig.HIT_SOUND_NAME)
 end
 
 function LetterBlaster:mount()

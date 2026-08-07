@@ -47,6 +47,12 @@ local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
 local log = Logger.new("VfxBroadcast")
 
+export type BeamPayloadOpts = {
+	soundParent: Instance?,
+	soundName: string?,
+	drawnLocallyBy: number?,
+}
+
 export type ShockwavePayloadOpts = {
 	color: Color3?,
 	transparency: number?,
@@ -132,14 +138,25 @@ end
 -- LetterBlock the server is about to destroy, and an Instance argument for
 -- a thing that no longer exists by the time the payload lands arrives as
 -- nil; a Vector3 still draws the shot that was actually taken.
-function VfxBroadcast.beam(origin: Vector3, endPoint: Vector3, drawnLocallyBy: number?)
+--
+-- `opts.soundParent` + `opts.soundName` name a Sound that already exists on
+-- a long-lived replicated Instance — the staff's Handle — and each client
+-- plays its own copy. Naming an existing Sound rather than shipping a
+-- SoundId keeps its authored volume and rolloff intact, and the parent
+-- being a BasePart is what makes the playback positional. Same
+-- already-replicated requirement as playOn: don't point this at something
+-- the server created this frame.
+function VfxBroadcast.beam(origin: Vector3, endPoint: Vector3, opts: BeamPayloadOpts?)
 	local r = outbound("beam")
 	if not r then return end
+	local o = opts or {}
 	r:FireAllClients({
 		kind           = "beam",
 		origin         = origin,
 		endPoint       = endPoint,
-		drawnLocallyBy = drawnLocallyBy,
+		soundParent    = o.soundParent,
+		soundName      = o.soundName,
+		drawnLocallyBy = o.drawnLocallyBy,
 	})
 end
 

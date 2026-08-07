@@ -32,6 +32,18 @@ function BlockShoot.findLetterBlock(instance: Instance): Model?
 	return nil
 end
 
+-- The staff's Handle — the part everything about a shot hangs off. It
+-- carries the Muzzle attachment the beam leaves from, and the Fire/Hit/
+-- Fizzle Sounds, which live on it precisely because a Sound parented to a
+-- BasePart is 3D-positional and one parented to the Tool is not.
+function BlockShoot.resolveHandle(tool: Tool): BasePart?
+	local handle = tool:FindFirstChild(LetterBlasterConfig.HANDLE_NAME)
+	if handle and handle:IsA("BasePart") then
+		return handle :: BasePart
+	end
+	return nil
+end
+
 -- Where a shot leaves the staff, in world space.
 --
 -- Shared because both VMs need the same answer and must not disagree: the
@@ -46,15 +58,15 @@ end
 -- missing (it is Studio-managed, not in the Rojo tree), and returns nil
 -- if there is no Handle to fall back to.
 function BlockShoot.muzzlePosition(tool: Tool): Vector3?
-	local handle = tool:FindFirstChild(LetterBlasterConfig.HANDLE_NAME)
-	if not (handle and handle:IsA("BasePart")) then
+	local handle = BlockShoot.resolveHandle(tool)
+	if not handle then
 		return nil
 	end
 	local muzzle = handle:FindFirstChild(LetterBlasterConfig.MUZZLE_ATTACHMENT_NAME)
 	if muzzle and muzzle:IsA("Attachment") then
 		return muzzle.WorldPosition
 	end
-	return (handle :: BasePart).Position
+	return handle.Position
 end
 
 function BlockShoot.readBlock(block: Model): (string?, string?)

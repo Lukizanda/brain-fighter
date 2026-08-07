@@ -1,6 +1,6 @@
 ---
 type: system
-description: Phase 4.6 weapon controller — wraps the block-shoot input pipeline behind the Spelling Staff Tool's Tool.Activated, with a cooldown, a laser-beam blast effect, and fire/hit/fizzle sounds. Since 2026-08-05 the beam replicates to other players via VfxBroadcast; the sounds still do not.
+description: Phase 4.6 weapon controller — wraps the block-shoot input pipeline behind the Spelling Staff Tool's Tool.Activated, with a cooldown, a laser-beam blast effect, and fire/hit/fizzle sounds. Since 2026-08-05 the beam and the fire sound both replicate via VfxBroadcast; the Sounds moved onto the Handle to make that possible.
 updated: 2026-08-05
 ---
 
@@ -13,7 +13,7 @@ The controller behind the **Spelling Staff** — the weapon Tool the player hold
 - `src/shared/LetterBlaster/init.luau` — controller: `new(tool, session)`, `:mount()` (connects `Tool.Activated`), `:destroy()` (disconnects).
 - `src/shared/LetterBlaster/LetterBlasterConfig.luau` — tuning constants: `COOLDOWN`, `FIRE_SOUND_NAME`, `HIT_SOUND_NAME`, `FIZZLE_SOUND_NAME`.
 - `src/StarterPack/Spelling Staff/Scripts/SpellingStaff.client.luau` — the boot LocalScript: on `tool.Equipped` calls `LetterBlaster.new(tool, PlayerSession.get()):mount()`, and `:destroy()` on `Unequipped`.
-- `src/StarterPack/Spelling Staff/` — the Rojo-managed Tool template: `Handle/` (MeshPart folder with a Studio-managed `Muzzle` attachment) + `FireSound`/`HitSound`/`FizzleSound` `.model.json` children directly under the Tool.
+- `src/StarterPack/Spelling Staff/` — the Rojo-managed Tool template: `Handle/` (MeshPart folder with a Studio-managed `Muzzle` attachment, and the `FireSound`/`HitSound`/`FizzleSound` `.model.json` children).
 
 ## Flow
 
@@ -53,20 +53,36 @@ The local draw moved **below** the `WordBuffer:append` check as part of this. It
 
 ## Sounds
 
-`FireSound`, `HitSound`, and `FizzleSound` live as direct `.model.json` children of the Tool instance (not inside the Handle). The controller looks them up via `tool:FindFirstChild(name)` on each shot.
+`FireSound`, `HitSound`, and `FizzleSound` are `.model.json` children of the **Handle**, resolved through `LetterBlaster:_playSound(name)` → `BlockShoot.resolveHandle(tool)`.
 
-| Sound | Event |
-|---|---|
-| FireSound | Every activation that passes the cooldown + mind-full gates |
-| HitSound | Confirmed consume only (block hit + buffer appended) |
-| FizzleSound | Mind-full block, or buffer rejecting the append |
+| Sound | Event | Heard by |
+|---|---|---|
+| FireSound | Every activation that passes the cooldown + mind-full gates | Shooter, plus every other player on a confirmed consume |
+| HitSound | Confirmed consume only (block hit + buffer appended) | Shooter only |
+| FizzleSound | Mind-full block, or buffer rejecting the append | Shooter only |
 
-**None of these are heard by other players**, and that is still true after the beam fix. `Sound:Play()` called on a client plays on that client only. Two things need deciding before it can be fixed properly, which is why it was left alone:
+### Why the Handle and not the Tool (2026-08-05)
 
-- The Sounds are parented to the **Tool**, not to a BasePart, so they are non-positional. Replaying them verbatim on a bystander's client would put another player's blaster at full volume anywhere on the map. Remote playback needs a positional anchor — either move the Sounds onto the `Handle` (changes the wielder's own audio from 2D to 3D) or clone them onto the shooter's Handle at playback time (leaves the wielder untouched).
-- `FireSound` fires on activations that never reach the server, including clean misses. The server only learns about successful consumes, so a broadcast-on-consume design makes bystanders hear hits but not misses.
+They used to hang directly off the Tool. A Sound parented to something that is not a BasePart is **non-positional** — it plays at full volume regardless of where the listener is standing. That made replicating them impossible without redesign: another player's blaster would have been just as loud from across the arena as from next to you.
 
-`FizzleSound` also has an **empty `SoundId`** in the place file — it is silent for everyone today, including the wielder.
+Moving them onto the Handle (a `MeshPart`) makes them 3D, which is what lets `BlockShootService` name one in the beam broadcast and have every client play its own replicated copy at the right distance. The rolloff window is `RollOffMinDistance = 20` → `RollOffMaxDistance = 200`:
+
+- **20** is the floor so the wielder is never attenuated. The default audio listener is the *camera*, which in this TPS sits ~12–15 studs behind the character, so a smaller floor would quietly make players' own weapons duller than before the move.
+- **200** is `BlockShoot.MAX_RAYCAST_DISTANCE` — the range at which the weapon can act at all. A player standing further away than the blaster can reach has no reason to hear it.
+
+The SoundIds, volumes and rolloff now live in the `.model.json` files rather than only in the `.rbxl`. Before this they were set in Studio and untracked, so moving the files at all would have silently created three fresh Sounds with empty ids.
+
+### What still doesn't replicate, by choice
+
+- **HitSound** is hit confirmation — the audio equivalent of a hit marker. Whether a shot connected is the shooter's business; the fire sound is the part that happened in the world. Same reasoning as the prediction contract on `CastAction.spellResolved`.
+- **FizzleSound** is a refusal cue for an input that never reached the server at all.
+- **Misses**. `FireSound` plays locally on any activation past the gates, but the server only learns about successful consumes, so bystanders hear hits and not misses. Closing that gap would mean a second remote fired on every trigger pull purely for cosmetics — not worth the traffic or the surface.
+
+### Fizzle asset
+
+`FizzleSound` had an **empty `SoundId`** until 2026-08-05 — silent for everyone, including the wielder. It now carries `rbxassetid://134677020800886` at `PlaybackSpeed = 0.55`, matching `VfxConfig.SFX.fizzle` and the pitch the two existing refusal cues (`SpellMenuGui`, `GameplayHudGui`) already use, so a refused action sounds the same wherever it was triggered from.
+
+This is the one place that id is duplicated outside `VfxConfig`. Rojo JSON cannot reference a Luau constant, and setting it at runtime would not work either — every client needs the id on **its own replicated copy** of the Sound, not just the wielder's. A note in `VfxConfig.SFX.fizzle` points back here so a real asset swap updates both.
 
 ## Constants
 

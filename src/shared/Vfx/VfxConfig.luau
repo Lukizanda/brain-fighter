@@ -145,6 +145,13 @@ VfxConfig.SFX = {
 	-- same swoosh as `cast`, and played pitched-down by the callers: a
 	-- deflated version of the cast sound is the clearest way to say "that
 	-- cast didn't happen" without a dedicated buzzer asset.
+	--
+	-- Has one copy outside this table that a swap must also update:
+	-- StarterPack/Spelling Staff/Handle/FizzleSound.model.json, the staff's
+	-- own refusal cue. It cannot read this constant — Rojo JSON has no way
+	-- to reference Luau — and it cannot be set at runtime either, because
+	-- every client needs the id on its replicated copy of that Sound, not
+	-- just the wielder. Same asset, same 0.55 playback speed.
 	fizzle = "rbxassetid://134677020800886",
 
 	-- Boss FireballVolley launch. No owned or findable asset reads as a

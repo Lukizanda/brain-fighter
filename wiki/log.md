@@ -1049,3 +1049,60 @@ player already feels, so it goes to the user. Recorded in [[systems/LetterBlaste
 with the incidental find that `FizzleSound` has an empty `SoundId` and is silent for everyone today.
 
 Pages touched: [[systems/LetterBlaster]], [[systems/BlockShoot]].
+
+## [2026-08-05] ingest | The blaster's fire sound follows the beam across the wire
+
+Follow-up to the beam fix earlier the same day, taking the option the user picked from the two that
+were flagged there: **move the Sounds onto the Handle**, and give `FizzleSound` a real asset.
+
+Moving them is the whole fix, not a preliminary. A Sound parented to something that is not a
+BasePart is non-positional — it plays at full volume wherever the listener stands. That is why the
+sounds were left alone in the beam commit: replaying one verbatim on a bystander's client would have
+made another player's blaster as loud from across the arena as from arm's length. On the Handle
+(a `MeshPart`) they are 3D, and `BlockShootService` can now name one in the beam broadcast for every
+client to play its own replicated copy at the right distance.
+
+`VfxBroadcast.beam` grew an opts table carrying `soundParent` + `soundName`. **The sound is named,
+not shipped** — no `SoundId` crosses the wire. Every client already has that Sound replicated on the
+shooter's Handle with its authored volume, pitch and rolloff; playing the instance keeps the tuning
+where a designer can see it, and a Sound rebuilt from an id on the receiving end would drift from it
+silently. Same already-replicated requirement as `playOn`.
+
+Rolloff is `20 → 200`, both derived rather than picked. **20** is the floor because the default audio
+listener is the *camera*, which in this TPS sits ~12–15 studs behind the character — a smaller floor
+would have quietly made every player's own weapon duller than it was before the move, which is the
+kind of regression a "purely additive" change is not allowed to have. **200** is
+`BlockShoot.MAX_RAYCAST_DISTANCE`: a listener further away than the weapon can reach has no reason
+to hear it.
+
+`HitSound` and `FizzleSound` stay local, and that is a decision rather than an omission. Hit
+confirmation is the audio hit marker — whether a shot connected is the shooter's business, the same
+line `CastAction.spellResolved`'s contract draws. A fizzle is a refusal for an input the server
+never saw. Misses stay local too: closing that would mean a second remote on every trigger pull for
+cosmetics alone.
+
+`FizzleSound` had an empty `SoundId` and was silent for everyone. It now carries the same asset and
+the same 0.55 playback speed as `VfxConfig.SFX.fizzle`, matching the two existing refusal cues so a
+refused action sounds identical wherever it came from. That id is now **duplicated** outside
+`VfxConfig` — Rojo JSON cannot reference a Luau constant, and a runtime assignment would not work
+either, because every client needs the id on its own replicated copy rather than just the wielder's.
+Noted at both ends so a real asset swap updates both.
+
+One trap avoided: the three Sounds' `SoundId` and `Volume` had only ever existed in the `.rbxl`; the
+`.model.json` files declared nothing but `className`. Moving the files without declaring the
+properties would have deleted three configured Sounds and created three empty ones. They are now
+versioned on disk.
+
+**Verification is incomplete and this is not verified in-engine.** The Studio MCP server dropped
+partway through and did not come back, so there was no playtest. What was checked: `rojo build` to
+XML confirms all three Sounds materialise under the Handle with the right ids, volumes, pitch and
+rolloff (`SoundId` serialises as `AudioContent`, `RollOffMin/MaxDistance` as `EmitterSize` /
+`MaxDistance` — an earlier probe read them as missing purely because it searched the API names). The
+Luau was not run at all.
+
+**Owed before trusting this:** a playtest confirming the sounds still play for the wielder, and a
+check for **stale duplicate Sounds under the Tool** — the Tool's `init.meta.json` sets
+`ignoreUnknownInstances: true`, so on a fresh connect Rojo will leave the old Tool-level Sounds in
+place rather than deleting them, and the staff would end up with two of each.
+
+Pages touched: [[systems/LetterBlaster]], [[systems/BlockShoot]].

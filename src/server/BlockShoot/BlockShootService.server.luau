@@ -30,6 +30,7 @@ local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local BlockShoot = require(ReplicatedStorage.Shared.BlockShoot)
 local BlockShootConstants = require(script.Parent.BlockShootConstants)
 local BlockShootValidation = require(script.Parent.BlockShootValidation)
+local LetterBlasterConfig = require(ReplicatedStorage.Shared.LetterBlaster.LetterBlasterConfig)
 local RateLimiter = require(script.Parent.Parent.Utility.RateLimiter)
 local VfxBroadcast = require(ReplicatedStorage.Shared.Vfx.VfxBroadcast)
 
@@ -58,25 +59,34 @@ local function reject(player: Player, reason: string)
 	end
 end
 
--- Show the shot to everyone who isn't the shooter.
+-- Show and sound the shot for everyone who isn't the shooter.
 --
 -- The blaster's laser used to be drawn only by the client that fired it,
 -- into its own Workspace, where it stayed: client-created instances never
 -- replicate upward, so every other player watched blocks vanish in silence
--- with nothing connecting them to the player who shot them. The beam is
--- cosmetic, so the server does not draw it either — it describes it, and
--- each client draws its own (see VfxBroadcast).
+-- with nothing connecting them to the player who shot them. `Sound:Play()`
+-- on a client is local in exactly the same way. The beam is cosmetic, so
+-- the server does not draw it either — it describes it, and each client
+-- draws its own (see VfxBroadcast).
 --
--- `drawnLocallyBy` excludes the shooter, who drew this beam on the frame
--- they clicked and must not get a second one a round trip later. That
--- exclusion is only safe because the client's draw is unconditional on the
--- same branch that fires this remote.
+-- The sound is named, not shipped: every client already has this Sound
+-- replicated on the shooter's Handle with its authored volume and rolloff,
+-- and playing that instance is what makes a distant blaster sound distant.
+--
+-- `drawnLocallyBy` excludes the shooter, who drew the beam and played the
+-- fire sound on the frame they clicked and must not get a second of each a
+-- round trip later. That exclusion is only safe because the client's draw
+-- is unconditional on the same branch that fires this remote.
 local function broadcastShot(player: Player, character: Model, blockPos: Vector3)
 	local tool = character:FindFirstChildWhichIsA("Tool")
 	if not tool then return end
 	local origin = BlockShoot.muzzlePosition(tool)
 	if not origin then return end
-	VfxBroadcast.beam(origin, blockPos, player.UserId)
+	VfxBroadcast.beam(origin, blockPos, {
+		soundParent    = BlockShoot.resolveHandle(tool),
+		soundName      = LetterBlasterConfig.FIRE_SOUND_NAME,
+		drawnLocallyBy = player.UserId,
+	})
 end
 
 consumeRemote.OnServerEvent:Connect(function(player: Player, block: any)

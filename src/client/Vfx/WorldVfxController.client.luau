@@ -31,6 +31,28 @@ local LocalPlayer = Players.LocalPlayer
 local Remotes       = ReplicatedStorage.Shared.Vfx.Remotes
 local WorldVfxEvent = Remotes:WaitForChild("WorldVfxEvent") :: RemoteEvent
 
+-- Play a Sound that already exists on a replicated Instance, on this
+-- client only.
+--
+-- We play the authored instance rather than building one from a SoundId:
+-- its volume, pitch and rolloff were tuned where the designer can see
+-- them, and a second Sound built here would drift from that silently.
+-- Positional playback comes free from the parent being a BasePart, which
+-- is the whole reason the staff's Sounds hang off the Handle.
+--
+-- Restarting a Sound already playing is deliberate — that is what a weapon
+-- fired twice inside one sample's length should do.
+local function playNamedSound(parent: any, name: any)
+	if typeof(parent) ~= "Instance" or typeof(name) ~= "string" then return end
+	-- The character may have been destroyed, or the Tool unequipped,
+	-- between the server firing and this arriving.
+	if not parent:IsDescendantOf(workspace) then return end
+	local sound = parent:FindFirstChild(name)
+	if sound and sound:IsA("Sound") then
+		sound:Play()
+	end
+end
+
 -- Only the server fires this, so the payload isn't a trust boundary — but
 -- it is still a wire boundary. A malformed entry should drop one cosmetic,
 -- not throw inside the event handler.
@@ -58,6 +80,7 @@ local handlers: { [string]: (payload: any) -> () } = {
 		if typeof(payload.origin) ~= "Vector3" then return end
 		if typeof(payload.endPoint) ~= "Vector3" then return end
 		laserBeamEffect(payload.origin, payload.endPoint)
+		playNamedSound(payload.soundParent, payload.soundName)
 	end,
 
 	shockwave = function(payload: any)
