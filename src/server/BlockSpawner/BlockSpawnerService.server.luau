@@ -12,7 +12,9 @@ local log = Logger.new("BlockSpawnerService")
 -- Tag any Part in Workspace with "BlockSpawnVolume" to define a spawn
 -- region. Multiple tagged parts are all used simultaneously — blocks are
 -- distributed across them weighted by volume. Density is controlled via
--- GameConfig.BLOCK_SPAWN_DENSITY (blocks per 1000 cubic studs).
+-- GameConfig.BLOCK_SPAWN_DENSITY (blocks per 1000 cubic studs), and how
+-- long a consumed block takes to come back via
+-- GameConfig.BLOCK_RESPAWN_DELAY.
 local SPAWN_VOLUME_TAG = "BlockSpawnVolume"
 
 local function resolveSpawnOpts(): BlockSpawner.Opts
@@ -41,6 +43,7 @@ local function resolveSpawnOpts(): BlockSpawner.Opts
 		boxes = if #boxes > 0 then boxes else nil,
 		density = GameConfig.BLOCK_SPAWN_DENSITY,
 		minSpacing = GameConfig.BLOCK_MIN_SPACING,
+		respawnDelay = GameConfig.BLOCK_RESPAWN_DELAY,
 	}
 end
 

@@ -8,6 +8,11 @@
 -- server-authoritative (so every client sees the same set); the
 -- client-side LetterBlockAnimator handles motion locally.
 --
+-- A consumed block is replaced after `respawnDelay` seconds
+-- (GameConfig.BLOCK_RESPAWN_DELAY) rather than on the next frame, so a
+-- replacement doesn't materialise in the player's face the instant
+-- they shoot one. Each block is on its own clock — see scheduleRefill.
+--
 -- Letter selection is Scrabble-frequency-weighted (English vowels +
 -- common consonants dominate) — the SOFT-HEURISTIC the design defers
 -- "explicit dictionary-bag scan" complexity to (see
@@ -77,6 +82,15 @@ local WILDCARD_FREQUENCY = 4
 local FULL_REVOLUTION_RADIANS = math.pi * 2
 local MAX_SPAWN_ATTEMPTS = 20
 
+-- Seconds between a block being consumed and its replacement spawning.
+-- Zero reproduces the original same-frame refill.
+--
+-- This is only the fallback for callers that pass no `respawnDelay`
+-- (the Phase 3 test suites, mostly). The shipped game value is
+-- GameConfig.BLOCK_RESPAWN_DELAY, threaded through by
+-- BlockSpawnerService — tune it there, not here.
+local DEFAULT_RESPAWN_DELAY_SECONDS = 0
+
 ----------------------------------------------------------------------
 -- Types
 ----------------------------------------------------------------------
@@ -92,6 +106,7 @@ export type Opts = {
 	colorWeights: { red: number?, green: number?, blue: number? }?,
 	parent: Instance?,
 	minSpacing: number?,  -- minimum studs between block centers; 0 disables
+	respawnDelay: number?,  -- seconds before a consumed block is replaced; 0 refills next frame
 }
 
 ----------------------------------------------------------------------
@@ -102,6 +117,7 @@ local running = false
 local resolvedOpts = {
 	targetCount = DEFAULT_TARGET_COUNT,
 	minSpacing = 0,
+	respawnDelay = DEFAULT_RESPAWN_DELAY_SECONDS,
 	colorWeights = {
 		red = DEFAULT_COLOR_WEIGHT,
 		green = DEFAULT_COLOR_WEIGHT,
@@ -266,13 +282,36 @@ local function maintainCount()
 	end
 end
 
+-- Replaces exactly ONE block, not "however many are missing".
+--
+-- Deliberately not maintainCount(): with a respawn delay, each consumed
+-- block owns its own timer, and the first timer to expire must not
+-- refill the arena to target. If it did, three blocks shot a second
+-- apart would all reappear the instant the first cooldown elapsed —
+-- two of them early, in a burst. One-in-one-out keeps each replacement
+-- on the clock that its own destruction started.
+--
+-- Still bounded by targetCount so a stale timer surviving a
+-- stop()/start() cycle can't push the arena over.
+local function spawnOneIfBelowTarget()
+	if not running then
+		return
+	end
+	if activeCount >= resolvedOpts.targetCount then
+		return
+	end
+	spawnOne()
+end
+
 local function scheduleRefill()
-	task.defer(function()
-		if not running then
-			return
-		end
-		maintainCount()
-	end)
+	local delaySeconds = resolvedOpts.respawnDelay
+	if delaySeconds > 0 then
+		task.delay(delaySeconds, spawnOneIfBelowTarget)
+	else
+		-- task.defer rather than an inline call: this runs inside the
+		-- removed-signal handler, which is mid-iteration over `active`.
+		task.defer(spawnOneIfBelowTarget)
+	end
 end
 
 ----------------------------------------------------------------------
@@ -318,6 +357,12 @@ local function applyOpts(userOpts: Opts?)
 
 	resolvedOpts.parent = u.parent or workspace
 	resolvedOpts.minSpacing = u.minSpacing or 0
+
+	-- ~= nil, not `or` — an explicit 0 means "refill next frame", which
+	-- is what the Phase 3 suites pin, and `or` would silently swap it
+	-- for the default.
+	resolvedOpts.respawnDelay =
+		if u.respawnDelay ~= nil then u.respawnDelay else DEFAULT_RESPAWN_DELAY_SECONDS
 end
 
 ----------------------------------------------------------------------
@@ -385,8 +430,9 @@ function BlockSpawner.rerollAll()
 		block:Destroy()
 	end
 	-- The removed-signal handler has cleared `active` by now and
-	-- queued a deferred refill per destroy. The first deferred to
-	-- fire drains to target; the rest are no-ops.
+	-- queued one refill per destroy, each replacing a single block.
+	-- With a respawnDelay set, the whole field comes back one
+	-- cooldown later rather than immediately.
 end
 
 function BlockSpawner.getActiveBlocks(): { Model }

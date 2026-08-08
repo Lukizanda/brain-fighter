@@ -21,6 +21,10 @@ return {
 			boxMin = Vector3.new(-10, 10, -10),
 			boxMax = Vector3.new(10, 18, 10),
 			parent = container,
+			-- Pinned explicitly: this case is "a destroyed block gets
+			-- replaced at all", not "how long that takes". The cooldown
+			-- is covered by blockspawner_respawn_delay.
+			respawnDelay = 0,
 		})
 	end,
 

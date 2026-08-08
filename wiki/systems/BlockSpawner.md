@@ -1,17 +1,18 @@
 ---
 type: system
-description: Server-side letter-block populator — maintains a target count of floating LetterBlocks in the arena with Scrabble-weighted letter distribution and configurable color weights.
-updated: 2026-07-27
+description: Server-side letter-block populator — maintains a target count of floating LetterBlocks in the arena with Scrabble-weighted letter distribution, configurable color weights, and a per-block respawn cooldown.
+updated: 2026-08-08
 ---
 
 # BlockSpawner
 
-Server-side populator that keeps a target count of [[systems/LetterBlock|LetterBlock]] Models alive in the arena. When a block is destroyed (consumed by [[systems/BlockShoot|BlockShoot]], despawned, etc.), the spawner auto-refills to target via the CollectionService removed signal.
+Server-side populator that keeps a target count of [[systems/LetterBlock|LetterBlock]] Models alive in the arena. When a block is destroyed (consumed by [[systems/BlockShoot|BlockShoot]], despawned, etc.), the spawner schedules a single replacement via the CollectionService removed signal, after a `GameConfig.BLOCK_RESPAWN_DELAY` cooldown.
 
 ## Files
 
 - `src/shared/BlockSpawner/init.luau` — module: start / stop / rerollAll / getActiveBlocks / pickers / tunables.
-- `src/server/BlockSpawner/BlockSpawnerService.server.luau` — server bootstrap that calls `BlockSpawner.start()`.
+- `src/server/BlockSpawner/BlockSpawnerService.server.luau` — server bootstrap that calls `BlockSpawner.start()`, resolving `BlockSpawnVolume`-tagged parts and the `GameConfig` tunables.
+- `src/shared/Tests/Suites/Phase3/blockspawner_respawn_delay.luau` — asserts the arena stays short mid-cooldown and returns to *exactly* target after, catching a refill-to-target regression.
 
 ## API
 
@@ -19,9 +20,9 @@ Server-side populator that keeps a target count of [[systems/LetterBlock|LetterB
 
 | Member | Type | Notes |
 |---|---|---|
-| `.start(opts?)` | `(Opts?) -> ()` | Fills arena to target count, hooks CollectionService removed signal for auto-refill. No-ops if already running. |
-| `.stop()` | `() -> ()` | Disconnects the refill listener. Existing blocks remain. |
-| `.rerollAll()` | `() -> ()` | Destroys all active blocks. The removed-signal handler auto-refills to target. |
+| `.start(opts?)` | `(Opts?) -> ()` | Fills arena to target count **immediately** (the cooldown applies to replacements, not the initial fill), hooks CollectionService removed signal for auto-refill. No-ops if already running. |
+| `.stop()` | `() -> ()` | Disconnects the refill listener. Existing blocks remain, and any in-flight respawn timers no-op on their `running` check. |
+| `.rerollAll()` | `() -> ()` | Destroys all active blocks. Each queues its own replacement, so the field returns one cooldown later. **No callers** as of 2026-08-08 — it is a documented escape hatch from [[design/gameplay-loop]], not a shipped mechanic. |
 | `.getActiveBlocks()` | `() -> { Model }` | Snapshot of currently tracked blocks. |
 | `.LETTER_FREQUENCIES` | `{ [string]: number }` | Scrabble-standard 98-tile distribution used for weighted letter picks. |
 
@@ -47,8 +48,11 @@ type Opts = {
     }?,
     parent: Instance?,           -- default workspace
     minSpacing: number?,         -- minimum studs between block centers; 0 disables (see GameConfig.BLOCK_MIN_SPACING)
+    respawnDelay: number?,       -- seconds before a consumed block is replaced; 0 refills next frame (see GameConfig.BLOCK_RESPAWN_DELAY)
 }
 ```
+
+`respawnDelay` resolves with `~= nil` rather than `or`, so an explicit `0` means "next frame" instead of silently falling back to the module default. The module default is `0` — the shipped value lives in `GameConfig.BLOCK_RESPAWN_DELAY` and is threaded through by `BlockSpawnerService`.
 
 ## Studio setup
 
@@ -72,7 +76,21 @@ Color is picked independently from letter, defaulting to uniform 33/33/33. A per
 
 ### Auto-refill via CollectionService removed signal
 
-When any tagged `LetterBlock` is removed from CollectionService, the spawner checks if it was one of ours (`active` set lookup, O(1)) and schedules a deferred refill. This means the arena self-heals regardless of what destroys the block — BlockShoot consumption, admin cleanup, or a rerollAll call.
+When any tagged `LetterBlock` is removed from CollectionService, the spawner checks if it was one of ours (`active` set lookup, O(1)) and schedules a replacement. This means the arena self-heals regardless of what destroys the block — BlockShoot consumption, admin cleanup, or a rerollAll call.
+
+### Respawn cooldown: one timer per block, not one refill to target
+
+Before 2026-08-08 the refill was `task.defer(maintainCount)`, and `maintainCount` loops until the arena is back at target. Instant refill made a replacement appear in the player's face the moment they shot something, so the refill is now delayed by `respawnDelay`.
+
+Delaying that same call would have been wrong. `maintainCount` fills *every* missing slot, so with three blocks shot a second apart, the first expiring timer would refill all three at once — two of them a full cooldown early, arriving as a burst. The delayed path therefore calls `spawnOneIfBelowTarget`, which replaces exactly one block. One destroy queues one timer which produces one spawn, so replacements stay on the clock their own destruction started.
+
+`maintainCount` is still used, but only by `start()` for the initial fill — the cooldown is about *replacing* blocks, and an empty arena at round start should populate immediately.
+
+The `activeCount >= targetCount` bound is what makes a stale timer harmless: one surviving a `stop()` / `start()` cycle finds the arena already full and no-ops, so it cannot push the count over target.
+
+**Measured** (2026-08-08 playtest, `BLOCK_RESPAWN_DELAY = 3`): blocks destroyed at t = 0.00 / 1.02 / 2.02 were replaced at t = 3.08 / 4.05 / 5.06 — each 3.03–3.08 s after its own destruction, staggered rather than bursting, ending back at exactly the target count.
+
+Raising the delay thins the arena under sustained fire: steady-state missing blocks ≈ delay × kills-per-second. At 3 s and roughly one kill per second, that is ~3 blocks short of target — barely visible against ~40. A much longer cooldown is a scarcity mechanic, not just polish, and should be tuned against [[design/gameplay-loop]]'s spellability heuristic.
 
 ### Random yaw on spawn
 
@@ -87,6 +105,7 @@ Each block spawns with a random initial Y-axis rotation so a cluster doesn't loo
 | Arena box | 40×8×40 studs, Y 8–16 (reference) | `BlockSpawnVolume` tagged parts |
 | Color weights | uniform (1, 1, 1) | gameplay-loop § Spawner |
 | Min spacing | 4 studs between block centers | `GameConfig.BLOCK_MIN_SPACING` |
+| Respawn cooldown | 3 s per consumed block | `GameConfig.BLOCK_RESPAWN_DELAY`; `0` refills next frame |
 | Wildcard frequency | `4` → 4/102 ≈ 3.9% | `WILDCARD_FREQUENCY` in `BlockSpawner/init.luau`; `0` disables |
 
 ### Wildcard rolls

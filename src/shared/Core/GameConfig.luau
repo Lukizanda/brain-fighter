@@ -59,6 +59,7 @@ local GameConfig = {
 	BLOCK_SPAWN_DENSITY = 0.1,
 	BLOCK_MIN_SPACING = 4,            -- minimum studs between block centers; 0 disables
 	BLOCK_SCALE = 1.5,                -- uniform scale multiplier on the 4×4×4 template (e.g. 0.5 = 2 studs, 2 = 8 studs); increase BLOCK_MIN_SPACING proportionally when scaling up
+	BLOCK_RESPAWN_DELAY = 3,          -- seconds between a block being consumed and its replacement spawning; 0 refills on the next frame. Each consumed block is replaced independently, so N rapid kills come back staggered the same way they went out. Raising this thins the arena under sustained fire — steady-state missing blocks ≈ delay × kills-per-second.
 
 	----------------------------------------------------------------------
 	-- Default camera behavior (applies when TPS_CHARACTER_ENABLED = false)
