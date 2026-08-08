@@ -2,7 +2,7 @@
 type: system
 description: Visual effects — particle effects for spell casts/impacts (shipped via VfxController + spawnEffect + cross-client broadcast), UI feedback animations, and per-color theming. World cast/impact VFX are implemented; PERF guardrails and some lanes remain planned.
 status: implemented (core); planned (PERF guardrails, collect-pop)
-updated: 2026-08-04
+updated: 2026-08-08
 ---
 
 # Visual Effects
@@ -10,7 +10,7 @@ updated: 2026-08-04
 > **Implementation status (2026-06-05).** The world-VFX core shipped — but with different module names than the plan below describes. Read this banner first; treat the rest of the page as the original design plan, accurate in intent but stale on specifics.
 >
 > **What exists on disk:**
-> - `src/shared/Vfx/VfxConfig.luau` — `COLORS`, `SFX` (sound asset ids), `EFFECTS` (cast t1–t4 red, t1–t3 blue, **t1–t3 green**, `impact_damage/heal/freeze/shield/knockup/wall/buff`, **`shield_block`**, **`shield_break`**, **`impact_damage_t2`/`impact_damage_t3`**, `projectile_red_t1/t2/t4`, **`projectile_boss_fireball`**, **`aoe_boss_groundslam`**, **`projectile_destroy`** — 2026-08-04: every `EFFECTS` entry now carries an audible placeholder `sound`, none left `UNSET`), and a `PERF` table.
+> - `src/shared/Vfx/VfxConfig.luau` — `COLORS`, `SFX` (sound asset ids), `EFFECTS` (cast t1–t4 red, t1–t3 blue, **t1–t3 green**, `impact_damage/heal/freeze/shield/knockup/wall/buff`, **`shield_block`**, **`shield_break`**, **`impact_damage_t2`/`impact_damage_t3`**, `projectile_red_t1/t2/t4`, **`projectile_boss_fireball`**, **`aoe_boss_groundslam`**, **`projectile_destroy`**, **`wall_rise_rumble`/`wall_rise_dust`** — 2026-08-04: every `EFFECTS` entry now carries an audible placeholder `sound`, none left `UNSET`), and a `PERF` table.
 > - `src/shared/Vfx/spawnEffect.luau` — **the shared spawn engine** (cast/impact/projectile), used by *both* the client `VfxController` and `SkillDelivery`. The plan's inline `VfxController.spawnCast/spawnImpact` methods were never built that way.
 > - `src/client/Vfx/VfxController.client.luau` — plays cast VFX locally on `CastAction.spellResolved`, relays to server.
 > - `src/server/Vfx/VfxBroadcastService.server.luau` — validates + `SpellVfxEvent:FireAllClients`.
@@ -53,6 +53,10 @@ A server-spawned effect therefore gives you the anchor, the ring and the audio b
 **The one thing a caller still decides: `drawnLocallyBy`.** Delivery handlers that run on **both** VMs (`projectile`, `aoe`) pass the casting player's UserId — that player's client runs the same code and already drew the effect frame-perfectly, so the broadcast must skip them or they see two. Server-only paths (`world_spawn`, boss fire) pass nothing, so everyone receives it. Same skip `VfxController` does with `senderUserId` and `ProjectileVfxController` with `casterUserId`.
 
 **Gameplay objects are the exception, and they split rather than move.** A Stone Wall slab is collidable — it must be one server-owned object or it blocks the boss on one machine and not another. So `spawnBarrier` creates the Part server-side as before and broadcasts only its cosmetic overlay.
+
+That split has a limit worth naming: **moving a gameplay Part is not a cosmetic, so it stays server-side too.** The wall's rise (2026-08-08) is a per-frame `CFrame` write on the server, not a client-side animation over an already-placed slab — collision has to follow the visual, and `CFrame` writes on an anchored Part replicate as ordinary property changes anyway. Only the dust coming off the base goes over the wire, as `wall_rise_rumble` / `wall_rise_dust`. See [[systems/SkillPipeline]] § Stone Wall.
+
+**A new Part cannot move on the frame it is created.** The corollary that cost a shipped-and-rejected attempt at that rise. *Initial* instance replication is slower than the property updates that follow it, so a Part created and immediately animated has already travelled by the time any client first sees it — the client's first frame is the animation's middle, which reads exactly like a pop. Anything server-animated from birth needs a beat of stillness first (`BARRIER_TELL_SEC`). Note this is a *different* failure from the `playAt`-by-position rule below: there the Instance reference arrives `nil`, here it arrives correctly but late.
 
 **Broadcast fresh Parts by position, not by reference.** An Instance argument the receiving client hasn't replicated yet arrives as `nil`, and the barrier overlay fires on the same frame the Part is created — squarely inside that window. `playOn` is for long-lived targets (a character's HumanoidRootPart); `playAt` is for anything just created.
 

@@ -878,7 +878,7 @@ SkillDelivery.handlers = {
 	-- doesn't refund a cast that the server is about to honour.
 	--
 	-- deliveryParams: durationSec, size (Vector3), color,
-	--                 placeDistanceStuds, cosmeticEffectId.
+	--                 placeDistanceStuds, cosmeticEffectId, riseSec.
 	world_spawn = function(skill: SkillSpec, ctx: DeliveryCtx): Result
 		local params = skill.deliveryParams
 		local onComplete = ctx.onComplete
@@ -944,11 +944,12 @@ SkillDelivery.handlers = {
 			footCFrame = CFrame.lookAt(groundHit.Position, groundHit.Position + footCFrame.LookVector)
 		end
 
-		local barrier = SkillVisuals.spawnBarrier(footCFrame, {
+		SkillVisuals.spawnBarrier(footCFrame, {
 			size             = params.size,
 			color            = params.color,
 			lifetimeSec      = params.durationSec,
 			cosmeticEffectId = params.cosmeticEffectId,
+			riseSec          = params.riseSec,
 		})
 
 		-- Effects still run if a spec declares them (e.g. a future wall
@@ -957,9 +958,11 @@ SkillDelivery.handlers = {
 			and applyImpactEffects(skill, ctx.target, ctx.source, ctx.mode)
 			or { ok = true }
 
+		-- The foot, not barrier.Position: the slab is still buried mid-rise
+		-- at this point, so its own CFrame would log a spot underground.
 		log:info(("world_spawn: %s placed at %s (lifetime=%.1fs)"):format(
 			skill.name,
-			tostring(barrier.Position),
+			tostring(footCFrame.Position),
 			(params.durationSec or WALL_DEFAULT_DURATION_SEC) :: number
 		))
 		if onComplete then onComplete() end

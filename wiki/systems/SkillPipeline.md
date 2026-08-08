@@ -1,7 +1,7 @@
 ---
 type: system
 description: Unified data + dispatch pipeline shared by player spells and boss attacks. SkillSpec (data) + SkillEffects (effects) + SkillDelivery (deliveries), with caller-resolved origin so any caster (player, boss, future NPC) plugs in the same way.
-updated: 2026-08-04
+updated: 2026-08-08
 ---
 
 # Skill Pipeline
@@ -314,6 +314,31 @@ The same choice buys cross-client replication for free — the authoritative poo
 `world_spawn` places an anchored, collidable slab via `SkillVisuals.spawnBarrier` and lets `Debris` clean it up after `durationSec`. It collides with **everything, including the caster** (design call 2026-08-03): a wall you can walk through but the boss can't reads as broken, and being able to box yourself in is what makes placement a decision.
 
 The handler is server-only. A Part created on a client is local to that client — it wouldn't block the server-owned boss, and the server's copy replicates down anyway, so spawning on both would double the wall. The client branch returns `ok=true` so CastAction doesn't refund a cast the server is about to honour.
+
+**The slab rises; it does not appear** (2026-08-08). It is parented buried by its own full height — top face flush with the ground — holds still for `BARRIER_TELL_SEC` (0.18 s) while dust kicks up, then climbs over `riseSec` (default 0.55 s, overridable per spec via `deliveryParams.riseSec`).
+
+**The tell is correctness, not pacing, and this took two attempts to get right.** A Part's *initial* replication is slower than the property updates that follow it. The first version rose immediately on creation, and a Client-VM trace caught the wall at **202.8 studs on the client's very first frame** of a Part created at 197.5 and settling at 207.5 — so every client's first sight of it was a half-height slab hanging mid-climb. Which is precisely what "it pops in mid-air" looks like. Holding still until everyone has the Part is what makes the climb something players can watch instead of arrive late to.
+
+**The curve is the step response of a *critically damped* second-order system** — `y(a) = 1 - e^(-rate·a)·(1 + rate·a)`. Two properties, each of which replaced a rejected version of this rise:
+
+| curve | slope at t=0 | first 50 ms of travel | max height | verdict |
+|---|---|---|---|---|
+| damped **impulse** `1 - e^(-da)cos(ωa)` | `decay` — maximum | **72%** | 1.10 | pop with a wobble |
+| damped **step**, underdamped | zero | 16% | 1.10 | climbs well, then **leaps off the floor** |
+| damped **step**, critical | zero | 16% | **1.00** | shipped |
+
+1. **Step, not impulse.** The impulse response (what the letter-block pop-in uses, [[systems/LetterBlock]]) starts at its *maximum* velocity, so it front-loads travel and no tuning moves that — the first attempt was past full height by t=0.09 s. The step response leaves rest and accelerates.
+2. **Critically damped, so it cannot overshoot.** The second attempt punched 10% of the wall's height past its resting place. On a letter block that overshoot is charm; on a slab standing on the ground it is a 1-stud gap of daylight underneath, and the wall reads as leaping into the air at the end of its own entrance. **Nothing that rests on the floor may overshoot upward — the floor is the thing it is arriving at.**
+
+Critical damping is the boundary case: the fastest a second-order system can reach its target *without* crossing it. Still a spring, still nothing like a linear slide, just with no bounce left to spend. It's also why `Enum.EasingStyle.Back` is unusable here — the overshoot is its entire behaviour. One dial, `BARRIER_RISE_RATE` (6.6 e-folds across the rise), trading "still visibly creeping when the window ends" against "stops so hard it reads as a cut"; the residual ~0.1 stud is snapped.
+
+Three points worth keeping about how it's driven:
+
+- **One Part, moved — collision follows the visual because it *is* the visual.** No cosmetic riser over an already-placed slab: that would let something walk through a wall that looks unfinished, or be blocked by one that looks absent.
+- **Per-frame `Heartbeat` on the server, not a `TweenService` tween.** The spring overshoots and rings and no `EasingStyle` exposes those as dials. Server-side `CFrame` writes on an anchored Part replicate as ordinary property changes — unlike `ParticleEmitter:Emit()` — so every client sees the same climb.
+- **The CFrame is set before parenting.** A Part that replicates once at its settled position and *then* jumps underground is the same pop, reintroduced one frame earlier.
+
+Ground dust (`wall_rise_rumble` + `wall_rise_dust`) is broadcast at three points across the base, not one: a single emitter under a 16-stud slab puts the whole plume at the centre and leaves both ends rising out of nothing. Only the centre point carries the rumble audio — three copies of one sample started on the same frame phase against each other rather than getting louder. The settle burst (`impact_wall`) now fires **when the slab lands, at the foot**, where it used to fire on creation at the wall's mid-air centre.
 
 Two gotchas worth keeping:
 

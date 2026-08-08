@@ -159,6 +159,15 @@ VfxConfig.SFX = {
 	-- asset as `cast` rather than sitting UNSET/silent — callers pitch it
 	-- down so a boss launch doesn't sound identical to a player cast.
 	bossProjectileLaunch = "rbxassetid://134677020800886",
+
+	-- The ground giving way as a Stone Wall pushes up through it. Points at
+	-- the same dry percussive hit as `impactDamage`, but played at roughly
+	-- a third speed, which stretches a 0.58 s slap into ~1.8 s of low
+	-- grinding — the nearest thing to an earth rumble the inventory has.
+	-- Its own entry despite sharing an asset, for the same reason as
+	-- `shieldBreak`: a real rumble sample is then a one-line swap here
+	-- rather than an edit inside the EFFECTS table.
+	stoneRumble = "rbxassetid://131133470069125",
 }
 
 local SFX = VfxConfig.SFX
@@ -215,6 +224,82 @@ local function castEntry(palette: ColorPalette, tier: number): EffectSpec
 		sound            = { soundId = SFX.cast, volume = p.soundVol, pitchRange = p.pitch },
 		totalDurationSec = p.totalSec,
 		anchor           = "casterStaffTip",
+	}
+end
+
+----------------------------------------------------------------------
+-- Stone Wall rise
+----------------------------------------------------------------------
+-- Grit and dust, not a spell colour. The wall shoulders its way up out
+-- of the floor, so what comes off the base is earth — tinting it green
+-- like the rest of the green tier would read as sparks.
+--
+-- Deliberately not a fourth entry in COLORS: that table is the *spell*
+-- palette, keyed by the three spell colours, and adding to it would
+-- imply a fourth castable colour.
+local STONE_DUST: ColorPalette = {
+	primary = Color3.fromRGB(122, 108, 92),
+	glow    = Color3.fromRGB(160, 146, 128),
+	accent  = Color3.fromRGB(96, 86, 74),
+}
+
+-- How long the emitters keep throwing dust. Must outlast the wall's whole
+-- arrival — SkillVisuals BARRIER_TELL_SEC + BARRIER_RISE_SEC, 0.18 + 0.55
+-- — so the plume is still going when the slab lands and doesn't cut out
+-- mid-climb. Can't read those constants directly: SkillVisuals requires
+-- this module, so the dependency only runs one way. Hence the duplicated
+-- number and this note.
+local WALL_RISE_EMIT_SEC = 0.85
+
+-- Longest a dust particle lives. The anchor has to outlive the last
+-- particle spawned on the last frame of the emit window, so both entries
+-- below set totalDurationSec to the sum of the two.
+local WALL_RISE_DUST_MAX_LIFETIME_SEC = 1.1
+
+-- Two layers, shared by the sounded centre entry and the silent flank
+-- one so they can never drift apart:
+--   dust — slow, wide, long-lived; the body of the plume
+--   grit — fast chips thrown clear of the base; the detail that sells it
+--          as rock rather than smoke
+local function stoneRiseEmitters(): { EmitterSpec }
+	return {
+		{
+			template    = "BurstMedium",
+			color       = STONE_DUST,
+			rate        = 80,
+			durationSec = WALL_RISE_EMIT_SEC,
+			lifetime    = NumberRange.new(0.50, WALL_RISE_DUST_MAX_LIFETIME_SEC),
+			size        = NumberSequence.new({
+				NumberSequenceKeypoint.new(0.0, 0.6),
+				NumberSequenceKeypoint.new(0.5, 1.5),
+				NumberSequenceKeypoint.new(1.0, 2.2),
+			}),
+			-- Slow and wide: dust boiling up around the base, not a jet.
+			speed        = NumberRange.new(2, 7),
+			spreadAngle  = Vector2.new(80, 80),
+			rotation     = NumberRange.new(-180, 180),
+			transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0.0, 0.45),
+				NumberSequenceKeypoint.new(0.3, 0.55),
+				NumberSequenceKeypoint.new(1.0, 1.00),
+			}),
+		},
+		{
+			template    = "ImpactBurst",
+			color       = STONE_DUST,
+			rate        = 35,
+			durationSec = WALL_RISE_EMIT_SEC,
+			lifetime    = NumberRange.new(0.35, 0.70),
+			size        = NumberSequence.new({
+				NumberSequenceKeypoint.new(0.0, 0.35),
+				NumberSequenceKeypoint.new(1.0, 0.0),
+			}),
+			speed       = NumberRange.new(9, 20),
+			-- Narrower than the dust so the chips arc up along the slab's
+			-- face instead of spraying flat across the floor.
+			spreadAngle = Vector2.new(45, 45),
+			rotation    = NumberRange.new(-180, 180),
+		},
 	}
 end
 
@@ -522,6 +607,34 @@ VfxConfig.EFFECTS = {
 		-- rather than as a weapon strike.
 		sound            = { soundId = SFX.impactDamage, volume = 0.9, pitchRange = NumberRange.new(0.55, 0.68) },
 		totalDurationSec = 0.65,
+		anchor           = "worldPosition",
+	},
+
+	-- Ground rumble under a Stone Wall while it climbs out of the floor.
+	--
+	-- Rate-based rather than a one-shot burst because it has to run for
+	-- the whole rise: a single puff at t=0 reads as the wall having
+	-- already arrived, which is the pop this effect exists to replace.
+	--
+	-- Played at the centre of the wall's base. The flanks get the silent
+	-- `wall_rise_dust` instead — see SkillVisuals BARRIER_RISE_DUST_SPAN
+	-- for why the plume is three points wide and why only one of them
+	-- carries the audio.
+	wall_rise_rumble = {
+		emitters         = stoneRiseEmitters(),
+		sound            = { soundId = SFX.stoneRumble, volume = 0.65, pitchRange = NumberRange.new(0.28, 0.36) },
+		-- Emit window plus the slowest dust particle's full lifetime, so
+		-- the anchor is never destroyed out from under a plume still in
+		-- the air.
+		totalDurationSec = WALL_RISE_EMIT_SEC + WALL_RISE_DUST_MAX_LIFETIME_SEC,
+		anchor           = "worldPosition",
+	},
+
+	-- The same plume without the sound, for the points either side of the
+	-- wall's centre. Identical emitters by construction, not by copy.
+	wall_rise_dust = {
+		emitters         = stoneRiseEmitters(),
+		totalDurationSec = WALL_RISE_EMIT_SEC + WALL_RISE_DUST_MAX_LIFETIME_SEC,
 		anchor           = "worldPosition",
 	},
 
