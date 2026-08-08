@@ -1,7 +1,7 @@
 ---
 type: system
-description: Floating letter-block prefab — the in-world entity the player shoots to spell words. Spawn API, color tints, and CollectionService tag for the animator.
-updated: 2026-07-27
+description: Floating letter-block prefab — the in-world entity the player shoots to spell words. Spawn API, color tints, CollectionService tag for the animator, and the spawn-in intro.
+updated: 2026-08-08
 ---
 
 # LetterBlock
@@ -36,7 +36,7 @@ The Cube properties: `Size = 4×4×4`, `Anchored = true`, `CanCollide = false`, 
 
 - `src/shared/LetterBlocks/init.luau` — module: spawn / applyVisualState / constants.
 - `src/shared/LetterBlocks/Template/init.meta.json` — Template Model, `ignoreUnknownInstances`, default attributes (`Block.Letter = "A"`, `Block.Color = "red"`).
-- `src/client/LetterBlockAnimator.client.luau` — CollectionService Heartbeat loop: bob 0.5 studs / 1.5 s period, Y-axis rotation 6 deg/s, per-block phase offset.
+- `src/client/LetterBlockAnimator.client.luau` — CollectionService Heartbeat loop: bob 0.5 studs / 1.5 s period, Y-axis rotation 6 deg/s, per-block phase offset, distance-bucketed culling, and the spawn-in intro.
 - `BrainFighter.rbxl` (not under Rojo) — holds the MCP-created Cube + SurfaceGuis + ParticleEmitter children of `Template`. Saving the `.rbxl` is what persists them.
 
 ## Behavioural verification (2026-05-14 playtest)
@@ -82,9 +82,48 @@ The face label goes through `Wildcard.toDisplay(letter)`, so a wildcard's stored
 
 ## CollectionService tag → animator
 
-`spawn` calls `CollectionService:AddTag(block, "LetterBlock")` before parenting. The client animator (`LetterBlockAnimator.client.luau`) listens via `CollectionService:GetInstanceAddedSignal("LetterBlock")` and tracks each block in a Heartbeat loop. Per-block phase offset is derived from the block's address so a cluster of blocks doesn't bob in unison — looks more organic.
+`spawn` calls `CollectionService:AddTag(block, "LetterBlock")` before parenting. The client animator (`LetterBlockAnimator.client.luau`) listens via `CollectionService:GetInstanceAddedSignal("LetterBlock")` and tracks each block in a Heartbeat loop. Each block draws a random phase offset on track so a cluster doesn't bob in unison — looks more organic.
 
-This is a one-way contract: blocks tag themselves, the animator just watches the tag. No direct require, no init-order coupling. Adding a second animator (e.g. a despawn shrink effect) means another `GetInstanceAddedSignal` — no edits to the module.
+This is a one-way contract: blocks tag themselves, the animator just watches the tag. No direct require, no init-order coupling.
+
+A *read-only* observer (analytics, an audio cue) can safely add its own `GetInstanceAddedSignal` with no edits here. Anything that **writes** a block's transform, scale, or transparency must go inside the animator instead — it already writes all three every frame, and a second writer would fight it. See [[concepts/SingleOwnership]].
+
+## Spawn-in intro
+
+The spawner refills the instant a block is consumed, so before 2026-08-08 a replacement snapped into existence at full size next to the one the player had just shot. It read as a pop-in glitch rather than an arrival.
+
+The animator now plays a ~0.35 s intro on every block that arrives *after* the client has started:
+
+| Channel | Curve | Range |
+|---|---|---|
+| `Model:ScaleTo` | `Back` / `Out` — overshoots, then settles | 8 % of final scale → final (peaks ~9 % over) |
+| `Cube.Transparency`, `TextTransparency`, `TextStrokeTransparency` | `Quad` / `Out` | 1 → the value the block replicated in with |
+| `Mana` ParticleEmitter | — | `Enabled = false` for the intro, restored on settle |
+
+Details that matter:
+
+- **Duration is jittered ±15 %.** One consumption triggers one refill, but a joining player can receive a whole arena at once; identical durations would read as a single synchronised inflate.
+- **Blocks already tagged when the script starts do not intro.** They're a settled arena, not an arrival — introing them would inflate the whole field in a joining player's face.
+- **Frame zero is applied synchronously in `track`**, not on the next Heartbeat. One frame at full size and full opacity is exactly the snap the intro exists to remove.
+- **The intro opts out of distance culling.** Holding a pivot still for whole frames is invisible on a settled block and very visible on one mid-pop.
+- **Final values are captured per instance**, not assumed zero, so the intro restores whatever the prefab authored.
+- **Scale is clamped on the low end only.** `Back`/`Out` is *supposed* to exceed 1; `Model:ScaleTo` rejects zero and negatives.
+- **Purely cosmetic.** The server knows nothing about the intro, so a mid-intro block is shootable like any other. Gating `CanQuery` would desync client and server on a block the player can see but not hit.
+
+### Verification (2026-08-08 playtest)
+
+Client-VM sampling via `execute_luau` with `datamodel_type = "Client"`, destroying blocks server-side on a timer and reading the replacement's local property values each Heartbeat. Server logs cannot verify this — the scale and transparency writes happen only on the local VM (see the VFX rule in `CLAUDE.md`).
+
+| t (s) | scale | cube T | text T | stroke T | mana |
+|---|---|---|---|---|---|
+| 0.016 | 0.459 | 0.805 | 0.805 | 0.805 | false |
+| 0.100 | 1.432 | 0.161 | 0.161 | 0.161 | false |
+| 0.166 | **1.636** (peak) | 0.000 | 0.000 | 0.000 | false |
+| 0.299 | **1.500** (settled) | 0.000 | 0.000 | 0.000 | true |
+
+Scale overshoots to 1.636 against a `GameConfig.BLOCK_SCALE` of 1.5 (+9 %) and lands exactly on 1.500. All three transparency channels move in lockstep. The emitter re-enables on the same frame the intro settles.
+
+Two dead ends worth not repeating: MCP `execute_luau` calls issued in one message **serialize rather than run concurrently**, and a `task.delay`-scheduled trigger fires before a follow-up Client call can arm its listener. Schedule a *repeating* server-side trigger, then arm the client sampler.
 
 ## Why the animator runs on the client
 

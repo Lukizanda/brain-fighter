@@ -1124,3 +1124,9 @@ candidate for deletion. Verified after `rokit install` and a server restart: `/a
 **Rule of thumb this establishes:** the Studio plugin updates itself on Roblox's schedule and the
 CLI does not. A connect error that appears out of nowhere without a repo change is a version skew
 until proven otherwise — check `rojo --version` against the plugin build date before reading code.
+
+## [2026-08-08] ingest | letter block spawn-in intro
+
+Blocks refilled instantly at full size when consumed, so a replacement snapped into existence next to the one the player just shot. `LetterBlockAnimator` now plays a ~0.35 s intro on arrival: `Model:ScaleTo` on a Back/Out curve (8 % of final → ~9 % overshoot → settle), transparency on Quad/Out across the Cube and every face TextLabel's text + stroke, and the Mana emitter silenced until settle. Duration jitters ±15 % so a joining player's whole arena doesn't inflate in unison; blocks already tagged at script start skip the intro entirely.
+
+Placed inside the animator rather than a sibling controller: it already writes each block's transform every frame, and a second writer to scale/transparency would fight it ([[concepts/SingleOwnership]]). Verified by sampling the **client** VM (`execute_luau` with `datamodel_type = "Client"`) while destroying blocks server-side — scale 0.459 → 1.636 → 1.500, all three transparency channels in lockstep, emitter re-enabled on the settle frame. Corrected two stale claims on [[systems/LetterBlock]]: the phase offset is a plain `math.random`, not derived from the block's address, and "add a second animator" is only safe for read-only observers.
