@@ -1210,3 +1210,41 @@ Variety without risk: each face shuffles the atlas, reveals six, and mirrors eac
 Two layers enforce the invariant rather than trusting it. A startup pass warns on any atlas point outside `[0, 1]`, so a future authoring slip fails loudly at load instead of silently in a match. And the segments sit under a `ClipsDescendants` container: segments have *thickness*, so one lying along an edge would still put half its width past it, and clipping makes staying on the slab something the engine guarantees rather than something the author remembered.
 
 Verified client-side: canvas 640×400 for the 16×10 slab, 2 crack canvases both clipping, 40 segments, **worst overhang 2.3 px = 0.06 studs** — under half a segment's thickness, and clipped. No validator warnings, so every authored point is in range. Screenshots show fractures well inside the face at both one-crack and multi-crack stages. See [[systems/SkillPipeline]] § Stone Wall — cracks and the crumble.
+
+## [2026-08-08] ingest | Cracks moved onto the crumble's seam lattice
+
+The crack telegraph and the collapse it telegraphs disagreed. Cracks were authored freehand in normalised face coordinates while the slab breaks into a 5×4 grid of boxes, so every fracture line promised a break the crumble then ignored, and the crumble opened straight seams the cracks had said nothing about. Fine on a still wall, wrong the moment it came apart.
+
+`CRACK_PATTERNS` re-authored in **seam-lattice coordinates**: a node is `Vector2.new(column, row)` on the crumble's own grid, column 0→`COLUMNS` left to right, row 0→`ROWS` base to top, and consecutive nodes must be neighbours — so every run lies along a line the wall actually parts on. `COLUMNS`/`ROWS` are now shared by both halves, and that coupling is the point rather than an accident.
+
+The lattice also subsumes the bug the freehand atlas was itself written to fix: a node is in bounds by construction, so there is nothing left to steer or reject. Only the jag can leave the face, and it is clamped before it is applied.
+
+Jag, not curvature: each seam run is cut into three sub-segments whose interior joints are shoved perpendicular by up to 0.35 studs, so the pattern doesn't read as a drawn-on grid — but run *endpoints* stay on the node, which is what keeps runs meeting, branches landing on their trunk, and cracks arriving at the corners the chunks part at. Segments are drawn overlong by their own thickness (half each end) because two rotated rectangles meeting at an angle leave a wedge of daylight on the outside of the turn, and the jag puts a turn at every joint.
+
+Validation upgraded from "point in `[0, 1]`" to "whole-number node inside the grid, and each step a Manhattan distance of exactly 1" — a diagonal step cuts across the middle of a chunk, which is precisely what the lattice rules out.
+
+Verified by measurement against a drawn wall: **every segment endpoint within 13.85 px of a seam on a 14.0 px jag budget, zero strays**, where the freehand atlas put **41 of 78 endpoints off-seam, worst 48.9 px** — most of a chunk away from any line the wall breaks on. Screenshot against a seam-grid overlay confirms the cracks ride the grid. See [[systems/SkillPipeline]] § Stone Wall — cracks and the crumble.
+
+## [2026-08-08] ingest | Crack reveals made non-overlapping
+
+Follow-up to the seam-lattice move. Six cracks are revealed per face, and two laid along the same seam don't read as two cracks — the second to appear lands on the first and mostly thickens it, so a fracture that should have been its own event is spent for nothing.
+
+Fixed at both ends. `chooseCracks` picks greedily against the runs already claimed, considering both orientations so mirroring becomes a way out of a clash rather than another source of them, and taking the *first* candidate that collides with nothing rather than the best of all of them — which keeps the pick random while the lattice has room and only compromises once it doesn't.
+
+That alone wasn't enough: a plain shuffle retraced **29%** of the runs it drew, the greedy picker got it to **13%**, and neither ever produced a clean wall, because ten base-rooted paths over six base runs cannot be disjoint. So the atlas was re-authored to be **pairwise edge-disjoint**, checked at startup rather than trusted — a shared run is invisible in the source and only shows up as a fracture that appears and changes nothing.
+
+The first disjoint set then exposed a second rule. Four of its patterns lived on the outer columns, and *because* they were disjoint they stacked end to end into unbroken lines up both sides, framing the slab like a picture. Those seams are the wall's own silhouette, so a crack drawn on one reads as an outline, not a fracture. **Nothing may travel along an outer edge** — reaching one is fine — and the validator now warns on it. Final set: four cracks climbing from the base, two low bed joints crossing them, four rooted higher on a joint or reaching in from an edge.
+
+Verified over 2000 generated walls: **zero retraced runs, 100% clean, mirroring still applied to 51% of cracks**; validator reports no off-grid node, non-adjacent step, outer-edge run or shared run. Screenshots of three independent draws show cracks spread across the whole face with no outline effect. See [[systems/SkillPipeline]] § Stone Wall — cracks and the crumble.
+
+## [2026-08-08] ingest | Stone Wall cracks got a sound
+
+Each fracture now snaps audibly as it appears, gated by `CRACK_SOUND_ENABLED` in `client/Vfx/BarrierCrumbleController`. Off is a supported state rather than a broken one — the cracks are the telegraph and the audio only makes it harder to miss for a player facing away. The switch is there because six snaps suits one wall and might get busy with several standing at once, which is a judgement for a real match.
+
+Counted per stagger slot, not per crack. Both faces draw their own fracture for each slot, so keying on the crack would hit twice for every one a player perceives; the controller fires at the earlier of the pair, so a crack is always on screen when it sounds. `cracking[barrier]` grew from a segment list to a `CrackState` carrying `moments` (sorted, one per slot) and `played`.
+
+The catch-up case has its own rule: a client joining a wall partway through its lead window draws every crack due by then on its first frame, so however many moments land in one frame only one sound plays. Otherwise that player's arrival is announced by a burst of noise describing a wall that, to them, merely already looks cracked.
+
+`SFX.stoneCrack` + a sound-only `wall_crack` EffectSpec, played via `spawnEffectAtPoint` so the audio config sits in VfxConfig with the rest instead of a hand-built Sound in the controller. spawnEffect already plays audio outside its emitters guard, so an emitter-less spec works as-is. Shares an asset with `impactFreeze`/`shieldBreak` — the only sample in the inventory that snaps rather than thuds — at 0.55–0.70 against their 0.90–1.05 and 0.80–0.92, since ice cracks bright and stone cracks dull. Default attenuation, deliberately: a crack matters to whoever is behind the wall.
+
+Verified on the client with the lead window driven open by a local rewrite of the expiry attribute: **6 snaps for 11 crack reveals** (the pairing working), **6/6 coinciding with a reveal, worst gap 0.016 s**, pitch spread 0.56–0.68 across one wall, volume 0.45, anchor `SkillEffectAnchor`, default EmitterSize 10. Asset preloads (`IsLoaded=true`, 0.39 s → 0.70 s at 0.55 speed against a 0.75 s anchor, so no clipped tail) and the console is free of sound-load errors. See [[systems/SkillPipeline]] § Stone Wall — cracks and the crumble.

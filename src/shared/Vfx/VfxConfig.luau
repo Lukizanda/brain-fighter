@@ -257,6 +257,17 @@ VfxConfig.SFX = {
 	-- `shieldBreak`: a real rumble sample is then a one-line swap here
 	-- rather than an edit inside the EFFECTS table.
 	stoneRumble = "rbxassetid://131133470069125",
+
+	-- A single fracture opening across a Stone Wall's face, in the seconds
+	-- before it collapses. Points at the same short sharp asset as
+	-- `impactFreeze` — the only thing in the inventory that snaps rather
+	-- than thuds — played well below the pitch either of its other uses
+	-- takes, which pulls it off ice and onto stone.
+	--
+	-- Its own entry despite sharing an asset, for the same reason as
+	-- `shieldBreak` and `stoneRumble`: a real stone-crack sample is then a
+	-- one-line swap here rather than an edit inside the EFFECTS table.
+	stoneCrack = "rbxassetid://88987851128257",
 }
 
 local SFX = VfxConfig.SFX
@@ -344,6 +355,12 @@ local WALL_RISE_EMIT_SEC = 0.85
 -- particle spawned on the last frame of the emit window, so both entries
 -- below set totalDurationSec to the sum of the two.
 local WALL_RISE_DUST_MAX_LIFETIME_SEC = 1.1
+
+-- How long the crack snap needs its anchor to survive. The sample is
+-- 0.39 s, and `wall_crack` plays it as slow as 0.55 speed, which stretches
+-- it to ~0.71 s; a shorter anchor would cut the tail off the fracture that
+-- fires closest to the wall's collapse.
+local WALL_CRACK_SOUND_SEC = 0.75
 
 -- Two layers, shared by the sounded centre entry and the silent flank
 -- one so they can never drift apart:
@@ -764,6 +781,30 @@ VfxConfig.EFFECTS = {
 	wall_rise_dust = {
 		emitters         = stoneRiseEmitters(),
 		totalDurationSec = WALL_RISE_EMIT_SEC + WALL_RISE_DUST_MAX_LIFETIME_SEC,
+		anchor           = "worldPosition",
+	},
+
+	-- One fracture snapping open across a Stone Wall, played by
+	-- `client/Vfx/BarrierCrumbleController` as each crack appears.
+	--
+	-- Sound-only: the crack itself is SurfaceGui geometry on the slab, and
+	-- this effect exists purely to give that geometry a voice. Nothing to
+	-- emit, so no emitters — see spawnEffect, which plays audio outside the
+	-- emitters guard precisely so a spec like this one works.
+	--
+	-- Pitched to 0.55–0.70, well under the 0.90–1.05 the freeze impact
+	-- takes from the same asset and under `shieldBreak`'s 0.80–0.92. Ice
+	-- cracks bright and stone cracks dull, and the three uses have to stay
+	-- distinguishable while they share a sample. The range is also wide
+	-- enough that six fractures on one wall don't read as one sound looped.
+	--
+	-- Quiet, and deliberately left on Roblox's default attenuation rather
+	-- than the wide settings the boss cues use: this is the one case those
+	-- defaults are tuned for. A crack matters to whoever is sheltering
+	-- behind the wall, and it should fade for everyone else.
+	wall_crack = {
+		sound            = { soundId = SFX.stoneCrack, volume = 0.45, pitchRange = NumberRange.new(0.55, 0.70) },
+		totalDurationSec = WALL_CRACK_SOUND_SEC,
 		anchor           = "worldPosition",
 	},
 

@@ -6,8 +6,9 @@
 -- Owns a Stone Wall's visual decline, both halves of it:
 --
 --   cracks  — fracture lines spread across the slab's faces through the
---             last few seconds of its life, so its collapse is something
---             you can see coming and plan around
+--             last few seconds of its life, each landing with a snap, so
+--             its collapse is something you can see and hear coming and
+--             plan around
 --   rubble  — the slab breaks into falling chunks when it finally goes,
 --             instead of blinking out of existence
 --
@@ -55,6 +56,13 @@ local log = Logger.new("BarrierCrumble")
 -- Grid the slab is cut into. 5x4 on the shipped 16x10 wall gives chunks
 -- a bit over 3 studs across — big enough to read as masonry, small
 -- enough that the wall doesn't come apart like a four-piece jigsaw.
+--
+-- **The cracks are authored against this same grid**, and that coupling is
+-- the point rather than an accident: see the atlas below. Changing these
+-- numbers moves the seams the crack patterns are drawn along, so the
+-- atlas has to be re-authored to match — the startup validation catches a
+-- pattern that no longer *fits* the grid, but it cannot tell that one
+-- which fits a smaller grid has stopped spanning the wall.
 local COLUMNS = 5
 local ROWS    = 4
 
@@ -132,7 +140,8 @@ local CRACK_LEAD_SEC = 2.5
 -- over seconds out of a sequence of instants.
 --
 -- This is also why the geometry is fixed at build time and stepCracks
--- only toggles Visible — there is nothing left to interpolate.
+-- only toggles Visible and fires the snap — there is nothing left to
+-- interpolate.
 local CRACK_PIXELS_PER_STUD = 40
 
 -- How many of the authored patterns below a given face reveals.
@@ -146,6 +155,24 @@ local CRACK_TIP_THICKNESS_FRACTION = 0.45
 
 -- Branches come off an established crack, so they read as secondary.
 local CRACK_BRANCH_THICKNESS_FRACTION = 0.6
+
+-- Jaggedness. A crack follows a seam but does not follow it *exactly* —
+-- stone fails along a weakness, wandering either side of it. Each seam run
+-- is cut into this many sub-segments whose interior joints are shoved
+-- perpendicular to the run, which is what stops the pattern reading as a
+-- drawn-on grid.
+--
+-- The endpoints of every run are left untouched, on the lattice node. That
+-- is what keeps the wander cosmetic: consecutive runs still meet, branches
+-- still land on their trunk, and the crack still arrives at the seam
+-- corners the chunks will actually part along.
+--
+-- Amplitude is in studs, converted at draw time, so the wander is the same
+-- physical size on a wall of any proportion. As a fraction of a chunk it
+-- has to stay small — a crack that strays a third of the way into a face
+-- stops reading as belonging to that seam at all.
+local CRACK_JAG_SEGMENTS = 3
+local CRACK_JAG_STUDS    = 0.35
 
 -- When each crack fires, as a fraction of the lead window. Spread across
 -- most of it so the fractures arrive as a sequence of separate events
@@ -165,6 +192,19 @@ local CRACK_PROGRESS_EXPONENT = 1.3
 
 local CRACK_COLOR = Color3.fromRGB(24, 22, 20)
 
+-- Optional audio on each fracture, and optional in the sense that the
+-- telegraph works without it: the cracks are the warning, this only makes
+-- them harder to miss for a player facing the other way. Off is a
+-- supported state, not a broken one — flip this and the wall still cracks
+-- and still crumbles, in silence.
+--
+-- Worth having a switch at all because it is the piece most likely to want
+-- pulling. Six snaps per wall is fine for one wall and could get busy in a
+-- fight with several standing at once, and that is a judgement to make in
+-- a real match rather than here.
+local CRACK_SOUND_ENABLED   = true
+local CRACK_SOUND_EFFECT_ID = "wall_crack"
+
 -- Both broad faces. A 2-stud slab's edges aren't worth cracking, and you
 -- can't see both faces at once, so each draws its own subset rather than
 -- being mirrored through the wall.
@@ -173,74 +213,108 @@ local CRACK_FACES: { Enum.NormalId } = { Enum.NormalId.Front, Enum.NormalId.Back
 ----------------------------------------------------------------------
 -- The crack atlas
 ----------------------------------------------------------------------
--- Authored fracture patterns in NORMALISED face coordinates: x runs 0 at
--- the left edge to 1 at the right, y runs 0 at the top to 1 at the base
--- (matching the GUI canvas, whose origin is top-left). Each pattern is a
--- list of strokes; each stroke is a polyline. Stroke 1 is the trunk and
--- any others are branches, authored to start on a point of the trunk so
--- they join it.
+-- Authored fracture patterns in SEAM-LATTICE coordinates. A node is
+-- `Vector2.new(column, row)` on the grid the slab is cut into: column runs
+-- 0 at the left edge to COLUMNS at the right, row runs 0 at the base to
+-- ROWS at the top. Both are integers, and consecutive nodes in a stroke
+-- must be neighbours — every run therefore lies along a line the crumble
+-- actually breaks on. Each pattern is a list of strokes; stroke 1 is the
+-- trunk and any others are branches, authored to start on a node of the
+-- trunk so they join it.
 --
--- **Authored rather than generated, and that is a bug fix.** The first
--- version walked each crack from a random base point with random
--- headings and random segment lengths, and nothing stopped that walk
--- leaving the face — a crack starting near an edge and turning outward
--- rendered as lines hanging in the air off the side of the wall.
--- Clamping a random walk means either steering it (which straightens
--- cracks against the edge, where they most want to look natural) or
--- rejecting and retrying (unbounded work on a frame). Fixed points sized
--- to the slab cannot leave it in the first place, need no per-wall
--- generation, and can actually be looked at and tuned.
+-- **On the lattice, and that is a bug fix.** The previous atlas was drawn
+-- freehand in normalised face coordinates, and looked fine on a still
+-- wall — but the slab breaks into a grid of boxes, so every crack was
+-- promising a fracture line the collapse then ignored, and the collapse
+-- opened straight seams the cracks had said nothing about. The telegraph
+-- has to be a telegraph *of this collapse*: a crack is where the wall is
+-- about to come apart, so it belongs on the seam it comes apart along.
 --
--- Cracks climb from the base, which is where a wall under its own weight
--- fails. Variety across the set is deliberate: different heights reached,
--- different amounts of lateral travel, some branched and some not.
+-- Rooting the geometry in the lattice also subsumes the bug the freehand
+-- atlas was itself written to fix. The version before that walked each
+-- crack from a random point with random headings, and nothing stopped the
+-- walk leaving the face — cracks rendered as lines hanging in the air off
+-- the side of the wall. A node is in bounds by construction, so there is
+-- nothing left to steer or reject; only the jag between nodes needs
+-- clamping, and it is bounded before it is applied.
 --
--- **Every point must lie within [0, 1] on both axes** — that invariant is
--- what keeps the pattern on the slab. It is checked once at startup
--- rather than trusted; see the validation below.
+-- Two rules shape the set, and both were learned by drawing it.
+--
+-- **No two patterns use the same run.** Six of the ten are drawn on a
+-- face, and two cracks laid along one seam don't read as two cracks — the
+-- second to appear lands on the first and mostly thickens it, so a
+-- fracture that should have been its own event is spent for nothing.
+-- Disjointness is a property of the set, checked at startup, which is what
+-- lets any six be revealed without the reveal having to think about it
+-- (`chooseCracks` still does, because mirroring can reintroduce a clash
+-- the authored set doesn't have).
+--
+-- **Nothing runs along the outer edges** — no vertical on column 0 or
+-- COLUMNS, no horizontal on row 0 or ROWS. Those seams are the slab's own
+-- silhouette, so a crack drawn on one doesn't read as a crack at all; it
+-- reads as an outline. The first disjoint set had four patterns on the
+-- outer columns, and because they were disjoint they stacked end to end
+-- into unbroken lines up both sides, framing the wall like a picture. The
+-- rule costs the interesting half of nothing: the base still offers four
+-- runs to climb out of, and horizontals may still *reach* an edge, they
+-- just may not travel along one.
+--
+-- What is left after both rules: four cracks climbing from the base (which
+-- is where a wall under its own weight fails), two low bed joints running
+-- across them, and four rooted higher up on a joint or reaching in from an
+-- edge. Different heights, different lateral travel, some branched, some a
+-- plain vertical — and spread over the whole face rather than one busy
+-- corner, since a pattern's place in the set is now also its place on the
+-- wall.
+--
+-- **Every node must be an integer within the grid, and every step must be
+-- to a neighbour.** Those two invariants are what keep a pattern on the
+-- slab and on the seams. They are checked once at startup rather than
+-- trusted; see the validation below.
 local CRACK_PATTERNS: { { { Vector2 } } } = {
-	-- Tall trunk, low branch.
+	-- Base column 1. Climbs two courses, then turns out to the left edge.
 	{
-		{ Vector2.new(0.13, 1.00), Vector2.new(0.17, 0.79), Vector2.new(0.10, 0.61), Vector2.new(0.16, 0.38) },
-		{ Vector2.new(0.17, 0.79), Vector2.new(0.28, 0.68) },
+		{ Vector2.new(1, 0), Vector2.new(1, 1), Vector2.new(1, 2), Vector2.new(0, 2) },
 	},
-	-- Long, steep, unbranched.
+	-- Base column 2. Three courses dead straight — the plain vertical of
+	-- the set — with a short branch peeling off partway up.
 	{
-		{ Vector2.new(0.31, 1.00), Vector2.new(0.35, 0.81), Vector2.new(0.29, 0.60), Vector2.new(0.37, 0.42), Vector2.new(0.32, 0.23) },
+		{ Vector2.new(2, 0), Vector2.new(2, 1), Vector2.new(2, 2), Vector2.new(2, 3) },
+		{ Vector2.new(2, 2), Vector2.new(1, 2) },
 	},
-	-- Short and stubby.
+	-- Base column 3. Climbs two, then steps out to mid-face.
 	{
-		{ Vector2.new(0.50, 1.00), Vector2.new(0.45, 0.86), Vector2.new(0.52, 0.72) },
+		{ Vector2.new(3, 0), Vector2.new(3, 1), Vector2.new(3, 2), Vector2.new(4, 2) },
 	},
-	-- Wide fork near the top.
+	-- Base column 4. Climbs two, then runs out to the right edge.
 	{
-		{ Vector2.new(0.67, 1.00), Vector2.new(0.71, 0.83), Vector2.new(0.65, 0.65), Vector2.new(0.70, 0.49) },
-		{ Vector2.new(0.65, 0.65), Vector2.new(0.78, 0.57) },
+		{ Vector2.new(4, 0), Vector2.new(4, 1), Vector2.new(4, 2), Vector2.new(5, 2) },
 	},
-	-- Leans hard to one side as it climbs.
+	-- Low bed joint crossing the left half. Cuts across whatever is
+	-- climbing out of the base under it.
 	{
-		{ Vector2.new(0.87, 1.00), Vector2.new(0.81, 0.82), Vector2.new(0.88, 0.63), Vector2.new(0.79, 0.44) },
+		{ Vector2.new(0, 1), Vector2.new(1, 1), Vector2.new(2, 1) },
 	},
-	-- Tight zigzag, mid height.
+	-- The same failure on the right half.
 	{
-		{ Vector2.new(0.23, 1.00), Vector2.new(0.29, 0.87), Vector2.new(0.22, 0.73), Vector2.new(0.30, 0.57) },
+		{ Vector2.new(3, 1), Vector2.new(4, 1), Vector2.new(5, 1) },
 	},
-	-- Low and forked, both arms short.
+	-- Upper left, climbing off a joint to the top edge.
 	{
-		{ Vector2.new(0.43, 1.00), Vector2.new(0.39, 0.85), Vector2.new(0.45, 0.71) },
-		{ Vector2.new(0.45, 0.71), Vector2.new(0.36, 0.60) },
+		{ Vector2.new(1, 2), Vector2.new(1, 3), Vector2.new(1, 4) },
 	},
-	-- The tallest in the set; reaches most of the way up the slab.
+	-- Bed joint high on the left. The quietest in the set.
 	{
-		{ Vector2.new(0.60, 1.00), Vector2.new(0.64, 0.85), Vector2.new(0.57, 0.69), Vector2.new(0.63, 0.50), Vector2.new(0.57, 0.29) },
+		{ Vector2.new(0, 3), Vector2.new(1, 3), Vector2.new(2, 3) },
 	},
-	-- Gentle, nearly vertical.
+	-- Upper middle, climbing to the top with a fork near the crown.
 	{
-		{ Vector2.new(0.77, 1.00), Vector2.new(0.74, 0.85), Vector2.new(0.79, 0.69), Vector2.new(0.75, 0.53) },
+		{ Vector2.new(3, 2), Vector2.new(3, 3), Vector2.new(3, 4) },
+		{ Vector2.new(3, 3), Vector2.new(4, 3) },
 	},
-	-- Hugs the left edge — the case that used to run off the face.
+	-- Reaches in from the right edge high up, then turns for the crown.
 	{
-		{ Vector2.new(0.06, 1.00), Vector2.new(0.10, 0.83), Vector2.new(0.05, 0.67), Vector2.new(0.11, 0.51) },
+		{ Vector2.new(5, 3), Vector2.new(4, 3), Vector2.new(4, 4) },
 	},
 }
 
@@ -276,8 +350,20 @@ type CrackSegment = {
 	appearAt: number,
 }
 
+-- Everything one cracking slab needs per frame.
+--
+-- `moments` is one entry per stagger slot, not per crack, and that is the
+-- point of it: both faces draw their own fracture for the same moment, so
+-- keying the sound on the crack would hit twice for every one the player
+-- perceives. Ascending, and consumed in order by `played`.
+type CrackState = {
+	segments: { CrackSegment },
+	moments: { number },
+	played: number,
+}
+
 local active: { Crumble } = {}
-local cracking: { [BasePart]: { CrackSegment } } = {}
+local cracking: { [BasePart]: CrackState } = {}
 
 local function jitter(magnitude: number): number
 	return (math.random() * 2 - 1) * magnitude
@@ -287,21 +373,121 @@ end
 -- Cracks
 ----------------------------------------------------------------------
 
--- Startup check on the invariant the atlas rests on. A pattern edited
--- out of range is exactly the bug the atlas replaced, so it fails loudly
--- here rather than by drawing lines off the side of a wall in a match.
+-- Startup check on the two invariants the atlas rests on: nodes are on
+-- the grid, and each step goes to a neighbour. A pattern edited off the
+-- lattice is exactly the bug the lattice was adopted to fix — a crack
+-- promising a break the collapse won't make, or one drifting off the face
+-- entirely — so it fails loudly here rather than in a match.
 for patternIndex, pattern in ipairs(CRACK_PATTERNS) do
 	for strokeIndex, stroke in ipairs(pattern) do
-		for pointIndex, point in ipairs(stroke) do
-			if point.X < 0 or point.X > 1 or point.Y < 0 or point.Y > 1 then
+		for nodeIndex, node in ipairs(stroke) do
+			if node.X % 1 ~= 0 or node.Y % 1 ~= 0
+				or node.X < 0 or node.X > COLUMNS
+				or node.Y < 0 or node.Y > ROWS
+			then
 				log:warn(string.format(
-					"crack pattern %d stroke %d point %d is outside the face (%.2f, %.2f)"
-						.. " — it will be clipped at the slab edge",
-					patternIndex, strokeIndex, pointIndex, point.X, point.Y
+					"crack pattern %d stroke %d node %d is not a grid corner (%.2f, %.2f)"
+						.. " — expected whole numbers within %dx%d",
+					patternIndex, strokeIndex, nodeIndex, node.X, node.Y, COLUMNS, ROWS
 				))
+			end
+
+			if nodeIndex > 1 then
+				local previous = stroke[nodeIndex - 1]
+
+				-- Manhattan distance of exactly 1: one column or one row,
+				-- never both and never a jump. A diagonal step cuts across
+				-- the middle of a chunk, which is the whole thing the
+				-- lattice rules out.
+				local step = math.abs(node.X - previous.X) + math.abs(node.Y - previous.Y)
+				if step ~= 1 then
+					log:warn(string.format(
+						"crack pattern %d stroke %d node %d does not follow a seam from the"
+							.. " node before it (step of %.2f) — the run will cut across a chunk",
+						patternIndex, strokeIndex, nodeIndex, step
+					))
+				end
+
+				-- Runs along the slab's own outline read as a border rather
+				-- than a fracture; reaching an edge is fine, travelling
+				-- along one is not. Cheap to check and easy to reintroduce
+				-- by accident, since such a run looks unremarkable written
+				-- down and only shows itself once two patterns stack into a
+				-- full-height line up the side of the wall.
+				local onOuterColumn = node.X == previous.X
+					and (node.X == 0 or node.X == COLUMNS)
+				local onOuterRow = node.Y == previous.Y
+					and (node.Y == 0 or node.Y == ROWS)
+				if onOuterColumn or onOuterRow then
+					log:warn(string.format(
+						"crack pattern %d stroke %d node %d runs along the slab's outer edge"
+							.. " — it will read as an outline, not a crack",
+						patternIndex, strokeIndex, nodeIndex
+					))
+				end
 			end
 		end
 	end
+end
+
+-- Mirroring doubles the apparent variety of the atlas for one
+-- subtraction, and lands on a seam either way: the columns are evenly
+-- spaced, so the mirror of column c is column COLUMNS - c.
+local function mirrorNode(node: Vector2, mirrored: boolean): Vector2
+	return if mirrored then Vector2.new(COLUMNS - node.X, node.Y) else node
+end
+
+-- A grid corner in canvas pixels.
+--
+-- The row flip is the load-bearing line: the lattice counts rows up from
+-- the base, matching the chunks, while the GUI canvas counts pixels down
+-- from the top. Without it the whole atlas renders upside down — cracks
+-- hanging from the ceiling, still perfectly on the seams, which is a
+-- failure that would look deliberate.
+local function nodeToPixels(node: Vector2, canvasPx: Vector2, mirrored: boolean): Vector2
+	local placed = mirrorNode(node, mirrored)
+	return Vector2.new(
+		placed.X / COLUMNS * canvasPx.X,
+		(1 - placed.Y / ROWS) * canvasPx.Y
+	)
+end
+
+-- Expands a stroke's lattice nodes into the pixel polyline actually drawn:
+-- every node, plus the jag joints wandering either side of the seam
+-- between them.
+local function strokePoints(stroke: { Vector2 }, canvasPx: Vector2, mirrored: boolean): { Vector2 }
+	local points: { Vector2 } = {}
+	local previous = nodeToPixels(stroke[1], canvasPx, mirrored)
+	table.insert(points, previous)
+
+	for nodeIndex = 2, #stroke do
+		local target = nodeToPixels(stroke[nodeIndex], canvasPx, mirrored)
+		local delta  = target - previous
+		local runPx  = delta.Magnitude
+
+		if runPx > 0 then
+			local normal = Vector2.new(-delta.Y, delta.X) / runPx
+			for step = 1, CRACK_JAG_SEGMENTS - 1 do
+				local along  = previous + delta * (step / CRACK_JAG_SEGMENTS)
+				local offset = normal * jitter(CRACK_JAG_STUDS * CRACK_PIXELS_PER_STUD)
+				local joint  = along + offset
+				-- Only the jag can leave the face, and only along a run on
+				-- the outer edge, where the wander has nothing on one side
+				-- to stray into. Clamped rather than left to the container's
+				-- ClipsDescendants, so the crack stays a connected line
+				-- instead of losing a joint and gapping.
+				table.insert(points, Vector2.new(
+					math.clamp(joint.X, 0, canvasPx.X),
+					math.clamp(joint.Y, 0, canvasPx.Y)
+				))
+			end
+		end
+
+		table.insert(points, target)
+		previous = target
+	end
+
+	return points
 end
 
 -- Draws one authored pattern onto a face, scaled to the slab. Every
@@ -316,29 +502,23 @@ local function addCrack(
 	appearAt: number
 )
 	for strokeIndex, stroke in ipairs(pattern) do
-		local trunkThickness = if strokeIndex == 1
+		local baseThickness = if strokeIndex == 1
 			then CRACK_THICKNESS_PX
 			else CRACK_THICKNESS_PX * CRACK_BRANCH_THICKNESS_FRACTION
 
-		for pointIndex = 1, #stroke - 1 do
-			local fromNorm = stroke[pointIndex]
-			local toNorm   = stroke[pointIndex + 1]
-			-- Mirroring doubles the apparent variety of the atlas for one
-			-- subtraction, and cannot push a point out of bounds because
-			-- 1 - x is in [0, 1] whenever x is.
-			if mirrored then
-				fromNorm = Vector2.new(1 - fromNorm.X, fromNorm.Y)
-				toNorm   = Vector2.new(1 - toNorm.X, toNorm.Y)
-			end
+		local points = strokePoints(stroke, canvasPx, mirrored)
+		local runs   = #points - 1
 
-			local fromPx = fromNorm * canvasPx
-			local toPx   = toNorm * canvasPx
+		for index = 1, runs do
+			local fromPx = points[index]
+			local toPx   = points[index + 1]
 			local delta  = toPx - fromPx
 			local lengthPx = delta.Magnitude
 			if lengthPx <= 0 then continue end
 
 			local taper = 1 - (1 - CRACK_TIP_THICKNESS_FRACTION)
-				* ((pointIndex - 1) / math.max(#stroke - 1, 1))
+				* ((index - 1) / math.max(runs - 1, 1))
+			local thickness = baseThickness * taper
 			local centre = fromPx + delta / 2
 
 			local frame = Instance.new("Frame")
@@ -347,12 +527,16 @@ local function addCrack(
 			-- covers. Rotation pivots about the element's centre, so
 			-- anchoring there makes pivot and anchor the same point and
 			-- the segment lands exactly on the line between the two
-			-- authored points. With a left-edge AnchorPoint the frame
-			-- swings off its start and the crack renders as disconnected
-			-- dashes.
-			frame.AnchorPoint      = Vector2.new(0.5, 0.5)
-			frame.Position         = UDim2.fromOffset(centre.X, centre.Y)
-			frame.Size             = UDim2.fromOffset(lengthPx, trunkThickness * taper)
+			-- points. With a left-edge AnchorPoint the frame swings off its
+			-- start and the crack renders as disconnected dashes.
+			frame.AnchorPoint = Vector2.new(0.5, 0.5)
+			frame.Position    = UDim2.fromOffset(centre.X, centre.Y)
+			-- Overlong by its own thickness, half at each end. Two rotated
+			-- rectangles meeting at an angle leave a wedge of daylight on
+			-- the outside of the turn; the overlap fills it. The jag puts a
+			-- turn at every joint, so without this the crack reads as a
+			-- dotted line the moment it stops being straight.
+			frame.Size             = UDim2.fromOffset(lengthPx + thickness, thickness)
 			frame.Rotation         = math.deg(math.atan2(delta.Y, delta.X))
 			frame.BackgroundColor3 = CRACK_COLOR
 			frame.BorderSizePixel  = 0
@@ -380,8 +564,128 @@ local function shuffledPatternIndices(): { number }
 	return order
 end
 
+-- Names one seam run, independent of which way it was walked, so a run
+-- shared by two patterns produces the same key from both.
+local function edgeKey(a: Vector2, b: Vector2): string
+	local ax, ay, bx, by = a.X, a.Y, b.X, b.Y
+	if bx < ax or (bx == ax and by < ay) then
+		ax, ay, bx, by = bx, by, ax, ay
+	end
+	return string.format("%d,%d/%d,%d", ax, ay, bx, by)
+end
+
+-- Every seam run a pattern occupies in the orientation it would be drawn.
+local function patternEdges(pattern: { { Vector2 } }, mirrored: boolean): { string }
+	local edges: { string } = {}
+	for _, stroke in ipairs(pattern) do
+		for index = 1, #stroke - 1 do
+			table.insert(edges, edgeKey(
+				mirrorNode(stroke[index], mirrored),
+				mirrorNode(stroke[index + 1], mirrored)
+			))
+		end
+	end
+	return edges
+end
+
+-- The set-level invariant, and the reason any six patterns can be revealed
+-- without checking: no two of them use the same run, so no crack can land
+-- on another. Authored that way and verified here rather than trusted,
+-- because a duplicate is invisible in the source — two patterns sharing a
+-- seam look fine written down and only show up as a fracture that appears
+-- and changes nothing. Checked unmirrored, which is the orientation
+-- `chooseCracks` can always fall back to.
+do
+	local owner: { [string]: number } = {}
+	for patternIndex, pattern in ipairs(CRACK_PATTERNS) do
+		for _, key in ipairs(patternEdges(pattern, false)) do
+			if owner[key] then
+				log:warn(string.format(
+					"crack patterns %d and %d both run along seam %s — whichever appears"
+						.. " second will land on the first",
+					owner[key], patternIndex, key
+				))
+			else
+				owner[key] = patternIndex
+			end
+		end
+	end
+end
+
+type Reveal = {
+	pattern: { { Vector2 } },
+	mirrored: boolean,
+}
+
+-- Picks the patterns a face reveals, preferring ones that don't retrace a
+-- seam an already-picked crack is using.
+--
+-- The problem it solves is specific to the lattice: on a 5x4 grid there
+-- are only six runs out of the base, so a plain shuffle of ten base-rooted
+-- patterns will often deal two that start on the same one. Two cracks laid
+-- along the same seam don't read as two cracks — the second one appearing
+-- lands on top of the first and mostly just thickens it, so a fracture
+-- that should have been its own event is spent for nothing. Spreading them
+-- is what makes six reveals look like six.
+--
+-- Greedy rather than an exact cover, and it takes the *first* candidate
+-- that collides with nothing rather than the best of all of them, which
+-- keeps the pick random when the lattice has room and only starts
+-- compromising once it doesn't. Both orientations of each pattern are
+-- considered, so mirroring becomes a way out of a clash instead of another
+-- source of them: a pattern rooted at column 1 mirrors to column 4.
+--
+-- Bounded work — patterns x orientations x runs, a few hundred string
+-- comparisons once per face when a wall spawns, and it short-circuits the
+-- moment it finds a clean fit.
+local function chooseCracks(count: number): { Reveal }
+	local order = shuffledPatternIndices()
+	local taken: { [number]: boolean } = {}
+	local claimed: { [string]: boolean } = {}
+	local chosen: { Reveal } = {}
+
+	for _ = 1, count do
+		local bestIndex: number? = nil
+		local bestMirrored = false
+		local bestOverlap = math.huge
+
+		for _, index in ipairs(order) do
+			if not taken[index] then
+				-- Orientations tried in random order, so a pattern that fits
+				-- either way doesn't always come out the same way up.
+				local firstMirrored = math.random() < 0.5
+				for _, mirrored in ipairs({ firstMirrored, not firstMirrored }) do
+					local overlap = 0
+					for _, key in ipairs(patternEdges(CRACK_PATTERNS[index], mirrored)) do
+						if claimed[key] then
+							overlap += 1
+						end
+					end
+					if overlap < bestOverlap then
+						bestIndex, bestMirrored, bestOverlap = index, mirrored, overlap
+					end
+				end
+			end
+			if bestOverlap == 0 then break end
+		end
+
+		-- Only when the atlas runs out, which CRACKS_PER_FACE prevents.
+		if not bestIndex then break end
+
+		taken[bestIndex] = true
+		local pattern = CRACK_PATTERNS[bestIndex]
+		for _, key in ipairs(patternEdges(pattern, bestMirrored)) do
+			claimed[key] = true
+		end
+		table.insert(chosen, { pattern = pattern, mirrored = bestMirrored })
+	end
+
+	return chosen
+end
+
 local function buildCracks(barrier: BasePart)
 	local segments: { CrackSegment } = {}
+	local moments: { number } = {}
 	local canvasPx = Vector2.new(
 		barrier.Size.X * CRACK_PIXELS_PER_STUD,
 		barrier.Size.Y * CRACK_PIXELS_PER_STUD
@@ -414,8 +718,9 @@ local function buildCracks(barrier: BasePart)
 		container.ClipsDescendants       = true
 		container.Parent                 = gui
 
-		local order = shuffledPatternIndices()
-		for slot = 1, revealed do
+		-- Chosen per face rather than per wall: the two sides fracture
+		-- independently, so each gets its own spread across the lattice.
+		for slot, reveal in ipairs(chooseCracks(revealed)) do
 			local appearAt = math.min(
 				(slot - 1) / revealed * CRACK_STAGGER_SPAN + jitter(CRACK_TIMING_JITTER),
 				CRACK_LATEST_APPEAR
@@ -423,18 +728,28 @@ local function buildCracks(barrier: BasePart)
 			addCrack(
 				container,
 				canvasPx,
-				CRACK_PATTERNS[order[slot]],
-				math.random() < 0.5,
+				reveal.pattern,
+				reveal.mirrored,
 				segments,
 				appearAt
 			)
+
+			-- The earlier of the two faces' cracks for this slot is the
+			-- moment the wall audibly fails. Whichever face the player
+			-- happens to be looking at, a crack is on screen when it sounds.
+			moments[slot] = math.min(moments[slot] or math.huge, appearAt)
 		end
 	end
 
-	cracking[barrier] = segments
+	-- The jitter can reorder neighbouring slots, and the clamp at
+	-- CRACK_LATEST_APPEAR can tie the last two. `played` walks this in
+	-- order, so it has to actually be in order.
+	table.sort(moments)
+
+	cracking[barrier] = { segments = segments, moments = moments, played = 0 }
 end
 
-local function stepCracks(barrier: BasePart, segments: { CrackSegment })
+local function stepCracks(barrier: BasePart, state: CrackState)
 	-- Read every frame rather than caching at spawn: the attribute
 	-- replicates with the Instance, but the tag it is discovered by
 	-- replicates on its own schedule, and this sidesteps the ordering
@@ -449,8 +764,24 @@ local function stepCracks(barrier: BasePart, segments: { CrackSegment })
 
 	-- On or off, nothing in between. The wall's decay is gradual because
 	-- these moments are spread out, not because any one of them is.
-	for _, segment in ipairs(segments) do
+	for _, segment in ipairs(state.segments) do
 		segment.frame.Visible = progress >= segment.appearAt
+	end
+
+	-- How many fractures this frame accounted for. Normally one, or none.
+	local landed = 0
+	while state.played < #state.moments and progress >= state.moments[state.played + 1] do
+		state.played += 1
+		landed += 1
+	end
+
+	-- One sound however many landed, which matters for exactly one case: a
+	-- client joining a wall already partway through its lead window draws
+	-- every crack due by then on its first frame, and playing a snap for
+	-- each would announce as a burst of noise what is, to that player, a
+	-- wall that simply already looks cracked.
+	if landed > 0 and CRACK_SOUND_ENABLED then
+		SkillVisuals.spawnEffectAtPoint(barrier.Position, CRACK_SOUND_EFFECT_ID)
 	end
 end
 
@@ -592,11 +923,11 @@ local function stepCrumble(crumble: Crumble, dt: number): boolean
 end
 
 RunService.Heartbeat:Connect(function(dt: number)
-	for barrier, segments in pairs(cracking) do
+	for barrier, state in pairs(cracking) do
 		-- A barrier removed some way other than Destroy (a round reset
 		-- reparenting it, say) would otherwise be walked forever.
 		if barrier.Parent then
-			stepCracks(barrier, segments)
+			stepCracks(barrier, state)
 		else
 			cracking[barrier] = nil
 		end
