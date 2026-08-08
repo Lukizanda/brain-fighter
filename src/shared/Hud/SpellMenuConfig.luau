@@ -15,9 +15,9 @@ local SpellMenuConfig = {
 
 	-- Per-color panel backgrounds
 	COLORS = {
-		red   = { bg = Color3.fromRGB(180, 55, 55),  label = "RED"   },
-		green = { bg = Color3.fromRGB(50, 155, 65),  label = "GREEN" },
-		blue  = { bg = Color3.fromRGB(55, 105, 195), label = "BLUE"  },
+		red   = { bg = Color3.fromRGB(180, 55, 55),  label = ""   },
+		green = { bg = Color3.fromRGB(50, 155, 65),  label = "" },
+		blue  = { bg = Color3.fromRGB(55, 105, 195), label = ""  },
 	},
 
 	-- Fill: dim base layer (always-visible "empty" bg) and animated fill bar
@@ -28,8 +28,8 @@ local SpellMenuConfig = {
 	-- Text
 	LABEL_FONT  = Enum.Font.GothamBold,
 	LABEL_SIZE  = 26,
-	SPELL_FONT  = Enum.Font.Gotham,
-	SPELL_SIZE  = 24,
+	SPELL_FONT  = Enum.Font.GothamBold,
+	SPELL_SIZE  = 32,
 	TEXT_COLOR  = Color3.fromRGB(255, 255, 255),
 	DIM_COLOR   = Color3.fromRGB(160, 160, 175),
 	TEXT_STROKE = 0.5,
