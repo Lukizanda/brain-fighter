@@ -1106,3 +1106,21 @@ check for **stale duplicate Sounds under the Tool** — the Tool's `init.meta.js
 place rather than deleting them, and the staff would end up with two of each.
 
 Pages touched: [[systems/LetterBlaster]], [[systems/BlockShoot]].
+
+## [2026-08-08] ingest | Rojo toolchain pinned to 7.7.0 to match the auto-updated plugin
+
+The Studio plugin auto-updated itself to Rojo 7.7.0 and connects started failing with
+`ApiContext:28: attempt to index number with 'protocolVersion'`. Not a project-config fault: 7.7.0
+moved the web API from JSON to **MessagePack**, so `connect()` calls `Http.Response.msgpack` where
+7.6.1 called `Http.Response.json`. Msgpack-decoding the 7.6.1 server's JSON reads the leading `{`
+(`0x7B`) as a fixint and hands `123` to the protocol check — which is why the failure surfaces as an
+index-a-number error rather than the friendly version-mismatch message that code exists to print.
+
+`rokit.toml` bumped `7.6.1` → `7.7.0`; `aftman.toml` was separately stale at `7.7.0-rc.1` and now
+matches. Rokit reads `rokit.toml`, so `aftman.toml` is dead weight that will drift again — a
+candidate for deletion. Verified after `rokit install` and a server restart: `/api/rojo` answers
+`200 application/msgpack`, first byte `0x89` (9-entry fixmap) instead of `0x7B`.
+
+**Rule of thumb this establishes:** the Studio plugin updates itself on Roblox's schedule and the
+CLI does not. A connect error that appears out of nowhere without a repo change is a version skew
+until proven otherwise — check `rojo --version` against the plugin build date before reading code.
