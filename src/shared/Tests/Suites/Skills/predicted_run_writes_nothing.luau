@@ -27,9 +27,9 @@
 -- SkillEffects that early-returns unconditionally. "Nothing happened" is
 -- only meaningful next to proof that something was supposed to.
 --
--- Covers: instant damage (Inferno), freeze + its `_frozen` render flag
--- (Frost Nip), the shield pool (Shield), and projectile Part creation
--- (Fireball).
+-- Covers: instant damage and its `_burning` render flag (Inferno), freeze
+-- + its `_frozen` render flag (Frost Nip), the shield pool (Shield), and
+-- projectile Part creation (Fireball).
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -58,6 +58,7 @@ type Snapshot = {
 	health: number,
 	walkSpeed: number,
 	frozen: boolean,
+	burning: boolean,
 	shield: number,
 	projectiles: number,
 }
@@ -114,7 +115,10 @@ local function runTrial(mode: string, ctx: Ctx): Snapshot
 	local run = { mode = mode :: any }
 	local projectilesBefore = countProjectiles()
 
-	-- Inferno (red T3): instant, fraction-of-MaxHP damage.
+	-- Inferno (red T3): instant, fraction-of-MaxHP damage + the `_burning`
+	-- render flag. The flag clears itself after INFERNO_BURN_SEC (3 s),
+	-- which is far longer than SETTLE_SEC, so it is still up when the
+	-- snapshot is taken.
 	SpellExecutor.cast(SpellRegistry.getSpell("red", 3), casterHum, targetHum, run)
 	-- Frost Nip (blue T1): instant, freeze — WalkSpeed 0 + `_frozen` flag.
 	SpellExecutor.cast(SpellRegistry.getSpell("blue", 1), casterHum, targetHum, run)
@@ -130,6 +134,7 @@ local function runTrial(mode: string, ctx: Ctx): Snapshot
 		health      = targetHum.Health,
 		walkSpeed   = targetHum.WalkSpeed,
 		frozen      = targetModel:GetAttribute(SkillConstants.FROZEN_ATTRIBUTE) == true,
+		burning     = targetModel:GetAttribute(SkillConstants.BURNING_ATTRIBUTE) == true,
 		shield      = if typeof(shield) == "number" then shield :: number else 0,
 		projectiles = countProjectiles() - projectilesBefore,
 	}
@@ -158,6 +163,9 @@ return {
 		if p.frozen then
 			return false, "predicted run set the _frozen render flag"
 		end
+		if p.burning then
+			return false, "predicted run set the _burning render flag"
+		end
 		if p.shield ~= 0 then
 			return false, ("predicted run granted a shield pool of %d"):format(p.shield)
 		end
@@ -175,6 +183,10 @@ return {
 			return false, ("authoritative run did not freeze (WalkSpeed %s, frozen %s) — freeze "
 				.. "assertions above are vacuous"):format(tostring(a.walkSpeed), tostring(a.frozen))
 		end
+		if not a.burning then
+			return false, "authoritative run did not set the _burning render flag — the burn "
+				.. "assertion above is vacuous"
+		end
 		if a.shield <= 0 then
 			return false, "authoritative run granted no shield — shield assertion above is vacuous"
 		end
@@ -182,8 +194,8 @@ return {
 			return false, "authoritative run spawned no projectile — projectile assertion above is vacuous"
 		end
 
-		return true, ("predicted wrote nothing; authoritative wrote health=%d walkSpeed=%d frozen=%s shield=%d projectiles=%d")
-			:format(a.health, a.walkSpeed, tostring(a.frozen), a.shield, a.projectiles)
+		return true, ("predicted wrote nothing; authoritative wrote health=%d walkSpeed=%d frozen=%s burning=%s shield=%d projectiles=%d")
+			:format(a.health, a.walkSpeed, tostring(a.frozen), tostring(a.burning), a.shield, a.projectiles)
 	end,
 
 	teardown = function(ctx: Ctx)

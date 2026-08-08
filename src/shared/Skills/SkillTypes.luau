@@ -10,7 +10,7 @@
 ----------------------------------------------------------------------
 
 export type EffectSpec = {
-	kind: string,       -- "damage" | "heal" | "freeze" | "knockup" | "shield" | "buff"
+	kind: string,       -- "damage" | "heal" | "freeze" | "burn" | "knockup" | "shield" | "buff"
 	[string]: any,      -- free-form params per kind
 }
 

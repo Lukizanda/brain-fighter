@@ -18,11 +18,35 @@ updated: 2026-08-08
 > - `src/shared/Vfx/Remotes/*.model.json` — `BroadcastSpellVfx` / `SpellVfxEvent` / `ProjectileVfxEvent` / `WorldVfxEvent`.
 > - `src/shared/Vfx/CosmeticProjectile.luau` + `src/client/Vfx/ProjectileVfxController.client.luau` — the *seen* projectile. The authoritative shot is server-simulated and invisible; each client replays the broadcast launch parameters locally so a blocked shot dies on the shield bubble rather than ~12 studs short of it. See [[systems/SkillPipeline]] § "Projectile visuals are client-local".
 > - `src/shared/Vfx/StatusVisuals/FreezeVfx.luau` — the freeze ice-shard status visual (see [[systems/SkillPipeline]] § VFX Layers).
+> - `src/shared/Vfx/StatusVisuals/InfernoVfx.luau` + `src/client/Vfx/InfernoVfxController.client.luau` — the burning-rig flames (2026-08-08). Attribute-driven off `_burning`, like ShieldVfx. Parents `ParticleEmitter`s straight onto every limb over `MIN_PART_VOLUME` rather than welding Parts, which is what makes the fire *engulf* the rig instead of being a bonfire it stands in — a ParticleEmitter parented to a BasePart inherits that part's volume for its Sphere/Surface emission shape.
+> - `src/shared/Vfx/ScreenImpact.luau` — the screen-space lane (2026-08-08): warm `ColorCorrectionEffect` + `BlurEffect` in `Lighting`, plus a camera shake via `Humanoid.CameraOffset`. Deliberately **not** `Camera.CFrame` — the default Roblox camera scripts own that and rewrite it every frame.
 > - `src/shared/Vfx/StatusVisuals/ShieldVfx.luau` + `src/client/Vfx/ShieldVfxController.client.luau` — the absorb-shield bubble. Unlike FreezeVfx it is **attribute-driven**: the controller watches `_shield` on each player character rather than being called from an effect handler, which is what gets it cross-client replication without a broadcast. See [[systems/SkillPipeline]] § "Shield — the bubble reads the attribute, not the cast".
 >
 > **Does NOT exist (fictional in the plan below):** `UiVfxController` (UI VFX live inline inside the HUD builders, not a standalone module), `src/shared/Vfx/init.luau` barrel, and `src/shared/Vfx/Templates/` (the `VfxTemplates` folder is Studio/MCP-managed, not Rojo `.model.json`).
 >
-> **Corrected contract facts:** the broadcast payload field is **`impactEffectIds: { string }`** (plural array), not `impactEffectId`; the server validates **`MAX_TIER = 4`** (not 3) and `MAX_IMPACT_EFFECT_IDS = 8`. Lifetime cleanup is **`Debris:AddItem` only** today — the §"PERF guardrails" cap/evict/throttle table and the `"VfxInstance"` Heartbeat sweep are **not implemented** (`PERF` data exists but `spawnEffect` reads none of it). The LetterBlock collect-pop is still unbuilt. Green cast entries **were** unbuilt until 2026-08-03 — `cast_green_t1..t3` now exist, and `spawnEffect` plays `EffectSpec.sound` (it previously consumed only `emitters`, so every spell was silent); `.light` and `.beam` are still ignored.
+> **Corrected contract facts:** the broadcast payload field is **`impactEffectIds: { string }`** (plural array), not `impactEffectId`; the server validates **`MAX_TIER = 4`** (not 3) and `MAX_IMPACT_EFFECT_IDS = 8`. Lifetime cleanup is **`Debris:AddItem` only** today — the §"PERF guardrails" cap/evict/throttle table and the `"VfxInstance"` Heartbeat sweep are **not implemented** (`PERF` data exists but `spawnEffect` reads none of it). The LetterBlock collect-pop is still unbuilt. Green cast entries **were** unbuilt until 2026-08-03 — `cast_green_t1..t3` now exist, and `spawnEffect` plays `EffectSpec.sound` (it previously consumed only `emitters`, so every spell was silent). **`.light` is implemented as of 2026-08-08** — a `PointLight` at full brightness on the landing frame, tweened to 0 over `durationSec` and honouring `PERF.allowLights`; `impact_damage_t3` is its first and so far only consumer. `.beam` is still ignored.
+
+## VfxTemplates and the third-party texture trap
+
+`ReplicatedStorage.VfxTemplates` holds seven `ParticleEmitter` templates, Studio/MCP-managed and **not** Rojo-tracked — they live only in `BrainFighter.rbxl` and must be re-created after a fresh place open.
+
+| Template | Texture | Notes |
+|---|---|---|
+| `BurstSmall` / `BurstMedium` / `ImpactBurst` / `HealBurst` | `1913819781` | The original four. All share one soft round blob. |
+| `FireFlame` | `17703243127` | 8×8 flipbook, `FlipbookMode = OneShot`, additive (`LightEmission` 1 / `LightInfluence` 0), `Acceleration` (0, 12, 0) + `Drag` 4, Sphere/Surface/Outward. |
+| `FireSmoke` | `17703243127` | Same sheet, charcoal-tinted, `LightInfluence` 1, slower and larger. |
+| `FireEmber` | `1913819781` | Keeps the blob — a spark *is* a bright round dot, and a flipbook there would only cost frames. |
+
+**Why Inferno looked flat for so long, and the lesson.** Every template shared one round-blob texture, so no particle count could make anything read as fire — the pre-2026-08-08 `impact_damage_t3` was already the biggest entry in the table at 86 particles and still looked like a firework. The fix was the *texture*, not the count: a flipbook sheet animates each particle through a full flame birth-and-dissipate over its lifetime. Reach for `FlipbookLayout` before reaching for a bigger `emitCount`.
+
+**Third-party Creator Store images do not load in this universe.** Every "free" fire/smoke flipbook decal found via `search_asset` on `creator_store` — sixteen of them, including all the top hits for "fire flipbook" and "smoke flipbook" — failed to load. `17703243127` works *only* because it is already in the universe inventory.
+
+Verify before building on an asset, and verify correctly:
+- `ContentProvider:PreloadAsync(ids, callback)` reports `Enum.AssetFetchStatus.Failure` for these. **Use the callback form** — the argument-less call succeeds silently either way and tells you nothing.
+- The cheapest reliable probe is an `ImageLabel` in a `SurfaceGui` and a read of `IsLoaded` after a few seconds. A `Decal` on a Part plus a screenshot is *not* reliable: the project's own known-good `1913819781` rendered blank that way, and one Creator Store "fire flipbook" rendered a **shirt template**.
+- Always include a known-good id as a control. Without `1913819781` in the batch there is no way to tell "this asset is unusable" from "my probe is broken".
+
+When a needed texture has no usable owned equivalent, the path is to author one and upload it to the universe — not to ship an id that renders for nobody.
 
 ## Nothing player-facing runs on the server
 

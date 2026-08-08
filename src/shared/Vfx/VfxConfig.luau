@@ -17,6 +17,15 @@ export type ColorPalette = {
 export type EmitterSpec = {
 	template: string,
 	color: ColorPalette?,
+	-- Wins over `color` when both are set.
+	--
+	-- `color` collapses a palette to `ColorSequence.new(primary)` — one flat
+	-- tint for the particle's whole life, which is all a solid-blob sprite
+	-- needs. A flipbook flame needs the opposite: white-hot at birth,
+	-- orange through the middle, deep red as it dies. That gradient is what
+	-- makes the greyscale sheet read as fire rather than as an orange
+	-- smudge, and it cannot be expressed as a palette.
+	colorSequence: ColorSequence?,
 	rate: number?,
 	lifetime: NumberRange?,
 	size: NumberSequence?,
@@ -82,6 +91,86 @@ VfxConfig.COLORS = {
 }
 
 local C = VfxConfig.COLORS
+
+----------------------------------------------------------------------
+-- Fire
+----------------------------------------------------------------------
+-- Shared by the two lanes that draw Inferno's fire, so they can't drift
+-- into looking like two different spells: the one-shot eruption
+-- (`impact_damage_t3` below, via spawnEffect) and the lingering burn
+-- (`StatusVisuals/InfernoVfx`, driven by the `_burning` attribute).
+--
+-- Deliberately NOT an entry in COLORS. That table is the *spell* palette
+-- keyed by the three castable colours, and a fourth key would imply a
+-- fourth castable colour — the same reasoning that keeps STONE_DUST out of
+-- it further down.
+--
+-- These are ColorSequences rather than flat tints because the flipbook
+-- sheet they drive (`FireFlame` / `FireSmoke` in ReplicatedStorage.
+-- VfxTemplates) is greyscale. A flat orange over greyscale flame frames
+-- reads as an orange smudge; a gradient that cools from white-hot through
+-- orange to a dying red over the particle's life is what actually reads as
+-- combustion. The emitters are additive (LightEmission 1, LightInfluence
+-- 0), so these values are light being added, not surface colour — which is
+-- why the early keypoints run brighter than a Color3 normally would.
+VfxConfig.FIRE = {
+	-- The body of the flame.
+	flame = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 246, 200)),
+		ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 176, 44)),
+		ColorSequenceKeypoint.new(0.65, Color3.fromRGB(255, 88, 16)),
+		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(122, 20, 8)),
+	}),
+
+	-- Sparks thrown clear of the body. Stays hot longer than the flame —
+	-- an ember that cooled on the same curve would vanish into the smoke
+	-- instead of arcing away from it.
+	ember = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 236, 170)),
+		ColorSequenceKeypoint.new(0.60, Color3.fromRGB(255, 140, 30)),
+		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(190, 46, 10)),
+	}),
+
+	-- Charcoal, not black: pure black smoke disappears against the arena's
+	-- dark geometry and silhouettes badly against the skybox.
+	smoke = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(92, 68, 58)),
+		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(38, 34, 34)),
+	}),
+
+	-- The glow Inferno casts on its surroundings, shared by the eruption's
+	-- one-shot light and the flicker that rides the burn.
+	light = Color3.fromRGB(255, 138, 46),
+
+	-- What the blast does to the viewer's screen (ScreenImpact.Profile).
+	--
+	-- Restrained on purpose, and the numbers are small for a reason: this
+	-- fires for every player who can see the hit, several times a fight,
+	-- and a screen effect that is merely strong the first time is nausea by
+	-- the tenth. Brightness 0.09 and a 0.4-stud shake are at the threshold
+	-- where you feel the hit without being able to point at an effect.
+	--
+	-- `releaseSec` is short next to the 3 s burn on purpose. This is the
+	-- detonation's punch, not the fire's mood — the lingering warmth comes
+	-- from the burning rig's own PointLight, which is in the world and
+	-- therefore falls off with distance and hides behind cover the way a
+	-- fire should. A screen tint held for three seconds would do neither.
+	screen = {
+		tintColor  = Color3.fromRGB(255, 214, 176),
+		brightness = 0.09,
+		contrast   = 0.12,
+		blurSize   = 8,
+		shakeStuds = 0.4,
+		shakeHz    = 11,
+		releaseSec = 0.55,
+	},
+
+	-- Beyond this the blast gets no screen layer at all: the falloff is
+	-- linear from the camera to here. Roughly the width of the arena, so an
+	-- Inferno across the map still registers faintly and one across the
+	-- room lands at nearly full strength.
+	screenFalloffStuds = 140,
+}
 
 ----------------------------------------------------------------------
 -- SFX
@@ -351,41 +440,81 @@ VfxConfig.EFFECTS = {
 	-- over "impact_damage" when the caster is T3. An eruption rather than
 	-- a splash — slower, taller particles thrown upward off the target,
 	-- with the explosion SFX instead of the dry percussive hit.
+	--
+	-- Rebuilt on the flipbook templates (2026-08-08). The previous version
+	-- was already the biggest entry in this table — 86 particles across two
+	-- layers — and still read as a firework, because every template in
+	-- VfxTemplates shared one soft round blob texture. Particle count was
+	-- never the problem: a hundred round dots is a hundred round dots. What
+	-- fixed it was `FireFlame`/`FireSmoke`, whose 8x8 sheet animates each
+	-- particle through a full flame birth-and-dissipate over its lifetime.
+	--
+	-- This is only half of Inferno's fire. It is the one-shot blast; the
+	-- flames that stay on the target afterwards are drawn by
+	-- StatusVisuals/InfernoVfx off the `_burning` attribute. Note there is
+	-- deliberately no `impact_burn` entry — `resolveImpactEffectIds` will
+	-- look one up for the skill's second onImpact kind and find nothing,
+	-- which is correct. A burst there would fire at cast time on the
+	-- caster's prediction and double the eruption.
 	impact_damage_t3 = {
 		emitters = {
+			-- The eruption body. Big, brief, and thrown upward off the hit.
 			{
-				template    = "ImpactBurst",
-				color       = C.red,
-				emitCount   = 60,
-				lifetime    = NumberRange.new(0.55, 1.10),
-				size        = NumberSequence.new({
-					NumberSequenceKeypoint.new(0.0, 0.9),
-					NumberSequenceKeypoint.new(0.3, 1.6),
-					NumberSequenceKeypoint.new(1.0, 0.0),
+				template      = "FireFlame",
+				colorSequence = VfxConfig.FIRE.flame,
+				emitCount     = 34,
+				lifetime      = NumberRange.new(0.55, 1.00),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 3.0),
+					NumberSequenceKeypoint.new(0.4, 7.5),
+					NumberSequenceKeypoint.new(1.0, 5.0),
 				}),
-				speed       = NumberRange.new(18, 34),
+				speed         = NumberRange.new(14, 26),
 				-- Narrower than the 180-degree splash so the column reads
 				-- as rising out of the target rather than spraying past it.
-				spreadAngle = Vector2.new(70, 70),
-				rotation    = NumberRange.new(-180, 180),
+				spreadAngle   = Vector2.new(70, 70),
 			},
-			-- Second, slower layer of embers that outlives the initial
-			-- flash and gives the eruption a falling tail.
+			-- Sparks. The one layer that keeps the old blob texture, and
+			-- should: a spark IS a bright round dot, and swapping it for a
+			-- flipbook would only cost frames.
 			{
-				template    = "BurstMedium",
-				color       = C.red,
-				emitCount   = 26,
-				lifetime    = NumberRange.new(0.9, 1.6),
-				size        = NumberSequence.new({
-					NumberSequenceKeypoint.new(0.0, 0.5),
-					NumberSequenceKeypoint.new(1.0, 0.0),
+				template      = "FireEmber",
+				colorSequence = VfxConfig.FIRE.ember,
+				emitCount     = 44,
+				lifetime      = NumberRange.new(0.9, 1.9),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.55),
+					NumberSequenceKeypoint.new(1.0, 0.00),
 				}),
-				speed       = NumberRange.new(4, 12),
-				spreadAngle = Vector2.new(120, 120),
+				speed         = NumberRange.new(20, 44),
+				spreadAngle   = Vector2.new(120, 120),
+			},
+			-- The tail. Outlives both layers above and is what makes the
+			-- blast read as having left something behind rather than
+			-- switching off — it sets `totalDurationSec` below.
+			{
+				template      = "FireSmoke",
+				colorSequence = VfxConfig.FIRE.smoke,
+				emitCount     = 20,
+				lifetime      = NumberRange.new(1.4, 2.4),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 4.0),
+					NumberSequenceKeypoint.new(1.0, 11.0),
+				}),
+				speed         = NumberRange.new(5, 13),
+				spreadAngle   = Vector2.new(100, 100),
 			},
 		},
+		-- First use of the `light` field, which the EffectSpec type has
+		-- always declared and spawnEffect never read. Short: it is the
+		-- flash of the detonation, not the burn's steady glow — that one
+		-- belongs to InfernoVfx and lasts as long as the flames do.
+		light            = { color = VfxConfig.FIRE.light, brightness = 6, durationSec = 0.45 },
 		sound            = { soundId = SFX.impactHeavy, volume = 1.0, pitchRange = NumberRange.new(0.88, 1.0) },
-		totalDurationSec = 1.8,
+		-- Covers the longest emitter above (smoke, up to 2.4 s) plus the
+		-- frame it is emitted on. Cutting this short destroys the attachment
+		-- mid-plume and the smoke pops out of existence.
+		totalDurationSec = 2.5,
 		upward           = true,
 		anchor           = "targetHumanoidRootPart",
 	},

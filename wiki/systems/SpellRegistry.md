@@ -1,7 +1,7 @@
 ---
 type: system
 description: Pure-Luau config layer for the spell roster (R/G/B × T1–T4) — name, color, tier, cost, targeting mode, skill:SkillSpec. Single source of truth consumed by SpellExecutor and the cast-menu HUD.
-updated: 2026-08-03
+updated: 2026-08-08
 ---
 
 # SpellRegistry
@@ -72,7 +72,7 @@ Declared as `TIER_COSTS = { 5, 10, 20, 40 }` in `init.luau`. Cost and drain are 
 |---|---|---|---|---|---|
 | Red | T1 | Firebolt | `auto` | `projectile` | `damage fractionOfMaxHP=0.05` |
 | Red | T2 | Fireball | `auto` | `projectile` | `damage fractionOfMaxHP=0.20` |
-| Red | T3 | Inferno | `auto` | `instant` | `damage fractionOfMaxHP=0.50` |
+| Red | T3 | Inferno | `auto` | `instant` | `damage fractionOfMaxHP=0.50 + burn durationSec=3` |
 | Red | T4 | Volley | `auto` | `projectile` | `damage amount=12` (3 projectiles, `staggerSec=0.12`) |
 | Green | T1 | Mend | self | `instant` | `heal fractionOfMaxHP=0.15` |
 | Green | T2 | Stone Wall | `placement` | `world_spawn` | _(none; the barrier Part is the effect — `durationSec=6`)_ |

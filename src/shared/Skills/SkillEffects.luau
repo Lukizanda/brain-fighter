@@ -101,6 +101,40 @@ local function purgeFreeze(h: Humanoid, restoreSpeed: boolean)
 	SkillInterrupt.unsilence(h)
 end
 
+-- Per-Humanoid burn bookkeeping, the `_freezeState` shape minus the parts
+-- a burn has no use for: nothing is saved and restored, so an entry is
+-- only a deadline plus the cleanup connections.
+type BurnState = {
+	expiresAt: number,
+	conns: { RBXScriptConnection },
+}
+local _burnState: { [Humanoid]: BurnState } = {}
+
+-- Fallback for a `burn` spec that omits durationSec. Callers are expected
+-- to pass one (SpellRegistry pins Inferno's), so this only ever covers a
+-- hand-built spec in a test or a console poke.
+local DEFAULT_BURN_SEC = 3.0
+
+-- Raise or drop the flag that drives the flames. Writes on both VMs for
+-- the same reason `setFrozenFlag` does — see the note there.
+local function setBurningFlag(h: Humanoid, burning: boolean)
+	local character = h.Parent
+	if not character then return end
+	character:SetAttribute(SkillConstants.BURNING_ATTRIBUTE, if burning then true else nil)
+end
+
+-- Single teardown path: timer expiry, death and despawn all land here.
+-- Idempotent, so overlapping Died/HealthChanged fires are harmless.
+local function purgeBurn(h: Humanoid)
+	local state = _burnState[h]
+	if not state then return end
+	_burnState[h] = nil
+	for _, conn in state.conns do
+		conn:Disconnect()
+	end
+	setBurningFlag(h, false)
+end
+
 local function resolveHumanoid(target: any): Humanoid?
 	if typeof(target) ~= "Instance" then return nil end
 	local inst = target :: Instance
@@ -208,6 +242,67 @@ SkillEffects.handlers = {
 		return { ok = true }
 	end,
 
+	-- Sets the target alight for `durationSec`, and does nothing else.
+	--
+	-- No damage, no debuff, no interrupt: this is a render flag and the
+	-- flames are drawn from it by `client/Vfx/InfernoVfxController`. Inferno
+	-- pairs it with a `damage` entry that lands the whole payload on the
+	-- same frame, so adding a tick here would silently rebalance the game's
+	-- heaviest spell during what is meant to be a visual pass. See the note
+	-- on `SkillConstants.BURNING_ATTRIBUTE` for why the seam exists anyway.
+	--
+	-- Simpler than `freeze` because there is nothing to restore. There is no
+	-- saved WalkSpeed to put back and no silence to lift, so the teardown is
+	-- just "clear the flag" and re-burning only has to push the deadline out.
+	burn = function(spec: EffectSpec, target: any, _source: any): Result
+		local h = resolveHumanoid(target)
+		if not h then return { ok = false, reason = "burn requires Humanoid target" } end
+		local duration: number = spec.durationSec or DEFAULT_BURN_SEC
+		local now = os.clock()
+		local state = _burnState[h]
+
+		if state then
+			-- Re-burn: push the deadline out if this one outlasts what is
+			-- already running, and leave the flames up in the meantime.
+			local extended = math.max(state.expiresAt, now + duration)
+			if extended > state.expiresAt then
+				state.expiresAt = extended
+				task.delay(extended - now, function()
+					local s = _burnState[h]
+					if s and os.clock() >= s.expiresAt - RESTORE_EPSILON_SEC then
+						purgeBurn(h)
+					end
+				end)
+			end
+			return { ok = true }
+		end
+
+		state = { expiresAt = now + duration, conns = {} }
+		_burnState[h] = state
+		setBurningFlag(h, true)
+
+		-- Same three exits `freeze` covers: a rig that dies or despawns
+		-- mid-burn never reaches the timer's deadline check, and would keep
+		-- both its flag and its registry entry forever.
+		table.insert(state.conns, h.Died:Connect(function()
+			purgeBurn(h)
+		end))
+		table.insert(state.conns, h.HealthChanged:Connect(function(health: number)
+			if health <= 0 then purgeBurn(h) end
+		end))
+		table.insert(state.conns, h.Destroying:Connect(function()
+			purgeBurn(h)
+		end))
+
+		task.delay(duration, function()
+			local s = _burnState[h]
+			if s and os.clock() >= s.expiresAt - RESTORE_EPSILON_SEC then
+				purgeBurn(h)
+			end
+		end)
+		return { ok = true }
+	end,
+
 	knockup = function(spec: EffectSpec, target: any, _source: any): Result
 		local h = resolveHumanoid(target)
 		if not h then return { ok = false, reason = "knockup requires Humanoid target" } end
@@ -271,6 +366,14 @@ function SkillEffects.isFrozen(target: any): boolean
 	return h ~= nil and _freezeState[h] ~= nil
 end
 
+-- Same read-only probe for the burn registry. Exists for the same reason:
+-- a rig that died or despawned mid-burn must leave nothing behind, and the
+-- only way to assert that is to ask the registry directly.
+function SkillEffects.isBurning(target: any): boolean
+	local h = resolveHumanoid(target)
+	return h ~= nil and _burnState[h] ~= nil
+end
+
 ----------------------------------------------------------------------
 -- Preconditions
 ----------------------------------------------------------------------
@@ -299,6 +402,7 @@ end
 SkillEffects.preconditions = {
 	damage  = needsTargetHumanoid("damage requires Humanoid target"),
 	freeze  = needsTargetHumanoid("freeze requires Humanoid target"),
+	burn    = needsTargetHumanoid("burn requires Humanoid target"),
 
 	-- knockup also needs somewhere to put the velocity.
 	knockup = function(_spec: EffectSpec, target: any, _source: any): Result

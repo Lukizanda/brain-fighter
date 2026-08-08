@@ -20,6 +20,7 @@
 local Debris            = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
+local TweenService      = game:GetService("TweenService")
 
 local Logger    = require(ReplicatedStorage.Shared.Core.Logger)
 local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
@@ -42,6 +43,12 @@ local UNSET_SOUND_IDS: { [string]: true } = {
 local SOUND_MAX_LIFETIME_SEC = 10
 
 local DEFAULT_SOUND_VOLUME = 0.8
+
+-- Reach of a burst's PointLight. Not per-effect: every effect that flashes
+-- wants to light roughly the room it went off in, and a per-entry knob
+-- would be one more number to get wrong for no visible gain. Brightness is
+-- the dial that varies.
+local LIGHT_RANGE_STUDS = 30
 
 -- Sounds are parented to the anchor (a BasePart or Attachment), which is
 -- what makes them 3D-positional. Deliberately NOT parented to the emitter
@@ -74,7 +81,15 @@ local function playSound(spec: VfxConfig.SoundSpec, anchorPart: BasePart | Attac
 end
 
 local function applyEmitterOverrides(emitter: ParticleEmitter, spec: VfxConfig.EmitterSpec)
-	if spec.color then
+	-- Checked before `color`, and exclusive with it: an entry that sets a
+	-- gradient means it, and the palette branch below would flatten the
+	-- gradient back to one tint AND stomp the template's LightEmission.
+	-- The flipbook fire templates ship at LightEmission 1 (fully additive)
+	-- for a reason; being quietly halved to 0.5 is the difference between
+	-- flame and a brown smear.
+	if spec.colorSequence then
+		emitter.Color = spec.colorSequence
+	elseif spec.color then
 		emitter.Color = ColorSequence.new(spec.color.primary)
 		emitter.LightEmission = 0.5
 	end
@@ -85,6 +100,33 @@ local function applyEmitterOverrides(emitter: ParticleEmitter, spec: VfxConfig.E
 	if spec.rotation     then emitter.Rotation     = spec.rotation     end
 	if spec.transparency then emitter.Transparency = spec.transparency end
 	if spec.rate         then emitter.Rate         = spec.rate         end
+end
+
+-- A one-shot flash: full brightness on the frame the effect lands, decayed
+-- to nothing over `durationSec`.
+--
+-- Tweened rather than switched off, because a PointLight that vanishes on
+-- a frame boundary is far more noticeable than one that fades — the whole
+-- scene's lighting steps at once, and the eye reads it as a glitch rather
+-- than as an explosion ending.
+local function spawnLight(
+	spec: { color: Color3, brightness: number, durationSec: number },
+	anchorPart: BasePart | Attachment
+)
+	local light = Instance.new("PointLight")
+	light.Name       = "VfxLight"
+	light.Color      = spec.color
+	light.Brightness = spec.brightness
+	light.Range      = LIGHT_RANGE_STUDS
+	light.Shadows    = false
+	light.Parent     = anchorPart
+
+	TweenService:Create(
+		light,
+		TweenInfo.new(spec.durationSec, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Brightness = 0 }
+	):Play()
+	Debris:AddItem(light, spec.durationSec + 0.1)
 end
 
 local function spawnEffect(effectSpec: VfxConfig.EffectSpec, anchorPart: BasePart | Attachment)
@@ -115,6 +157,16 @@ local function spawnEffect(effectSpec: VfxConfig.EffectSpec, anchorPart: BasePar
 	-- to drop their sound silently).
 	if effectSpec.sound then
 		playSound(effectSpec.sound, anchorPart)
+	end
+
+	-- Light, like sound, is outside the emitters guard — an effect is
+	-- allowed to be a flash with no particles.
+	--
+	-- `PERF.allowLights` is the honoured switch: WorldVfxController drops it
+	-- when the frame budget slips, and a burst that ignored it would be the
+	-- one thing still adding dynamic lights on a machine already struggling.
+	if effectSpec.light and VfxConfig.PERF.allowLights then
+		spawnLight(effectSpec.light, anchorPart)
 	end
 
 	if not effectSpec.emitters then return end

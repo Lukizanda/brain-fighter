@@ -69,6 +69,15 @@ local FIREBALL_IMPACT_RADIUS = 7
 local FIREBALL_DAMAGE_FRAC = 0.20
 local FIREBALL_COLOR = Color3.fromRGB(255, 90, 30)
 
+-- Inferno (T3) tuning. The damage fraction is the spell's entire payload
+-- and lands on the cast frame; the burn that follows is cosmetic — see
+-- SkillConstants.BURNING_ATTRIBUTE. Three seconds was picked to outlast
+-- the impact eruption (impact_damage_t3, ~1.8 s) so the flames are still
+-- going when the blast clears, without lingering long enough to read as a
+-- damage-over-time the spell does not have.
+local INFERNO_DAMAGE_FRAC = 0.50
+local INFERNO_BURN_SEC = 3.0
+
 -- Defensive tuning (Phase 5.2). The shield is a flat absorb pool with no
 -- expiry — it lasts until damage eats it or the holder dies (design call
 -- 2026-08-03; add a duration here if playtest says it overstays). 40
@@ -165,7 +174,13 @@ local SPELLS: { [Color]: { Spec } } = {
 				name = "Inferno",
 				delivery = "instant",
 				deliveryParams = {},
-				onImpact = { { kind = "damage", fractionOfMaxHP = 0.50 } },
+				-- Order matters only for readability; both land on the same
+				-- frame. `burn` is the render flag that keeps the target
+				-- alight after the eruption — it deals nothing.
+				onImpact = {
+					{ kind = "damage", fractionOfMaxHP = INFERNO_DAMAGE_FRAC },
+					{ kind = "burn", durationSec = INFERNO_BURN_SEC },
+				},
 			},
 		},
 		{
