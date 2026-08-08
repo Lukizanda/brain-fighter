@@ -42,7 +42,7 @@ local bossTypes: { [string]: BossTypeSpec } = {
 				delivery  = "projectile",
 				windupVfx = "charge_glow",
 				deliveryParams = {
-					count            = 30,
+					count            = 20,
 					speed            = 90,
 					spreadDegrees    = 10,
 					lifetimeSec      = 3,
@@ -55,7 +55,7 @@ local bossTypes: { [string]: BossTypeSpec } = {
 					impactEffectId   = "impact_damage",
 				},
 				onImpact = {
-					{ kind = "damage", amount = 15, useApplyDamage = true },
+					{ kind = "damage", amount = 5, useApplyDamage = true },
 				},
 			},
 			GroundSlam = {
