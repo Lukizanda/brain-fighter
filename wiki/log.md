@@ -1172,3 +1172,41 @@ New: `SkillEffects.handlers.burn` + `SkillConstants.BURNING_ATTRIBUTE` (render f
 Two defects caught in playtest, both from measuring rather than eyeballing: the Spelling Staff's `Handle` qualified as a limb (5.75 studs tall → largest girth on the rig → pinned to the rate cap), so a burning player was a torch rather than a bonfire — `collectLimbs` now skips `Tool` descendants as well as `Accessory`. And the burn's `PointLight` at brightness 6 / range 34 lit the whole arena orange; now 2.2 / 22.
 
 Verified client-side per the VFX standard: 12 flame limbs + smoke + embers = 14 emitters, none on a Tool; `ScreenImpact` on the rising edge measured brightness 0.0765 / blur 6.80 / `CameraOffset` 0.378 (= profile x 0.85 distance falloff, matching the formula), settling to exactly 0; teardown leaves 0 emitters, no Highlight, no light. Skills suite 5/5, with `predicted_run_writes_nothing` extended to pin `_burning` on both sides (`authoritative wrote ... burning=true`). See [[systems/SkillPipeline]] § VFX Layers, [[systems/VisualEffects]], [[systems/SpellRegistry]].
+
+## [2026-08-08] ingest | Stone Wall crumbles instead of blinking out
+
+New `client/Vfx/BarrierCrumbleController`: when a Stone Wall's duration expires it breaks into a 5×4 grid of falling chunks with the same ground plume it rose out of, instead of the slab simply vanishing.
+
+**No remote, no payload — destroying a replicated object is itself the broadcast.** `SkillVisuals.spawnBarrier` tags each slab with the new `SkillConstants.BARRIER_TAG`; `Debris` reclaims it on the server, every client's replicated copy dies with it, and `CollectionService:GetInstanceRemovedSignal` hands the controller the Part on the way out with CFrame, Size and Color still readable on the destroyed Instance. The collapse needs no description because the thing it describes was already replicated. Recorded in [[systems/VisualEffects]] as a general move: it is the attribute-driven `ShieldVfx`/`FreezeVfx` pattern with "gone" as the state.
+
+Gameplay contract unchanged — rubble is `CanCollide = false`, so collision ends on the exact frame the slab dies and `durationSec` still means "how long the wall blocks".
+
+Chunks are animated by hand rather than by the physics engine. Unanchored parts would need a collision group to stop twenty tumbling boxes shoving players around, and Roblox's 196 studs/s² drops them 24 studs in the first half second — the rubble would be through the floor before the break registered. Anchored parts on a chosen 105 studs/s² disturb nobody and can be told where the floor is, so the pile rests half-buried at the base. Topple speed and spin scale with starting height; release staggers bottom-up.
+
+`SkillVisuals.barrierGroundDust` extracted so the rise and the crumble share one definition of the three-point plume rather than the controller re-deriving the span and the which-point-is-sounded rule.
+
+Verified client-side: the removal signal does fire on the client for a server-destroyed replicated tagged Part (`slab=16, 10, 2 @ 245, 207.5, 26` read at removal), 20 chunks built, all resting at Y=203.31 — the computed rest plane — and the folder gone on schedule. That same trace caught the rubble sitting motionless for ~0.5 s before the fade began, reading as the effect having stuck, so lifetime/fade retuned 1.8/0.7 → 1.6/0.9 to start dissolving just as the last chunk lands. Client screenshots show early fracture with visible seams and chunks tumbling clear. `[BarrierCrumble] ready`, no warnings. See [[systems/SkillPipeline]] § Stone Wall — cracks and the crumble.
+
+## [2026-08-08] ingest | Stone Wall telegraphs its collapse with cracks
+
+`BarrierCrumbleController` now also owns the wall's warning: fracture lines spread across both broad faces through the last 2.5 s of its life, so the collapse is something a player can see coming and plan around. Same controller as the crumble rather than a second one — both write the same object's appearance on the same frames ([[concepts/SingleOwnership]]) and they are one effect told in order.
+
+New `SkillConstants.BARRIER_EXPIRES_AT`, a `workspace:GetServerTimeNow()` stamp written before the slab is parented so it replicates with the Instance. It has to be that clock and not `os.clock()`/`tick()`: this is a deadline crossing the wire, and a per-VM clock would crack the wall on a schedule that looked plausible on the machine it was tested from and was minutes off on everyone else's — silently. Absolute rather than a countdown, so a client joining mid-life computes the right amount of cracking instead of starting its own timer at zero.
+
+**Cracks snap in; they do not draw on.** The first version grew each segment's length over ~0.15 s and read as a pen stroke — stone does not tear slowly, a fracture is an instant event. Now each crack appears complete on one frame and what is gradual is the *count*: six fractures per face at spread-out moments with a mild ease-in, so the cadence tightens as the wall runs out of time. Geometry is fixed at build; the step function only toggles `Visible`.
+
+Two Roblox specifics worth keeping. `GuiObject.Rotation` pivots about the element's **centre**, not its `AnchorPoint` — segments anchored at their left edge swung off their start points as they were sized, and the first cracks rendered as disconnected dashes; centre-anchoring and placing each segment at the midpoint of its run makes the pivot and the anchor the same point. And these are SurfaceGui line segments rather than a crack decal because third-party Creator Store textures here are a coin flip on loading, and one that never resolves leaves the wall with no telegraph and no error.
+
+Verified client-side, sampling every frame: `steps=7 partialWidths=0`, the visible-segment count jumping 0 → 4 → 8 → 12 → 16 → 20 → 24 — exactly one four-segment fracture at a time, with no segment ever observed at a partial width. Fired at t-2.44, 1.89, 1.47, 1.27, 0.89, 0.59 against a 2.5 s lead. `_barrierExpiresAt` confirmed present on the client. See [[systems/SkillPipeline]] § Stone Wall — cracks and the crumble.
+
+## [2026-08-08] ingest | Stone Wall cracks baked into an atlas instead of generated
+
+Fixes cracks rendering off the side of the wall. The generator walked each fracture from a random base point with random headings and segment lengths, and nothing stopped that walk leaving the face — a crack starting near an edge and turning outward drew lines hanging in the air beside the slab.
+
+Clamping a random walk was the wrong repair: steering it back straightens cracks against the edge, which is exactly where they most need to look natural, and reject-and-retry puts unbounded work on a frame. Replaced with `CRACK_PATTERNS`, ten authored fracture patterns in normalised face coordinates (x 0→1 left to right, y 0→1 top to base). Each is a list of strokes so a pattern can carry a trunk plus branches that join it. Points scaled to the slab cannot leave it, need no per-wall generation, and can be read and tuned.
+
+Variety without risk: each face shuffles the atlas, reveals six, and mirrors each pattern at random — `1 - x` stays in range whenever `x` does, so two walls side by side don't fracture identically and no mirrored point can escape the face.
+
+Two layers enforce the invariant rather than trusting it. A startup pass warns on any atlas point outside `[0, 1]`, so a future authoring slip fails loudly at load instead of silently in a match. And the segments sit under a `ClipsDescendants` container: segments have *thickness*, so one lying along an edge would still put half its width past it, and clipping makes staying on the slab something the engine guarantees rather than something the author remembered.
+
+Verified client-side: canvas 640×400 for the 16×10 slab, 2 crack canvases both clipping, 40 segments, **worst overhang 2.3 px = 0.06 studs** — under half a segment's thickness, and clipped. No validator warnings, so every authored point is in range. Screenshots show fractures well inside the face at both one-crack and multi-crack stages. See [[systems/SkillPipeline]] § Stone Wall — cracks and the crumble.

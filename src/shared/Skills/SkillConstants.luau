@@ -50,8 +50,45 @@ local BURNING_ATTRIBUTE = "_burning"
 -- and burnable but never draw shards or flames.
 local DAMAGEABLE_TAGS: { string } = { "Damageable", "NPC", "Boss" }
 
+-- On every barrier slab `SkillVisuals.spawnBarrier` puts in the world.
+-- `client/Vfx/BarrierCrumbleController` watches it and owns the rubble.
+--
+-- The interesting half is that the controller listens for the tag being
+-- *removed*, which is what Destroy fires. The slab's death is the whole
+-- trigger: `Debris` reclaims it on the server when its duration is up,
+-- every client's replicated copy dies with it, and each one breaks its
+-- own into falling chunks from the CFrame, Size and Color still readable
+-- on the destroyed Part.
+--
+-- Same argument as the attributes above, one step further — the server
+-- doesn't broadcast the collapse, it just deletes a thing that was
+-- already replicated, and the collapse is what every client makes of
+-- that. Nothing new crosses the wire for a wall expiring.
+local BARRIER_TAG = "SkillBarrier"
+
+-- When the barrier it sits on will be reclaimed, so each client can crack
+-- the slab open in the seconds before it goes. Written by `spawnBarrier`,
+-- read by `client/Vfx/BarrierCrumbleController`.
+--
+-- **A `workspace:GetServerTimeNow()` stamp, and it has to be.** This is a
+-- deadline crossing the wire, and every per-VM clock is wrong for that:
+-- `os.clock()` is time since that process started, so a client's reading
+-- has no relationship to the server's, and `tick()`/`os.time()` drift
+-- between machines. `GetServerTimeNow` is the one clock both VMs agree
+-- on. The failure it avoids is silent and awful — the wall would crack on
+-- a schedule that looked plausible on the machine you tested from and was
+-- minutes off on everyone else's.
+--
+-- An absolute deadline rather than a remaining-seconds countdown, for the
+-- same reason the status attributes are absolute: it replicates once and
+-- stays correct, and a client that joins mid-life computes the right
+-- amount of cracking from it instead of starting its own timer from zero.
+local BARRIER_EXPIRES_AT = "_barrierExpiresAt"
+
 return {
-	FROZEN_ATTRIBUTE  = FROZEN_ATTRIBUTE,
-	BURNING_ATTRIBUTE = BURNING_ATTRIBUTE,
-	DAMAGEABLE_TAGS   = DAMAGEABLE_TAGS,
+	FROZEN_ATTRIBUTE   = FROZEN_ATTRIBUTE,
+	BURNING_ATTRIBUTE  = BURNING_ATTRIBUTE,
+	DAMAGEABLE_TAGS    = DAMAGEABLE_TAGS,
+	BARRIER_TAG        = BARRIER_TAG,
+	BARRIER_EXPIRES_AT = BARRIER_EXPIRES_AT,
 }

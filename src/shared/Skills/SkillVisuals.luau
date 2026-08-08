@@ -47,13 +47,15 @@
 -- standing in for "which of two simultaneous runs is this".
 ----------------------------------------------------------------------
 
+local CollectionService = game:GetService("CollectionService")
 local Debris            = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
 
-local VfxBroadcast = require(ReplicatedStorage.Shared.Vfx.VfxBroadcast)
-local VfxConfig    = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
-local spawnEffect  = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
+local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
+local VfxBroadcast   = require(ReplicatedStorage.Shared.Vfx.VfxBroadcast)
+local VfxConfig      = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
+local spawnEffect    = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
 local SHOCKWAVE_THICKNESS_STUDS = 0.4
 local SHOCKWAVE_DEFAULT_COLOR   = Color3.fromRGB(255, 210, 0)
@@ -292,6 +294,25 @@ function SkillVisuals.spawnShockwave(center: Vector3, radius: number, opts: Shoc
 	return shockwave
 end
 
+-- The stone plume along a barrier's base: three points across the width,
+-- centre one sounded, flanks silent.
+--
+-- Shared by the two ends of a wall's life — it rises out of this and it
+-- collapses back into it — so the span and the which-point-is-sounded
+-- rule live in one place rather than being re-derived by the crumble
+-- controller. Same dust either way: it is the same stone at the same
+-- spot, and what distinguishes arriving from collapsing is which way the
+-- slab is going, not what the ground does about it.
+--
+-- Routes per VM through spawnEffectAtPoint, so the server broadcasting a
+-- rise and a client drawing its own crumble both work unchanged.
+function SkillVisuals.barrierGroundDust(footCFrame: CFrame, size: Vector3)
+	local flankOffset = footCFrame.RightVector * (size.X / 2 * BARRIER_RISE_DUST_SPAN)
+	SkillVisuals.spawnEffectAtPoint(footCFrame.Position, BARRIER_RISE_EFFECT_ID)
+	SkillVisuals.spawnEffectAtPoint(footCFrame.Position + flankOffset, BARRIER_RISE_DUST_EFFECT_ID)
+	SkillVisuals.spawnEffectAtPoint(footCFrame.Position - flankOffset, BARRIER_RISE_DUST_EFFECT_ID)
+end
+
 -- Anchored, collidable slab standing on the ground. `footCFrame` is the
 -- position and facing of the wall's *base* — the slab is raised by half
 -- its height so it rests on that point instead of being buried to the
@@ -341,7 +362,18 @@ function SkillVisuals.spawnBarrier(footCFrame: CFrame, opts: BarrierOpts?): Base
 	barrier.CanCollide = true
 	barrier.Color      = color
 	barrier.Material   = Enum.Material.Slate
+	-- Set before parenting so it replicates with the Instance and every
+	-- client can start cracking without a follow-up round trip. A shared
+	-- clock, not a per-VM one — see SkillConstants.BARRIER_EXPIRES_AT.
+	barrier:SetAttribute(
+		SkillConstants.BARRIER_EXPIRES_AT,
+		workspace:GetServerTimeNow() + lifetimeSec
+	)
 	barrier.Parent     = workspace
+	-- What each client's BarrierCrumbleController watches. Tagged before
+	-- the Debris timer is armed so a zero-lifetime spec can't be reclaimed
+	-- by an untagged slab that nobody ever crumbles.
+	CollectionService:AddTag(barrier, SkillConstants.BARRIER_TAG)
 	Debris:AddItem(barrier, lifetimeSec)
 
 	-- The settle burst, once the slab is actually down. By position rather
@@ -360,11 +392,8 @@ function SkillVisuals.spawnBarrier(footCFrame: CFrame, opts: BarrierOpts?): Base
 		return barrier
 	end
 
-	-- Dust across the base, started on the same frame as the climb.
-	local flankOffset = footCFrame.RightVector * (size.X / 2 * BARRIER_RISE_DUST_SPAN)
-	SkillVisuals.spawnEffectAtPoint(footCFrame.Position, BARRIER_RISE_EFFECT_ID)
-	SkillVisuals.spawnEffectAtPoint(footCFrame.Position + flankOffset, BARRIER_RISE_DUST_EFFECT_ID)
-	SkillVisuals.spawnEffectAtPoint(footCFrame.Position - flankOffset, BARRIER_RISE_DUST_EFFECT_ID)
+	-- Dust across the base, started on the same frame as the tell.
+	SkillVisuals.barrierGroundDust(footCFrame, size)
 
 	-- Driven per frame rather than by a TweenService tween: the spring
 	-- overshoots and rings, and no EasingStyle exposes those as dials.
