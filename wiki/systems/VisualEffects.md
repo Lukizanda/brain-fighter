@@ -2,7 +2,7 @@
 type: system
 description: Visual effects — particle effects for spell casts/impacts (shipped via VfxController + spawnEffect + cross-client broadcast), UI feedback animations, and per-color theming. World cast/impact VFX are implemented; PERF guardrails and some lanes remain planned.
 status: implemented (core); planned (PERF guardrails, collect-pop)
-updated: 2026-08-08
+updated: 2026-08-09
 ---
 
 # Visual Effects
@@ -38,6 +38,10 @@ updated: 2026-08-08
 | `FireEmber` | `1913819781` | Keeps the blob — a spark *is* a bright round dot, and a flipbook there would only cost frames. |
 
 **Why Inferno looked flat for so long, and the lesson.** Every template shared one round-blob texture, so no particle count could make anything read as fire — the pre-2026-08-08 `impact_damage_t3` was already the biggest entry in the table at 86 particles and still looked like a firework. The fix was the *texture*, not the count: a flipbook sheet animates each particle through a full flame birth-and-dissipate over its lifetime. Reach for `FlipbookLayout` before reaching for a bigger `emitCount`.
+
+**The red school's impacts share one vocabulary (2026-08-09).** `impact_damage_t2` (Fireball) was rebuilt on the same three flipbook layers as `impact_damage_t3` — flame / ember / smoke, same `VfxConfig.FIRE` gradients — for the reason above: its 38-particle `ImpactBurst` splash was a firework at any count, and a fire school whose tiers draw from unrelated effects doesn't read as a ladder. **What separates the tiers is scale and how long the fire lasts**, not which templates they use. T3 is a detonation that hands off to a 3 s burn (`StatusVisuals/InfernoVfx`); T2 has no burn lane, so every lifetime is roughly halved and the smoke tail is cut hardest — `totalDurationSec` 1.25 against T3's 2.5. Fireball also lands far more often, so a long plume would leave the arena permanently hazed. The audio ladder is deliberately *not* shared: T2 keeps the pitched-down `impactDamage` hit rather than T3's `impactHeavy` boom.
+
+**Dropping the ground disc is what forced the scale-up.** The same day, Fireball set `impactRing = false` (see [[systems/SkillPipeline]] § `impactRing`) and stopped drawing the 14-stud neon shockwave under its hit. That disc was the only thing communicating the blast's exact reach, so the fire had to grow to imply it — the growth is as much in `spreadAngle` (130°/160°/140°, against T3's 70° column) as in `size`. **Watch the tier headroom here**: the T2 flame now peaks at 7.0 against T3's 7.5, so footprint barely separates them any more and the ladder rests on duration, ember/smoke volume and the light. If Fireball starts reading as interchangeable with Inferno, scale T3 up rather than pulling T2 back down.
 
 **Third-party Creator Store images do not load in this universe.** Every "free" fire/smoke flipbook decal found via `search_asset` on `creator_store` — sixteen of them, including all the top hits for "fire flipbook" and "smoke flipbook" — failed to load. `17703243127` works *only* because it is already in the universe inventory.
 

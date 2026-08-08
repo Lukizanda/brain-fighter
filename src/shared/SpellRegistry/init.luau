@@ -154,11 +154,22 @@ local SPELLS: { [Color]: { Spec } } = {
 					staggerSec = 0,
 					trackTarget = true,
 					impactRadius = FIREBALL_IMPACT_RADIUS,
-					impactColor = FIREBALL_COLOR,
+					-- No neon ground disc (2026-08-09). The blast reads as
+					-- an explosion on its own now that it draws Inferno's
+					-- fire, and the disc under it read as a separate flat
+					-- decal laid on the floor rather than as part of the
+					-- same event. `impactColor` is gone with it — it only
+					-- ever tinted the ring. What is genuinely lost is exact
+					-- radius legibility; the fire is sized to imply the
+					-- 7 studs instead of drawing them.
+					impactRing = false,
 					cosmeticEffectId = "projectile_red_t2",
 					-- Heavier splash burst than the shared impact_damage a
 					-- T1 Firebolt uses, so the 7-stud blast reads as bigger
-					-- than a single-target poke.
+					-- than a single-target poke. Since 2026-08-09 it draws
+					-- the same flipbook fire layers as Inferno's eruption,
+					-- scaled down and burning out inside ~1.2 s — Fireball
+					-- has no burn status to hand off to.
 					impactEffectId = "impact_damage_t2",
 				},
 				onImpact = { { kind = "damage", fractionOfMaxHP = FIREBALL_DAMAGE_FRAC } },

@@ -540,25 +540,112 @@ VfxConfig.EFFECTS = {
 	-- Reached through the registry's explicit impactEffectId rather than
 	-- the tier lookup, because projectile spells fire their own impact
 	-- burst from SkillDelivery at the real hit position.
+	--
+	-- Built from the same three flipbook layers as `impact_damage_t3`
+	-- (2026-08-09), for the reason that entry's comment gives: the round
+	-- blob texture on `ImpactBurst` reads as a firework at any particle
+	-- count, and 38 of them was still a firework. A fire spell should look
+	-- like fire at every tier, and having T2 and T3 draw from one visual
+	-- vocabulary is what makes the tier ladder read as *more of the same
+	-- thing* rather than three unrelated effects.
+	--
+	-- What separates it from T3 is scale and, above all, **how long the
+	-- fire lasts**. T3 is a detonation that leaves the target alight for
+	-- three seconds (StatusVisuals/InfernoVfx); T2 has no burn lane at all,
+	-- so its flames must be gone almost as soon as they arrive or the hit
+	-- reads as a status that never applied. Every lifetime below is roughly
+	-- half its T3 counterpart, and the smoke tail — the layer that sets
+	-- totalDurationSec — is cut hardest.
+	--
+	-- Fireball also lands far more often than Inferno (T2 cost, and it is
+	-- the workhorse of the red school), which is the second reason to keep
+	-- it brief: a 2.5 s plume per cast would leave the arena permanently
+	-- hazed in a fight.
+	-- Scaled up and the ground disc dropped (2026-08-09, second pass).
+	-- These two go together: `impactRing = false` in the registry means the
+	-- neon shockwave no longer draws a 14-stud-wide circle under the hit,
+	-- so the fire is now the *only* thing communicating that this spell has
+	-- a blast radius at all. It has to be wide enough to imply the 7 studs
+	-- the damage query actually uses, which is why the growth here is as
+	-- much in `spreadAngle` as in `size`.
+	--
+	-- The flame peak sits at 7.0 against T3's 7.5 — deliberately close.
+	-- With the disc gone there was no room left to be subtle about scale,
+	-- and the tier separation now rests on duration, ember/smoke volume and
+	-- the light rather than on footprint. If Fireball starts reading as
+	-- interchangeable with Inferno, scale T3 up rather than pulling this
+	-- back down; the ladder wants headroom at the top, not a smaller T2.
 	impact_damage_t2 = {
 		emitters = {
+			-- The blast body. Sized to cover the impact radius, and still
+			-- gone inside ~0.6 s.
 			{
-				template    = "ImpactBurst",
-				color       = C.red,
-				emitCount   = 38,
-				lifetime    = NumberRange.new(0.40, 0.75),
-				size        = NumberSequence.new({
-					NumberSequenceKeypoint.new(0.0, 0.7),
-					NumberSequenceKeypoint.new(0.35, 1.0),
-					NumberSequenceKeypoint.new(1.0, 0.0),
+				template      = "FireFlame",
+				colorSequence = VfxConfig.FIRE.flame,
+				emitCount     = 36,
+				-- Nudged up from 0.28–0.50 alongside the size increase.
+				-- Particles this large reaching full transparency in a
+				-- quarter second read as being switched off rather than
+				-- burning out.
+				lifetime      = NumberRange.new(0.32, 0.58),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 3.0),
+					NumberSequenceKeypoint.new(0.4, 7.0),
+					NumberSequenceKeypoint.new(1.0, 4.8),
 				}),
-				speed       = NumberRange.new(14, 26),
-				spreadAngle = Vector2.new(180, 180),
-				rotation    = NumberRange.new(-180, 180),
+				speed         = NumberRange.new(16, 30),
+				-- Much wider than T3's 70-degree column. That one is an
+				-- eruption climbing out of a target; this is a projectile
+				-- bursting on contact, and since it no longer has a disc
+				-- underneath it, spreading is what sells the radius.
+				spreadAngle   = Vector2.new(130, 130),
+			},
+			-- Sparks. Outlive the flame on purpose — embers arcing away
+			-- from a blast that has already gone out is the cheapest way to
+			-- keep a short effect from ending abruptly, and thrown wide
+			-- they also mark roughly where the splash stopped.
+			{
+				template      = "FireEmber",
+				colorSequence = VfxConfig.FIRE.ember,
+				emitCount     = 44,
+				lifetime      = NumberRange.new(0.55, 1.05),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.55),
+					NumberSequenceKeypoint.new(1.0, 0.00),
+				}),
+				speed         = NumberRange.new(24, 48),
+				spreadAngle   = Vector2.new(160, 160),
+			},
+			-- The tail, and the layer that sets totalDurationSec. Still
+			-- thin and short next to T3's 20 particles over 2.4 s — enough
+			-- to say something burned here, not enough to hang around.
+			{
+				template      = "FireSmoke",
+				colorSequence = VfxConfig.FIRE.smoke,
+				emitCount     = 14,
+				lifetime      = NumberRange.new(0.75, 1.15),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 3.5),
+					NumberSequenceKeypoint.new(1.0, 9.5),
+				}),
+				speed         = NumberRange.new(6, 13),
+				spreadAngle   = Vector2.new(140, 140),
 			},
 		},
+		-- Same flash as the eruption, dimmer and shorter. Honours
+		-- PERF.allowLights inside spawnEffect, so it sheds first on a
+		-- machine already dropping frames.
+		light            = { color = VfxConfig.FIRE.light, brightness = 5.0, durationSec = 0.32 },
+		-- Deliberately still the T1 hit sound pitched down, not T3's
+		-- `impactHeavy`. The visual language is shared; the *weight* is not
+		-- — a Fireball that booms like the 50%-max-HP nuke would flatten
+		-- the audio ladder the tiers are supposed to climb.
 		sound            = { soundId = SFX.impactDamage, volume = 1.0, pitchRange = NumberRange.new(0.82, 0.94) },
-		totalDurationSec = 0.90,
+		-- Covers the longest emitter above (smoke, up to 1.15 s) plus the
+		-- frame it is emitted on. Cutting this short destroys the
+		-- attachment mid-plume and the smoke pops out of existence.
+		totalDurationSec = 1.25,
+		upward           = true,
 		anchor           = "targetHumanoidRootPart",
 	},
 

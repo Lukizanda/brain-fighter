@@ -161,6 +161,10 @@ The `fuze` is the load-bearing one. Because the shot is aimed where the target s
 
 When `impactRadius == 0` (Firebolt, Volley, both boss FireballVolleys) the fuze is off and only a direct hit damages — `expiry` and a wall `impact` deal nothing, they just stop the Part.
 
+**`impactRing` — a splash can skip the ground disc (2026-08-09).** Default true, which is the historical behaviour: a splash detonation draws the neon `SkillVisuals.spawnShockwave` disc sized to `impactRadius`, and the impact burst anchors *to that disc*. Set it false and the disc is skipped while the splash and its burst survive — the burst then anchors to a throwaway `spawnEffectAtPoint` anchor instead, which is also why it stays visible on clients that haven't replicated a Part created this frame. Fireball is the only spell using it: once its impact drew Inferno's fire, the disc underneath read as a separate flat decal on the floor rather than part of the same event.
+
+**What you give up is radius legibility**, and it is a real tradeoff rather than a free win — the disc is the only thing that draws the blast's exact reach, so turning it off is only defensible where the burst is big enough to imply it. That is why Fireball's `impact_damage_t2` grew in `spreadAngle` as much as in `size` in the same change. `impactColor` only ever tinted the ring, so it is dead config on any spell with `impactRing = false` and Fireball dropped it. Verified on a client: a real Fireball detonation produces 0 `SkillShockwave` and 1 `SkillEffectAnchor`; an otherwise-identical probe spec with `impactRing` unset still produces its ring.
+
 **Behaviour change to know about**: projectiles are now blocked by cover, boss attacks included. `RaycastParams.RespectCanCollide = true` keeps shockwaves, VFX parts, and other decorative non-collidable geometry from eating shots; the caster and the projectile itself are excluded from the ray. Verified in-playtest: a 5-stud miss deals 20 damage, a 10-stud miss deals 0, a rig 3 studs behind a wall takes splash, a rig 29 studs behind takes nothing.
 
 ## Registry Lifecycle & Death Cleanup (Phase 5.1)

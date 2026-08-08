@@ -280,9 +280,21 @@ SkillDelivery.handlers = {
 	--   impactEffectId    — optional VfxConfig.EFFECTS key spawned at the
 	--                       impact position. For impactRadius == 0 the
 	--                       burst anchors to the hit humanoid's HRP; for
-	--                       impactRadius > 0 it anchors to the shockwave.
+	--                       impactRadius > 0 it anchors to the shockwave,
+	--                       or to a throwaway point anchor when
+	--                       impactRing is false.
 	--   impactColor       — optional shockwave color tint. impactRadius > 0
-	--                       only.
+	--                       and impactRing only.
+	--   impactRing        — default true: a splash detonation draws the
+	--                       neon ground disc (SkillVisuals.spawnShockwave)
+	--                       sized to impactRadius. False keeps the splash
+	--                       and its burst but skips the disc, for spells
+	--                       whose impact effect already reads as an
+	--                       explosion on its own — see Fireball. Radius
+	--                       legibility is the tradeoff being made: the disc
+	--                       is the only thing that shows the blast's exact
+	--                       reach, so turn it off only where the burst is
+	--                       big enough to imply it. impactRadius > 0 only.
 	--   cosmeticEffectId  — optional VfxConfig.EFFECTS key attached to
 	--                       each moving Part as a trail/glow. Its Sound is
 	--                       a child of that Part, so it is cut off when the
@@ -330,6 +342,7 @@ SkillDelivery.handlers = {
 		local cosmeticEffectId: string? = params.cosmeticEffectId
 		local impactEffectId:   string? = params.impactEffectId
 		local impactColor:      Color3? = params.impactColor
+		local impactRing:       boolean = params.impactRing ~= false
 		-- Fired once at the muzzle, and deliberately NOT folded into
 		-- cosmeticEffectId: that one parents its Sound to the moving Part,
 		-- so the shot's own destruction cuts the sound off mid-play. A
@@ -352,8 +365,10 @@ SkillDelivery.handlers = {
 		local consumeOnHit: boolean = if impactRadius > 0
 			then true
 			else params.consumeOnHit ~= false
-		-- Splash projectiles spawn a shockwave on *every* detonation cause,
-		-- so they already announce their own death and want no second cue.
+		-- Splash projectiles fire their impact burst on *every* detonation
+		-- cause — wall, expiry, direct hit alike — so they already announce
+		-- their own death and want no second cue. True whether or not the
+		-- ring is drawn: the burst is the announcement, the disc is silent.
 		-- Only single-target shots can die silently, so only they get this.
 		local destroyEffectId: string? = if impactRadius > 0
 			then nil
@@ -411,15 +426,26 @@ SkillDelivery.handlers = {
 			-- and wants the fallback.
 			local cued = false
 			if impactRadius > 0 then
-				-- spawnShockwave anchors the impact burst to itself via
-				-- cosmeticEffectId. collectHittables() is frame-cached, so
-				-- this re-read returns the same snapshot the caller tested
-				-- against — a humanoid inside proximityRadius is guaranteed
-				-- to also be considered for splash.
-				SkillVisuals.spawnShockwave(hitPos, impactRadius, {
-					color            = impactColor,
-					cosmeticEffectId = impactEffectId,
-				})
+				-- Two ways to draw a splash, and they differ only in whether
+				-- the ground disc is part of it. Both put the burst at
+				-- `hitPos`: spawnShockwave anchors it to the ring via
+				-- cosmeticEffectId, spawnEffectAtPoint builds a throwaway
+				-- anchor for it. The second path exists because a Part
+				-- created this frame arrives nil on clients that haven't
+				-- replicated it — which is exactly why there is a
+				-- position-based primitive to fall back to.
+				if impactRing then
+					SkillVisuals.spawnShockwave(hitPos, impactRadius, {
+						color            = impactColor,
+						cosmeticEffectId = impactEffectId,
+					})
+				elseif impactEffectId then
+					SkillVisuals.spawnEffectAtPoint(hitPos, impactEffectId)
+				end
+				-- collectHittables() is frame-cached, so this re-read returns
+				-- the same snapshot the caller tested against — a humanoid
+				-- inside proximityRadius is guaranteed to also be considered
+				-- for splash.
 				local struck = 0
 				for _, h in collectHittables() do
 					if h.hum.Parent == source then continue end -- skip caster
