@@ -92,13 +92,35 @@ A *read-only* observer (analytics, an audio cue) can safely add its own `GetInst
 
 The spawner refills the instant a block is consumed, so before 2026-08-08 a replacement snapped into existence at full size next to the one the player had just shot. It read as a pop-in glitch rather than an arrival.
 
-The animator now plays a ~0.35 s intro on every block that arrives *after* the client has started:
+The animator now plays a ~0.45 s intro on every block that arrives *after* the client has started:
 
 | Channel | Curve | Range |
 |---|---|---|
-| `Model:ScaleTo` | `Back` / `Out` — overshoots, then settles | 8 % of final scale → final (peaks ~9 % over) |
+| `Model:ScaleTo` | damped spring — overshoot, dip under, settle | 8 % of final scale → final (peaks ~21 % over, dips ~4 % under) |
 | `Cube.Transparency`, `TextTransparency`, `TextStrokeTransparency` | `Quad` / `Out` | 1 → the value the block replicated in with |
 | `Mana` ParticleEmitter | — | `Enabled = false` for the intro, restored on settle |
+
+### The spring curve
+
+Scale rides an explicit damped harmonic rather than a built-in easing style:
+
+```
+y(t) = 1 - e^(-decay*t) * cos(omega*t)
+omega = pi * INTRO_SPRING_HALF_CYCLES
+decay = -ln(INTRO_SPRING_OVERSHOOT) * omega / pi
+```
+
+`y(0) = 0` and `y(1)` lands on ~1. Two tunables:
+
+- **`INTRO_SPRING_OVERSHOOT`** (0.20) — how far the first peak goes past the settle point. The `decay` derivation solves the envelope at `omega*t = pi` for exactly this value, so the constant means what it says instead of being whatever the math happened to produce.
+- **`INTRO_SPRING_HALF_CYCLES`** (3) — how many times the curve crosses the settle point. 1 degenerates to a single Back-style overshoot; 5+ reads as rubber rather than weight.
+
+`Enum.EasingStyle.Back` was the first cut and does overshoot, but its magnitude is a fixed engine constant (~10 %) and it crosses once. Neither is tunable, and springiness needs both dials — hence the explicit curve.
+
+Two consequences worth knowing:
+
+- The realized overshoot is slightly under `INTRO_SPRING_OVERSHOOT` because scale lerps *from* `startScale`, not from zero. At the shipped constants that's 20.9 % measured against a 20 % nominal.
+- `y(1)` carries a residual envelope of about +0.7 %, so the curve approaches the settle point from above. That is 0.012 studs at the shipped block scale, and `settleIntro` writes the exact final value anyway.
 
 Details that matter:
 
@@ -107,21 +129,25 @@ Details that matter:
 - **Frame zero is applied synchronously in `track`**, not on the next Heartbeat. One frame at full size and full opacity is exactly the snap the intro exists to remove.
 - **The intro opts out of distance culling.** Holding a pivot still for whole frames is invisible on a settled block and very visible on one mid-pop.
 - **Final values are captured per instance**, not assumed zero, so the intro restores whatever the prefab authored.
-- **Scale is clamped on the low end only.** `Back`/`Out` is *supposed* to exceed 1; `Model:ScaleTo` rejects zero and negatives.
+- **Scale is clamped on the low end only.** The spring is *supposed* to exceed 1; `Model:ScaleTo` rejects zero and negatives.
+- **Opacity resolves at 45 % of the duration**, just past the spring's first peak — the block is solid by the time it is at its biggest, so the ring-down reads as weight rather than as the block still arriving.
 - **Purely cosmetic.** The server knows nothing about the intro, so a mid-intro block is shootable like any other. Gating `CanQuery` would desync client and server on a block the player can see but not hit.
 
 ### Verification (2026-08-08 playtest)
 
 Client-VM sampling via `execute_luau` with `datamodel_type = "Client"`, destroying blocks server-side on a timer and reading the replacement's local property values each Heartbeat. Server logs cannot verify this — the scale and transparency writes happen only on the local VM (see the VFX rule in `CLAUDE.md`).
 
-| t (s) | scale | cube T | text T | stroke T | mana |
-|---|---|---|---|---|---|
-| 0.016 | 0.459 | 0.805 | 0.805 | 0.805 | false |
-| 0.100 | 1.432 | 0.161 | 0.161 | 0.161 | false |
-| 0.166 | **1.636** (peak) | 0.000 | 0.000 | 0.000 | false |
-| 0.299 | **1.500** (settled) | 0.000 | 0.000 | 0.000 | true |
+| t (s) | scale | vs. final | cube T | text T |
+|---|---|---|---|---|
+| 0.015 | 0.422 | −71.8 % | 0.839 | 0.839 |
+| 0.132 | **1.813** | **+20.9 %** (peak) | 0.138 | 0.138 |
+| 0.215 | 1.566 | +4.4 % | 0.000 | 0.000 |
+| 0.299 | **1.438** | **−4.1 %** (dip) | 0.000 | 0.000 |
+| 0.483 | **1.500** | 0.0 % (settled) | 0.000 | 0.000 |
 
-Scale overshoots to 1.636 against a `GameConfig.BLOCK_SCALE` of 1.5 (+9 %) and lands exactly on 1.500. All three transparency channels move in lockstep. The emitter re-enables on the same frame the intro settles.
+Against a `GameConfig.BLOCK_SCALE` of 1.5, the measured curve peaks at +20.9 % and dips to −4.1 % before landing exactly on 1.500 — matching the offline prediction of +20.6 % / −4.1 % to within a fifth of a percent. All three transparency channels move in lockstep and reach zero at t ≈ 0.215, just past the peak. The emitter re-enables on the settle frame.
+
+Two dials worth reaching for when tuning: `INTRO_SPRING_OVERSHOOT` for how hard it pops, `INTRO_SPRING_HALF_CYCLES` for how much it rings. Both are cheap to predict offline — the curve is 3 lines of math — so check the shape numerically before spending a playtest on it.
 
 Two dead ends worth not repeating: MCP `execute_luau` calls issued in one message **serialize rather than run concurrently**, and a `task.delay`-scheduled trigger fires before a follow-up Client call can arm its listener. Schedule a *repeating* server-side trigger, then arm the client sampler.
 

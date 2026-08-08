@@ -47,7 +47,7 @@ local ROTATION_RADIANS_PER_SECOND = math.rad(ROTATION_DEGREES_PER_SECOND)
 -- Spawn-in intro tunables
 ----------------------------------------------------------------------
 
-local INTRO_DURATION_SECONDS = 0.35
+local INTRO_DURATION_SECONDS = 0.45
 
 -- ±fraction of jitter on the duration. A consumed block triggers one
 -- refill, but a joining player can receive a whole arena at once —
@@ -59,15 +59,37 @@ local INTRO_DURATION_JITTER = 0.15
 -- "materialising" rather than "growing from nothing".
 local INTRO_START_SCALE_FRACTION = 0.08
 
--- Opacity resolves partway through so the block is legible while the
--- tail of the scale curve is still settling.
-local INTRO_FADE_FRACTION = 0.55
+-- Opacity resolves just past the spring's first peak, so the block is
+-- solid by the time it is at its biggest and the ring-down reads as
+-- weight rather than as the block still arriving.
+local INTRO_FADE_FRACTION = 0.45
 
--- Back/Out overshoots past the final scale and eases back — the pop.
--- Quad/Out on opacity, which must not overshoot (transparency clamps).
-local INTRO_SCALE_EASING_STYLE = Enum.EasingStyle.Back
+-- Scale rides a damped harmonic — the spring:
+--     y(t) = 1 - e^(-decay*t) * cos(omega*t)
+-- y(0) = 0 and y(1) settles on 1, with the first peak overshooting the
+-- final scale by INTRO_SPRING_OVERSHOOT before ringing back down.
+--
+-- Enum.EasingStyle.Back overshoots too, but its magnitude is a fixed
+-- engine constant (~10%) and it only crosses the settle point once.
+-- Springiness wants both of those as dials, hence the explicit curve.
+local INTRO_SPRING_OVERSHOOT = 0.20
+
+-- Half-cycles of the cosine across the intro. 3 gives the shape you
+-- want from a spring: overshoot, a shallow dip under, then settle.
+-- 1 degenerates to a Back-style single overshoot; 5+ starts to read as
+-- rubber rather than weight.
+local INTRO_SPRING_HALF_CYCLES = 3
+
+local SPRING_OMEGA = math.pi * INTRO_SPRING_HALF_CYCLES
+-- The first peak lands at omega*t = pi, where the envelope has decayed
+-- to e^(-decay*pi/omega). Solving that for decay puts the peak exactly
+-- on the requested overshoot instead of wherever the math happens to
+-- land.
+local SPRING_DECAY = -math.log(INTRO_SPRING_OVERSHOOT) * SPRING_OMEGA / math.pi
+
+-- Quad/Out on opacity, which must not overshoot — transparency clamps.
 local INTRO_FADE_EASING_STYLE = Enum.EasingStyle.Quad
-local INTRO_EASING_DIRECTION = Enum.EasingDirection.Out
+local INTRO_FADE_EASING_DIRECTION = Enum.EasingDirection.Out
 
 local FULLY_TRANSPARENT = 1
 local CUBE_CHILD_NAME = "Cube"
@@ -104,6 +126,13 @@ local trackedBlocks: { [Model]: State } = {}
 
 local function lerp(from: number, to: number, alpha: number): number
 	return from + (to - from) * alpha
+end
+
+-- Damped harmonic on [0, 1]. Rises past 1, rings back through it, and
+-- lands on ~1. Slightly overshoots 1 at t = 1 by the residual envelope
+-- (well under a percent), which settleIntro snaps away.
+local function springAlpha(alpha: number): number
+	return 1 - math.exp(-SPRING_DECAY * alpha) * math.cos(SPRING_OMEGA * alpha)
 end
 
 ----------------------------------------------------------------------
@@ -194,16 +223,15 @@ local function applyIntro(block: Model, intro: Intro, alpha: number)
 		return
 	end
 
-	local scaleAlpha = TweenService:GetValue(alpha, INTRO_SCALE_EASING_STYLE, INTRO_EASING_DIRECTION)
-	-- Back/Out overshoots above 1 by design; clamp only the low end so
-	-- a negative sample can never reach ScaleTo, which rejects it.
-	local scale = math.max(intro.startScale, lerp(intro.startScale, intro.finalScale, scaleAlpha))
+	-- The spring exceeds 1 by design; clamp only the low end so a
+	-- negative sample can never reach ScaleTo, which rejects it.
+	local scale = math.max(intro.startScale, lerp(intro.startScale, intro.finalScale, springAlpha(alpha)))
 	block:ScaleTo(scale)
 
 	local fadeAlpha = TweenService:GetValue(
 		math.min(alpha / INTRO_FADE_FRACTION, 1),
 		INTRO_FADE_EASING_STYLE,
-		INTRO_EASING_DIRECTION
+		INTRO_FADE_EASING_DIRECTION
 	)
 	for _, target in ipairs(intro.fades) do
 		(target.instance :: any)[target.property] =
