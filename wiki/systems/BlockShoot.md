@@ -127,6 +127,10 @@ All of it runs on **one** `Heartbeat` connection per stream, not one per mote �
 
 Measured on a moving collector: 8 motes peak, alive across 24 frames, 34 distinct sizes in flight (stagger and shrink both live), closest approach to the HumanoidRootPart 0.27 studs, and zero instances left behind afterwards.
 
+**The broadcast receive path is verified** (2026-08-10), which had been outstanding since Phase 5.6. It is testable with one client precisely because `BlockTapController` never draws the stream locally — only the burst — so any stream on a client arrived over the wire. Firing `VfxBroadcast.collect` from the server produced **1 anchor and 8 motes** on the client, and an absent `collectorUserId` produced **nothing at all**: no stream, no orphaned anchor, no error, because `resolveCollector` returns nil before anything is constructed. That second case is the player-leaves-mid-flight path, which PvP will actually hit.
+
+What one client still cannot show is a stream funnelling toward *another* player's character. The residual risk is low rather than zero: `resolveCollector` is `Players:GetPlayerByUserId` with no branch for the local player, so "collector is someone else" executes the same code with a different `Player`. A real second client would only be confirming the wire, not the logic.
+
 ## MindFull gate
 
 When the buffer hits 12/12, [[systems/MindFullManager]] fires `mindFull`. `BlockTapController` simply polls `:isMindFull()` on each input — no signal wiring needed because the check is cheap and the gate is checked exactly once per event (a refused tap plays the client-local fizzle cue). When the player removes tiles or memorizes a word, the buffer shrinks and `:isMindFull()` returns false, re-enabling input.
