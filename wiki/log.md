@@ -1326,3 +1326,7 @@ Also fixed: a dying shot used to erase its own trail back to the muzzle, because
 Verified end-to-end on a real Brain volley (server-fired → `ProjectileVfxEvent` → client-drawn), 16 concurrent cosmetics each with the bolt mesh, trail and live emitters. Client-rendered proof, not server logs.
 
 Pages updated: systems/VisualEffects (two new sections + banner), systems/SkillPipeline (delivery-visuals row).
+
+## [2026-08-10] ingest | Tap reach raised, then the real cause found: a screen/viewport aim mismatch
+
+`MAX_RAYCAST_DISTANCE` went 200 → 1400 after measuring the arena at 240 × 259 studs (diagonal ~353) with the farthest block 320 studs out — genuinely past the old raycast *and* the old 300-stud server bound. The complaint survived the raise, which was the real signal: `BlockTapController` had inherited LetterBlaster's `ViewportPointToRay` while switching the point to `input.Position`, mismatching the two mouse coordinate spaces by one GUI inset (58 px = 7.7° = 0.135 studs of miss per stud of range). Effective reach was ~30 studs regardless of the constant. Fixed to `ScreenPointToRay`; verified against `Mouse.Hit` (0.00 studs error), by sweep (buggy pairing hit 0/40 on-screen blocks, fixed 18/40, rest occluded) and by a live click at 303 studs. See systems/BlockShoot § Aiming.

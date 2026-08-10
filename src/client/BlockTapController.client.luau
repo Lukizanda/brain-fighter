@@ -136,7 +136,23 @@ local function tryPop(screenPosition: Vector2)
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { character }
 
-	local ray = camera:ViewportPointToRay(screenPosition.X, screenPosition.Y)
+	-- ScreenPointToRay, *not* ViewportPointToRay — the two take different
+	-- coordinate spaces and the caller has to match the one its point came
+	-- from. `input.Position` (and Mouse.X/Y) are inset-adjusted: measured
+	-- from below the topbar. GetMouseLocation() is not; it is raw viewport
+	-- space. ScreenPointToRay adds the inset back, ViewportPointToRay does
+	-- not, so the correct pairs are ScreenPointToRay+input.Position and
+	-- ViewportPointToRay+GetMouseLocation().
+	--
+	-- LetterBlaster used the second pair and was right. This controller
+	-- inherited its ViewportPointToRay line but changed where the point
+	-- came from, which silently tilted every ray up by the inset — 58px,
+	-- or 7.7 degrees at a 601px/70-degree viewport. That is an *angular*
+	-- error, so the miss grows with range: 0.135 studs per stud, meaning
+	-- ~4 studs off at 30 studs and 43 off at 320. A letter block is about
+	-- 4 studs wide, so taps landed only within ~30 studs and it read as a
+	-- hard range limit that raising MAX_RAYCAST_DISTANCE could not budge.
+	local ray = camera:ScreenPointToRay(screenPosition.X, screenPosition.Y)
 	local result = workspace:Raycast(ray.Origin, ray.Direction * BlockShoot.MAX_RAYCAST_DISTANCE, params)
 
 	if not result then
@@ -258,9 +274,13 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessedEv
 		and input.UserInputType ~= Enum.UserInputType.Touch then
 		return
 	end
-	-- input.Position rather than UserInputService:GetMouseLocation():
-	-- same value for a mouse click, and the only correct answer for a
-	-- touch, which has no cursor to read.
+	-- input.Position rather than UserInputService:GetMouseLocation(): the
+	-- only correct answer for a touch, which has no cursor to read.
+	--
+	-- These are NOT the same value for a mouse click — they differ by the
+	-- GUI inset — and assuming they were is what broke aim when this
+	-- replaced LetterBlaster. tryPop pairs this with ScreenPointToRay;
+	-- see the note there before changing either.
 	tryPop(Vector2.new(input.Position.X, input.Position.Y))
 end)
 

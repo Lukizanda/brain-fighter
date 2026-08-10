@@ -45,6 +45,31 @@ Verified by A/B with the GUI as the only variable: an input-consuming button pla
 
 `BlockTapController` requires a character with a `Humanoid` above 0 HP. Holding the staff was an implicit gate — a corpse has no equipped Tool, so `Tool.Activated` could not fire. A global handler has no such gate, and without the check a dead player clicking would spend rate-limit budget on consumes the server can only reject.
 
+## Aiming — screen space vs viewport space
+
+Roblox has two mouse coordinate spaces that differ by the GUI inset, and two matching `Camera` methods. **Pairing them wrong does not fail loudly — it tilts the ray.**
+
+| Source of the point | Space | Correct method |
+|---|---|---|
+| `InputObject.Position`, `Mouse.X`/`Mouse.Y` | inset-adjusted (measured below the topbar) | `Camera:ScreenPointToRay` |
+| `UserInputService:GetMouseLocation()` | raw viewport | `Camera:ViewportPointToRay` |
+
+[[systems/LetterBlaster]] used the second pair and was correct. `BlockTapController` kept its `ViewportPointToRay` line but changed where the point came from — `input.Position`, needed because touch has no cursor to read — and inherited a constant vertical offset of one GUI inset.
+
+**Why this presented as a range limit.** The offset is in pixels at the screen, so it becomes an *angle* at the camera and the miss grows linearly with distance. Measured on a 1027×601 viewport at 70° FOV: a 58 px inset is **7.7° of aim error**, or **0.135 studs of miss per stud of range**.
+
+| Range | Miss |
+|---|---|
+| 30 studs | 4.0 studs |
+| 100 studs | 13.5 studs |
+| 320 studs | 43.2 studs |
+
+A letter block is about 4 studs across, so taps landed only within ~30 studs and everything past that felt like a wall. Raising `MAX_RAYCAST_DISTANCE` could not move that wall, because the ray was never pointed at the block in the first place.
+
+Confirmed against the engine's own `Mouse.Hit` as ground truth — `ScreenPointToRay(input.Position)` agrees to **0.00 studs**, `ViewportPointToRay(input.Position)` does not — and end-to-end in a playtest: aiming at each on-screen block's true screen point, the buggy pairing hit **0 of 40** and the fixed pairing hit **18 of 40**, the remaining 22 being genuinely occluded by an opaque union in the spawn zone. A real synthetic click then popped a block at **303 studs** against a 9 px target.
+
+**The lesson worth carrying:** an aim error that scales with distance is indistinguishable from a range cap by feel alone. When a range complaint survives a range change, stop tuning the range.
+
 ## Showing the consume
 
 A validated consume ends in `broadcastPop`, which fires **two** cosmetics on one round trip:
@@ -139,7 +164,9 @@ Check 3 also makes a double-consume race a no-op for free: the first `Destroy` u
 
 ### Reach (raised 2026-08-10)
 
-`MAX_RAYCAST_DISTANCE` went 200 → 1400. The old value could not cross the arena: the `BlockSpawnVolume` parts span **240 × 259 studs** (floor diagonal ~353), and a live measurement put the farthest block **320 studs** from the player — past the 200-stud raycast *and* past the old 300-stud server bound. The far half of the field was simply unpoppable.
+`MAX_RAYCAST_DISTANCE` went 200 → 1400. The old value could not cross the arena: the `BlockSpawnVolume` parts span **240 × 259 studs** (floor diagonal ~353), and a live measurement put the farthest block **320 studs** from the player — past the 200-stud raycast *and* past the old 300-stud server bound. The far half of the field was out of range.
+
+> **This raise did not fix the reported problem, and it is worth knowing why before trusting the numbers below.** Reach was a real ceiling, but it was not the binding one: the aim bug in § Aiming capped effective reach at roughly 30 studs regardless of what this constant said. Raising it 7× changed nothing a player could feel, which is exactly the signal that the constant was not the cause. The measurements here stand; the diagnosis they were gathered to support did not.
 
 Reach is tuned in exactly one place; the server bound and the Hardening suite's out-of-range fixture both derive from it.
 
