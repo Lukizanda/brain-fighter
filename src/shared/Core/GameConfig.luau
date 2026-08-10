@@ -48,6 +48,7 @@ local GameConfig = {
 	DEV_SMOKE_KILLFEED = false, -- when true, loop-fires 3 synthetic KillFeed events (normal kill / self-elim / env kill) so the UI can be verified without real combat
 	DEV_BOT_COUNT = 0, -- number of stationary enemy-team bots to spawn for solo TDM tuning (0 disables); bots respawn via DeathHandler and credit kills via ScoreTracker.recordBotKill
 	DEV_SIMULATE_LOADOUT_CYCLING = false, -- when true, server-side script spawns 2 tools in the player's Backpack, cycles them via humanoid:EquipTool, and writes the result to workspace.LoadoutCycleSimResult — used to repro / regression-test the LoadoutService re-entry guard without relying on real pedestal pickups (which can't be MCP-driven)
+	DEV_COUNT_POP_VFX = true, -- ON for the 2026-08-10 two-client check; turn back off when done. When true, each client logs one line per block pop counting the burst and ribbon instances it actually built. Turns the "is the popper's burst drawn twice?" question into a number — a doubled burst reads only as slightly brighter and slightly louder, which is not something anyone should be asked to eyeball. Multi-client: every line is prefixed with the player name
 
 	----------------------------------------------------------------------
 	-- Block Spawner
