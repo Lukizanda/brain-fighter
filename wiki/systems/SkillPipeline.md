@@ -1,7 +1,7 @@
 ---
 type: system
 description: Unified data + dispatch pipeline shared by player spells and boss attacks. SkillSpec (data) + SkillEffects (effects) + SkillDelivery (deliveries), with caller-resolved origin so any caster (player, boss, future NPC) plugs in the same way.
-updated: 2026-08-08
+updated: 2026-08-10
 ---
 
 # Skill Pipeline
@@ -470,7 +470,7 @@ Inferno is the worked example of why the split matters: its polish pass (2026-08
 |---|---|---|---|
 | **Burst VFX** | `VfxController` clones from `VfxConfig.EFFECTS` via `Shared/Vfx/spawnEffect.luau` | Fire-and-forget; `totalDurationSec` from the EffectSpec | The visual is a one-shot particle burst at cast (staff tip) or impact (target HRP). |
 | **Status visuals** | A module under `src/shared/Vfx/StatusVisuals/`, always driven by a client watcher on the status's own attribute — `ShieldVfx` ← `client/Vfx/ShieldVfxController` (`_shield`), `FreezeVfx` ← `client/Vfx/FreezeVfxController` (`_frozen`), `InfernoVfx` ← `client/Vfx/InfernoVfxController` (`_burning`). Never called from `SkillEffects.handlers.<kind>` directly; all three modules refuse on the server. | Persistent geometry or emitters attached to the rig, living for the duration of the active status; cleanup is reciprocal (`start` + `stop`) | The effect is a persistent body decoration (ice shards, flames, poison cloud) that must follow limbs and survive a multi-second status. Burst particles can't carry these semantics. |
-| **Delivery visuals** | Inline in `SkillDelivery.handlers.{projectile, aoe}` — the physical `Part` is the visual | Tied to the physics object (`Debris:AddItem`) | The visual IS the gameplay object (the projectile body, the shockwave geometry). For cosmetic upgrades (trail/glow/sound) on top, set `deliveryParams.cosmeticEffectId` and the handler attaches the corresponding `VfxConfig.EFFECTS` entry to the moving Part — physics still lives in `SkillDelivery`, the *cosmetic* layer routes through `VfxConfig`. |
+| **Delivery visuals** | Inline in `SkillDelivery.handlers.{projectile, aoe}` — the physical `Part` is the visual | Tied to the physics object (`Debris:AddItem`) | The visual IS the gameplay object (the projectile body, the shockwave geometry). For cosmetic upgrades (trail/glow/sound) on top, set `deliveryParams.cosmeticEffectId` and the handler attaches the corresponding `VfxConfig.EFFECTS` entry to the moving Part — physics still lives in `SkillDelivery`, the *cosmetic* layer routes through `VfxConfig`. Since 2026-08-10 that one id also selects the shot's *body* (comet head vs orb, trail, light) from `VfxConfig.PROJECTILE_BODIES`; see [[systems/VisualEffects]] § "Projectiles". |
 | **Screen-space** | `Shared/Vfx/ScreenImpact.luau`, called from a client controller. Post-processing lives in `Lighting`; the shake writes `Humanoid.CameraOffset` | One-shot, decays to neutral over `releaseSec`; `ScreenImpact.clear()` for hard teardown | The point is what the *viewer* feels, not what exists in the world — a tint, a blur, a shake. Nothing is attached to a rig, nothing has a position, nothing replicates. Scale by distance at the call site and keep it restrained: it fires for every player who can see the hit, many times a fight. |
 
 Color source is shared across all three lanes: `VfxConfig.COLORS.{red,green,blue}.{primary,glow,accent}`. Status visuals and delivery visuals should never hardcode a `Color3` — pull from the palette so a future red/blue retheme touches one table.

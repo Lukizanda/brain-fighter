@@ -52,6 +52,12 @@ local bossTypes: { [string]: BossTypeSpec } = {
 					staggerSec       = 0.15,
 					trackTarget      = true,
 					launchEffectId   = "projectile_boss_fireball",
+					-- In-flight trail + comet body (2026-08-10). Until this
+					-- the boss's only projectile cosmetic was the launch
+					-- sound above, so a 20-shot volley crossed the arena as
+					-- 20 bare orange cubes. Rates in that entry are held
+					-- deliberately low — it runs 20 times at once.
+					cosmeticEffectId = "projectile_boss_bolt",
 					impactEffectId   = "impact_damage",
 				},
 				onImpact = {
@@ -110,6 +116,11 @@ local bossTypes: { [string]: BossTypeSpec } = {
 					color            = Color3.fromRGB(120, 80, 255),
 					staggerSec       = 0.1,
 					launchEffectId   = "projectile_boss_fireball",
+					-- Violet, and pointedly not the fire trail the Brain
+					-- uses: this shot freezes. Dressing it in the flame
+					-- flipbook would promise the wrong status on a spell
+					-- whose whole tell is that it isn't fire.
+					cosmeticEffectId = "projectile_boss_arcane_bolt",
 					-- Single impactEffectId slot; damage wins over freeze as the
 					-- more generic "you got hit" cue since detonate() only plays
 					-- one id per landed shot.

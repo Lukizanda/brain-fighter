@@ -70,6 +70,56 @@ export type EffectSpec = {
 	upward: boolean?,
 }
 
+----------------------------------------------------------------------
+-- Projectile bodies
+----------------------------------------------------------------------
+-- The *solid* of a drawn shot — the Part CosmeticProjectile builds and
+-- flies — as opposed to the particles spawnEffect hangs off it.
+--
+-- Kept in its own table (PROJECTILE_BODIES, below the EFFECTS list) and
+-- keyed by the same `cosmeticEffectId`, rather than as a field on
+-- EffectSpec. spawnEffect deals in emitters, sound and light and has no
+-- business knowing a shot has a shape; a projectile-only field on the spec
+-- every cast burst also uses would be dead weight on all of them. One id
+-- still describes one complete look — the two tables are read with one key.
+--
+-- A shot with no entry here renders the way every shot did before
+-- 2026-08-10: an axis-aligned neon cube. That fallback is what keeps this
+-- optional for any future non-fire projectile.
+export type ProjectileTrailSpec = {
+	-- Distance between the two trail attachments — the ribbon's width where
+	-- it leaves the shot. Deliberately independent of the part's size, so a
+	-- thin bolt can still drag a streak wide enough to read at range.
+	widthStuds: number,
+	lifetimeSec: number,
+	color: ColorSequence,
+	transparency: NumberSequence,
+}
+
+export type ProjectileBodySpec = {
+	-- "orb" is a plain sphere. "bolt" stretches that sphere along the
+	-- direction of travel into a comet head.
+	shape: "orb" | "bolt",
+	-- Multiplier on the body's length along travel. Ignored for "orb".
+	stretch: number?,
+	-- Multiplier on the cross-section. Cosmetic only, and it has to stay
+	-- that way: CosmeticProjectile measures shield contact against the
+	-- *gameplay* size it was launched with, never the rendered one. A
+	-- slimmed bolt that shrank the shell padding would start slipping
+	-- through bubbles the server blocks it on.
+	girth: number?,
+	-- Replaces the shot's own colour on the solid core. Fire wants a
+	-- white-hot centre with the spell's orange living in the flame and the
+	-- trail around it; without this the core is one flat orange ball and the
+	-- particles have nothing to be hotter than.
+	coreColor: Color3?,
+	trail: ProjectileTrailSpec?,
+	-- Honours PERF.allowLights like every other light in this file. Worth
+	-- setting only on shots that arrive one at a time — one light per shot
+	-- means a 20-round boss volley puts 20 dynamic lights in the arena.
+	light: { color: Color3, brightness: number, rangeStuds: number }?,
+}
+
 export type PerfConfig = {
 	maxEmitters: number,
 	maxBeams: number,
@@ -171,6 +221,71 @@ VfxConfig.FIRE = {
 	-- room lands at nearly full strength.
 	screenFalloffStuds = 140,
 }
+
+----------------------------------------------------------------------
+-- Projectile look constants
+----------------------------------------------------------------------
+-- Shared by a delivery cosmetic's particle entry (EFFECTS) and its solid
+-- body (PROJECTILE_BODIES), which are two tables read with one key and so
+-- must not drift apart on colour.
+
+-- A projectile core is a Neon sphere, so this is light being emitted rather
+-- than surface colour — and that is exactly the trap. The first version of
+-- this was FIRE.flame's white-hot birth colour (255, 238, 196), on the
+-- reasoning that the orange belongs to the sheath and the core should be
+-- what the sheath is hotter than. On screen every shot rendered as a flat
+-- white disc: Neon clips a near-white tint to pure white, there is no
+-- gradient across a single Part to recover it, and the stretched bolt
+-- silhouette vanished inside the blowout.
+--
+-- So the core carries the orange and the *particles* carry the white — the
+-- opposite of the original split, and the one that actually reads as
+-- molten. Verified by screenshot, not reasoning; a value this close to
+-- clipping cannot be judged from the hex.
+local FIRE_CORE_COLOR = Color3.fromRGB(255, 152, 48)
+
+-- The Wizard boss's bolt. Deliberately neither in COLORS nor in FIRE: it is
+-- not a castable spell colour and it is not fire (the shot freezes). The
+-- only two things that draw it are its own EFFECTS entry and its trail, so
+-- it stays a local rather than becoming a fourth public palette.
+--
+-- Core pulled off near-white for the same clipping reason as the fire one
+-- above; the pale end of the gradient survives on the particles, which are
+-- small and sparse enough not to saturate.
+local ARCANE_CORE_COLOR = Color3.fromRGB(166, 110, 255)
+local ARCANE_GRADIENT = ColorSequence.new({
+	ColorSequenceKeypoint.new(0.00, Color3.fromRGB(226, 208, 255)),
+	ColorSequenceKeypoint.new(0.45, Color3.fromRGB(150, 96, 255)),
+	ColorSequenceKeypoint.new(1.00, Color3.fromRGB(72, 30, 150)),
+})
+
+-- What a fire trail fades through, and pointedly NOT FIRE.flame.
+--
+-- That sequence is built for a particle that is born white-hot and cools
+-- over its own lifetime, which is right for a sprite and wrong for a
+-- ribbon: a Trail's gradient runs along its *length*, so FIRE.flame put the
+-- white end at the shot and left a wide pale band trailing behind every
+-- projectile. This one starts at the core's own orange — so the ribbon
+-- looks like it is leaving the shot rather than being a separate white
+-- object attached to it — and cools into the same deep red the flame dies at.
+local FIRE_TRAIL_GRADIENT = ColorSequence.new({
+	ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 170, 60)),
+	ColorSequenceKeypoint.new(0.45, Color3.fromRGB(255, 92, 20)),
+	ColorSequenceKeypoint.new(1.00, Color3.fromRGB(140, 26, 8)),
+})
+
+-- Every projectile trail fades over its own length rather than ending on a
+-- hard edge — a ribbon that stops dead reads as a bug, not as a streak.
+--
+-- The midpoint is what keeps it from reading as a solid bar. A straight
+-- 0→1 ramp holds most of its opacity across most of its length, which at
+-- these widths is a painted stripe; dropping it to 0.7 by the halfway mark
+-- puts the visible mass right behind the shot where a wake belongs.
+local TRAIL_FADE = NumberSequence.new({
+	NumberSequenceKeypoint.new(0.0, 0.35),
+	NumberSequenceKeypoint.new(0.5, 0.70),
+	NumberSequenceKeypoint.new(1.0, 1.00),
+})
 
 ----------------------------------------------------------------------
 -- SFX
@@ -973,7 +1088,37 @@ VfxConfig.EFFECTS = {
 	-- when deliveryParams.cosmeticEffectId is set. `durationSec` matches
 	-- each spell's lifetimeSec so the trail emits for the whole flight.
 
-	-- Firebolt (T1) — small, fast, low-rate trail.
+	-- ⚠ Every entry below sets `rate` explicitly, and must.
+	--
+	-- Rebuilt 2026-08-10, and this is the first version of the three that
+	-- has ever drawn a particle. They were authored on `BurstSmall` with a
+	-- `durationSec` and no `rate` — and every template in
+	-- ReplicatedStorage.VfxTemplates ships `Rate = 0`, which is correct for
+	-- the burst effects that are the overwhelming majority of this file and
+	-- reach spawnEffect through `emitCount`. So spawnEffect dutifully set
+	-- `Enabled = true` on an emitter with a rate of zero, three times, and
+	-- every fire projectile in the game has been a bare neon cube with no
+	-- trail at all since the day these landed. A rate-based entry here is
+	-- the exception, not the norm — state the rate.
+	--
+	-- The second change is the vocabulary. These were the last things in the
+	-- red school still built on `BurstSmall`'s round blob texture, months
+	-- after the impacts moved to the `FireFlame`/`FireEmber`/`FireSmoke`
+	-- flipbook sheets (2026-08-08, -09) for exactly the reason those entries
+	-- give: a hundred round dots is a hundred round dots. A fire spell
+	-- should look like fire from the muzzle to the blast, not only where it
+	-- lands.
+	--
+	-- Each entry pairs with a PROJECTILE_BODIES entry under the same key,
+	-- which owns the shape, the trail ribbon and the light. Read them
+	-- together — the sizes here are chosen against the body sizes there.
+
+	-- Firebolt (T1) — a streaking bolt: thin stretched core, a flame sheath
+	-- that is gone about a body-length behind it, sparks shedding wide.
+	--
+	-- The short sheath lifetime is the whole character of this one. Let the
+	-- flame live as long as Fireball's and a Firebolt stops reading as fast
+	-- and starts reading as a small fireball, which is the T2 slot's job.
 	--
 	-- `sound` plays once at launch (spawnEffect has no looping path, so it
 	-- can't cover the whole 1.5 s flight — the wiki still lists a proper
@@ -983,16 +1128,37 @@ VfxConfig.EFFECTS = {
 	projectile_red_t1 = {
 		emitters = {
 			{
-				template    = "BurstSmall",
-				color       = C.red,
-				durationSec = 1.5,           -- matches FIREBOLT_LIFETIME_SEC
-				lifetime    = NumberRange.new(0.08, 0.18),
-				size        = NumberSequence.new({
-					NumberSequenceKeypoint.new(0.0, 0.22),
-					NumberSequenceKeypoint.new(1.0, 0.0),
+				template      = "FireFlame",
+				colorSequence = VfxConfig.FIRE.flame,
+				durationSec   = 1.5,           -- matches FIREBOLT_LIFETIME_SEC
+				rate          = 55,
+				lifetime      = NumberRange.new(0.14, 0.26),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 1.10),
+					NumberSequenceKeypoint.new(1.0, 0.15),
 				}),
-				speed       = NumberRange.new(0, 1),
-				spreadAngle = Vector2.new(12, 12),
+				-- Near zero, and that is deliberate for every sheath layer in
+				-- this block: the shot's own travel is what spaces the
+				-- particles into a trail. Give them real speed and the sheath
+				-- blooms outward into a cloud the bolt sits inside instead of
+				-- staying wrapped around it.
+				speed         = NumberRange.new(0, 1),
+				spreadAngle   = Vector2.new(10, 10),
+			},
+			-- Sparks. The one layer thrown wide, and what gives the bolt a
+			-- silhouette once the sheath behind it has burned out.
+			{
+				template      = "FireEmber",
+				colorSequence = VfxConfig.FIRE.ember,
+				durationSec   = 1.5,
+				rate          = 26,
+				lifetime      = NumberRange.new(0.25, 0.50),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.28),
+					NumberSequenceKeypoint.new(1.0, 0.00),
+				}),
+				speed         = NumberRange.new(1, 4),
+				spreadAngle   = Vector2.new(35, 35),
 			},
 		},
 		sound            = { soundId = SFX.cast, volume = 0.35, pitchRange = NumberRange.new(1.10, 1.25) },
@@ -1000,47 +1166,187 @@ VfxConfig.EFFECTS = {
 		anchor           = "worldPosition",
 	},
 
-	-- Fireball (T2) — denser, larger, longer-lived trail. Same layering
-	-- caveat as T1; slightly louder/lower to read as the bigger shot.
+	-- Fireball (T2) — the orb. The only projectile in the roster that is
+	-- meant to read as a burning *ball* rather than as a streak, which is
+	-- what separates it from the T1 and T4 bolts either side of it: three
+	-- layers instead of two, the flame growing after birth instead of
+	-- shrinking, and a smoke tail no bolt gets.
+	--
+	-- Slightly louder/lower than T1 so it reads as the bigger shot.
 	projectile_red_t2 = {
 		emitters = {
+			-- The body. Grows for the first half of its life so the orb looks
+			-- like it is boiling outward rather than shedding, then collapses
+			-- — the same birth-and-dissipate arc impact_damage_t2 uses.
+			-- Rate is the tuning dial here, and it is far lower than it looks
+			-- like it should be. Fireball travels at 55 studs/s, so rate 95
+			-- drops a particle every 0.58 studs while each one is ~3 studs
+			-- across: five-plus additive layers stacked at every point of the
+			-- path, which blows out to flat white cotton rather than fire.
+			-- Roughly one particle-width of spacing is what reads as flame —
+			-- past that, more particles buy saturation, not density.
 			{
-				template    = "BurstSmall",
-				color       = C.red,
-				durationSec = 2.0,           -- matches FIREBALL_LIFETIME_SEC
-				lifetime    = NumberRange.new(0.20, 0.40),
-				size        = NumberSequence.new({
-					NumberSequenceKeypoint.new(0.0, 0.55),
-					NumberSequenceKeypoint.new(1.0, 0.0),
+				template      = "FireFlame",
+				colorSequence = VfxConfig.FIRE.flame,
+				durationSec   = 2.0,           -- matches FIREBALL_LIFETIME_SEC
+				rate          = 40,
+				lifetime      = NumberRange.new(0.30, 0.55),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.00, 2.20),
+					NumberSequenceKeypoint.new(0.45, 2.70),
+					NumberSequenceKeypoint.new(1.00, 0.60),
 				}),
-				speed       = NumberRange.new(0, 2),
-				spreadAngle = Vector2.new(18, 18),
+				speed         = NumberRange.new(0, 2),
+				spreadAngle   = Vector2.new(24, 24),
+			},
+			{
+				template      = "FireEmber",
+				colorSequence = VfxConfig.FIRE.ember,
+				durationSec   = 2.0,
+				rate          = 30,
+				lifetime      = NumberRange.new(0.45, 0.90),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.42),
+					NumberSequenceKeypoint.new(1.0, 0.00),
+				}),
+				speed         = NumberRange.new(2, 7),
+				spreadAngle   = Vector2.new(60, 60),
+			},
+			-- The tail. Kept thin and short-lived on purpose — Fireball is the
+			-- workhorse of the red school and a generous smoke trail per cast
+			-- would leave the arena permanently hazed, the same argument that
+			-- caps the smoke on its impact burst.
+			{
+				template      = "FireSmoke",
+				colorSequence = VfxConfig.FIRE.smoke,
+				durationSec   = 2.0,
+				rate          = 12,
+				lifetime      = NumberRange.new(0.55, 0.95),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 1.4),
+					NumberSequenceKeypoint.new(1.0, 4.2),
+				}),
+				speed         = NumberRange.new(0, 2),
+				spreadAngle   = Vector2.new(30, 30),
 			},
 		},
 		sound            = { soundId = SFX.cast, volume = 0.45, pitchRange = NumberRange.new(0.95, 1.05) },
-		totalDurationSec = 2.2,
+		-- Covers the smoke layer (up to 0.95 s) emitted on the last frame of
+		-- a full 2.0 s flight. Cutting it to the flight time destroys the
+		-- attachment mid-plume and the tail pops out of existence.
+		totalDurationSec = 3.0,
 		anchor           = "worldPosition",
 	},
 
-	-- Volley (T4) — existing, longer-lived trail for the staggered stream.
+	-- Volley (T4) — three staggered bolts. Same two-layer bolt build as T1,
+	-- a touch wider and longer-lived so a stream of them still resolves into
+	-- three separate shots at spread.
+	--
 	-- Loudest/lowest of the three so a T4 volley reads as heavier per-shot.
 	projectile_red_t4 = {
 		emitters = {
 			{
-				template    = "BurstSmall",
-				color       = C.red,
-				durationSec = 3.0,
-				lifetime    = NumberRange.new(0.15, 0.30),
-				size        = NumberSequence.new({
-					NumberSequenceKeypoint.new(0.0, 0.40),
-					NumberSequenceKeypoint.new(1.0, 0.0),
+				template      = "FireFlame",
+				colorSequence = VfxConfig.FIRE.flame,
+				durationSec   = 3.0,
+				rate          = 40,
+				lifetime      = NumberRange.new(0.16, 0.30),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 1.35),
+					NumberSequenceKeypoint.new(1.0, 0.20),
 				}),
-				speed       = NumberRange.new(0, 2),
-				spreadAngle = Vector2.new(20, 20),
+				speed         = NumberRange.new(0, 1),
+				spreadAngle   = Vector2.new(12, 12),
+			},
+			{
+				template      = "FireEmber",
+				colorSequence = VfxConfig.FIRE.ember,
+				durationSec   = 3.0,
+				rate          = 20,
+				lifetime      = NumberRange.new(0.30, 0.60),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.32),
+					NumberSequenceKeypoint.new(1.0, 0.00),
+				}),
+				speed         = NumberRange.new(1, 5),
+				spreadAngle   = Vector2.new(40, 40),
 			},
 		},
 		sound            = { soundId = SFX.cast, volume = 0.55, pitchRange = NumberRange.new(0.80, 0.90) },
 		totalDurationSec = 3.2,
+		anchor           = "worldPosition",
+	},
+
+	-- Brain boss FireballVolley — the in-flight trail these shots never had.
+	-- Until now the boss's only projectile cosmetic was the launch *sound*
+	-- (projectile_boss_fireball, below), so a Brain volley was 20 orange
+	-- cubes crossing the arena in silence.
+	--
+	-- Rates are roughly a third of the player Firebolt's for a shot four
+	-- times its size, and that is the whole tuning constraint: this entry
+	-- runs 20 times concurrently, ~0.15 s apart, against a player spell that
+	-- runs once. Scale the sizes when it needs to read bigger, never the
+	-- rates.
+	projectile_boss_bolt = {
+		emitters = {
+			{
+				template      = "FireFlame",
+				colorSequence = VfxConfig.FIRE.flame,
+				durationSec   = 3.0,
+				rate          = 30,
+				lifetime      = NumberRange.new(0.18, 0.32),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 3.20),
+					NumberSequenceKeypoint.new(1.0, 0.60),
+				}),
+				speed         = NumberRange.new(0, 2),
+				spreadAngle   = Vector2.new(14, 14),
+			},
+			{
+				template      = "FireEmber",
+				colorSequence = VfxConfig.FIRE.ember,
+				durationSec   = 3.0,
+				rate          = 14,
+				lifetime      = NumberRange.new(0.30, 0.55),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.50),
+					NumberSequenceKeypoint.new(1.0, 0.00),
+				}),
+				speed         = NumberRange.new(2, 6),
+				spreadAngle   = Vector2.new(45, 45),
+			},
+		},
+		-- Deliberately silent. `projectile_boss_fireball` already fires once
+		-- per shot at the muzzle and its own comment explains why it is held
+		-- so quiet — a second per-shot sound riding the trail would make one
+		-- Brain attack 40 overlapping plays.
+		totalDurationSec = 3.2,
+		anchor           = "worldPosition",
+	},
+
+	-- Wizard boss FireballVolley — same bolt build, violet, and no flame
+	-- layer at all. The shot freezes rather than burns, so dressing it in
+	-- the fire flipbook would promise the wrong status; `FireEmber` is a
+	-- plain round spark and takes a tint cleanly, which is exactly what this
+	-- needs. Named for the boss, not the school, because it is neither red
+	-- nor blue in the castable sense.
+	projectile_boss_arcane_bolt = {
+		emitters = {
+			{
+				template      = "FireEmber",
+				colorSequence = ARCANE_GRADIENT,
+				durationSec   = 4.0,
+				rate          = 40,
+				lifetime      = NumberRange.new(0.22, 0.45),
+				size          = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.75),
+					NumberSequenceKeypoint.new(1.0, 0.00),
+				}),
+				speed         = NumberRange.new(0, 3),
+				spreadAngle   = Vector2.new(25, 25),
+			},
+		},
+		totalDurationSec = 4.2,
 		anchor           = "worldPosition",
 	},
 
@@ -1128,6 +1434,111 @@ VfxConfig.EFFECTS = {
 	block_pop_blue  = blockPopEntry(C.blue),
 	block_pop_wild  = blockPopEntry(WILDCARD_GOLD),
 }
+
+----------------------------------------------------------------------
+-- PROJECTILE_BODIES
+----------------------------------------------------------------------
+-- The solid of a drawn shot, keyed by the same `cosmeticEffectId` as its
+-- EFFECTS entry above. CosmeticProjectile reads it; nothing else does. See
+-- the ProjectileBodySpec type at the top of this file for what each field
+-- means and why this isn't a field on EffectSpec.
+--
+-- A cosmeticEffectId with no entry here still flies — it just flies as the
+-- untouched axis-aligned neon cube every projectile in this game was until
+-- 2026-08-10. That fallback is what keeps this optional for a future
+-- non-fire projectile that wants particles and nothing else.
+--
+-- Two shapes across five entries, and the split is per the design call of
+-- 2026-08-10: Fireball is the one shot that reads as a burning *ball*;
+-- everything else — Firebolt, Volley and both bosses — is a comet head with
+-- a streak behind it. `stretch` is what makes that difference, and it is
+-- large (≈3×) on purpose. A bolt only reads as travelling if it is visibly
+-- longer than it is wide at the speeds these move.
+--
+-- Declared as an annotated local and then assigned, rather than built
+-- inline with a trailing `::` cast. The annotation gives Luau an expected
+-- type while it reads the literal, which is what lets `shape = "bolt"`
+-- narrow to the "orb" | "bolt" union; a cast applied afterwards is checking
+-- an already-inferred plain `string` against that union and rejects it.
+local PROJECTILE_BODIES: { [string]: ProjectileBodySpec } = {
+	-- Firebolt. 0.5-stud gameplay size × 1.6 girth × 3.4 stretch ≈ a
+	-- 0.8 × 2.7 stud sliver.
+	projectile_red_t1 = {
+		shape     = "bolt",
+		stretch   = 3.4,
+		girth     = 1.6,
+		coreColor = FIRE_CORE_COLOR,
+		trail = {
+			widthStuds   = 0.85,
+			lifetimeSec  = 0.22,
+			color        = FIRE_TRAIL_GRADIENT,
+			transparency = TRAIL_FADE,
+		},
+	},
+
+	-- Fireball. The only body with a light, and it can afford one precisely
+	-- because it is the only projectile spell that arrives one at a time —
+	-- see the note on ProjectileBodySpec.light.
+	projectile_red_t2 = {
+		shape     = "orb",
+		girth     = 1.35,
+		coreColor = FIRE_CORE_COLOR,
+		trail = {
+			widthStuds   = 1.90,
+			lifetimeSec  = 0.34,
+			color        = FIRE_TRAIL_GRADIENT,
+			transparency = TRAIL_FADE,
+		},
+		light = { color = VfxConfig.FIRE.light, brightness = 3.0, rangeStuds = 16 },
+	},
+
+	-- Volley. A hair fatter and longer-lived than Firebolt so three of them
+	-- at 12° spread still resolve as three shots rather than one smear.
+	projectile_red_t4 = {
+		shape     = "bolt",
+		stretch   = 3.0,
+		girth     = 1.50,
+		coreColor = FIRE_CORE_COLOR,
+		trail = {
+			widthStuds   = 0.95,
+			lifetimeSec  = 0.26,
+			color        = FIRE_TRAIL_GRADIENT,
+			transparency = TRAIL_FADE,
+		},
+	},
+
+	-- Brain boss. Girth barely above 1 because the gameplay size is already
+	-- 2 studs — the multipliers the player bolts use would put a 3-stud-wide
+	-- slab on screen 20 times over.
+	projectile_boss_bolt = {
+		shape     = "bolt",
+		stretch   = 2.8,
+		girth     = 1.15,
+		coreColor = FIRE_CORE_COLOR,
+		trail = {
+			widthStuds   = 2.40,
+			lifetimeSec  = 0.30,
+			color        = FIRE_TRAIL_GRADIENT,
+			transparency = TRAIL_FADE,
+		},
+	},
+
+	-- Wizard boss.
+	projectile_boss_arcane_bolt = {
+		shape     = "bolt",
+		stretch   = 3.2,
+		girth     = 1.40,
+		coreColor = ARCANE_CORE_COLOR,
+		trail = {
+			widthStuds   = 1.10,
+			lifetimeSec  = 0.28,
+			color        = ARCANE_GRADIENT,
+			transparency = TRAIL_FADE,
+		},
+	},
+}
+
+VfxConfig.PROJECTILE_BODIES = PROJECTILE_BODIES
 
 VfxConfig.PERF = {
 	maxEmitters      = 32,

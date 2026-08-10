@@ -1,6 +1,6 @@
 ---
 type: system
-description: Visual effects — particle effects for spell casts/impacts (shipped via VfxController + spawnEffect + cross-client broadcast), UI feedback animations, and per-color theming. World cast/impact VFX are implemented; PERF guardrails and some lanes remain planned.
+description: Visual effects — particle effects for spell casts/impacts (shipped via VfxController + spawnEffect + cross-client broadcast), projectile bodies and trails, UI feedback animations, and per-color theming. World cast/impact/projectile VFX are implemented; PERF guardrails and some lanes remain planned.
 status: implemented (core); planned (PERF guardrails, collect-pop)
 updated: 2026-08-10
 ---
@@ -10,13 +10,13 @@ updated: 2026-08-10
 > **Implementation status (2026-06-05).** The world-VFX core shipped — but with different module names than the plan below describes. Read this banner first; treat the rest of the page as the original design plan, accurate in intent but stale on specifics.
 >
 > **What exists on disk:**
-> - `src/shared/Vfx/VfxConfig.luau` — `COLORS`, `SFX` (sound asset ids), `EFFECTS` (cast t1–t4 red, t1–t3 blue, **t1–t3 green**, `impact_damage/heal/freeze/shield/knockup/wall/buff`, **`shield_block`**, **`shield_break`**, **`impact_damage_t2`/`impact_damage_t3`**, `projectile_red_t1/t2/t4`, **`projectile_boss_fireball`**, **`aoe_boss_groundslam`**, **`projectile_destroy`**, **`wall_rise_rumble`/`wall_rise_dust`** — 2026-08-04: every `EFFECTS` entry now carries an audible placeholder `sound`, none left `UNSET`), and a `PERF` table.
+> - `src/shared/Vfx/VfxConfig.luau` — `COLORS`, `SFX` (sound asset ids), `EFFECTS` (cast t1–t4 red, t1–t3 blue, **t1–t3 green**, `impact_damage/heal/freeze/shield/knockup/wall/buff`, **`shield_block`**, **`shield_break`**, **`impact_damage_t2`/`impact_damage_t3`**, `projectile_red_t1/t2/t4`, **`projectile_boss_fireball`**, **`projectile_boss_bolt`/`projectile_boss_arcane_bolt`**, **`aoe_boss_groundslam`**, **`projectile_destroy`**, **`wall_rise_rumble`/`wall_rise_dust`** — 2026-08-04: every `EFFECTS` entry now carries an audible placeholder `sound`, none left `UNSET`), and a `PERF` table.
 > - `src/shared/Vfx/spawnEffect.luau` — **the shared spawn engine** (cast/impact/projectile), used by *both* the client `VfxController` and `SkillDelivery`. The plan's inline `VfxController.spawnCast/spawnImpact` methods were never built that way.
 > - `src/client/Vfx/VfxController.client.luau` — plays cast VFX locally on `CastAction.spellResolved`, relays to server.
 > - `src/server/Vfx/VfxBroadcastService.server.luau` — validates + `SpellVfxEvent:FireAllClients`.
 > - `src/shared/Vfx/VfxBroadcast.luau` + `src/client/Vfx/WorldVfxController.client.luau` — **the server's only legal way to make a player see or hear something** (2026-08-04). See § "Nothing player-facing runs on the server" below.
 > - `src/shared/Vfx/Remotes/*.model.json` — `BroadcastSpellVfx` / `SpellVfxEvent` / `ProjectileVfxEvent` / `WorldVfxEvent`.
-> - `src/shared/Vfx/CosmeticProjectile.luau` + `src/client/Vfx/ProjectileVfxController.client.luau` — the *seen* projectile. The authoritative shot is server-simulated and invisible; each client replays the broadcast launch parameters locally so a blocked shot dies on the shield bubble rather than ~12 studs short of it. See [[systems/SkillPipeline]] § "Projectile visuals are client-local".
+> - `src/shared/Vfx/CosmeticProjectile.luau` + `src/client/Vfx/ProjectileVfxController.client.luau` — the *seen* projectile. The authoritative shot is server-simulated and invisible; each client replays the broadcast launch parameters locally so a blocked shot dies on the shield bubble rather than ~12 studs short of it. See [[systems/SkillPipeline]] § "Projectile visuals are client-local". Since 2026-08-10 it also builds the shot's *body* (sphere or stretched comet head, Trail, light) from **`VfxConfig.PROJECTILE_BODIES`** — see § "Projectiles" below.
 > - `src/shared/Vfx/StatusVisuals/FreezeVfx.luau` — the freeze ice-shard status visual (see [[systems/SkillPipeline]] § VFX Layers).
 > - `src/shared/Vfx/StatusVisuals/InfernoVfx.luau` + `src/client/Vfx/InfernoVfxController.client.luau` — the burning-rig flames (2026-08-08). Attribute-driven off `_burning`, like ShieldVfx. Parents `ParticleEmitter`s straight onto every limb over `MIN_PART_VOLUME` rather than welding Parts, which is what makes the fire *engulf* the rig instead of being a bonfire it stands in — a ParticleEmitter parented to a BasePart inherits that part's volume for its Sphere/Surface emission shape.
 > - `src/shared/Vfx/ScreenImpact.luau` — the screen-space lane (2026-08-08): warm `ColorCorrectionEffect` + `BlurEffect` in `Lighting`, plus a camera shake via `Humanoid.CameraOffset`. Deliberately **not** `Camera.CFrame` — the default Roblox camera scripts own that and rewrite it every frame.
@@ -51,6 +51,41 @@ Verify before building on an asset, and verify correctly:
 - Always include a known-good id as a control. Without `1913819781` in the batch there is no way to tell "this asset is unusable" from "my probe is broken".
 
 When a needed texture has no usable owned equivalent, the path is to author one and upload it to the universe — not to ship an id that renders for nobody.
+
+## A rate-based entry must state its `rate`
+
+**Every template in `VfxTemplates` ships `Rate = 0`.** That is correct for the overwhelming majority of `EFFECTS`, which are one-shot bursts reaching `spawnEffect` through `emitCount`. It is a silent kill switch for the minority that use `durationSec`.
+
+`spawnEffect`'s `durationSec` branch only sets `Enabled = true`. It does not supply a rate, and `applyEmitterOverrides` writes one only when the spec has a `rate` field. So an entry with `durationSec` and no `rate` enables an emitter that emits nothing, logs nothing, and warns nothing — it looks authored and does not exist.
+
+This shipped in all three delivery cosmetics (`projectile_red_t1/t2/t4`) and went unnoticed for months: **every fire projectile in the game was a bare neon cube with no trail at all**, and the "make the projectiles nicer" task turned out to be mostly "make them appear". Fixed 2026-08-10; all rate-based entries now state `rate` explicitly.
+
+If you author a `durationSec` entry, set `rate`. If a trail is invisible, check `rate` before touching anything else — count and size are the wrong place to look, because the emitter never ran.
+
+## Projectiles (2026-08-10)
+
+Fire projectiles were the last thing in the red school still speaking the pre-flipbook vocabulary — `BurstSmall`'s round blob, on top of the dead-`rate` bug above. They now draw from the same `FireFlame`/`FireEmber`/`FireSmoke` layers and `VfxConfig.FIRE` gradients as the impacts, so the school reads as one thing from muzzle to blast.
+
+**`VfxConfig.PROJECTILE_BODIES` is a second table keyed by the same `cosmeticEffectId`.** It owns the *solid* of a drawn shot — shape, stretch, core colour, trail ribbon, light — while the `EFFECTS` entry under that key owns the particles. Deliberately not a field on `EffectSpec`: `spawnEffect` deals in emitters, sound and light and has no business knowing a shot has a shape, and a projectile-only field would be dead weight on every cast burst. `CosmeticProjectile` reads it; nothing else does. **A key with no entry still flies** — as the old axis-aligned neon cube — which is what keeps it optional for a future non-fire projectile.
+
+| id | body | notes |
+|---|---|---|
+| `projectile_red_t1` (Firebolt) | bolt, 3.4× | short sheath; flame gone ~a body-length behind it |
+| `projectile_red_t2` (Fireball) | orb | three layers, flame *grows* after birth, smoke tail, the only body with a light |
+| `projectile_red_t4` (Volley) | bolt, 3.0× | wider than T1 so three at 12° spread stay three shots |
+| `projectile_boss_bolt` (Brain) | bolt, 2.8× | first in-flight trail the boss has ever had |
+| `projectile_boss_arcane_bolt` (Wizard) | bolt, 3.2× | violet, ember-only — the shot *freezes*, so no flame layer |
+
+Four things that had to be found by looking, not by reading:
+
+- **`Shape = Ball` with a non-uniform `Size` does not render an ellipsoid.** The engine draws a round sphere and ignores the other two axes. The first pass set `Size.Z` to 3.4× and every bolt still came out a circle. Elongation needs a `SpecialMesh` of `MeshType = Sphere`, whose `Scale` *is* per-axis. Caught only by stripping the flame off and looking at the bare silhouette — with a sheath on, a comet and a ball are indistinguishable.
+- **Neon clips a near-white tint to pure white.** Cores were first set to `FIRE.flame`'s white-hot birth colour, reasoning the sheath should be what is hotter; on screen every shot was a flat white disc with the silhouette lost inside the blowout. The core carries the *orange* and the particles carry the white — the opposite split, and the one that reads as molten. A colour this close to clipping cannot be judged from the hex.
+- **A Trail's gradient runs along its length, not over a lifetime.** Reusing `FIRE.flame` (built for a particle cooling as it ages) put the white end at the shot and dragged a wide pale band behind everything. Fire trails use their own `FIRE_TRAIL_GRADIENT`, start at the core's orange, and sit below `LightEmission` 1 so the colour survives the blend.
+- **Particle density must be judged at the real speed.** Fireball at rate 95 and 3-stud sprites, moving 55 studs/s, stacked ~5 additive layers at every point of its path and saturated to white cotton (now 40). A probe at an artificially slow speed piles every particle on one spot and is worthless for this — it will tell you a correct entry is broken.
+
+**Death no longer erases the trail.** Destroying the Part on the impact frame took its `Attachment` with it, and killing an Attachment kills every particle already emitted from it — so a shot stopped by a wall 0.2 s into a 2 s flight deleted its own streak back to the muzzle. `CosmeticProjectile.retire()` hides the core, switches the emitters and Trail off, drops the light, and lets `Debris` collect the shell ~1.6 s later. Impact cues are unaffected: they spawn on their own throwaway anchors.
+
+**Rendered size is never gameplay size.** `girth`/`stretch` scale only the drawn body; the shield-contact padding in the flight loop reads `params.size`, the size the server launched the real shot with. Keep it that way — a 3× longer body that also padded the shell test would block where the server does not, which is the class of divergence [[systems/SkillPipeline]] § "Projectile visuals are client-local" exists to prevent.
 
 ## Nothing player-facing runs on the server
 
