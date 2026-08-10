@@ -68,6 +68,22 @@ The **stream** goes to everyone *including* the popper, who deliberately does **
 
 Cost is bounded by a concurrent-stream cap (`VfxConfig.PERF.maxBlockPops`), not by duration: flight is deliberately longer than the tap cooldown so a fast speller has two streams in the air, which is the correct read rather than a defect.
 
+### Stream layers, and the order they degrade in
+
+| Layer | Role | Dropped when |
+|---|---|---|
+| Ribbon (`Beam`) | The cue itself. Tracks the collector for free, because a Beam between two live Attachments follows both ends with no per-frame code. | Never — only the whole-stream cap |
+| Motes | The block's mana visibly coming apart and being drawn in. Flavour, not information. | Origin beyond `MOTE_VISIBLE_DISTANCE`; thinned 8 → 3 as concurrent streams approach the cap |
+| Arrival shrink | Motes taper to a quarter size so the cloud enters the collector rather than piling on their chest. | With the motes |
+
+Losing motes costs flavour; losing the ribbon costs information — hence the order. Thinning is proportional rather than a threshold: a fight that quietly loses half its sparkles still reads correctly, whereas streams that randomly do or don't have motes reads as a bug. **The local player's own stream is exempt** from both the distance cull and the thinning — it is one stream, it is the feedback for their own input, and it is the one they are looking at.
+
+Every mote rides a quadratic Bézier whose endpoint is re-read each frame from the collector's HumanoidRootPart, for the same reason the payload carries a userId: a curve baked at spawn arcs gracefully into empty ground. Per-mote flight is jittered **shorter** only, never longer — the stream is torn down when the ribbon lands, so a longer mote would be destroyed mid-air short of its target.
+
+All of it runs on **one** `Heartbeat` connection per stream, not one per mote — at eight motes across a dozen streams, per-mote scheduling would mean ~100 independent schedules for a 0.4 s effect. Same single-driver shape [[systems/LetterBlock]]'s animator uses for the whole block field.
+
+Measured on a moving collector: 8 motes peak, alive across 24 frames, 34 distinct sizes in flight (stagger and shrink both live), closest approach to the HumanoidRootPart 0.27 studs, and zero instances left behind afterwards.
+
 ## MindFull gate
 
 When the buffer hits 12/12, [[systems/MindFullManager]] fires `mindFull`. `BlockTapController` simply polls `:isMindFull()` on each input — no signal wiring needed because the check is cheap and the gate is checked exactly once per event (a refused tap plays the client-local fizzle cue). When the player removes tiles or memorizes a word, the buffer shrinks and `:isMindFull()` returns false, re-enabling input.

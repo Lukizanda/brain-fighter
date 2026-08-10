@@ -1300,3 +1300,15 @@ Rollback is `WordBuffer:removeLastMatching`, not "pop the last slot" — the rou
 **Cosmetics split rather than both gated behind confirmation.** The burst stays predicted — it remains true even when you lose the race, because the block popped either way — while the stream is drawn only from the server's confirmed branch, since attribution is a hit-marker-class claim `CastAction`'s prediction contract forbids this layer from asserting. A stream you did not earn is never drawn, with no cancellation logic.
 
 Two harness lessons worth keeping: Rojo syncs into the **Edit** DataModel, so edits made during a running playtest never reach it (stop and restart, or you test stale code); and deferred `BindableEvent` delivery does not flush on a bare `task.wait()` inside an injected `execute_luau` chunk — `RunService.Heartbeat:Wait()` does. The latter also fixed latent flakiness in the pre-existing WordBuffer change-count assertion.
+
+## [2026-08-10] ingest | Phase 5.7 — collect stream motes (third layer)
+
+The sparkle cloud: 8 block-coloured points pulled off a shell around the block and drawn into the collector, on top of the ribbon and the arrival taper. Completes the layered cue the stage-3 design set up.
+
+Each mote rides a quadratic Bézier whose endpoint is **re-read every frame** from the collector's HumanoidRootPart — same reason the payload carries a userId rather than a position. A curve baked at spawn arcs gracefully into empty ground while the player runs out from under it. Per-mote flight is jittered **shorter only**: the stream is torn down when the ribbon lands, so a mote granted a longer flight would be destroyed mid-air short of its target. That also orders the events correctly — sparks land, then the connection winks out.
+
+One `Heartbeat` connection drives the ribbon and all its motes. Per-mote tweens or connections would mean ~100 independent schedules for a 0.4 s effect at a dozen concurrent streams; this is the single-driver shape `LetterBlockAnimator` already uses for the whole block field.
+
+Degradation is ordered by what it costs: motes thin proportionally 8 → 3 as concurrent streams approach `PERF.maxBlockPops` and drop entirely past `MOTE_VISIBLE_DISTANCE`, while the ribbon is never dropped short of the whole-stream cap. Losing motes costs flavour; losing the ribbon costs attribution. Thinning is proportional rather than a threshold, because streams that randomly do or don't have motes reads as a bug where a uniformly sparser fight does not. The local player's own stream is exempt from both — one stream, and it is the feedback for their own input.
+
+Measured against a moving collector: 8 motes peak, alive across 24 frames, 34 distinct sizes in flight (stagger and shrink both live), 0.27-stud closest approach to the HumanoidRootPart, 0 instances left behind.
