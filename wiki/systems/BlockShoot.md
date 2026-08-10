@@ -60,7 +60,11 @@ The stream is the PvP attribution cue and it replaces the blaster beam. The beam
 
 **The stream's destination is a `collectorUserId`, not a position.** A `Vector3` is right for `beam` (a laser is instantaneous) and wrong here, because the collector is *running* during the flight — a frozen endpoint funnels into the ground where they used to be. An Instance would hit the nil-arrival race and break on respawn. The userId is re-resolved per client per frame, and failing to resolve mid-flight simply ends the stream. Verified against a moving collector: over 25 frames while the character travelled 19.2 studs, the endpoint-to-HumanoidRootPart gap stayed at **0.00 studs**. A stationary test passes even with the bug, so test this moving.
 
-`drawnLocallyBy = player.UserId` excludes the popper, who drew both on the frame they clicked. That exclusion is only safe because the client's draw sits on the same branch that fires the remote, below the buffer check — a rejected append must never draw a burst no other player can have a match for.
+**The two cosmetics are broadcast differently, and the split is the point.**
+
+The **burst** excludes the popper (`drawnLocallyBy`), who predicts it on the frame they click. Safe to predict because it stays true even when they lose the race — the block popped either way, just for somebody else.
+
+The **stream** goes to everyone *including* the popper, who deliberately does **not** predict it. It is an attribution claim — "that letter came to me" — which is the same class of thing as a hit marker, and [[systems/CastAction]]'s prediction contract forbids this layer from asserting one. Drawing it only from the server's confirmed branch means a player who loses a race never sees a stream flow into them for a letter they did not get, with no cancellation logic needed.
 
 Cost is bounded by a concurrent-stream cap (`VfxConfig.PERF.maxBlockPops`), not by duration: flight is deliberately longer than the tap cooldown so a fast speller has two streams in the air, which is the correct read rather than a defect.
 
@@ -68,11 +72,22 @@ Cost is bounded by a concurrent-stream cap (`VfxConfig.PERF.maxBlockPops`), not 
 
 When the buffer hits 12/12, [[systems/MindFullManager]] fires `mindFull`. `BlockTapController` simply polls `:isMindFull()` on each input — no signal wiring needed because the check is cheap and the gate is checked exactly once per event (a refused tap plays the client-local fizzle cue). When the player removes tiles or memorizes a word, the buffer shrinks and `:isMindFull()` returns false, re-enabling input.
 
-## Known gap — the optimistic append
+## Contested blocks — the optimistic append and its rollback
 
-The `WordBuffer:append` at step 5 happens **before** the remote fires, and nothing tells the client if the server rejected it. In solo play that is safe: nobody else can take your block. In PvP the loser of a same-frame race for one block keeps a **phantom letter** for the rest of the round — a letter they never got, occupying a slot and eventually paying out energy on Memorize.
+The `WordBuffer:append` at step 5 happens **before** the remote fires. The server half of the race has always worked for free (check 3 below: the first `Destroy` unparents the block, so the second request fails validation). The client half did not — nothing told it a consume had been refused, so the loser of a same-frame race for one block kept a **phantom letter** for the rest of the round, occupying a slot and eventually paying out energy on Memorize. Unreachable in solo play, routine in PvP. Closed in Phase 5.7 stage 4.
 
-The server half already handles the race correctly and for free (check 3 below). The client half does not. Closing it is Phase 5.7 stage 4.
+**The reply carries a client-minted request id, not the block.** Echoing the block is the obvious design and it fails exactly where it matters: the rejection that matters most is losing a race, and by then the winner has already destroyed that block — an Instance reference to a destroyed object is the same nil-arrival trap [[systems/VisualEffects]]' `playOn` documents, so the rollback would no-op in the one case it exists for. A number always survives the trip. The id is opaque to the server: type-checked, echoed, never used for a lookup, and returned only to the player who sent it.
+
+**Rollback removes the last tile matching (letter, colour)** via `WordBuffer:removeLastMatching`, and each part of that is load-bearing:
+
+- Not `remove(size())` — the round trip is long enough for the player to have tapped two more blocks, and popping the newest slot would confiscate a letter they *did* earn.
+- Not the remembered index either — `reorder` and `remove` shuffle indices, so a stored index goes stale the moment the player touches their buffer.
+- Last-matching rather than first, because appends land at the end. Once the player has reordered, two tiles of the same letter and colour are genuinely indistinguishable (the buffer has no tile identity), so the newest match is the best available guess.
+- No match is a **no-op**, not an error: the player may have destroyed the tile themselves before the rejection landed, and eating an innocent letter would be strictly worse.
+
+Verified live end-to-end: buffer `[N,Y]`, two more taps → `[N,Y,W,T]`, reject the **W** (the older of the pair, not the newest) → `[N,Y,T]`. Plus six unit cases in `WordBuffer/__tests.luau` covering colour matching, duplicates, no-match, empty buffer, and the `changed` signal firing only on a real removal.
+
+Unanswered entries expire after `PENDING_TTL_SEC` (10 s), since the server replies only on refusal — an ack per success would double this remote's traffic on the most frequent action in the game to carry one bit that is almost always "fine". A rejection arriving after expiry is logged rather than silent; if that ever appears in real play the TTL is too short for the round trip.
 
 ## PlayerSession
 

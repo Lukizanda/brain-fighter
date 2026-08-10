@@ -25,11 +25,9 @@ local UserInputService  = game:GetService("UserInputService")
 
 local BlockShoot     = require(ReplicatedStorage.Shared.BlockShoot)
 local BlockTapConfig = require(ReplicatedStorage.Shared.BlockShoot.BlockTapConfig)
-local LetterBlocks   = require(ReplicatedStorage.Shared.LetterBlocks)
 local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillVisuals   = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 local VfxConfig      = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
-local collectStream  = require(ReplicatedStorage.Shared.Vfx.collectStream)
 local PlayerSession  = require(script.Parent.PlayerSession)
 
 local log = Logger.new("BlockTapController")
@@ -53,6 +51,39 @@ fizzleSound.PlaybackSpeed = FIZZLE_PLAYBACK_SPEED
 fizzleSound.Parent        = SoundService
 
 local lastPopped: number = -math.huge
+
+-- Letters appended optimistically and not yet settled, keyed by a
+-- client-minted request id.
+--
+-- **Not keyed by the block**, which was the obvious first choice and is
+-- wrong. The server would have to echo the block back to say which
+-- consume failed, and the single most important rejection — losing a race
+-- for a block — is precisely the case where that block has *already been
+-- destroyed* by the winner. An Instance reference for a destroyed object
+-- is exactly the kind of thing VfxBroadcast.playOn warns arrives as nil,
+-- so the rollback would silently no-op in the one situation it exists
+-- for. A number always survives the trip.
+--
+-- The id is opaque to the server: it type-checks it and echoes it, never
+-- looks anything up with it, so this adds no trust surface.
+--
+-- The server only replies when it *refuses*, so a success leaves its
+-- entry behind — hence the sweep below rather than an ack on the hot
+-- path, which would double this remote's traffic on the most frequent
+-- action in the game to carry one bit that is almost always "fine".
+type PendingAppend = { letter: string, color: string, firedAt: number }
+local pending: { [number]: PendingAppend } = {}
+local requestSeq = 0
+
+-- How long an unanswered append waits before it is assumed to have
+-- succeeded. A rejection travels one round trip; this is orders of
+-- magnitude more than that, because the cost of the two mistakes is not
+-- symmetric. Expiring too early means a late rejection finds no entry and
+-- the phantom letter survives — the exact bug this stage exists to close.
+-- Expiring late costs a table entry.
+local PENDING_TTL_SEC = 10
+
+local PENDING_SWEEP_SEC = 5
 
 -- Alive-and-embodied check.
 --
@@ -125,9 +156,8 @@ local function tryPop(screenPosition: Vector2)
 		return
 	end
 
-	-- Read before firing: the server destroys the block, and the burst and
-	-- stream both need to start from where it stood, not from a Model
-	-- mid-teardown.
+	-- Read before firing: the server destroys the block, and the burst
+	-- needs to start from where it stood, not from a Model mid-teardown.
 	local blockPos = block:GetPivot().Position
 
 	local appended = session.wordBuffer:append(letter, color)
@@ -137,19 +167,80 @@ local function tryPop(screenPosition: Vector2)
 		return
 	end
 
-	consumeRemote:FireServer(block)
+	-- The append above is optimistic — the server has not agreed yet. Record
+	-- what we owe back so a rejection can undo exactly this letter.
+	requestSeq += 1
+	local requestId = requestSeq
+	pending[requestId] = { letter = letter, color = color, firedAt = os.clock() }
+
+	consumeRemote:FireServer(block, requestId)
 	log:info(string.format("popped %s (%s)", letter, color))
 
-	-- Prediction layer: draw on the frame we clicked rather than waiting a
-	-- round trip. BlockShootService redraws both of these for every OTHER
-	-- client once it has validated the consume, and excludes us via
-	-- drawnLocallyBy so we never see them twice. That exclusion is only
-	-- safe because this draw sits on the same branch that fires the remote
-	-- — deliberately below the buffer check, so a rejected append never
-	-- draws a burst no other player can have a match for.
+	-- Predict the burst, but NOT the stream. The split is the point.
+	--
+	-- The burst is a spark: it says a block came apart here. That stays
+	-- true even when we lose a race for it, because the block really did
+	-- pop — the winner popped it — so drawing it immediately is honest and
+	-- the tap feels instant.
+	--
+	-- The stream is an attribution claim: "that letter came to *me*". That
+	-- is the same class of thing as a hit marker, which CastAction's
+	-- prediction contract explicitly forbids this layer from asserting. So
+	-- it is drawn only once the server has confirmed the consume — which is
+	-- why BlockShootService broadcasts `collect` to everyone *including*
+	-- the popper, with no drawnLocallyBy exclusion. A stream you did not
+	-- earn is never drawn rather than drawn and retracted.
 	SkillVisuals.spawnEffectAtPoint(blockPos, VfxConfig.resolveBlockPopId(color))
-	collectStream.play(blockPos, LocalPlayer.UserId, LetterBlocks.COLOR_TINTS[color])
 end
+
+-- The consume was refused. Give the letter back.
+--
+-- Every rejection rolls back identically. The client does not need to
+-- know whether it lost a race, tripped the rate limiter or sent something
+-- malformed — it needs one bit, that the letter did not land.
+local function onRejected(requestId: any)
+	if typeof(requestId) ~= "number" then return end
+	local entry = pending[requestId]
+	if not entry then
+		-- Already expired, or a reply for something we never sent. Doing
+		-- nothing is right: with no record of an optimistic append there is
+		-- nothing owed back, and guessing would confiscate an earned letter.
+		--
+		-- Logged rather than silent. This branch is indistinguishable from
+		-- "the rollback is broken" when you are looking at a buffer that
+		-- still has a phantom letter in it, and a silent return cost a
+		-- diagnostic cycle during 5.7 stage 4. If this ever fires in real
+		-- play it means PENDING_TTL_SEC is too short for the round trip.
+		log:warn(string.format(
+			"rejection for request %d had no pending entry — expired (TTL %ds) or never sent",
+			requestId, PENDING_TTL_SEC))
+		return
+	end
+	pending[requestId] = nil
+
+	local removed = session.wordBuffer:removeLastMatching(entry.letter, entry.color)
+	fizzleSound:Play()
+	log:info(string.format(
+		"consume rejected — rolled back '%s' (%s), tile found: %s",
+		entry.letter, entry.color, tostring(removed)
+	))
+end
+
+consumeRemote.OnClientEvent:Connect(onRejected)
+
+-- Retire entries the server never refused, so the table cannot grow
+-- across a long round. Every successful pop leaves one behind by design.
+task.spawn(function()
+	while true do
+		task.wait(PENDING_SWEEP_SEC)
+		local now = os.clock()
+		for requestId, entry in pending do
+			if now - entry.firedAt > PENDING_TTL_SEC then
+				pending[requestId] = nil
+			end
+		end
+	end
+end)
 
 -- gameProcessedEvent is load-bearing, not defensive.
 --

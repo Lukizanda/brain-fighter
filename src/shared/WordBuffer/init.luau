@@ -94,6 +94,45 @@ function WordBuffer:remove(index: number)
 	self._changedSignal:Fire()
 end
 
+-- Take back one tile that turned out never to have been earned.
+--
+-- The append that put it here is optimistic: BlockTapController adds the
+-- letter before the server has agreed the block was theirs to take. In
+-- solo play that is always safe, because nobody else can take your block.
+-- In PvP the loser of a same-frame race for one block must give the
+-- letter back, or they keep a phantom tile for the rest of the round.
+--
+-- Removes the LAST tile matching (letter, color), and this is the whole
+-- subtlety:
+--
+--   * Not `remove(size())`. The round trip is long enough for the player
+--     to have tapped two more blocks, and popping the newest slot would
+--     confiscate a letter they did earn.
+--   * Not the index the tile was appended at either — `reorder` and
+--     `remove` both shuffle indices, so a remembered index goes stale the
+--     moment the player touches their buffer.
+--   * Last-matching rather than first: appends land at the end, so absent
+--     any reordering the phantom *is* the last match. Once the player has
+--     reordered, two tiles of the same letter and colour are genuinely
+--     indistinguishable — the buffer has no tile identity — so any match
+--     is as defensible as another, and the newest is the best guess at
+--     the one that just arrived.
+--
+-- Returns false and changes nothing when there is no match: the player
+-- may have already destroyed the tile themselves, and a rejection that
+-- arrives afterwards must be a no-op rather than eat an innocent letter.
+function WordBuffer:removeLastMatching(letter: string, color: Color): boolean
+	for index = #self._tiles, FIRST_INDEX, -1 do
+		local tile = self._tiles[index]
+		if tile.letter == letter and tile.color == color then
+			table.remove(self._tiles, index)
+			self._changedSignal:Fire()
+			return true
+		end
+	end
+	return false
+end
+
 function WordBuffer:reorder(fromIdx: number, toIdx: number)
 	local n = #self._tiles
 	if fromIdx < FIRST_INDEX or fromIdx > n or toIdx < FIRST_INDEX or toIdx > n then

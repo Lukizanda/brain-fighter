@@ -53,29 +53,66 @@ local consumeLimiter = RateLimiter.new(
 -- a single probe would leave no trace at all.
 local rejectionLogBudget = RateLimiter.new(1, 1 / BlockShootConstants.REJECTION_LOG_THROTTLE_SEC)
 
-local function reject(player: Player, reason: string)
+-- Drop the request, log it, and — new in 5.7 stage 4 — tell the client.
+--
+-- The client appended the letter to its WordBuffer *before* firing this
+-- remote, and until now nothing ever told it the consume had failed. In
+-- solo play that was safe: nobody else can take your block, so the only
+-- rejections were exploit attempts by a client that would ignore the
+-- reply anyway. PvP makes it reachable by honest players — two people
+-- tapping one block on the same frame, where exactly one can win — and
+-- the loser would otherwise keep a phantom letter for the rest of the
+-- round, occupying a slot and eventually paying out energy on Memorize.
+--
+-- Reused `ConsumeBlock` rather than adding a sibling remote: the
+-- rejection *is* the response to that request, and one wire object is
+-- one thing to keep in step. Firing back to the requesting player only,
+-- so this stays off the broadcast path entirely.
+--
+-- What comes back is the client's own opaque request id, NOT the block.
+-- Echoing the block looks natural and fails exactly where it matters:
+-- the rejection that matters most is losing a race, and by then the
+-- winner has already destroyed that block — an Instance reference for a
+-- destroyed object is the same nil-arrival trap `VfxBroadcast.playOn`
+-- documents, so the rollback would no-op in the one case it exists for.
+-- A number always survives the trip.
+--
+-- The id is never trusted: it is type-checked, nothing is looked up with
+-- it, and it goes back only to the player who sent it. A client that
+-- lies about its own id can only fail to roll back its own buffer.
+--
+-- The reason string is deliberately NOT sent. It is server-log detail
+-- (it names which check tripped and at what threshold), and the client
+-- needs exactly one bit: the letter did not land.
+local function reject(player: Player, reason: string, requestId: any)
 	local key = string.format("%d:%s", player.UserId, reason)
 	if rejectionLogBudget:consume(key) then
 		log:warn(string.format("rejected ConsumeBlock from %s — %s", player.Name, reason))
 	end
+	if typeof(requestId) == "number" then
+		consumeRemote:FireClient(player, requestId)
+	end
 end
 
--- Show the pop for everyone who isn't the player who made it.
+-- Describe the pop for the clients. Two cosmetics, and they are broadcast
+-- differently on purpose.
 --
--- Two cosmetics, one round trip: the burst where the block stood, and the
--- stream carrying its mana onto the popper. The server describes both and
--- each client draws its own — `ParticleEmitter:Emit()` does not replicate,
--- and a Beam the server built would be anchored to a Part the receiving
--- client may not have yet.
+-- The server describes rather than draws — `ParticleEmitter:Emit()` does
+-- not replicate, and a Beam the server built would be anchored to a Part
+-- the receiving client may not have yet.
 --
--- The stream is the PvP attribution cue. It replaces the blaster beam,
--- which was the only thing linking a taker to a block for other players,
--- and it says more: who got it, and which colour they banked.
+-- **Burst — excludes the popper.** They drew it on the frame they clicked,
+-- as prediction, and a second copy a round trip later would be a visible
+-- double-flash. Safe to predict because it stays true even if they lose a
+-- race for the block: the block popped either way.
 --
--- `drawnLocallyBy` excludes the popper, who drew both on the frame they
--- clicked and must not get a second copy a round trip later. That is only
--- safe because the client's draw is unconditional on the same branch that
--- fires this remote.
+-- **Stream — goes to everyone, popper included.** It is the attribution
+-- cue, and attribution is a claim only the server can make. The popper
+-- deliberately does *not* predict it (see BlockTapController), so there is
+-- nothing to exclude them from — and a player who loses a race never sees
+-- a stream flow into them for a letter they did not get, because the only
+-- thing that draws one is this line, on the branch where the consume
+-- actually succeeded.
 local function broadcastPop(player: Player, blockPos: Vector3, blockColor: string?)
 	VfxBroadcast.playAt(
 		VfxConfig.resolveBlockPopId(blockColor),
@@ -83,29 +120,28 @@ local function broadcastPop(player: Player, blockPos: Vector3, blockColor: strin
 		player.UserId
 	)
 	VfxBroadcast.collect(blockPos, player.UserId, {
-		color          = if blockColor then LetterBlocks.COLOR_TINTS[blockColor] else nil,
-		drawnLocallyBy = player.UserId,
+		color = if blockColor then LetterBlocks.COLOR_TINTS[blockColor] else nil,
 	})
 end
 
-consumeRemote.OnServerEvent:Connect(function(player: Player, block: any)
+consumeRemote.OnServerEvent:Connect(function(player: Player, block: any, requestId: any)
 	-- Rate first: it is the cheapest check and the one an exploiter is
 	-- most likely to be hammering.
 	if not consumeLimiter:consume(player) then
-		reject(player, "rate limit")
+		reject(player, "rate limit", requestId)
 		return
 	end
 
 	local model, blockReason = BlockShootValidation.checkBlock(block)
 	if not model then
-		reject(player, blockReason or "invalid block")
+		reject(player, blockReason or "invalid block", requestId)
 		return
 	end
 
 	local character = player.Character
 	local inRange, rangeReason = BlockShootValidation.checkRange(character, model)
 	if not inRange then
-		reject(player, rangeReason or "out of range")
+		reject(player, rangeReason or "out of range", requestId)
 		return
 	end
 
