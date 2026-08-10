@@ -39,6 +39,10 @@ export type Tile = { letter: string, color: Color }
 local WordBuffer = {}
 WordBuffer.__index = WordBuffer
 
+-- Exported so the server's economy ledger can express "well past what a
+-- buffer can hold" against the real capacity instead of a copy of 12.
+WordBuffer.DEFAULT_CAP = DEFAULT_CAP
+
 export type WordBuffer = typeof(setmetatable(
 	{} :: {
 		_cap: number,

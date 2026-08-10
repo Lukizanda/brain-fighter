@@ -74,7 +74,19 @@ So it catches a client that casts *without* shooting — a cast-spam bot, which 
 
 The reframe that produced option 3: the useful question is not *how do we bound energy*, but **does the server ever learn that a word was spelled?** The ledger's answer is no, and everything weak about it follows from that.
 
-### Validated memorize (decided, not yet built)
+### Validated memorize (built 2026-08-10, shadow mode)
+
+Landed as `server/Economy/` — `EnergyLedger` (state + verdicts, keyed by UserId so the suite can drive it without a `Players` entry), `EconomyConstants` (the `ENFORCE` flag), `EconomyService` (the `ReportMemorize` remote + lifecycle). Credit hooks the accepting branch of `BlockShootService`; the price check and debit sit in `SpellCastService` before the target checks. Client side, every memorize goes through `client/EconomyReport` so the wire format lives in one place and a new call site cannot silently skip the report.
+
+`MemorizeAction.scoreTiles` was extracted for this: client and server price a word with the same code, because two implementations of "what is this word worth" would drift and the server's copy is only useful while it agrees on every legitimate play.
+
+**Verified 2026-08-10**: suite `Economy/ledger_prices_a_cast` 1/1 (12 scenarios — including *shooting alone earns nothing*, which is the assertion the rejected ledger would have failed), and a live wire check firing `ReportMemorize` from the Client VM produced `[EconomyService] would reject memorize from ZandaLuki — claimed 1 x A/red, holds 0` with nothing refused.
+
+**Owed:** the happy path end-to-end — tap real blocks, memorize, see the credit — has not been driven, because it needs actual tapping rather than injected Luau. The wire is proven; the credit path is proven only by the suite.
+
+**Reading the shadow log:** `DevDebug`'s `[` hotkey conjures letters into the buffer without consuming a block, so every dev memorize logs a coverage failure. Those are not findings. Discount any would-reject line following a `[` press.
+
+#### Design
 
 The server keeps, per player, a **multiset of the letters consumed since that player's last memorize** — 26 letters × 3 colours, so 78 integers and no meaningful memory cost. A new remote carries the word on memorize. The server checks it against [[systems/Dictionary]], checks the letters are covered by the held set, and credits the **exact** `EnergyEconomy.splitByColor` value. `spec.cost` is debited from the cast's colour on every accepted cast, exactly as the ledger specified.
 

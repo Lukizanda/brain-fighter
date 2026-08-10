@@ -23,7 +23,7 @@ local UserInputService  = game:GetService("UserInputService")
 
 local Logger            = require(ReplicatedStorage.Shared.Core.Logger)
 local PlayerSession     = require(script.Parent.PlayerSession)
-local MemorizeAction    = require(ReplicatedStorage.Shared.MemorizeAction)
+local EconomyReport     = require(script.Parent.EconomyReport)
 local Dictionary        = require(ReplicatedStorage.Shared.Dictionary)
 local InputCategorizer  = require(ReplicatedStorage.Shared.Core.InputCategorizer)
 
@@ -89,6 +89,12 @@ onDevFillMana()
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 
+	-- NOTE: these letters are conjured, not taken from a block, so the
+	-- server's EnergyLedger never saw them arrive. Memorizing them will
+	-- always log a coverage failure ("claimed 1 x A/red, holds 0"). That
+	-- is the dev path being a dev path, NOT a shadow-mode finding —
+	-- discount any would-reject line that follows a `[` press before
+	-- reading the log as evidence about real players.
 	if input.KeyCode == Enum.KeyCode.LeftBracket then
 		local letter = string.sub(TEST_WORD, letterIdx, letterIdx)
 		letterIdx = (letterIdx % #TEST_WORD) + 1
@@ -98,7 +104,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		log:info(string.format("append '%s' [%s] → '%s'  valid=%s", letter, color, word, tostring(Dictionary.isSpellable(word))))
 
 	elseif input.KeyCode == Enum.KeyCode.RightBracket then
-		local result = MemorizeAction.tryMemorize(session.wordBuffer, session.energyReservoirs)
+		local result = EconomyReport.memorize(session)
 		letterIdx = 1
 		if result.ok then
 			log:info("memorize ok word=" .. tostring(result.word))

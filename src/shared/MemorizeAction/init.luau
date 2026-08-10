@@ -46,7 +46,57 @@ export type Result = {
 	pattern: string?,
 }
 
+export type Scored = {
+	-- The concrete dictionary word the tiles resolve to, e.g. "DOG".
+	word: string,
+	energyByColor: EnergyEconomy.ColorEnergy,
+}
+
 local MemorizeAction = {}
+
+-- Resolve a set of buffered tiles into the word they spell and the
+-- per-color energy that word is worth, or nil if they spell nothing.
+--
+-- Pure: holds no state, touches neither a buffer nor a reservoir, and
+-- does not mutate the caller's tiles — the resolved letters are stamped
+-- onto a copy.
+--
+-- Extracted from tryMemorize for validated memorize (Phase 5.4) so the
+-- server can price a reported memorize with the exact code the client
+-- scored it with. Two implementations of "what is this word worth"
+-- would drift, and the server's copy is only useful while it agrees
+-- with the client's on every legitimate play.
+function MemorizeAction.scoreTiles(tiles: { WordBuffer.Tile }): Scored?
+	if #tiles == EMPTY_BUFFER_SIZE then
+		return nil
+	end
+
+	local letters = table.create(#tiles)
+	for i, tile in tiles do
+		letters[i] = tile.letter
+	end
+	local pattern = table.concat(letters)
+
+	local word = Dictionary.resolve(pattern, EnergyEconomy.computeWordEnergy)
+	if not word then
+		return nil
+	end
+
+	-- Stamp the resolved letter onto every tile so wildcards score as the
+	-- letter they became. resolve() matches on length, so the two strings
+	-- are always the same size. Colors are deliberately left alone: a
+	-- wild tile stays "wild" so splitByColor still spreads its energy
+	-- across all three reservoirs rather than banking it in one.
+	local scored = table.create(#tiles)
+	for i, tile in tiles do
+		scored[i] = { letter = string.sub(word, i, i), color = tile.color }
+	end
+
+	return {
+		word = word,
+		energyByColor = EnergyEconomy.splitByColor(scored),
+	}
+end
 
 -- Try to commit the buffered word.
 --
@@ -82,26 +132,15 @@ function MemorizeAction.tryMemorize(
 	-- the stars stand in for. Wildcard-free buffers resolve to
 	-- themselves via an O(1) lookup, so this is also the plain path.
 	local pattern = buffer:asWord()
-	local word = Dictionary.resolve(pattern, EnergyEconomy.computeWordEnergy)
-	if not word then
+	local scored = MemorizeAction.scoreTiles(buffer:tiles())
+	if not scored then
 		log:info("memorize fizzle — invalid word", pattern)
 		buffer:clear()
 		return { ok = false, reason = "invalid", pattern = pattern }
 	end
 
-	local tiles = buffer:tiles()
-
-	-- Stamp the resolved letter onto every tile so wildcards score as the
-	-- letter they became. resolve() matches on length, so the two strings
-	-- are always the same size. Colors are deliberately left alone: a
-	-- wild tile stays "wild" so splitByColor still spreads its energy
-	-- across all three reservoirs rather than banking it in one.
-	-- tiles() hands back a copy, so this doesn't disturb the buffer.
-	for i, tile in tiles do
-		tile.letter = string.sub(word, i, i)
-	end
-
-	local energyByColor = EnergyEconomy.splitByColor(tiles)
+	local word = scored.word
+	local energyByColor = scored.energyByColor
 
 	for color, amount in energyByColor do
 		reservoirs:add(color, amount)

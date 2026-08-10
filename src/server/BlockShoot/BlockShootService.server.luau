@@ -31,6 +31,7 @@ local BlockShoot = require(ReplicatedStorage.Shared.BlockShoot)
 local BlockShootConstants = require(script.Parent.BlockShootConstants)
 local BlockShootValidation = require(script.Parent.BlockShootValidation)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
+local EnergyLedger = require(script.Parent.Parent.Economy.EnergyLedger)
 local RateLimiter = require(script.Parent.Parent.Utility.RateLimiter)
 local VfxBroadcast = require(ReplicatedStorage.Shared.Vfx.VfxBroadcast)
 local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
@@ -150,9 +151,19 @@ consumeRemote.OnServerEvent:Connect(function(player: Player, block: any, request
 	-- recoverable from a destroyed Model, and an Instance reference for a
 	-- thing that no longer exists arrives as nil on the receiving client.
 	local blockPos = model:GetPivot().Position
-	local _, blockColor = BlockShoot.readBlock(model)
+	local blockLetter, blockColor = BlockShoot.readBlock(model)
 
 	model:Destroy()
+
+	-- Credit sits on this branch deliberately. A consume the server
+	-- refused is rolled back out of the client's buffer by
+	-- BlockTapController.onRejected, so crediting any earlier would put
+	-- the ledger's held set and that buffer out of step in the one
+	-- direction that can reject honest play.
+	-- See wiki/systems/SpellCastService.md § Validated memorize.
+	if blockLetter and blockColor then
+		EnergyLedger.creditBlock(player.UserId, blockLetter, blockColor)
+	end
 
 	broadcastPop(player, blockPos, blockColor)
 end)

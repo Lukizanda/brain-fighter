@@ -1358,3 +1358,23 @@ Built the hover outline; dropped the planned in-range glow on every reachable bl
 ## [2026-08-10] ingest | Phase 5.7 stage 6 + collect-stream receive path verified
 
 Wiki sweep: client-server-boundary's LetterBlaster row cited two deleted files and is now BlockTapController at its real line; index and tap-to-pop frontmatter still promised the in-range glow that stage 5 replaced with a hover outline. Plans, dated audits and changelog entries left as written. Also closed the two-client verification outstanding since Phase 5.6 — testable with one client because BlockTapController never draws the stream locally, so anything on a client came over the wire. A server-side VfxBroadcast.collect produced 1 anchor + 8 motes on the client; an absent collectorUserId produced nothing, no error and no orphaned anchor (the player-leaves-mid-flight case). Still unshown: a stream funnelling at another player's character, though resolveCollector has no local-player branch so it is the same code with a different Player. See systems/BlockShoot § Stream layers.
+
+## [2026-08-10] ingest | Validated memorize built and shipped dark
+
+Implements the design decided earlier today. New `server/Economy/`: `EnergyLedger` holds, per player, the letters consumed since their last memorize plus a per-colour earned-minus-spent ceiling; `EconomyConstants` carries the `ENFORCE` flag; `EconomyService` owns the new `ReportMemorize` remote and the ledger lifecycle. Credit hooks the accepting branch of `BlockShootService` (which already read the block before destroying it — only the letter was being discarded); the price check and debit sit in `SpellCastService`. Client side, `client/EconomyReport` is the single seam every memorize goes through, so the wire format exists once and a new call site cannot silently skip the report.
+
+`MemorizeAction.scoreTiles` extracted so client and server price a word with the same code. Two implementations of "what is this word worth" would drift, and the server's copy is only useful while it agrees with the client's on every honest play.
+
+**The client never names its own word.** The payload is the raw buffer tiles with wildcards still `*`; the server checks those against the blocks it watched that player take and then resolves the word itself. A client that pre-resolves its star is naming a tile it does not hold, and fails coverage — asserted in the suite.
+
+Three decisions worth keeping. Memorize clears the **entire** held set rather than the word's letters, mirroring the buffer drain and handling double-tap-discard with no second remote; any resulting superset leaves the server holding more than the client, which is the direction that cannot reject honest play. A fizzle is distinguished from a coverage failure by an explicit `fizzle` flag, because shadow mode's whole output is its failure log and a player mistyping FROG as FRGO must not read as an exploit. And the debit runs *before* the remaining target checks, since the client's predicted run has already drained its reservoir by the time the relay arrives — a server that only charged for casts which fully landed would drift permanently richer than the client it is pricing.
+
+Banking is deliberately left open: `HELD_BANKING_LOG_THRESHOLD` is a reporting threshold and explicitly not a cap, because refusing consumes past a limit would reject a player who discards aggressively, and rejecting real play is the one thing this design may not do.
+
+Verified: suite `Economy/ledger_prices_a_cast` 1/1 across 12 scenarios, including *shooting alone earns nothing* — the assertion the rejected energy-ceiling ledger would have failed, pinned so a regression toward it fails loudly. Live wire check from the Client VM produced `would reject memorize ... claimed 1 x A/red, holds 0` with nothing refused, confirming shadow mode end to end. One test bug found and fixed en route: `D*G` was pinned to `DOG`, but every candidate scores identically so `resolve` returns whichever it finds first (`DIG`) — the assertion is now a shape, not a tie-break the suite has no business owning.
+
+**Owed:** the happy path end to end. Tapping real blocks and watching the credit land needs actual tapping rather than injected Luau, so the credit path is proven by the suite and not yet in a live session. `ENFORCE` stays false until it is.
+
+Noted at the dev seam and on the system page: `DevDebug`'s `[` conjures letters without consuming a block, so every dev memorize logs a coverage failure. Those are not findings.
+
+Pages touched: [[systems/SpellCastService]].

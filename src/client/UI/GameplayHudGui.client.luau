@@ -15,10 +15,10 @@ local HudLayoutManager      = require(ReplicatedStorage.Shared.Hud.HudLayoutMana
 local BufferDisplayBuilder  = require(ReplicatedStorage.Shared.Hud.BufferDisplayBuilder)
 local AttributeBarBuilder   = require(ReplicatedStorage.Shared.Hud.AttributeBarBuilder)
 local MemorizeButtonBuilder = require(ReplicatedStorage.Shared.Hud.MemorizeButtonBuilder)
-local MemorizeAction        = require(ReplicatedStorage.Shared.MemorizeAction)
 local Dictionary            = require(ReplicatedStorage.Shared.Dictionary)
 local VfxConfig             = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 local PlayerSession         = require(script.Parent.Parent.PlayerSession)
+local EconomyReport         = require(script.Parent.Parent.EconomyReport)
 
 local log = Logger.new("GameplayHudGui")
 
@@ -109,7 +109,7 @@ onBufferChanged()
 session.wordBuffer.changed:Connect(onBufferChanged)
 
 btn.activated:Connect(function()
-	local result = MemorizeAction.tryMemorize(session.wordBuffer, session.energyReservoirs)
+	local result = EconomyReport.memorize(session)
 	btn:flashResult(result.ok)
 	if result.ok then
 		log:info("Memorized:", result.word)

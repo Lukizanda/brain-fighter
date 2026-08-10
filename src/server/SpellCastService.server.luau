@@ -24,13 +24,16 @@
 --      the client's auto-targeter could have locked it at;
 --   4. the player is inside a cast token budget.
 --
--- Still client-trusted: AFFORDABILITY. Energy lives entirely in
--- client/PlayerSession — the server has no reservoir, and no way to
--- build one without mirroring the whole memorize chain
--- (LetterBlock → WordBuffer → Dictionary → EnergyEconomy). Item 4 is a
--- flood guard, not a price check. Closing this properly is an
--- architecture decision, tracked in
--- wiki/systems/SpellCastService.md § Trust model.
+-- Affordability closed by validated memorize (see Economy/EnergyLedger):
+--   5. the player has provably earned enough of the spell's color,
+--      priced from blocks this server watched them take and words it
+--      validated them spelling.
+--
+-- That check is a lower bound on a cheat, not a mirror of the client's
+-- reservoir — energy still lives in client/PlayerSession, and the full
+-- server-side economy remains the real fix. It also ships DARK: while
+-- EconomyConstants.ENFORCE is false the verdict is logged and nothing
+-- is refused. See wiki/systems/SpellCastService.md § Validated memorize.
 --
 -- Every rejection drops the request and logs; nothing throws, so one
 -- malformed payload can never take the handler down for other players.
@@ -45,6 +48,8 @@ local SpellExecutor = require(ReplicatedStorage.Shared.SpellExecutor)
 
 local SpellCastConstants  = require(script.Parent.SpellCast.SpellCastConstants)
 local SpellCastValidation = require(script.Parent.SpellCast.SpellCastValidation)
+local EconomyConstants    = require(script.Parent.Economy.EconomyConstants)
+local EnergyLedger        = require(script.Parent.Economy.EnergyLedger)
 local RateLimiter         = require(script.Parent.Utility.RateLimiter)
 
 local log = Logger.new("SpellCastService")
@@ -69,6 +74,18 @@ local function reject(player: Player, reason: string)
 	end
 end
 
+-- Affordability failures log even while shadow mode refuses nothing:
+-- these lines are the entire product of running the mode dark, and one
+-- nobody reads is the same as not having shipped it.
+local function noteUnaffordable(player: Player, reason: string)
+	local key = string.format("%d:afford:%s", player.UserId, reason)
+	if not rejectionLogBudget:consume(key) then
+		return
+	end
+	local verb = if EconomyConstants.ENFORCE then "rejected" else "would reject"
+	log:warn(string.format("%s SpellCast from %s — %s", verb, player.Name, reason))
+end
+
 spellCastRemote.OnServerEvent:Connect(function(player: Player, color: any, tier: any, target: any)
 	if not castLimiter:consume(player) then
 		reject(player, "rate limit")
@@ -90,6 +107,26 @@ spellCastRemote.OnServerEvent:Connect(function(player: Player, color: any, tier:
 		end
 		return
 	end
+
+	-- Affordability — the check this handler has been missing since 5.4.
+	-- The ledger prices a cast from blocks the server watched this player
+	-- take and words it validated them spelling, so a client casting
+	-- energy it never earned fails here rather than being waved through
+	-- by a rate limit standing in for a price check.
+	--
+	-- Debited on the accepting branch and BEFORE the remaining target
+	-- checks, because the client's predicted run has already drained its
+	-- reservoir by the time this relay arrives. A server that only
+	-- charged for casts which fully landed would drift permanently
+	-- richer than the client it is trying to price.
+	local affordable, ledgerReason = EnergyLedger.checkCast(player.UserId, spec.color, spec.cost)
+	if not affordable then
+		noteUnaffordable(player, ledgerReason or "unaffordable")
+		if EconomyConstants.ENFORCE then
+			return
+		end
+	end
+	EnergyLedger.debitCast(player.UserId, spec.color, spec.cost)
 
 	-- Self-buffs and placement spells legitimately arrive with no target.
 	-- Anything else must name a living Model, or it's a malformed fire.
