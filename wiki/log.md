@@ -1378,3 +1378,7 @@ Verified: suite `Economy/ledger_prices_a_cast` 1/1 across 12 scenarios, includin
 Noted at the dev seam and on the system page: `DevDebug`'s `[` conjures letters without consuming a block, so every dev memorize logs a coverage failure. Those are not findings.
 
 Pages touched: [[systems/SpellCastService]].
+
+## [2026-08-10] ingest | Phase 5.7 recorded in build-plan; EffectSpec.anchor union corrected
+
+Two items deferred while a parallel session held the files. **build-plan**: Phase 5.7 marked complete with a stage→commit table, stages 5 and 6 filled in with what actually shipped (hover outline not in-range glow; reach raised then reverted once the coordinate-space aim bug surfaced), stage 3's "two-client check still owed" resolved to what one client could establish, and a changelog entry for the divergences. **VfxConfig**: `EffectSpec.anchor` still declared `"casterStaffTip"` while two entries assigned `"caster"` and `"blockPosition"` — neither a union member, so this was a live strict-mode type error. Union is now `"caster"`, the block-pop entry uses the existing `"worldPosition"`, and the field carries a note that nothing reads it. That is why it rotted quietly: descriptive metadata with no consumer cannot fail loudly. Stale mirrors in systems/VisualEffects (type block, two example specs, and the anchor-resolution row describing a walk to a deleted Tool) updated to match.

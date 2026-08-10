@@ -254,7 +254,7 @@ export type EffectSpec = {
     -- Lifetime / cleanup
     totalDurationSec: number,          -- effect-scope lifetime; cleanup at end
     -- Attachment policy
-    anchor: "casterStaffTip" | "targetRoot" | "targetHumanoidRootPart"
+    anchor: "caster" | "targetRoot" | "targetHumanoidRootPart"
           | "targetHead" | "worldPosition",
     -- Optional gameplay-linked duration (e.g. shield/freeze): when set,
     -- VfxController re-reads totalDurationSec from the spell spec instead
@@ -305,7 +305,7 @@ EFFECTS["cast_red_t1"] = {
     },
     sound = { soundId = "rbxassetid://0", volume = 0.8, pitchRange = NumberRange.new(0.95, 1.10) },
     totalDurationSec = 0.45,
-    anchor = "casterStaffTip",
+    anchor = "caster",
 }
 ```
 
@@ -345,7 +345,7 @@ EFFECTS["cast_blue_t3"] = {
     light = { color = Color3.fromHex("#80C0FF"), brightness = 6, durationSec = 0.4 },
     sound = { soundId = "rbxassetid://0", volume = 1.0 },
     totalDurationSec = 0.85,
-    anchor = "casterStaffTip",
+    anchor = "caster",
 }
 ```
 
@@ -416,7 +416,7 @@ Two cases, both handled via runtime Attachments — never pre-placed:
 | `targetHumanoidRootPart` | Create a transient Attachment on the target's `HumanoidRootPart`. Tag with `CollectionService:AddTag(att, "VfxAttachment")` so a single sweep job can prune leftovers. |
 | `targetHead` | Same, parented to `Head` (e.g. crown-style heal sparkles). |
 | `worldPosition` | Spawn an invisible anchor `Part` at the position (Anchored, CanCollide=false, Transparency=1, Size 0.1), parent the emitter to it. |
-| `casterStaffTip` | Walk `caster.Character.<EquippedTool>.Handle.Tip`. Fallback to HumanoidRootPart if the tool isn't equipped at fire time (e.g. dropped mid-cast). |
+| `caster` | The caster's `HumanoidRootPart`, directly. Was `casterStaffTip` — walk `caster.Character.<EquippedTool>.Handle.Tip`, falling back to the HumanoidRootPart when no tool was equipped. Phase 5.7 deleted the Spelling Staff, so the fallback became the only path and `VfxController.resolveStaffTip` collapsed into `resolveCastAnchor`. |
 
 We **clone emitters to the target** rather than pre-placing because:
 1. Targets vary (NPCs, the Boss rig, future props). Pre-placing wastes memory on every potential target.

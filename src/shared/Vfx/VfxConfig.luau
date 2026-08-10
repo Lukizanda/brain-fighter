@@ -65,7 +65,14 @@ export type EffectSpec = {
 	light: { color: Color3, brightness: number, durationSec: number }?,
 	sound: SoundSpec?,
 	totalDurationSec: number,
-	anchor: "casterStaffTip" | "targetRoot" | "targetHumanoidRootPart" | "targetHead" | "worldPosition",
+	-- Descriptive metadata: nothing reads this. `spawnEffect` takes its
+	-- anchor from the caller, so this documents where an effect is *meant*
+	-- to hang rather than deciding it. Kept honest anyway — it named
+	-- `casterStaffTip` for a while after Phase 5.7 deleted the staff, and
+	-- because no code path consumed it the stale name cost nothing and so
+	-- went unnoticed. A field that cannot fail loudly has to be corrected
+	-- deliberately.
+	anchor: "caster" | "targetRoot" | "targetHumanoidRootPart" | "targetHead" | "worldPosition",
 	durationFromSpec: boolean?,
 	upward: boolean?,
 }
@@ -448,8 +455,7 @@ local function castEntry(palette: ColorPalette, tier: number): EffectSpec
 		},
 		sound            = { soundId = SFX.cast, volume = p.soundVol, pitchRange = p.pitch },
 		totalDurationSec = p.totalSec,
-		-- Was "casterStaffTip" until Phase 5.7 deleted the staff. Descriptive
-		-- metadata only — spawnEffect takes its anchor from the caller.
+		-- Was "casterStaffTip" until Phase 5.7 deleted the staff.
 		anchor           = "caster",
 	}
 end
@@ -490,7 +496,12 @@ local function blockPopEntry(palette: ColorPalette): EffectSpec
 		},
 		sound            = { soundId = SFX.blockPop, volume = 0.55, pitchRange = NumberRange.new(0.94, 1.12) },
 		totalDurationSec = 0.45,
-		anchor           = "blockPosition",
+		-- "worldPosition", not a "blockPosition" of its own: the block is
+		-- already being destroyed when this plays, so the burst is handed a
+		-- Vector3 read before the teardown. There is no block left to anchor
+		-- to, which is the same reason BlockShootService uses playAt rather
+		-- than playOn.
+		anchor           = "worldPosition",
 	}
 end
 
