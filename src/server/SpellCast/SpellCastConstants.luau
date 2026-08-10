@@ -9,7 +9,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local LetterBlasterConfig = require(ReplicatedStorage.Shared.LetterBlaster.LetterBlasterConfig)
+local BlockTapConfig = require(ReplicatedStorage.Shared.BlockShoot.BlockTapConfig)
 
 local SpellCastConstants = {}
 
@@ -33,15 +33,15 @@ SpellCastConstants.MAX_TARGET_DISTANCE_STUDS =
 -- Flood guard, NOT an affordability check — the server cannot price a
 -- cast today (see the service header). The floor is derived from what
 -- the economy physically permits: energy only enters a reservoir by
--- memorizing a word, every letter in that word costs one LetterBlaster
--- shot, and the weapon gates shots at COOLDOWN. One block per cast is
--- the most generous possible reading (a one-letter dictionary word
--- carrying a high-value tile), so this can never reject real play while
--- still stopping a remote loop dead.
+-- memorizing a word, every letter in that word costs one popped block,
+-- and the input gates pops at COOLDOWN. One block per cast is the most
+-- generous possible reading (a one-letter dictionary word carrying a
+-- high-value tile), so this can never reject real play while still
+-- stopping a remote loop dead.
 local MIN_BLOCKS_PER_CAST = 1
 
 SpellCastConstants.CAST_BURST_CAPACITY = 3
-SpellCastConstants.CAST_REFILL_PER_SEC = 1 / (MIN_BLOCKS_PER_CAST * LetterBlasterConfig.COOLDOWN)
+SpellCastConstants.CAST_REFILL_PER_SEC = 1 / (MIN_BLOCKS_PER_CAST * BlockTapConfig.COOLDOWN)
 
 -- Each (player, reason) pair gets one warning immediately and then at
 -- most one per this window: a single probe is never silent, a loop

@@ -11,7 +11,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BlockShoot = require(ReplicatedStorage.Shared.BlockShoot)
-local LetterBlasterConfig = require(ReplicatedStorage.Shared.LetterBlaster.LetterBlasterConfig)
+local BlockTapConfig = require(ReplicatedStorage.Shared.BlockShoot.BlockTapConfig)
 
 local BlockShootConstants = {}
 
@@ -26,12 +26,12 @@ local CAMERA_ZOOM_ALLOWANCE_STUDS = 100
 BlockShootConstants.MAX_CONSUME_DISTANCE_STUDS =
 	BlockShoot.MAX_RAYCAST_DISTANCE + CAMERA_ZOOM_ALLOWANCE_STUDS
 
--- Sustained ceiling is exactly the LetterBlaster's fire cooldown, so a
--- player firing as fast as the weapon allows is never throttled. The
--- burst allowance absorbs network jitter bunching consecutive fires
--- into one frame — see RateLimiter for why a flat interval is wrong.
+-- Sustained ceiling is exactly the client's tap cooldown, so a player
+-- popping as fast as the input allows is never throttled. The burst
+-- allowance absorbs network jitter bunching consecutive pops into one
+-- frame — see RateLimiter for why a flat interval is wrong.
 BlockShootConstants.CONSUME_BURST_CAPACITY = 3
-BlockShootConstants.CONSUME_REFILL_PER_SEC = 1 / LetterBlasterConfig.COOLDOWN
+BlockShootConstants.CONSUME_REFILL_PER_SEC = 1 / BlockTapConfig.COOLDOWN
 
 -- A rejected client is usually a broken client or an exploiter looping
 -- the remote; either way the log must not become the DoS. Each

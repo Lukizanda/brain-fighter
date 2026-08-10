@@ -5,7 +5,7 @@
 ----------------------------------------------------------------------
 -- The two checks that could plausibly break real play if mis-tuned, so
 -- both directions are asserted: the bound rejects abuse AND a player
--- firing the LetterBlaster as fast as it allows is never throttled.
+-- tapping blocks as fast as the input allows is never throttled.
 --
 -- The rate half runs in real time against the production constants
 -- (~1.5s) rather than a stubbed clock, because the thing worth testing
@@ -15,7 +15,7 @@
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
-local LetterBlasterConfig  = require(ReplicatedStorage.Shared.LetterBlaster.LetterBlasterConfig)
+local BlockTapConfig       = require(ReplicatedStorage.Shared.BlockShoot.BlockTapConfig)
 local BlockShootConstants  = require(ServerScriptService.Server.BlockShoot.BlockShootConstants)
 local BlockShootValidation = require(ServerScriptService.Server.BlockShoot.BlockShootValidation)
 local RateLimiter          = require(ServerScriptService.Server.Utility.RateLimiter)
@@ -77,7 +77,7 @@ return {
 				ctx.sustainedRejects += 1
 			end
 			if shot < SUSTAINED_SHOTS then
-				task.wait(LetterBlasterConfig.COOLDOWN)
+				task.wait(BlockTapConfig.COOLDOWN)
 			end
 		end
 

@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-08-03
+updated: 2026-08-10
 ---
 
 # Build Plan
@@ -249,8 +249,33 @@ Added 2026-08-04 after four consecutive VFX/SFX bugs traced to one root cause. F
 
 **Milestone:** a two-client playtest shows exactly one projectile and one impact burst per cast on both screens, with no `RunService:IsServer()` guard remaining in `SkillVisuals`.
 
+## Phase 5.7 — Tap-to-pop (retire the Spelling Staff)
+
+Added 2026-08-10. Full plan in [[design/tap-to-pop]].
+
+**The finding:** the Spelling Staff is a wrapper around "click the thing you want". There is no aiming skill, no reticle (by design), no ammo, no alternate fire, and nothing else in the game is shot. What it costs is a boot chain no other input has — `StarterPack` → `Backpack` → `Tool.Equipped` → `LetterBlaster:mount()` — which with `SHOW_BACKPACK = false` means core input in a shipped build depends on the *dev-only* `DevAutoEquipTool` firing. Plus a two-VM muzzle position, a Studio-managed `Muzzle` attachment outside the Rojo tree, and a fizzle `SoundId` duplicated into `.model.json`.
+
+**The change:** click/tap a block directly and it pops. Input and presentation layers only — `ConsumeBlock`'s payload, `BlockShootValidation`'s three checks and the rate limiter's tuning source are all unchanged. ClickDetector was rejected: the word buffer is client-side, so a server-side `MouseClick` would destroy blocks the client had already refused to buffer.
+
+| Stage | Item |
+|---|---|
+| 1 | Input moves off `Tool.Activated` to `UserInputService.InputBegan` (MouseButton1 + Touch) in `src/client/BlockTapController.client.luau`; tunables to `shared/BlockShoot/BlockTapConfig`. **`gameProcessedEvent` guard is the whole risk** — the mouse is free during play and the HUD is click-driven, so without it every spell button press also pops the block behind it. |
+| 2 | Delete `StarterPack/Spelling Staff/`, `shared/LetterBlaster/`, `BlockShoot.muzzlePosition`/`resolveHandle`, `BlockShootService.broadcastShot`. Keep `laserBeamEffect` — NPC `Actions.luau` still uses it. |
+| 3 | `VfxConfig.EFFECTS.block_pop` (colour-tinted, sound in the entry) plus the **collect stream** — new `VfxBroadcast.collect` kind funnelling block-coloured sparks from the block onto the player who took it. Fizzle becomes a client-local `VfxConfig.SFX.fizzle` cue, resolving the duplicated asset id. |
+| 4 | **Contested blocks (PvP correctness).** The `WordBuffer` append is optimistic and nothing tells the client it was rejected — the loser of a same-frame race keeps a phantom letter all round. Add a rejection reply, roll the pending append back by identity (not "pop the last slot"), and gate pop + stream behind confirmation. Latent in the current build; PvP is what makes it reachable. |
+| 5 | `TAP_REACH_STUDS` (start 45, tune against the live `BlockSpawnVolume`) + client-local `Highlight` glow on in-range blocks, stronger hover outline, muted while mind-full. Retune `blockshoot_range_and_rate`. |
+| 6 | Wiki: `LetterBlaster` → REMOVED record, `BlockShoot`/`LetterBlock`/`AudioSFX` updated, Tutorial's "shoot" verb → "tap". |
+
+**Attribution is a PvP requirement, not juice.** The beam was the only thing linking a taker to a block for other players. The collect stream replaces it and reads better: the beam said where a shot came from, the stream says who got it and which colour they banked — deliberately leaking that read, because "red has been flowing into him for ten seconds" is a tactical tell worth having. Destination is a `collectorUserId` re-resolved per frame, not a baked Vector3: the collector is running during the stream's flight. Layered ribbon → motes → arrival flash so a busy fight degrades to ribbon-only rather than losing the cue exactly when it matters most.
+
+**Deferred, not dropped:** a cosmetic hand-held prop. Hands are empty after this; a non-functional staff can come back as a separate silhouette/polish item with no input logic attached.
+
+**Milestone:** two clients, empty hands, no hotbar. Blocks glow before they are in reach, pop on **both screens**, and a colour-matched stream funnels onto whoever took it while they run. Both tap the same block on the same frame → exactly one letter, exactly one stream. Server logs do not verify stage 3; a second client does, and it has to be a moving one.
+
 ## Plan changelog
 
+- **2026-08-10**: Phase 5.7 amended for PvP — collect stream added as the replacement attribution cue (new `VfxBroadcast.collect` kind, userId destination so it tracks a running collector), and a new Stage 4 for contested blocks. Planning PvP surfaced a latent bug: the `WordBuffer` append is optimistic and unacknowledged, so the loser of a same-frame race for a block keeps a phantom letter for the round. Present in the current staff build; unreachable in solo play. Stage count 5 → 6.
+- **2026-08-10**: Phase 5.7 added — tap-to-pop ([[design/tap-to-pop]]). Retires the Spelling Staff Tool and `LetterBlaster` in favour of direct click/tap on blocks, with a client-local in-range glow so the reach limit is legible. Input + presentation only; the `ConsumeBlock` trust surface is untouched. Cosmetic hand prop deferred.
 - **2026-08-04**: Phase 5.6 added — client/server boundary refactor ([[design/client-server-boundary]]). Root-cause follow-up to the four VFX replication bugs; audit found the dual-VM simulation is confined to the Skills chain. Six stages, each independently shippable; stages 1–2 are pre-launch safe, 3–5 post-launch. Recommendation: server-only delivery as the destination, explicit `mode` field as the scaffold.
 - **2026-08-03**: Phase 5.2 shield/wall/buff design pass + implementation landed. `shield` (40 HP absorb pool, no expiry, reusing Health's `_shield` modifier) and `buff` (timed `damageAmp`, first consumer Stasis) are real; `wall` deleted as a decoy handler; Stone Wall implemented as a server-only collidable barrier via `world_spawn`; Sanctuary restored to heal + shield; self-target identification moved from a colour heuristic to `SpellRegistry.selfTarget` / `needsEnemyTarget`, and the cast relay extended to target-less casts. 5.2 remains open on SFX assets + VFX gaps. Placement reticle and shield HUD explicitly deferred to 5.3.
 - **2026-07-27**: Phase 5.1 complete — Skills leak fix (Died/HealthChanged/Destroying purge), stub-spell refunds (`unimplemented` failures incl. `world_spawn`), damage-path split documented (unify in 5.4), Skills test suite added (4/4 in playtest). Sanctuary temporarily heal-only. Next: friends-playtest checkpoint, then 5.2 + hardening.

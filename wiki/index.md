@@ -16,6 +16,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[design/ui-architecture-review]] — Phase 4.8 audit of `src/client/UI/` + `src/shared/Hud/` (re-audited 2026-06-05); R-1..R-4 cleanup landed + verified, no High open; 2 Medium / 3 Low deferred; Phase 5 gate = GO
 - [[design/system-audit-2026-06]] — whole-repo architecture/tech-debt audit (2026-06-05); ~half the repo is dormant template code; Tier 1 = Skills Humanoid leak + BossAdapter retirement + split-brain damage; key call = template keep-or-cut. Next-session pick-up point.
 - [[design/client-server-boundary]] — audit of which systems run gameplay code on both VMs (2026-08-04); root cause of the four VFX replication bugs = the Skills chain is implicit client prediction with authoritative re-simulation. Recommends authority/prediction/presentation split; 6-stage plan = Phase 5.6
+- [[design/tap-to-pop]] — Phase 5.7 plan (2026-08-10): retire the Spelling Staff / LetterBlaster, click or tap blocks directly to pop them; in-range glow makes the reach limit legible, and a **collect stream** funnels block-coloured sparks onto whoever took it as the PvP attribution cue replacing the beam. Also closes the optimistic-append phantom-letter hole PvP exposes
 - [[design/persistence-progression]] — persistence & progression strategy (2026-07-27): mastery-first (no meta unlocks), ProfileStore-backed PlayerData, settings + word PBs + reserved cosmetics schema; analytics pulled into the 5.4 gate; implementation = Phase 5.5
 
 ## Systems
