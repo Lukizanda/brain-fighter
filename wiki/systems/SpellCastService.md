@@ -56,10 +56,43 @@ Two ways forward were put up:
 
 1. **Energy-ceiling ledger (cheap, sound, approximate).** The server already sees every `ConsumeBlock`, and each block carries `Block.Letter` / `Block.Color`. It can therefore track an *upper bound* on the energy each player could possibly have earned, and reject casts whose running cost exceeds it. One-sided by construction, so it never rejects legitimate play, and it needs no change to [[systems/EnergyReservoirs]] or [[systems/SpellRegistry]]. It would not catch a client that under-spends, only one that spends energy it never earned — which is the exploit that matters.
 2. **Server-authoritative economy (correct, expensive).** Mirror the whole memorize chain server-side: LetterBlock → WordBuffer → Dictionary → EnergyEconomy → EnergyReservoirs, with the client HUD reading replicated state. This is the real fix and roughly the shape [[design/persistence-progression]] will want anyway, since a server that can't price a cast also can't be trusted to record a personal best.
+3. **Validated memorize (added 2026-08-10).** Server tracks the letters each player has consumed and validates the word they claim to have memorized, crediting exact energy. Sits between the two above — see § Validated memorize below.
 
 > **Decided 2026-08-03: option 1, the energy-ceiling ledger.** Tracked as its own item in [[design/build-plan]] Phase 5.4.
+>
+> **Superseded 2026-08-10: option 3, validated memorize.** The ledger's bound was worked against the real constants and found to saturate at `CAP_PER_COLOR` within ~8 s of sustained shooting, which is ≥ every cost in the roster — so it would have passed essentially every cast an actively-shooting client made. The ledger design below is kept as the record of what was rejected and why.
 
-### Ledger design (not yet built)
+### Why the ledger was rejected
+
+Not a tuning failure — an informational one, and the distinction is the whole argument.
+
+The bound credits each consumed block `letterValue × 3`, where 3 is `LENGTH_MULTIPLIER_EPIC`. That is the *smallest sound* multiplier: a player genuinely can spell a 9+ letter word, so any lower figure would start rejecting legitimate play, which is the one thing the design is not allowed to do. The ledger is therefore already as tight as it can be given what it knows.
+
+Worked against source constants — `LetterBlasterConfig.COOLDOWN` 0.25 s, Scrabble-weighted mean letter value ≈1.9, uniform 33/33/33 colour split — the ceiling accrues at roughly **7.6 per colour per second**, reaching `TIER_COSTS[4]` (40) in about five seconds and pinning at the 60 cap by eight. Against a real economy where a colour's energy accrues over tens of seconds of successful spelling, the ceiling is effectively always full.
+
+So it catches a client that casts *without* shooting — a cast-spam bot, which `RateLimiter` already largely handles — and misses the cheat anyone would actually write: shoot blocks normally, producing traffic indistinguishable from real play, and never memorize a word. Spelling, the entire premise of the game, becomes optional while every spell stays available.
+
+The reframe that produced option 3: the useful question is not *how do we bound energy*, but **does the server ever learn that a word was spelled?** The ledger's answer is no, and everything weak about it follows from that.
+
+### Validated memorize (decided, not yet built)
+
+The server keeps, per player, a **multiset of the letters consumed since that player's last memorize** — 26 letters × 3 colours, so 78 integers and no meaningful memory cost. A new remote carries the word on memorize. The server checks it against [[systems/Dictionary]], checks the letters are covered by the held set, and credits the **exact** `EnergyEconomy.splitByColor` value. `spec.cost` is debited from the cast's colour on every accepted cast, exactly as the ledger specified.
+
+**Memorize clears the entire held set, not just the word's letters.** This mirrors `MemorizeAction.tryMemorize`, which drains the whole buffer — there is no such thing as memorizing a sub-word — and it handles double-tap-discard without a second remote: discarded letters are cleared on the same event the client cleared them. Whenever discards leave the server's set a superset of the client's real buffer, that is the safe direction, and it re-syncs on every memorize.
+
+Two problems from the ledger design disappear rather than getting solved. `MAX_LETTER_VALUE` is not needed, because credit is exact rather than bounded — which is fortunate, since no such constant exists in `src/`. And [[systems/Wildcard]] needs no special case at the credit site: the claimed word carries resolved letters, held stars cover any letter during the coverage check, and `Dictionary.resolve` does the same work it does client-side.
+
+**Residual gap — banking.** A client bypassing the mind-full gate could shoot far past the 12-slot buffer cap between memorizes and claim the best word among the accumulated letters. Deliberately **not** closed with a hard cap on held-set size: a player who discards aggressively could plausibly shoot well past 12 between memorizes, and a cap that is ever wrong rejects real play. Log the high-water mark and tighten later against evidence.
+
+**False-reject path — largely closed by Phase 5.7 stage 4.** The client appends a letter to its buffer locally and *then* fires `ConsumeBlock`, so a server-side refusal on rate or range would leave the client holding a letter the server never credited, and a memorize using it would not validate. Phase 5.7 stage 4 (2026-08-10) closed this while solving the PvP block race: `reject()` now fires the client-minted request id back on `ConsumeBlock`, and `BlockTapController.onRejected` rolls the letter out via `WordBuffer:removeLastMatching`. Client buffer and server held-set therefore stay in sync by construction, and this design inherits that for free.
+
+The residue is narrow: if the reply is lost or arrives after `PENDING_TTL_SEC`, the pending entry is swept without a rollback and the divergence returns for that one letter. Narrow enough to measure rather than design around — which is what shadow mode is for.
+
+**Rollout: shadow mode first.** Compute the verdict, log it, reject nothing. Confirm the false-positive count is actually zero across the friends playtest, then flip to enforce. That makes "is the coverage check generous enough" a measurement rather than a judgement call — the same mistake the rate limiter's generous floor was standing in for.
+
+**Why this and not the ledger, in one line:** it is roughly twice the work, it closes the cheat the ledger misses, and none of it is throwaway if the project later goes to option 2 — the memorize remote and the server-side `Dictionary` / `EnergyEconomy` wiring are exactly what a full authoritative economy needs. It also hands [[design/persistence-progression]] the word itself, which two of Phase 5.5's headline stats (longest word, highest-value word) require and which the ledger could never have provided.
+
+### Ledger design (rejected 2026-08-10 — kept as the record)
 
 Credit on every *accepted* `ConsumeBlock`, debit on every *accepted* cast. Both hooks sit in files this pass already owns, so it needs no new cross-system coupling beyond one shared server module.
 
