@@ -16,16 +16,25 @@ local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 
 -- How far a tap can reach.
 --
--- Raised 200 → 1400 on 2026-08-10. 200 could not cross the arena: the
--- BlockSpawnVolume parts span roughly 240 × 259 studs, so corner to
--- corner is ~353 studs and the far half of the field was simply
--- unpoppable from where you stood.
+-- 200, the value LetterBlaster shipped with. It went to 1400 briefly on
+-- 2026-08-10 while chasing a "range is too short" report, then back:
+-- the reach was never the problem. Taps were landing only within ~30
+-- studs because BlockTapController mispaired its mouse coordinate space
+-- with the camera method, which capped effective reach far below this
+-- number and made every value of it feel identical. See the aim note in
+-- BlockTapController.tryPop.
+--
+-- Deliberately shorter than the arena. The BlockSpawnVolume parts span
+-- roughly 240 × 259 studs (corner to corner ~353), so the far edge of
+-- the field is out of reach by design — you close on blocks rather than
+-- clearing the map from spawn. That also keeps the server's derived
+-- bound meaningful as an anti-grief limit rather than a formality.
 --
 -- Everything downstream derives from this one number — the server's
 -- MAX_CONSUME_DISTANCE_STUDS and the Hardening suite's out-of-range
 -- fixture both scale with it — so this is the only place reach is
 -- tuned.
-local MAX_RAYCAST_DISTANCE = 1400
+local MAX_RAYCAST_DISTANCE = 200
 
 local BlockShoot = {}
 

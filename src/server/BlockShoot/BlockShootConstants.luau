@@ -23,14 +23,15 @@ local BlockShootConstants = {}
 -- property of the camera rig, not of how far you can tap.
 local CAMERA_ZOOM_ALLOWANCE_STUDS = 100
 
--- NOTE on what this bound is worth now (2026-08-10). At the old 200-stud
--- reach this capped a client at 300 studs, which was a real anti-grief
--- bound: an exploiter could clear blocks near themselves but not across
--- the map. With reach at 1400 it is 1500, comfortably more than the
--- ~353-stud arena diagonal, so it no longer bounds griefing at all — it
--- is a sanity check against absurd coordinates, and nothing more. If
--- cross-map block denial ever needs stopping in PvP, it needs a
--- different mechanism (per-block claim, or a much tighter reach).
+-- What this bound is worth. At the 200-stud reach it caps a client at
+-- 300 studs, which is under the ~353-stud arena diagonal — so it is a
+-- real anti-grief bound: an exploiter firing the remote directly can
+-- clear blocks near themselves but not across the map. That property
+-- only holds while reach stays below the arena size. Reach was briefly
+-- 1400 on 2026-08-10, which put this at 1500 and reduced it to a
+-- sanity check against absurd coordinates; if it is ever raised past
+-- the arena again, cross-map block denial needs a different mechanism
+-- (a per-block claim) rather than this check.
 
 BlockShootConstants.MAX_CONSUME_DISTANCE_STUDS =
 	BlockShoot.MAX_RAYCAST_DISTANCE + CAMERA_ZOOM_ALLOWANCE_STUDS
