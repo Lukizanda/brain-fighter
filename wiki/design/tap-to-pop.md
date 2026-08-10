@@ -1,6 +1,6 @@
 ---
 type: design
-description: Migration plan for retiring the Spelling Staff / LetterBlaster and replacing it with direct click/tap-to-pop on letter blocks, plus a client-local in-range glow affordance. Phase 5.7.
+description: Migration plan for retiring the Spelling Staff / LetterBlaster and replacing it with direct click/tap-to-pop on letter blocks, plus a client-local hover affordance (planned as an in-range glow; see stage 5 for why it shipped as a single hover outline). Phase 5.7.
 updated: 2026-08-10
 ---
 

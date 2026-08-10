@@ -45,8 +45,8 @@ Evidence is from `require` graph traversal plus per-file guard inspection, not f
 | `SkillBuffs` | ✅ runs | ✅ runs | ❌ **no** | `grantShield` read-modify-writes `_shield` at `:228`; client write never replicates upward |
 | `SkillVisuals` | ✅ draws | ✅ broadcasts | ⚠️ workaround | `IsServer()` branches at `:87,:123,:143,:218` — correct today, exists only because callers run on both |
 | `SkillInterrupt` | ✅ | ✅ | ❌ no | reached from `SkillEffects` freeze/purge |
-| **BlockShoot** | ✅ | ✅ | ✅ **yes — correct** | `src/shared/BlockShoot/init.luau:23-38` is two pure read-only helpers (`findLetterBlock`, `readBlock`). Zero state writes. Textbook shared module. |
-| **LetterBlaster** | ✅ only | ❌ | ✅ yes | `StarterPack/Spelling Staff/Scripts/SpellingStaff.client.luau:6`; fires `ConsumeBlock` at `LetterBlaster/init.luau:119`. Server owns the destroy. Correct request/authority split. |
+| **BlockShoot** | ✅ | ✅ | ✅ **yes — correct** | `src/shared/BlockShoot/init.luau:43,54` is two pure read-only helpers (`findLetterBlock`, `readBlock`). Zero state writes. Textbook shared module. |
+| **BlockTapController** | ✅ only | ❌ | ✅ yes | fires `ConsumeBlock` at `src/client/BlockTapController.client.luau:194`. Server owns the destroy. Correct request/authority split. Replaced `LetterBlaster` in Phase 5.7 — the split survived the input migration unchanged, which is the row's actual point. |
 | **BlockSpawner** | ❌ | ✅ only | ✅ yes | required only by `server/BlockSpawner/BlockSpawnerService.server.luau:8` |
 | `LetterBlocks` | ✅ | ✅ | ✅ yes | tag + attribute names only |
 | `WordBuffer`, `EnergyReservoirs`, `MindFullManager`, `MemorizeAction`, `EnergyEconomy`, `Dictionary` | ✅ only | ❌ | ⚠️ known hole | all via `client/PlayerSession.luau:14-16`. The server has no reservoir — this is the client-trusted affordability gap already tracked in [[systems/SpellCastService]] § Trust model. |
@@ -54,7 +54,7 @@ Evidence is from `require` graph traversal plus per-file guard inspection, not f
 | `Boss` | ❌ | ✅ only | ✅ yes | `server/Boss/*` |
 | `Vfx` (`VfxConfig`, `spawnEffect`, `StatusVisuals`) | ✅ draws | refuses | ✅ yes | `spawnEffect` refuses server-side by design |
 
-**Verdict: the duplication is confined to one chain — `CastAction → SpellExecutor → SkillDelivery → SkillEffects/SkillBuffs/SkillVisuals`.** Everything else the audit touched is either correctly server-only, correctly client-only, or a genuinely pure shared module. The suspected offenders (BlockShoot, LetterBlaster, BlockSpawner) all came back clean — BlockShoot in particular is the model the Skills chain should be measured against: shared code that reads and never writes.
+**Verdict: the duplication is confined to one chain — `CastAction → SpellExecutor → SkillDelivery → SkillEffects/SkillBuffs/SkillVisuals`.** Everything else the audit touched is either correctly server-only, correctly client-only, or a genuinely pure shared module. The suspected offenders (BlockShoot, the block-tap input path, BlockSpawner) all came back clean — BlockShoot in particular is the model the Skills chain should be measured against: shared code that reads and never writes.
 
 ## What the duplication actually costs
 
