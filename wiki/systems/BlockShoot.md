@@ -70,6 +70,24 @@ Confirmed against the engine's own `Mouse.Hit` as ground truth — `ScreenPointT
 
 **The lesson worth carrying:** an aim error that scales with distance is indistinguishable from a range cap by feel alone. When a range complaint survives a range change, stop tuning the range.
 
+## Hover affordance
+
+One `Highlight`, client-local, under the local player's `PlayerGui` — never replicated, so it is private to that player by construction rather than by convention. Three states, resolved every `RenderStepped`:
+
+| State | Look | Means |
+|---|---|---|
+| Ready | block's tint as fill, **white** outline, opaque | a click here pops it |
+| Denied | grey `#9ca3af`, dimmer in both channels | out of reach, or the mind is full |
+| Off | disabled | not pointing at a block |
+
+**Why one highlight and not one per reachable block.** Roblox renders a bounded number of `Highlight` instances — guidance is to stay under ~31 — and the arena holds 40 blocks, so glowing every reachable one exceeds the budget and drops outlines unpredictably. It is also noise. The question is only ever about the block under the cursor.
+
+**The probe deliberately overshoots reach** (`HOVER_PROBE_MULTIPLIER`). Stopping at reach would return no hit for a too-far block, making it indistinguishable from pointing at the sky; overshooting lets the affordance say "that is a block, and it is too far" — which is its whole job now that reach is shorter than the arena. Range is judged on `result.Distance` against `MAX_RAYCAST_DISTANCE`, the same measure along the same ray the tap uses, so the outline greys out on exactly the blocks a click would fail to reach.
+
+**The outline colour is not the block's colour, and that is deliberate.** The first build tinted both fill and outline with the block's tint; it is invisible, because an outline in the block's own colour has zero contrast against the block — and it fails on all four tints at once, since every tint is by definition the colour of the block wearing it. Every property assertion passed. Only a screenshot caught it. White is the one colour that separates from red, green, blue and gold and from the arena floor behind them. This is the same verification rule VFX is held to in `CLAUDE.md`: presentation is verified by what a client renders, not by what the code set.
+
+Mouse only, gated on `UserInputService.MouseEnabled`. A finger has no position until it is already tapping, by which point the highlight would be reporting a decision the player has already made.
+
 ## Showing the consume
 
 A validated consume ends in `broadcastPop`, which fires **two** cosmetics on one round trip:

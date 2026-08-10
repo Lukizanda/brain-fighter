@@ -80,6 +80,8 @@ Wired into the Cube's `Color`, every SurfaceGui-driven label tint, and the Parti
 
 The face label goes through `Wildcard.toDisplay(letter)`, so a wildcard's stored `*` renders as `★` while every other letter passes through uppercased.
 
+**These tints are not usable as an outline colour on the block itself.** The Phase 5.7 hover affordance tried it and the highlight was invisible: an outline drawn in the block's own tint has no contrast against the block, and it fails for all four tints simultaneously because each tint *is* the colour of the block wearing it. Anything that has to read *against* a block needs an off-palette colour — the hover outline uses white. See [[systems/BlockShoot]] § Hover affordance.
+
 ## CollectionService tag → animator
 
 `spawn` calls `CollectionService:AddTag(block, "LetterBlock")` before parenting. The client animator (`LetterBlockAnimator.client.luau`) listens via `CollectionService:GetInstanceAddedSignal("LetterBlock")` and tracks each block in a Heartbeat loop. Each block draws a random phase offset on track so a cluster doesn't bob in unison — looks more organic.

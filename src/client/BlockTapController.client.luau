@@ -20,11 +20,13 @@
 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
 local SoundService      = game:GetService("SoundService")
 local UserInputService  = game:GetService("UserInputService")
 
 local BlockShoot     = require(ReplicatedStorage.Shared.BlockShoot)
 local BlockTapConfig = require(ReplicatedStorage.Shared.BlockShoot.BlockTapConfig)
+local LetterBlocks   = require(ReplicatedStorage.Shared.LetterBlocks)
 local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillVisuals   = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 local VfxConfig      = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
@@ -207,6 +209,103 @@ local function tryPop(screenPosition: Vector2)
 	-- the popper, with no drawnLocallyBy exclusion. A stream you did not
 	-- earn is never drawn rather than drawn and retracted.
 	SkillVisuals.spawnEffectAtPoint(blockPos, VfxConfig.resolveBlockPopId(color))
+end
+
+----------------------------------------------------------------------
+-- Hover affordance
+----------------------------------------------------------------------
+-- Client-local, and local to *this* player by construction: the
+-- Highlight lives under our own PlayerGui and is never replicated, so
+-- there is nothing to hide from other clients and no remote involved.
+--
+-- One Highlight, reused, rather than one per in-range block. Roblox
+-- renders a bounded number of Highlight instances (guidance is to stay
+-- under ~31) and the arena holds 40 blocks, so lighting every reachable
+-- one would exceed the budget and drop outlines unpredictably. It would
+-- also be noise — "which of these 20 can I pop" is not a question
+-- anyone asks. The question is always about the block under the cursor,
+-- and one highlight that changes colour answers it *and* shows where
+-- reach ends, at the only moment that matters.
+local hoverHighlight = Instance.new("Highlight")
+hoverHighlight.Name                 = "BlockHoverHighlight"
+-- Occluded, matching InfernoVfx: an outline drawn through the arena wall
+-- would mark blocks the player cannot see, which is a wallhack and also
+-- a lie, since the tap raycast stops at that wall too.
+hoverHighlight.DepthMode            = Enum.HighlightDepthMode.Occluded
+hoverHighlight.Enabled              = false
+hoverHighlight.Adornee              = nil
+hoverHighlight.Parent               = LocalPlayer:WaitForChild("PlayerGui")
+
+local function clearHover()
+	if hoverHighlight.Enabled then
+		hoverHighlight.Enabled = false
+		hoverHighlight.Adornee = nil
+	end
+end
+
+local function showHover(block: Model, ready: boolean, color: string?)
+	hoverHighlight.Adornee = block
+	hoverHighlight.Enabled = true
+	if ready then
+		-- Fill carries the block's colour, outline does not — see the note
+		-- in BlockTapConfig. An outline in the block's own tint is
+		-- invisible against the block.
+		local tint = (color and LetterBlocks.COLOR_TINTS[color]) or BlockTapConfig.HOVER_DENIED_COLOR
+		hoverHighlight.FillColor            = tint
+		hoverHighlight.OutlineColor         = BlockTapConfig.HOVER_READY_OUTLINE_COLOR
+		hoverHighlight.FillTransparency     = BlockTapConfig.HOVER_READY_FILL_TRANSPARENCY
+		hoverHighlight.OutlineTransparency  = BlockTapConfig.HOVER_READY_OUTLINE_TRANSPARENCY
+	else
+		hoverHighlight.FillColor            = BlockTapConfig.HOVER_DENIED_COLOR
+		hoverHighlight.OutlineColor         = BlockTapConfig.HOVER_DENIED_COLOR
+		hoverHighlight.FillTransparency     = BlockTapConfig.HOVER_DENIED_FILL_TRANSPARENCY
+		hoverHighlight.OutlineTransparency  = BlockTapConfig.HOVER_DENIED_OUTLINE_TRANSPARENCY
+	end
+end
+
+local function updateHover()
+	local character = livingCharacter()
+	local camera = workspace.CurrentCamera
+	if not character or not camera then
+		clearHover()
+		return
+	end
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character }
+
+	-- GetMouseLocation() pairs with ViewportPointToRay — the *opposite*
+	-- pairing to tryPop, which starts from an InputObject. Both are
+	-- correct; see the note in tryPop. This is the pairing LetterBlaster
+	-- used, and it is only right here because the point comes from
+	-- GetMouseLocation rather than an event.
+	local mousePos = UserInputService:GetMouseLocation()
+	local ray = camera:ViewportPointToRay(mousePos.X, mousePos.Y)
+	local probe = BlockShoot.MAX_RAYCAST_DISTANCE * BlockTapConfig.HOVER_PROBE_MULTIPLIER
+	local result = workspace:Raycast(ray.Origin, ray.Direction * probe, params)
+
+	local block = result and BlockShoot.findLetterBlock(result.Instance)
+	if not block or not result then
+		clearHover()
+		return
+	end
+
+	-- Range is measured exactly as the tap measures it — distance along
+	-- the same ray from the same origin — so the highlight turns grey on
+	-- precisely the blocks a click would fail to reach, not approximately
+	-- those.
+	local inRange = result.Distance <= BlockShoot.MAX_RAYCAST_DISTANCE
+	local _, color = BlockShoot.readBlock(block)
+	showHover(block, inRange and not session.mindFullManager:isMindFull(), color)
+end
+
+-- Hover is a mouse affordance and has no touch equivalent: a finger has
+-- no position until it is already tapping, by which point the highlight
+-- would be telling the player something they just committed to. Touch
+-- players get the same information from the fizzle and the pop itself.
+if UserInputService.MouseEnabled then
+	RunService.RenderStepped:Connect(updateHover)
 end
 
 -- The consume was refused. Give the letter back.

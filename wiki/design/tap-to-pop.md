@@ -327,13 +327,30 @@ playtest.
   re-derived from it (it currently adds a 100-stud camera-zoom allowance on top
   of `BlockShoot.MAX_RAYCAST_DISTANCE` — the allowance still applies, the base
   shrinks).
-- In-range `Highlight` glow + hover outline + mind-full muting, in the
+- ~~In-range `Highlight` glow~~ + hover outline + mind-full muting, in the
   controller.
 - Retune `blockshoot_range_and_rate`, which asserts both directions of the range
   bound against the production constants.
 
-**Done when:** walking toward a block lights it up before you can pop it, and the
-hardening suite is green on the new numbers.
+**Built as: hover outline only, with state — no in-range glow.** Two reasons the
+planned glow-every-reachable-block was dropped. Roblox renders a bounded number
+of `Highlight` instances (guidance is under ~31) and the arena holds 40 blocks,
+so the budget does not cover it and outlines would drop unpredictably. And it
+answers a question nobody asks: "which of these twenty can I reach" is not how
+anyone plays. The question is always about the block under the cursor, and one
+highlight that changes colour answers it *and* shows where reach ends, at the
+moment it is relevant. Three states: block tint + white outline (poppable),
+grey and dimmer (out of reach, or mind full), off (not pointing at a block).
+
+**Reach did not shrink after all.** This stage was written expecting reach to be
+tuned down; it ended up back at LetterBlaster's original 200 by a different
+route — see [[systems/BlockShoot]] § Reach and § Aiming. The hardening suite
+needed no retune because its out-of-range fixture derives from
+`MAX_RAYCAST_DISTANCE` rather than restating it.
+
+**Done when:** ~~walking toward a block lights it up before you can pop it~~
+pointing at a block tells you whether a click will land, and the hardening suite
+is green. ✅
 
 **PvP note:** reach plus glow turns blocks into contested positional resources —
 two players can see the same block go live for both of them. That is good design
