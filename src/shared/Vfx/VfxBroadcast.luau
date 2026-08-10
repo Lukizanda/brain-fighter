@@ -20,6 +20,8 @@
 --   VfxBroadcast.playOn(effectId, target)          — one-shot on a Part
 --   VfxBroadcast.shockwave(center, radius, opts)   — ground ring + burst
 --   VfxBroadcast.beam(origin, endPoint)            — laser from A to B
+--   VfxBroadcast.collect(origin, userId)           — stream from a point
+--                                                    onto a moving player
 --
 -- Each takes an optional `drawnLocallyBy: number?` (a UserId): don't send
 -- this to that player, they already have it. Exactly one situation earns
@@ -50,6 +52,11 @@ local log = Logger.new("VfxBroadcast")
 export type BeamPayloadOpts = {
 	soundParent: Instance?,
 	soundName: string?,
+	drawnLocallyBy: number?,
+}
+
+export type CollectPayloadOpts = {
+	color: Color3?,
 	drawnLocallyBy: number?,
 }
 
@@ -162,6 +169,44 @@ function VfxBroadcast.beam(origin: Vector3, endPoint: Vector3, opts: BeamPayload
 		soundParent    = o.soundParent,
 		soundName      = o.soundName,
 		drawnLocallyBy = o.drawnLocallyBy,
+	})
+end
+
+-- A stream of energy running from `origin` onto a player — the letter
+-- block's mana visibly flowing into whoever popped it.
+--
+-- This is the PvP attribution cue, and it replaces what the blaster beam
+-- used to do. The beam said *where a shot came from*; this says *who got
+-- it, and which colour they banked*, by pointing at a person rather than
+-- at a line of empty air.
+--
+-- The destination is a **userId, not a position and not an Instance**, and
+-- all three options fail differently:
+--
+--   * A Vector3 is what `beam` correctly uses — a laser is instantaneous
+--     and its endpoint is a block about to be destroyed. But a stream has
+--     a flight time during which the collector is *running*, so a frozen
+--     endpoint funnels into the patch of ground where they used to be.
+--     A stationary playtest cannot catch this; test it while moving.
+--   * An Instance re-introduces the nil-arrival race documented on
+--     `playOn`, and additionally breaks if the collector dies or respawns
+--     mid-flight.
+--   * A userId is re-resolved by each client, every frame. Resolution
+--     failing mid-flight is not an error — it is the stream ending, which
+--     is exactly right when its destination stops existing.
+--
+-- The origin stays a Vector3 for the same reason `beam`'s endpoint is one:
+-- the block is already being destroyed.
+function VfxBroadcast.collect(origin: Vector3, collectorUserId: number, opts: CollectPayloadOpts?)
+	local r = outbound("collect")
+	if not r then return end
+	local o = opts or {}
+	r:FireAllClients({
+		kind            = "collect",
+		origin          = origin,
+		collectorUserId = collectorUserId,
+		color           = o.color,
+		drawnLocallyBy  = o.drawnLocallyBy,
 	})
 end
 

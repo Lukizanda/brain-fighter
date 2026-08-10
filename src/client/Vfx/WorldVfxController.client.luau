@@ -22,6 +22,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Logger          = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillVisuals    = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 local VfxConfig       = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
+local collectStream   = require(ReplicatedStorage.Shared.Vfx.collectStream)
 local laserBeamEffect = require(ReplicatedStorage.Shared.Weapon.Scripts.Effects.laserBeamEffect)
 local spawnEffect     = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
@@ -81,6 +82,19 @@ local handlers: { [string]: (payload: any) -> () } = {
 		if typeof(payload.endPoint) ~= "Vector3" then return end
 		laserBeamEffect(payload.origin, payload.endPoint)
 		playNamedSound(payload.soundParent, payload.soundName)
+	end,
+
+	-- A block's mana streaming onto the player who popped it. Drawn by
+	-- everyone except the popper, who drew their own on the frame they
+	-- clicked — see VfxBroadcast.collect.
+	collect = function(payload: any)
+		if typeof(payload.origin) ~= "Vector3" then return end
+		if typeof(payload.collectorUserId) ~= "number" then return end
+		collectStream.play(
+			payload.origin,
+			payload.collectorUserId,
+			if typeof(payload.color) == "Color3" then payload.color else nil
+		)
 	end,
 
 	shockwave = function(payload: any)

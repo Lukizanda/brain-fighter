@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-07-27
+updated: 2026-08-10
 ---
 
 # Wiki Index
@@ -41,12 +41,12 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/LetterBlock]] — Phase 3 entity: floating block prefab with `Block.Letter` + `Block.Color` attributes; chunky 4×4×4 cube with 6-face SurfaceGui letter glyph + colored ParticleEmitter; CollectionService tag drives the client bob/rotation animator (6°/s, sinusoidal bob)
 - [[systems/BlockSpawner]] — Phase 3 server-side populator: Scrabble-weighted letter picks (plus a 27th wildcard roll at ~4%), configurable color weights, auto-refill via CollectionService removed signal; maintains ~24 blocks in a 40x8x40 arena box
 - [[systems/Wildcard]] — the gold ★ block that stands in for any letter (`D★G` → DOG); ASCII `*` internally / `★` on screen, uncapped per word, length-indexed dictionary matcher, energy spread across all three reservoirs
-- [[systems/BlockShoot]] — shared helpers + server handler for block consumption; client input now handled by LetterBlaster (Phase 4.6); payload/range/rate validation added 5.4
+- [[systems/BlockShoot]] — shared helpers + server handler for block consumption; client input is `BlockTapController` (Phase 5.7 — click/tap a block directly, `gameProcessedEvent`-guarded); payload/range/rate validation added 5.4 and unchanged by the input migration
 - [[systems/SpellCastService]] — server relay for client-initiated casts (client Health writes don't replicate on server-owned rigs); 5.4 validates spell/caster/target/rate — **affordability still client-trusted**, blocked on client-side energy state
 - [[systems/Boss]] — Full boss system: custom non-humanoid rig (BossBrain sphere), AI state machine (Idle/Patrol/AttackPrep/Attack/Cooldown), phase scaffolding, FireballVolley + GroundSlam attacks, BossHudGui health bar
 - [[systems/BossAdapter]] — Phase 3 MVP (**REMOVED commit 6610291**, previously superseded by Boss): static Humanoid-bearing Model; module + Phase 3 tests now deleted
 - [[systems/SkillPipeline]] — Unified `SkillSpec` + `SkillEffects` + `SkillDelivery` shared by player spells and boss attacks; pure data-driven dispatch, multi-effect `onImpact` arrays, reserved hooks for VFX/SFX/status-effects
-- [[systems/LetterBlaster]] — Phase 4.6 weapon controller behind the Spelling Staff Tool: Tool.Activated → cooldown → mind-full gate → raycast → consume + laser blast; FireSound/HitSound/FizzleSound; no reticle (tap directly on blocks)
+- [[systems/LetterBlaster]] — **REMOVED (Phase 5.7, commit 14881d9)**; historical record of the Spelling Staff Tool and its controller, which owned block input from 4.6 until tap-to-pop replaced it
 - [[systems/AudioSFX]] — Sound effect inventory, two-backend overview (Sound vs AudioPlayer), wiring patterns, placeholder locations, gap priority list
 - [[systems/Tutorial]] — Phase 5 guided first-play sequence: shoot → buffer → memorize → cast → boss hit; step machine, overlay builder, skip flag (planning)
 - [[systems/VisualEffects]] — world spell cast/impact particles + cross-client broadcast (VfxController + spawnEffect + VfxBroadcastService); per-color (R/G/B) theming. Core shipped; PERF guardrails + green casts still planned

@@ -27,9 +27,13 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local BlockShoot = require(ReplicatedStorage.Shared.BlockShoot)
 local BlockShootConstants = require(script.Parent.BlockShootConstants)
 local BlockShootValidation = require(script.Parent.BlockShootValidation)
+local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 local RateLimiter = require(script.Parent.Parent.Utility.RateLimiter)
+local VfxBroadcast = require(ReplicatedStorage.Shared.Vfx.VfxBroadcast)
+local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 
 local log = Logger.new("BlockShootService")
 
@@ -56,6 +60,34 @@ local function reject(player: Player, reason: string)
 	end
 end
 
+-- Show the pop for everyone who isn't the player who made it.
+--
+-- Two cosmetics, one round trip: the burst where the block stood, and the
+-- stream carrying its mana onto the popper. The server describes both and
+-- each client draws its own — `ParticleEmitter:Emit()` does not replicate,
+-- and a Beam the server built would be anchored to a Part the receiving
+-- client may not have yet.
+--
+-- The stream is the PvP attribution cue. It replaces the blaster beam,
+-- which was the only thing linking a taker to a block for other players,
+-- and it says more: who got it, and which colour they banked.
+--
+-- `drawnLocallyBy` excludes the popper, who drew both on the frame they
+-- clicked and must not get a second copy a round trip later. That is only
+-- safe because the client's draw is unconditional on the same branch that
+-- fires this remote.
+local function broadcastPop(player: Player, blockPos: Vector3, blockColor: string?)
+	VfxBroadcast.playAt(
+		VfxConfig.resolveBlockPopId(blockColor),
+		blockPos,
+		player.UserId
+	)
+	VfxBroadcast.collect(blockPos, player.UserId, {
+		color          = if blockColor then LetterBlocks.COLOR_TINTS[blockColor] else nil,
+		drawnLocallyBy = player.UserId,
+	})
+end
+
 consumeRemote.OnServerEvent:Connect(function(player: Player, block: any)
 	-- Rate first: it is the cheapest check and the one an exploiter is
 	-- most likely to be hammering.
@@ -77,13 +109,16 @@ consumeRemote.OnServerEvent:Connect(function(player: Player, block: any)
 		return
 	end
 
+	-- Read both before the block stops existing. The burst needs the
+	-- position it stood at, and the stream needs its colour — neither is
+	-- recoverable from a destroyed Model, and an Instance reference for a
+	-- thing that no longer exists arrives as nil on the receiving client.
+	local blockPos = model:GetPivot().Position
+	local _, blockColor = BlockShoot.readBlock(model)
+
 	model:Destroy()
 
-	-- Phase 5.7 stage 2: the laser beam that used to be broadcast from
-	-- here left with the staff — it was drawn from the Muzzle attachment
-	-- on a Tool that no longer exists. Until stage 3 lands the pop and
-	-- the collect stream, a consume is silent for everyone but the
-	-- player who made it. That is a known gap, not an oversight.
+	broadcastPop(player, blockPos, blockColor)
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)

@@ -52,7 +52,7 @@ Covers the Phase 5.4 server-trust validation on both client→server gameplay re
 
 These modules live under `ReplicatedStorage.Shared.Tests` but reach into `ServerScriptService.Server.*`, which is valid because `TestAutoRunner` is a server Script.
 
-Both directions are asserted, since a mis-tuned bound breaks real play as surely as a missing one: the suite checks that a player firing at the LetterBlaster's own cooldown is *never* throttled, and that an in-range block and an in-range target are *never* rejected. `blockshoot_range_and_rate` runs its rate half in real time (~1.3s) against the production constants, because the thing worth testing is the tuning rather than the arithmetic.
+Both directions are asserted, since a mis-tuned bound breaks real play as surely as a missing one: the suite checks that a player tapping at the client's own `BlockTapConfig.COOLDOWN` is *never* throttled, and that an in-range block and an in-range target are *never* rejected. `blockshoot_range_and_rate` runs its rate half in real time (~1.3s) against the production constants, because the thing worth testing is the tuning rather than the arithmetic.
 
 ## Cross-references
 

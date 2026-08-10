@@ -4,7 +4,7 @@
 -- VfxController (Phase C — local + broadcast)
 ----------------------------------------------------------------------
 -- Listens to CastAction.spellResolved and spawns ParticleEmitter
--- bursts at the caster's staff tip (cast VFX) and on the target's
+-- bursts on the caster (cast VFX) and on the target's
 -- HumanoidRootPart (impact VFX).
 --
 -- Also broadcasts via BroadcastSpellVfx so other clients see the
@@ -23,7 +23,7 @@
 -- Note the deliberate gap at the impact burst below: projectile spells are
 -- skipped, because their impact is raised by SkillDelivery at the real hit
 -- position on the server. Predicting an impact *location* is a claim this
--- layer is not entitled to make; predicting that the caster's staff
+-- layer is not entitled to make; predicting that the caster themselves
 -- flashed is not.
 ----------------------------------------------------------------------
 
@@ -46,19 +46,18 @@ local SpellVfxEvent     = Remotes:WaitForChild("SpellVfxEvent")     :: RemoteEve
 -- Helpers
 ----------------------------------------------------------------------
 
--- Walk character → equipped Tool → Handle → Tip attachment.
--- Falls back to HumanoidRootPart so VFX always fires somewhere.
-local function resolveStaffTip(character: Model): BasePart | Attachment
-	local tool = character:FindFirstChildWhichIsA("Tool")
-	if tool then
-		local handle = tool:FindFirstChild("Handle")
-		if handle then
-			local tip = handle:FindFirstChild("Tip")
-			if tip and tip:IsA("Attachment") then
-				return tip
-			end
-		end
-	end
+-- Where a cast burst is drawn from.
+--
+-- This used to walk character → equipped Tool → Handle → `Tip` attachment,
+-- with the HumanoidRootPart only as a fallback. Phase 5.7 deleted the
+-- Spelling Staff, so the Tool branch could never succeed again and every
+-- cast already resolved to the fallback — the walk was three FindFirstChild
+-- calls per cast that were guaranteed to miss.
+--
+-- Casts therefore originate at the caster's chest rather than a staff tip.
+-- That is the intended look while hands are empty; if the deferred cosmetic
+-- prop lands, give it an attachment and re-add the lookup here.
+local function resolveCastAnchor(character: Model): BasePart | Attachment
 	return (character:FindFirstChild("HumanoidRootPart") :: BasePart)
 end
 
@@ -110,11 +109,11 @@ CastAction.spellResolved:Connect(function(
 	local character = LocalPlayer.Character
 	if not character then return end
 
-	-- Cast VFX at staff tip
+	-- Cast VFX on the caster
 	local castEffectId = VfxConfig.resolveCastId(spec.color, spec.tier)
 	local castEffect   = VfxConfig.EFFECTS[castEffectId]
 	if castEffect then
-		local anchor = resolveStaffTip(character)
+		local anchor = resolveCastAnchor(character)
 		spawnEffect(castEffect, anchor)
 		log:infoThrottled("cast_vfx", 2, string.format("cast vfx: %s @ %s", castEffectId, anchor.Name))
 	end
@@ -150,7 +149,7 @@ end)
 SpellVfxEvent.OnClientEvent:Connect(function(payload: any)
 	if payload.senderUserId == LocalPlayer.UserId then return end
 
-	-- Cast burst at the sender's staff tip
+	-- Cast burst on the sender
 	if payload.castEffectId then
 		local castEffect = VfxConfig.EFFECTS[payload.castEffectId]
 		local senderPlayer = if typeof(payload.senderUserId) == "number"
@@ -158,7 +157,7 @@ SpellVfxEvent.OnClientEvent:Connect(function(payload: any)
 			else nil
 		local senderChar = senderPlayer and senderPlayer.Character
 		if castEffect and senderChar then
-			local anchor = resolveStaffTip(senderChar)
+			local anchor = resolveCastAnchor(senderChar)
 			spawnEffect(castEffect, anchor)
 		end
 	end

@@ -50,7 +50,7 @@ Check 2 closes a latent crash as well as an exploit. `SpellRegistry.getSpell` ac
 
 Energy state lives entirely client-side. `EnergyReservoirs` is instantiated in exactly one place — `src/client/PlayerSession.luau` — and the server holds no reservoir, no word buffer, and no memorize history. Nothing in `src/server/` references [[systems/EnergyReservoirs]], [[systems/WordBuffer]], [[systems/EnergyEconomy]] or [[systems/MemorizeAction]]. There is no server-side number to compare a cast cost against.
 
-The rate limit is a flood guard standing in for the missing price check. Its floor is derived from what the economy physically permits — energy only enters a reservoir by memorizing a word, every letter in that word costs one LetterBlaster shot, and the weapon gates shots at `COOLDOWN` — taking the most generous possible reading of one block per cast so it can never reject real play. It stops a remote loop dead; it does not stop a client casting T4 Volley with an empty red bar.
+The rate limit is a flood guard standing in for the missing price check. Its floor is derived from what the economy physically permits — energy only enters a reservoir by memorizing a word, every letter in that word costs one popped block, and the input gates pops at `BlockTapConfig.COOLDOWN` — taking the most generous possible reading of one block per cast so it can never reject real play. It stops a remote loop dead; it does not stop a client casting T4 Volley with an empty red bar.
 
 Two ways forward were put up:
 

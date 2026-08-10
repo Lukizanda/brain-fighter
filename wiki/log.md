@@ -1268,3 +1268,23 @@ Follow-up to the entry above, and the two halves are causally linked. `impactRin
 **Tier headroom is the thing to watch.** T2's flame now peaks at 7.0 against T3's 7.5, so footprint barely separates them and the ladder rests on duration, ember/smoke volume and the light instead. Noted on both pages: if Fireball starts reading as interchangeable with Inferno, scale T3 up rather than pulling T2 back down.
 
 Verified on a client, both branches. A real `SkillDelivery.deliver` of the registry's Fireball produced **0 `SkillShockwave` and 1 `SkillEffectAnchor`**; an otherwise-identical probe spec with `impactRing` left unset still produced **1 ring**, so the default path is intact. Captured a live detonation on open floor from an elevated three-quarter angle where a ground disc would be unmistakable — none present, and the fire bloom covers the impact area. See [[systems/VisualEffects]] and [[systems/SkillPipeline]] § `impactRing`.
+
+## [2026-08-10] ingest | Phase 5.7 stages 1–2 — the Spelling Staff is gone, blocks are tapped
+
+Block input moved off `Tool.Activated` onto an always-mounted `UserInputService` handler (`src/client/BlockTapController.client.luau`), then the staff, `LetterBlaster`, `BlockShoot.muzzlePosition`/`resolveHandle`, `broadcastShot` and the whole `src/StarterPack` tree were deleted (commits `be2b1a2`, `14881d9`; net −337 lines). The server contract is untouched — `ConsumeBlock` still takes one argument and `BlockShootValidation` still runs the same three checks.
+
+Two findings worth carrying forward. **`gameProcessedEvent` is load-bearing**: `Tool.Activated` suppressed clicks over GUI for free, a raw `InputBegan` handler does not, and without the guard every spell-button press also pops the block behind it — proven by A/B with the GUI as the only variable. **The `WordBuffer` append is optimistic and unacknowledged**, so in PvP the loser of a same-frame race for a block keeps a phantom letter all round; latent in the staff build too, unreachable in solo play, scheduled as stage 4.
+
+Also emptied `GameConfig.DEV_AUTO_EQUIP_TOOL` (core input no longer depends on a dev helper firing), removed the now-pathless `StarterPack` mapping from `default.project.json`, resolved the duplicated fizzle `SoundId` (`VfxConfig.SFX.fizzle` is now the only copy), and simplified `VfxController.resolveStaffTip` → `resolveCastAnchor` — its Tool walk could never succeed again, so casts now visibly originate at the caster's chest rather than a staff tip.
+
+Pages updated: systems/LetterBlaster (→ REMOVED record), systems/BlockShoot, systems/AudioSFX, systems/Tutorial ("shoot"→"pop", dropped the equip step), systems/VisualEffects §2.1, systems/HUD, systems/SpellCastService, systems/Tests, design/tap-to-pop, design/build-plan, index. Dated audit entries in design/client-server-boundary and design/system-audit-2026-06 left as-is — they are history, not description.
+
+## [2026-08-10] ingest | Phase 5.7 stage 3 — block pop + collect stream
+
+A consume is visible again, and says more than the beam it replaces. `block_pop_{red,green,blue,wild}` bursts (resolved by `VfxConfig.resolveBlockPopId`) plus a new `VfxBroadcast.collect` kind that streams the block's mana onto the player who took it — the PvP attribution cue. Drawn by the popper on the frame they click and by every other client from the broadcast, out of one shared `collectStream` module so the two can't drift.
+
+**The destination is a `collectorUserId`, not a Vector3.** A frozen endpoint funnels into the ground the collector already left; an Instance hits the nil-arrival race and breaks on respawn. Re-resolved per client per frame instead, and failing to resolve mid-flight just ends the stream. Verified against a **moving** collector — endpoint-to-HumanoidRootPart gap 0.00 studs across 25 frames while the character travelled 19.2 studs. A stationary test passes with the bug present, so this one has to be driven moving.
+
+Flight (0.4 s) is deliberately **longer** than the 0.25 s tap cooldown. The first instinct was to fit it inside the cooldown to avoid overlap, but overlap is the correct read: several streams converging says "that player is banking letters fast", which is the tell the cue exists to give. `VfxConfig.PERF.maxBlockPops` — which already existed as a reserved knob — bounds cost instead of duration. No anchors or attachments leaked after the flight.
+
+**Still owed: the two-client check.** Only the predicted local draw has been exercised; the broadcast receive path (`WorldVfxController`'s `collect` handler) has not been seen by a second client. Same outstanding item as Phase 5.6 Stage 4.

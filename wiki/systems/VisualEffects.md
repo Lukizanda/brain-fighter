@@ -2,7 +2,7 @@
 type: system
 description: Visual effects — particle effects for spell casts/impacts (shipped via VfxController + spawnEffect + cross-client broadcast), UI feedback animations, and per-color theming. World cast/impact VFX are implemented; PERF guardrails and some lanes remain planned.
 status: implemented (core); planned (PERF guardrails, collect-pop)
-updated: 2026-08-09
+updated: 2026-08-10
 ---
 
 # Visual Effects
@@ -350,15 +350,24 @@ Heal / freeze / shield / wall / buff follow the same shape; `freeze` and `shield
 
 ## 2. World VFX — Implementation Detail
 
-### 2.1 Cast burst attachment to the Spelling Staff tip
+### 2.1 Cast burst anchor — ~~Spelling Staff tip~~ the caster (Phase 5.7)
 
-- **Folder-with-init layout** (implemented): `Handle.model.json` has been converted to:
+> **Superseded 2026-08-10.** The staff and its `Tip` attachment were deleted in
+> Phase 5.7 ([[design/tap-to-pop]]). `resolveCastAnchor` now returns the caster's
+> `HumanoidRootPart` directly — the documented fallback became the only path, so
+> the Tool walk was removed rather than left to miss three `FindFirstChild` calls
+> per cast. **Casts now originate at the caster's chest, not a staff tip.** If the
+> deferred cosmetic prop lands, give it an attachment and re-add the lookup.
+>
+> The original design is kept below as the record of why the fallback existed.
+
+- **Folder-with-init layout** (implemented, now deleted): `Handle.model.json` was converted to:
   - `src/StarterPack/Spelling Staff/Handle/init.model.json` — same MeshPart props (MeshId + Size).
-  - `src/StarterPack/Spelling Staff/Handle/Tip.model.json` — `Attachment` className, CFrame placeholder at `(0, 2.877, 0)` (top of staff, Y/2 of the MeshPart height). Exact CFrame to be captured via Studio + `capture-grip` after first sync.
+  - `src/StarterPack/Spelling Staff/Handle/Tip.model.json` — `Attachment` className, CFrame placeholder at `(0, 2.877, 0)` (top of staff, Y/2 of the MeshPart height).
   - See [[concepts/ModelJsonInstances]] for the folder-with-init convention (sibling `.model.json` files parent to the init instance, not to the Tool).
-  - **Fallback**: if Tip CFrame iteration drags, anchor v1 cast VFX to `caster.HumanoidRootPart` and defer Tip to v1.1.
+  - **Fallback**: if Tip CFrame iteration drags, anchor v1 cast VFX to `caster.HumanoidRootPart` and defer Tip to v1.1. *(This is what shipped, and then became permanent.)*
 - `VfxController.spawnCast(playerOrCharacter, effectId)`:
-  1. Resolves the character → finds the equipped Tool → `Tool.Handle.Tip` Attachment.
+  1. ~~Resolves the character → finds the equipped Tool → `Tool.Handle.Tip` Attachment.~~ Resolves the character → `HumanoidRootPart`.
   2. For each `EmitterSpec`, clones the template ParticleEmitter from `ReplicatedStorage.VfxTemplates`, applies overrides (color, rate, size, etc.), parents to the `Tip` Attachment.
   3. If `emitCount` is set: call `:Emit(emitCount)` and immediately mark for cleanup at `totalDurationSec`.
   4. If `durationSec` is set: leave `Enabled = true`, schedule `Enabled = false` at the duration, destroy at `totalDurationSec`.
@@ -605,7 +614,7 @@ Ordered so each step is independently testable; **bold** items are blocking for 
 
 ### Phase C — World VFX client-side
 6. ~~**Create `src/client/Vfx/VfxController.client.luau`**~~ **Done** — local-player path implemented: listens to `CastAction.spellResolved`, spawns cast emitters at `Handle.Tip` (fallback HRP), spawns impact emitters at target HRP. Remote-player path (`SpellVfxEvent.OnClientEvent` + `BroadcastSpellVfx:FireServer`) and `_G.PlayerVfx` debug handle deferred to Phase C step 2.
-7. ~~**`Tip` Attachment**~~ **Done** — `src/StarterPack/Spelling Staff/Handle/Tip.model.json` on disk (CFrame Y=2.877, half of Handle height 5.7549). Also created in Studio edit-mode DataModel via MCP so it persists until next Rojo sync.
+7. ~~**`Tip` Attachment**~~ **Done, then deleted (Phase 5.7)** — was `src/StarterPack/Spelling Staff/Handle/Tip.model.json` (CFrame Y=2.877, half of Handle height 5.7549). Went with the staff; cast bursts anchor to the HumanoidRootPart. See §2.1.
 8. **Populate `VfxConfig.EFFECTS`** — **Partial**: `cast_red_t1`, `cast_red_t2`, `impact_damage` implemented. Remaining: green/blue tiers, `impact_heal`, `impact_freeze`, `impact_shield`, `impact_wall`, `impact_buff`. Sound IDs `"rbxassetid://0"` — replaced by ArtDirection pass. VfxTemplates (`BurstSmall`, `BurstMedium`, `ImpactBurst`) created in Studio via MCP (not Rojo-tracked; re-create after fresh place open).
 9. **Extend `src/client/LetterBlockAnimator.client.luau`** with the collect-pop emitter spawn (§2.5). The `onRemoved` handler already reads `state.basePosition` from cache — Phase C only needs to add the emitter clone + Debris call there.
 

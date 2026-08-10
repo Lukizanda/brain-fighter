@@ -1,7 +1,7 @@
 ---
 type: system
 description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, reticle, settings menu, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu with embedded mana fill, MemorizeButton, MindFullIndicator), and the mobile DashButton. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291.)
-updated: 2026-07-15
+updated: 2026-08-10
 ---
 
 # HUD System
@@ -176,7 +176,7 @@ The first four read state through `PlayerSession.get()` and subscribe to signals
 
 ## WeaponRolodex — REMOVED (2026-06-22, commit `6610291`)
 
-The weapon-cycling card widget (Builder + Config + `WeaponRolodexGui` coordinator) was removed with the TPS weapon stack — Brain Fighter equips the single [[systems/LetterBlaster]] Spelling Staff, so there is nothing to cycle. The former `SHOW_WEAPON_ROLODEX` gate and the `_ammo` / `WeaponIcon` / `_cooldownEnd` Tool-attribute reads no longer apply.
+The weapon-cycling card widget (Builder + Config + `WeaponRolodexGui` coordinator) was removed with the TPS weapon stack. Brain Fighter then equipped a single Tool (the [[systems/LetterBlaster]] Spelling Staff), and since Phase 5.7 equips nothing at all — blocks are tapped directly — so there has never been anything to cycle. The former `SHOW_WEAPON_ROLODEX` gate and the `_ammo` / `WeaponIcon` / `_cooldownEnd` Tool-attribute reads no longer apply.
 
 ## Reticle
 

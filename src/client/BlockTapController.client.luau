@@ -25,8 +25,11 @@ local UserInputService  = game:GetService("UserInputService")
 
 local BlockShoot     = require(ReplicatedStorage.Shared.BlockShoot)
 local BlockTapConfig = require(ReplicatedStorage.Shared.BlockShoot.BlockTapConfig)
+local LetterBlocks   = require(ReplicatedStorage.Shared.LetterBlocks)
 local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
+local SkillVisuals   = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 local VfxConfig      = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
+local collectStream  = require(ReplicatedStorage.Shared.Vfx.collectStream)
 local PlayerSession  = require(script.Parent.PlayerSession)
 
 local log = Logger.new("BlockTapController")
@@ -122,6 +125,11 @@ local function tryPop(screenPosition: Vector2)
 		return
 	end
 
+	-- Read before firing: the server destroys the block, and the burst and
+	-- stream both need to start from where it stood, not from a Model
+	-- mid-teardown.
+	local blockPos = block:GetPivot().Position
+
 	local appended = session.wordBuffer:append(letter, color)
 	if not appended then
 		fizzleSound:Play()
@@ -131,6 +139,16 @@ local function tryPop(screenPosition: Vector2)
 
 	consumeRemote:FireServer(block)
 	log:info(string.format("popped %s (%s)", letter, color))
+
+	-- Prediction layer: draw on the frame we clicked rather than waiting a
+	-- round trip. BlockShootService redraws both of these for every OTHER
+	-- client once it has validated the consume, and excludes us via
+	-- drawnLocallyBy so we never see them twice. That exclusion is only
+	-- safe because this draw sits on the same branch that fires the remote
+	-- — deliberately below the buffer check, so a rejected append never
+	-- draws a burst no other player can have a match for.
+	SkillVisuals.spawnEffectAtPoint(blockPos, VfxConfig.resolveBlockPopId(color))
+	collectStream.play(blockPos, LocalPlayer.UserId, LetterBlocks.COLOR_TINTS[color])
 end
 
 -- gameProcessedEvent is load-bearing, not defensive.

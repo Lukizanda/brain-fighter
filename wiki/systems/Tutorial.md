@@ -1,8 +1,8 @@
 ---
 type: system
-description: Tutorial system — teaches the core Brain Fighter loop (shoot blocks → buffer word → memorize → cast spell) through guided in-world steps
+description: Tutorial system — teaches the core Brain Fighter loop (pop blocks → buffer word → memorize → cast spell) through guided in-world steps
 status: planning
-updated: 2026-07-15
+updated: 2026-08-10
 ---
 
 # Tutorial System
@@ -11,12 +11,17 @@ updated: 2026-07-15
 
 Guide a first-time player through the full Brain Fighter loop without UI overload:
 
-1. Equip the Spelling Staff
-2. Shoot a LetterBlock
-3. Collect enough letters to spell a word
-4. Memorize (validate + convert to energy)
-5. Cast a spell at the dummy boss
-6. See the boss take damage → tutorial complete
+1. Pop a LetterBlock (tap it)
+2. Collect enough letters to spell a word
+3. Memorize (validate + convert to energy)
+4. Cast a spell at the dummy boss
+5. See the boss take damage → tutorial complete
+
+> **Updated 2026-08-10 (Phase 5.7).** The old step 1 was "Equip the Spelling
+> Staff". There is no weapon and no Backpack any more — blocks are tapped
+> directly — so the tutorial now opens on the thing the player actually does.
+> One fewer step before the first bit of feedback, which is the right direction
+> for a first-play sequence anyway. See [[design/tap-to-pop]].
 
 ## Architecture Overview
 
@@ -51,7 +56,7 @@ TutorialConstants (shared)      — IDs, DataStore key prefix, magic numbers.
 
 | System | Interaction | Modification needed? |
 |---|---|---|
-| LetterBlaster | None — tutorial just guides where to point. | No |
+| BlockTapController | None — tutorial just guides where to point. | No |
 | BlockShoot (shared) | Add `blockConsumed: RBXScriptSignal` exposed from the shared module; fired by BlockShootService after successful destroy. | **Yes** — small addition |
 | WordBuffer | Tutorial counts ConsumeBlock events server-side (≥3 → advance from `fill_buffer`); doesn't need WordBuffer state directly since WordBuffer lives on the client. | No |
 | MemorizeAction | Client fires `memorize_success` claim after `tryMemorize` returns `ok=true`. Server trusts the claim (no independent validation in MVP). | No (claim from `GameplayHudGui` call site) |
@@ -93,9 +98,9 @@ TutorialConfig.STEPS = {
         showContinueButton = true,
     },
     {
-        id = "shoot_block",
-        title = "Shoot a Letter",
-        hintText = "Aim at any glowing block and tap to fire. The letter lands in your buffer.",
+        id = "pop_block",
+        title = "Pop a Letter",
+        hintText = "Tap any glowing block. The letter lands in your buffer.",
         completionSignal = "block_consumed",
         highlightTarget = { kind = "world", id = "nearest_letter_block" },
         showContinueButton = false,
@@ -103,7 +108,7 @@ TutorialConfig.STEPS = {
     {
         id = "fill_buffer",
         title = "Collect a Few More",
-        hintText = "Shoot two more blocks. You'll need at least three letters to spell something useful.",
+        hintText = "Pop two more blocks. You'll need at least three letters to spell something useful.",
         completionSignal = "three_blocks_consumed",
         highlightTarget = { kind = "ui", id = "BufferDisplay" },
         showContinueButton = false,
@@ -127,7 +132,7 @@ TutorialConfig.STEPS = {
     {
         id = "victory",
         title = "You're a Wizard",
-        hintText = "That's the whole loop. Keep blasting blocks, spell bigger words, and bring the boss down.",
+        hintText = "That's the whole loop. Keep popping blocks, spell bigger words, and bring the boss down.",
         completionSignal = "victory_dismissed",
         highlightTarget = { kind = "none", id = "" },
         showContinueButton = true,
@@ -156,7 +161,7 @@ Six steps total. The two `_dismissed` steps (`welcome`, `victory`) use an explic
 **States** (one per player):
 
 ```
-not_loaded → step:welcome → step:shoot_block → step:fill_buffer
+not_loaded → step:welcome → step:pop_block → step:fill_buffer
            → step:memorize_word → step:cast_spell → step:victory → complete
 ```
 
@@ -185,7 +190,7 @@ type Session = {
 
 **Server-side native signal hooks** (no client claim required):
 
-- `BlockShoot.blockConsumed:Connect(function(player, block) ... end)` — increments `blocksConsumed` for that player's session. Drives `shoot_block` → `fill_buffer` (after 1 block) and `fill_buffer` → `memorize_word` (after 3).
+- `BlockShoot.blockConsumed:Connect(function(player, block) ... end)` — increments `blocksConsumed` for that player's session. Drives `pop_block` → `fill_buffer` (after 1 block) and `fill_buffer` → `memorize_word` (after 3).
 - `boss.Humanoid:GetPropertyChangedSignal("Health")` — when `step:cast_spell` is active and health drops below `bossHealthAtStart`, transition to `step:victory`. (Subscribed when the step begins, disconnected when it ends.)
 
 **Player lifecycle:**
@@ -393,7 +398,7 @@ Ordered for implementation. Tasks within a phase are roughly parallelizable; pha
 ### Phase C — Server state machine
 
 - [ ] `src/server/Tutorial/TutorialService.server.luau` — per-player Session table, DataStore GetAsync on PlayerAdded, step transitions driven by:
-  - `BlockShoot.blockConsumed` (server-native) for `shoot_block` + `fill_buffer`
+  - `BlockShoot.blockConsumed` (server-native) for `pop_block` + `fill_buffer`
   - `boss.Humanoid:GetPropertyChangedSignal("Health")` (subscribed when entering `cast_spell`) for `cast_spell` → `victory`
   - `TutorialClientEvent` claims (`welcome_dismissed`, `memorize_success`, `cast_success`, `victory_dismissed`)
   - `TutorialSkipRequested` jumps to `complete`
@@ -410,13 +415,13 @@ Ordered for implementation. Tasks within a phase are roughly parallelizable; pha
 
 - [ ] MCP playtest: fresh player join → full 6-step path → confirm DataStore flag set → leave + rejoin → tutorial skipped.
 - [ ] MCP playtest: fresh player join → tap Skip at step 2 → confirm flag set + overlay torn down → rejoin → skipped.
-- [ ] MCP playtest: confirm idempotency — fire `memorize_success` claim while on `shoot_block`; server logs + drops.
+- [ ] MCP playtest: confirm idempotency — fire `memorize_success` claim while on `pop_block`; server logs + drops.
 - [ ] Accessibility audit: color-blind safe outline color (avoid pure green/red); confirm hint text is screen-reader friendly (no glyph-only icons).
 - [ ] Wiki ingest: update `wiki/index.md` Tutorial entry status `planning` → `built`, append `wiki/log.md` entry, bump `updated:` on this page.
 
 ## Related Pages
 
-- [[systems/LetterBlaster]]
+- [[systems/BlockShoot]] — the input path the tutorial observes
 - [[systems/BlockShoot]]
 - [[systems/WordBuffer]]
 - [[systems/MindFullManager]]

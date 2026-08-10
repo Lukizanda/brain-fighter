@@ -1,7 +1,7 @@
 ---
 title: Audio SFX
 description: Sound effect inventory, wiring patterns, placeholder locations, and gap list for Brain Fighter
-updated: 2026-08-04
+updated: 2026-08-10
 ---
 
 # Audio SFX
@@ -16,7 +16,7 @@ Two different Roblox audio systems are in use. Do not mix them for the same asse
 
 | Backend | Class | Used by |
 |---------|-------|---------|
-| **Old Sound** | `Instance.new("Sound")` | LetterBlaster, SpellMenuGui, GameplayHudGui, `Vfx/spawnEffect` |
+| **Old Sound** | `Instance.new("Sound")` | BlockTapController, SpellMenuGui, GameplayHudGui, `Vfx/spawnEffect` |
 | **New AudioPlayer** | `AudioPlayer` + `Wire` + `AudioEmitter` | Firearm (ShotReplication), Melee (MeleeHitReplication) |
 
 The old Sound class is simpler and fine for new work unless you need 3D positional audio or the new audio API's mixing features. The utility modules `playSoundFromSource.luau` and `playRandomSoundFromSource.luau` wrap the new system.
@@ -25,21 +25,20 @@ The old Sound class is simpler and fine for new work unless you need 3D position
 
 ## Sound Inventory
 
-### LetterBlaster (Spelling Staff tool children)
+### Block tapping (Phase 5.7)
 
-Sounds live as named children of the Tool instance, looked up via `FindFirstChild`. Names come from `LetterBlasterConfig.luau`.
+The three Spelling Staff Sounds (`FireSound` / `HitSound` / `FizzleSound`, children of the Tool's Handle) were **deleted with the staff** in Phase 5.7 — see [[systems/LetterBlaster]].
 
-| Event | Asset constant | Status | Notes |
-|-------|---------------|--------|-------|
-| Shoot attempt (every activation) | `FIRE_SOUND_NAME = "FireSound"` | ✅ wired | SoundId set in Studio |
-| Block consumed (success) | `HIT_SOUND_NAME = "HitSound"` | ✅ wired | SoundId set in Studio |
-| Mind full block | `FIZZLE_SOUND_NAME = "FizzleSound"` | ✅ wired | **SoundId not yet set in Studio** |
-| Buffer rejected | `FIZZLE_SOUND_NAME = "FizzleSound"` | ✅ wired | same FizzleSound instance |
+| Event | Where it lives now | Status | Notes |
+|-------|-------------------|--------|-------|
+| Tap refused (mind full, or buffer rejected) | client-local `Sound` in `SoundService`, `VfxConfig.SFX.fizzle` at `PlaybackSpeed = 0.55` | ✅ wired | Same asset and pitch as `SpellMenuGui` / `GameplayHudGui`, so a refusal sounds identical wherever it was triggered |
+| Block popped | `VfxConfig.EFFECTS.block_pop_{red,green,blue,wild}` → `sound` field, id `SFX.blockPop` | ✅ wired | Positional and replicated by construction, rather than a Sound on a Handle. One entry per block colour, resolved by `VfxConfig.resolveBlockPopId` |
+| Tap attempt (the old `FireSound`) | — | ❌ dropped | There is no weapon to fire |
+| Hit confirmation (the old `HitSound`) | folded into the block pop | ✅ wired | Was shooter-only; the pop is heard by everyone |
 | Cooldown gate | — | ❌ silent | low priority — fast repeat tap |
 | Raycast miss | — | ❌ silent | intentional — no target = no cue needed |
 
-**Model file**: `src/StarterPack/Spelling Staff/FizzleSound.model.json`
-**To set SoundId**: open Studio, expand Spelling Staff in Explorer, select FizzleSound, paste asset ID into SoundId property.
+**The fizzle asset id is no longer duplicated.** It used to have a second copy in `src/StarterPack/Spelling Staff/Handle/FizzleSound.model.json`, because Rojo JSON cannot reference a Luau constant and every client needed the id on its own replicated copy of that Sound. That file is gone; `VfxConfig.SFX.fizzle` is now the only place it lives.
 
 ---
 
@@ -224,7 +223,7 @@ No sounds wired for any player lifecycle event. `CharacterSystemsLoader.client.l
 | Priority | Gap | Effort |
 |----------|-----|--------|
 | **High** | **Source a real spell SFX pack and replace every `VfxConfig.SFX` id.** All 6 are stand-ins; `impactFreeze` (a sword hit standing in for an ice crack) is the weakest match. Needs a purchased/commissioned pack — the free library has nothing usable. | 1 line per entry once assets exist |
-| High | FizzleSound SoundId in Studio (LetterBlaster) | 1 min — just paste ID |
+| ~~High~~ | ~~FizzleSound SoundId in Studio (LetterBlaster)~~ — **resolved 5.7**: the Studio-side Sound is gone; the cue is built from `VfxConfig.SFX.fizzle` in code | done |
 | High | Firearm empty-click (dry fire) | small — add Sound child + 2 lines in shot validation |
 | Medium | `EffectSpec.light` and `.beam` are declared but still unimplemented in `spawnEffect` (only `emitters` + `sound` are consumed) | moderate |
 | Medium | Projectile trails (`projectile_red_t1/t2/t4`) — 2026-08-04: now play a quiet one-shot `SFX.cast` layer at launch (no looping path in `spawnEffect`) instead of nothing; still no real continuous in-flight whoosh | needs a loopable asset |
@@ -242,16 +241,21 @@ No sounds wired for any player lifecycle event. `CharacterSystemsLoader.client.l
 
 ## How to Add a New Sound
 
-### Spelling Staff tool sound (old Sound class)
+### Tool-child sound (removed pattern — do not reach for this)
 
-1. Add `<Name>.model.json` to `src/StarterPack/Spelling Staff/` with `{ "className": "Sound" }`.
-2. Add `Config.<NAME>_SOUND_NAME = "<Name>"` to `LetterBlasterConfig.luau`.
-3. In `LetterBlaster/init.luau`, look up and play:
-   ```lua
-   local snd = self._tool:FindFirstChild(LetterBlasterConfig.<NAME>_SOUND_NAME) :: Sound?
-   if snd then snd:Play() end
-   ```
-4. After Rojo sync, set the SoundId in Studio.
+The Spelling Staff hung named `Sound` children off its Handle and looked them up
+via `FindFirstChild`. The pattern is recorded here because it is the obvious
+thing to reinvent, and it has two traps:
+
+- A Sound parented to anything that is **not a `BasePart`** is non-positional —
+  full volume from anywhere on the map. That is why the staff's Sounds had to
+  move from the Tool to the Handle before they could be replicated at all.
+- The `SoundId` lives in `.model.json`, which cannot reference a Luau constant,
+  so the id gets duplicated and drifts.
+
+For a world sound, put it in a `VfxConfig.EFFECTS` entry instead (positional and
+replicated by construction). For a refusal or UI cue, use a client-local Sound in
+`SoundService` built from a `VfxConfig.SFX` constant.
 
 ### UI sound in SoundService (old Sound class)
 

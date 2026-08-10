@@ -230,6 +230,15 @@ VfxConfig.SFX = {
 	-- freeze use so the two still read as different events.
 	shieldBreak = "rbxassetid://88987851128257",
 
+	-- A letter block popping. Its own named entry even though it currently
+	-- points at the same asset as `impactFreeze` — same hook as
+	-- `shieldBreak`: a block bursting wants a short bright crack, that is
+	-- the only crack in the inventory, and a real pop lands as a one-line
+	-- change here rather than an edit inside the EFFECTS table. This is the
+	-- single most-heard sound in the game (once per letter, several times a
+	-- word), so it is the first id worth replacing with real audio.
+	blockPop = "rbxassetid://88987851128257",
+
 	-- Cast fizzle (not enough mana / no target in range). Deliberately the
 	-- same swoosh as `cast`, and played pitched-down by the callers: a
 	-- deflated version of the cast sound is the clearest way to say "that
@@ -324,7 +333,49 @@ local function castEntry(palette: ColorPalette, tier: number): EffectSpec
 		},
 		sound            = { soundId = SFX.cast, volume = p.soundVol, pitchRange = p.pitch },
 		totalDurationSec = p.totalSec,
-		anchor           = "casterStaffTip",
+		-- Was "casterStaffTip" until Phase 5.7 deleted the staff. Descriptive
+		-- metadata only — spawnEffect takes its anchor from the caller.
+		anchor           = "caster",
+	}
+end
+
+----------------------------------------------------------------------
+-- Block pop (Phase 5.7)
+----------------------------------------------------------------------
+-- The burst when a letter block is tapped. One entry per block colour so
+-- the pop reads as "you took a red" at a glance, which is tactical
+-- information once PvP lands — see design/tap-to-pop.md.
+--
+-- Wildcard gold is a fourth palette here but deliberately NOT a fourth
+-- key in COLORS: that table is the *spell* palette keyed by the three
+-- castable colours, and a gold entry would imply a gold spell. Same
+-- reasoning as STONE_DUST below. The tint matches
+-- LetterBlocks.COLOR_TINTS' gold so the burst matches the block it came
+-- from; the two are duplicated rather than shared because VfxConfig has
+-- no business requiring a gameplay module.
+local WILDCARD_GOLD: ColorPalette = {
+	primary = Color3.fromHex("#EAB308"),
+	glow    = Color3.fromHex("#FDE68A"),
+	accent  = Color3.fromHex("#FFFFFF"),
+}
+
+-- Smaller and faster than a cast burst on purpose. A pop happens several
+-- times per word — at cast-burst weight it would dominate the screen and
+-- bury the spell it is feeding.
+local function blockPopEntry(palette: ColorPalette): EffectSpec
+	return {
+		emitters = {
+			castEmitter("BurstSmall", palette, {
+				emitCount = 18,
+				lifetime  = NumberRange.new(0.18, 0.34),
+				sizePeak  = 0.5,
+				speed     = NumberRange.new(8, 16),
+				spreadDeg = 180, -- a block bursts outward in every direction
+			}),
+		},
+		sound            = { soundId = SFX.blockPop, volume = 0.55, pitchRange = NumberRange.new(0.94, 1.12) },
+		totalDurationSec = 0.45,
+		anchor           = "blockPosition",
 	}
 end
 
@@ -1067,6 +1118,15 @@ VfxConfig.EFFECTS = {
 		totalDurationSec = 0.1,
 		anchor           = "worldPosition",
 	},
+
+	----------------------------------------------------------------------
+	-- Block pops (Phase 5.7) — one per block colour, resolved by
+	-- VfxConfig.resolveBlockPopId.
+	----------------------------------------------------------------------
+	block_pop_red   = blockPopEntry(C.red),
+	block_pop_green = blockPopEntry(C.green),
+	block_pop_blue  = blockPopEntry(C.blue),
+	block_pop_wild  = blockPopEntry(WILDCARD_GOLD),
 }
 
 VfxConfig.PERF = {
@@ -1083,6 +1143,22 @@ VfxConfig.PERF = {
 
 function VfxConfig.resolveCastId(color: string, tier: number): string
 	return "cast_" .. color .. "_t" .. tier
+end
+
+-- Block pop burst for a block's `Block.Color` attribute.
+--
+-- The wildcard's colour is stored as Wildcard.COLOR rather than one of the
+-- three spell colours, and its entry is keyed "wild" instead, so unknown
+-- and wildcard both land somewhere real. Falling back to the red pop for
+-- an unrecognised colour is deliberate: a missing burst reads as "the tap
+-- didn't register", which is a worse lie than a wrong hue.
+function VfxConfig.resolveBlockPopId(color: string?): string
+	local id = "block_pop_" .. tostring(color)
+	if VfxConfig.EFFECTS[id] then return id end
+	if color ~= nil and color ~= "red" and color ~= "green" and color ~= "blue" then
+		return "block_pop_wild"
+	end
+	return "block_pop_red"
 end
 
 -- Impact effects are keyed by effect kind, optionally refined by tier.
