@@ -370,6 +370,12 @@ who spawned closer.
   edit, not a rework.
 - `wiki/log.md` ingest entry; `graphify update .` before the commit.
 
+**Done ✅.** All of the above landed, plus one the plan missed:
+[[design/client-server-boundary]] carried a `LetterBlaster` row citing two
+deleted files — a current-state claim, so it was corrected rather than left as
+history. Plans, dated audits and changelog entries describing what was true when
+written were deliberately not touched.
+
 ## Risks
 
 | Risk | Mitigation |
@@ -384,7 +390,30 @@ who spawned closer.
 | Stream funnels to where a player *was* | `collectorUserId` re-resolved per frame, not a baked Vector3. Verify against a **moving** target — a stationary test cannot catch this. |
 | Stream drawn for a consume that was rejected | Stage 4 gates all cosmetics behind confirmation, not behind the optimistic append. |
 
+## Status — all six stages shipped (2026-08-10)
+
+| Stage | Commit |
+|---|---|
+| 1 Input | `be2b1a2` |
+| 2 Delete the staff | `14881d9` |
+| 3 Pop visuals | `3204b0d` |
+| 4 Rejection rollback | `08a2e5a` |
+| 5 Motes / hover / reach | `e5f72cc`, `1080233`, `2139661` |
+| 6 Wiki | `d4bcfc3`, `4cc0ab6` |
+
+Two things came out differently from the plan, both recorded where they happened
+rather than only here: the in-range glow became a single hover outline (stage 5),
+and reach ended back at LetterBlaster's 200 after a raise-and-revert that
+uncovered [[systems/BlockShoot]] § Aiming — a screen/viewport coordinate
+mismatch that had capped effective reach at ~30 studs and was the actual cause of
+the "range is too short" report the raise was chasing.
+
 ## Milestone
+
+Everything below is verified except the one line that needs a second client — a
+stream funnelling at *another* player's character. The receive path itself is
+verified single-client (see [[systems/BlockShoot]] § Stream layers), so what
+remains is confirming the wire, not the logic.
 
 Two clients in the arena. Both spawn with empty hands and no hotbar. Each taps
 blocks in reach — they glow before you can take them, pop with a colour-matched
