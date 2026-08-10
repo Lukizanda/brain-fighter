@@ -18,10 +18,19 @@ local BlockShootConstants = {}
 -- The client raycasts from the *camera*, which in this game's default
 -- third-person rig sits behind the character. The server can only
 -- measure character→block, so the camera-to-character gap has to be
--- added back or a legitimate long shot would be rejected. 100 studs
--- covers any sane zoom-out; the reference arena is 40×40, so this is
--- pure headroom rather than a real gameplay limit.
+-- added back or a legitimate long tap would be rejected. 100 studs
+-- covers any sane zoom-out. It does not scale with reach — it is a
+-- property of the camera rig, not of how far you can tap.
 local CAMERA_ZOOM_ALLOWANCE_STUDS = 100
+
+-- NOTE on what this bound is worth now (2026-08-10). At the old 200-stud
+-- reach this capped a client at 300 studs, which was a real anti-grief
+-- bound: an exploiter could clear blocks near themselves but not across
+-- the map. With reach at 1400 it is 1500, comfortably more than the
+-- ~353-stud arena diagonal, so it no longer bounds griefing at all — it
+-- is a sanity check against absurd coordinates, and nothing more. If
+-- cross-map block denial ever needs stopping in PvP, it needs a
+-- different mechanism (per-block claim, or a much tighter reach).
 
 BlockShootConstants.MAX_CONSUME_DISTANCE_STUDS =
 	BlockShoot.MAX_RAYCAST_DISTANCE + CAMERA_ZOOM_ALLOWANCE_STUDS

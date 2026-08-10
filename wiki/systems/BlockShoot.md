@@ -135,7 +135,17 @@ Check 3 also makes a double-consume race a no-op for free: the first `Destroy` u
 
 ### Tuning
 
-`MAX_CONSUME_DISTANCE_STUDS` = `BlockShoot.MAX_RAYCAST_DISTANCE` (200) + 100. The client raycasts from the *camera*, which sits behind the character, so the camera-to-character gap has to be added back or a legitimate long shot would be rejected. The reference arena is 40×40, so the whole bound is headroom.
+`MAX_CONSUME_DISTANCE_STUDS` = `BlockShoot.MAX_RAYCAST_DISTANCE` (1400) + 100. The client raycasts from the *camera*, which sits behind the character, so the camera-to-character gap has to be added back or a legitimate long tap would be rejected. The allowance does not scale with reach — it is a property of the camera rig.
+
+### Reach (raised 2026-08-10)
+
+`MAX_RAYCAST_DISTANCE` went 200 → 1400. The old value could not cross the arena: the `BlockSpawnVolume` parts span **240 × 259 studs** (floor diagonal ~353), and a live measurement put the farthest block **320 studs** from the player — past the 200-stud raycast *and* past the old 300-stud server bound. The far half of the field was simply unpoppable.
+
+Reach is tuned in exactly one place; the server bound and the Hardening suite's out-of-range fixture both derive from it.
+
+**The practical limit is now target size, not range.** A 4-stud block subtends about `4 / distance × (viewportY / 2tan(fov/2))` pixels — measured at **5.4 px at 320 studs**. By ~500 studs it is under 3 px and by 1400 it is roughly 1 px. So the reach beyond the arena is harmless headroom, not usable range: anything past a few hundred studs needs a bigger target or a hover-snap before it can be clicked at all. That makes the Phase 5.7 stage 5 hover highlight *more* valuable, not less — its job shifts from "show where the limit is" to "let you hit something you can barely see".
+
+**What the range check is worth now.** At 200 studs the 300-stud bound was real anti-grief: an exploiter could clear blocks near themselves but not across the map. At 1500 it exceeds the arena diagonal four times over, so it no longer bounds griefing — it is a sanity check against absurd coordinates. If cross-map block denial needs stopping in PvP it needs a different mechanism (a per-block claim, or a much tighter reach).
 
 The rate limit is a token bucket, not a flat interval: network jitter routinely bunches two legitimately-spaced taps into one frame, so a flat interval rejects real play. Sustained rate is exactly `1 / BlockTapConfig.COOLDOWN`, with a 3-tap burst allowance for the jitter. Verified both ways — see [[systems/Tests]] § Hardening.
 

@@ -14,7 +14,18 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 
-local MAX_RAYCAST_DISTANCE = 200
+-- How far a tap can reach.
+--
+-- Raised 200 → 1400 on 2026-08-10. 200 could not cross the arena: the
+-- BlockSpawnVolume parts span roughly 240 × 259 studs, so corner to
+-- corner is ~353 studs and the far half of the field was simply
+-- unpoppable from where you stood.
+--
+-- Everything downstream derives from this one number — the server's
+-- MAX_CONSUME_DISTANCE_STUDS and the Hardening suite's out-of-range
+-- fixture both scale with it — so this is the only place reach is
+-- tuned.
+local MAX_RAYCAST_DISTANCE = 1400
 
 local BlockShoot = {}
 
