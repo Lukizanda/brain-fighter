@@ -235,12 +235,13 @@ VfxConfig.SFX = {
 	-- deflated version of the cast sound is the clearest way to say "that
 	-- cast didn't happen" without a dedicated buzzer asset.
 	--
-	-- Has one copy outside this table that a swap must also update:
-	-- StarterPack/Spelling Staff/Handle/FizzleSound.model.json, the staff's
-	-- own refusal cue. It cannot read this constant — Rojo JSON has no way
-	-- to reference Luau — and it cannot be set at runtime either, because
-	-- every client needs the id on its replicated copy of that Sound, not
-	-- just the wielder. Same asset, same 0.55 playback speed.
+	-- This is now the only copy. It used to be duplicated into
+	-- StarterPack/Spelling Staff/Handle/FizzleSound.model.json because Rojo
+	-- JSON cannot reference a Luau constant and every client needed the id
+	-- on its own replicated copy of that Sound. Phase 5.7 deleted the staff,
+	-- and BlockTapController's refusal cue is a client-local Sound built
+	-- from this constant like every other caller — so a swap here is now
+	-- genuinely a swap everywhere.
 	fizzle = "rbxassetid://134677020800886",
 
 	-- Boss FireballVolley launch. No owned or findable asset reads as a

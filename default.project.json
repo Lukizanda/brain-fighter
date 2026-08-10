@@ -21,10 +21,6 @@
       }
     }, 
 
-    "StarterPack": {
-      "$path": "src/StarterPack"
-    },
-
     "StarterGui": {
       "$className": "StarterGui",
       "$properties": {

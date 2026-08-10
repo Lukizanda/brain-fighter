@@ -24,10 +24,10 @@
 -- Each takes an optional `drawnLocallyBy: number?` (a UserId): don't send
 -- this to that player, they already have it. Exactly one situation earns
 -- it — a client drew the cosmetic itself, immediately, as prediction, and
--- the server is now catching everyone else up. The LetterBlaster beam is
--- the case it exists for: the shooter's beam leaves the staff on the frame
--- they clicked, and a second copy a round trip later would be a visible
--- double-flash.
+-- the server is now catching everyone else up. The blaster beam was the
+-- case it was built for: the shooter's beam left the staff on the frame
+-- they clicked, and a second copy a round trip later would have been a
+-- visible double-flash. Phase 5.7's block pop inherits the same shape.
 --
 -- Omit it for anything the server originates alone (boss fire, Stone Wall).
 -- And only pass it when the local draw is *unconditional* — if the client
@@ -131,21 +131,26 @@ function VfxBroadcast.playOn(effectId: string, target: Instance, drawnLocallyBy:
 	})
 end
 
--- A laser beam travelling from `origin` to `endPoint` — the LetterBlaster
--- shot, and anything else that wants a visible line between two points.
+-- A laser beam travelling from `origin` to `endPoint` — anything that
+-- wants a visible line between two points.
 --
--- Positions rather than Instances on purpose. The endpoint is usually a
--- LetterBlock the server is about to destroy, and an Instance argument for
+-- CURRENTLY UNCALLED. Its only consumer was the blaster shot, which left
+-- with the staff in Phase 5.7. Kept because it is a general primitive of
+-- this layer rather than staff-specific code, and because NPC Actions
+-- still draws a laser server-side by hand — that is the obvious next
+-- caller. Delete it if that never happens.
+--
+-- Positions rather than Instances on purpose. The endpoint was usually a
+-- LetterBlock the server was about to destroy, and an Instance argument for
 -- a thing that no longer exists by the time the payload lands arrives as
 -- nil; a Vector3 still draws the shot that was actually taken.
 --
 -- `opts.soundParent` + `opts.soundName` name a Sound that already exists on
--- a long-lived replicated Instance — the staff's Handle — and each client
--- plays its own copy. Naming an existing Sound rather than shipping a
--- SoundId keeps its authored volume and rolloff intact, and the parent
--- being a BasePart is what makes the playback positional. Same
--- already-replicated requirement as playOn: don't point this at something
--- the server created this frame.
+-- a long-lived replicated Instance, and each client plays its own copy.
+-- Naming an existing Sound rather than shipping a SoundId keeps its
+-- authored volume and rolloff intact, and the parent being a BasePart is
+-- what makes the playback positional. Same already-replicated requirement
+-- as playOn: don't point this at something the server created this frame.
 function VfxBroadcast.beam(origin: Vector3, endPoint: Vector3, opts: BeamPayloadOpts?)
 	local r = outbound("beam")
 	if not r then return end
