@@ -35,12 +35,11 @@ updated: 2026-08-12
 
 | Template | Texture | Notes |
 |---|---|---|
-| `BurstSmall` / `BurstMedium` / `ImpactBurst` / `HealBurst` | `1913819781` | The original four. All share one soft round blob. |
+| `BurstSmall` / `BurstMedium` / `ImpactBurst` / `HealBurst` / `FireEmber` | `rbxasset://textures/particles/sparkles_main.dds` | The engine's own default sparkle — soft, round, always present, no asset lookup. **Was `1913819781` until 2026-08-12**, which is the Roblox *shirt template*; see § The shirt-template texture below. |
 | `FireFlame` | `17703243127` | 8×8 flipbook, `FlipbookMode = OneShot`, additive (`LightEmission` 1 / `LightInfluence` 0), `Acceleration` (0, 12, 0) + `Drag` 4, Sphere/Surface/Outward. |
 | `FireSmoke` | `17703243127` | Same sheet, charcoal-tinted, `LightInfluence` 1, slower and larger. |
-| `FireEmber` | `1913819781` | Keeps the blob — a spark *is* a bright round dot, and a flipbook there would only cost frames. |
 
-**Why Inferno looked flat for so long, and the lesson.** Every template shared one round-blob texture, so no particle count could make anything read as fire — the pre-2026-08-08 `impact_damage_t3` was already the biggest entry in the table at 86 particles and still looked like a firework. The fix was the *texture*, not the count: a flipbook sheet animates each particle through a full flame birth-and-dissipate over its lifetime. Reach for `FlipbookLayout` before reaching for a bigger `emitCount`.
+**Why Inferno looked flat for so long, and the lesson.** Every template shared one texture (believed at the time to be a round blob; it was in fact the shirt template — the conclusion below survives that correction and is only strengthened by it), so no particle count could make anything read as fire — the pre-2026-08-08 `impact_damage_t3` was already the biggest entry in the table at 86 particles and still looked like a firework. The fix was the *texture*, not the count: a flipbook sheet animates each particle through a full flame birth-and-dissipate over its lifetime. Reach for `FlipbookLayout` before reaching for a bigger `emitCount`.
 
 **The red school's impacts share one vocabulary (2026-08-09).** `impact_damage_t2` (Fireball) was rebuilt on the same three flipbook layers as `impact_damage_t3` — flame / ember / smoke, same `VfxConfig.FIRE` gradients — for the reason above: its 38-particle `ImpactBurst` splash was a firework at any count, and a fire school whose tiers draw from unrelated effects doesn't read as a ladder. **What separates the tiers is scale and how long the fire lasts**, not which templates they use. T3 is a detonation that hands off to a 3 s burn (`StatusVisuals/InfernoVfx`); T2 has no burn lane, so every lifetime is roughly halved and the smoke tail is cut hardest — `totalDurationSec` 1.25 against T3's 2.5. Fireball also lands far more often, so a long plume would leave the arena permanently hazed. The audio ladder is deliberately *not* shared: T2 keeps the pitched-down `impactDamage` hit rather than T3's `impactHeavy` boom.
 
@@ -50,10 +49,26 @@ updated: 2026-08-12
 
 Verify before building on an asset, and verify correctly:
 - `ContentProvider:PreloadAsync(ids, callback)` reports `Enum.AssetFetchStatus.Failure` for these. **Use the callback form** — the argument-less call succeeds silently either way and tells you nothing.
-- The cheapest reliable probe is an `ImageLabel` in a `SurfaceGui` and a read of `IsLoaded` after a few seconds. A `Decal` on a Part plus a screenshot is *not* reliable: the project's own known-good `1913819781` rendered blank that way, and one Creator Store "fire flipbook" rendered a **shirt template**.
-- Always include a known-good id as a control. Without `1913819781` in the batch there is no way to tell "this asset is unusable" from "my probe is broken".
+- The cheapest reliable probe is an `ImageLabel` and a read of `IsLoaded` after a few seconds. A `Decal` on a Part plus a screenshot is *not* reliable.
+- Always include a known-good id as a control. **Use `rbxasset://textures/particles/sparkles_main.dds`** — it ships with the engine, so it cannot fail for inventory reasons. Do **not** use `1913819781`: this page recommended it as the control for months and it is the shirt template, which means it loads fine and tells you nothing about whether it is the image you wanted.
+- `IsLoaded` answers "did bytes arrive", not "is this the right picture". For anything you have not seen with your own eyes, render it large on a dark backing and **look at it**. That is the step that would have caught the bug below years earlier.
 
 When a needed texture has no usable owned equivalent, the path is to author one and upload it to the universe — not to ship an id that renders for nobody.
+
+### The shirt-template texture (2026-08-12)
+
+`rbxassetid://1913819781` is **the Roblox shirt template** — the clothing UV guide, with "Torso", "Left Arm" and "Right Arm" printed on it. Five of the seven templates were textured with it: `ImpactBurst`, `BurstMedium`, `BurstSmall`, `FireEmber` and `HealBurst`. Every impact, heal and burst effect in the game was drawing tiny opaque rectangles of a clothing template, tinted by the emitter colour.
+
+**Why it survived this long.** Every one of those five is used by *bursts* — `speed = 10–18`, `emitCount ≈ 22`, dead inside 0.3 s. Little hard-edged rectangles thrown outward at that speed read as sparks, and the tint hides the artwork. [[systems/ChargeCast]]'s halo is the project's first **sustained** emitter (`speed = 1–4`, ~108/sec, ~48 alive at once), which is the first case that holds them still and stacked long enough to see what they are: a solid square patch at the centre of the charge orb.
+
+**How it was pinned**, since "the orb looks wrong" has many candidate causes:
+1. Disabled *only* the halo emitter on a live orb → clean sphere. Rules out the mote Parts, the `PointLight` blowout and the name label.
+2. Switched `Shape` from `Box`/`Volume` to `Sphere`/`Surface` → square unchanged. Rules out the emission volume, which was the obvious suspect.
+3. Rendered the texture at 256 px on a dark `Frame` → the shirt template, unmistakably.
+
+Fixed by pointing all five at `rbxasset://textures/particles/sparkles_main.dds`, the engine default (confirmed by reading `Texture` off a freshly constructed `ParticleEmitter` rather than trusting a remembered path). Applied under a `ChangeHistoryService` waypoint. **`VfxTemplates` is not Rojo-tracked**, so this fix lives in `BrainFighter.rbxl` only and does not appear in any commit — a fresh clone will not have it.
+
+**The lesson is the one directly above.** `1913819781` was this page's recommended known-good control, and it was serving that role correctly in the narrow sense: it always loads. It just was not the image anyone thought it was, and no `IsLoaded` check will ever reveal that.
 
 ## A rate-based entry must state its `rate`
 
