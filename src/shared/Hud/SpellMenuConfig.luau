@@ -48,8 +48,8 @@ local SpellMenuConfig = {
 	-- on a full reservoir, which is exactly when the HUD is already at its
 	-- loudest; pushing the dead ones back costs nothing at that moment and
 	-- pays out when only one colour is live.
-	FILL_BASE_TRANSPARENCY      = 0.72,
-	FILL_BASE_TRANSPARENCY_DEAD = 0.88,
+	FILL_BASE_TRANSPARENCY      = 0.50,
+	FILL_BASE_TRANSPARENCY_DEAD = 0.72,
 	FILL_TWEEN = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 	FILL_MAX   = EnergyReservoirs.CAP_PER_COLOR,
 

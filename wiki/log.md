@@ -1466,3 +1466,9 @@ The interesting part is the bug it forced. `playFiredFlash` dims the base disc a
 Build-time init also now calls the same `baseColorFor(color, false)` / `baseTransparencyFor(false)` selectors the tweens use, instead of restating the drained values inline — one definition of "dead" rather than two that can drift.
 
 Verified by client screenshot across all three states, including the cast-dry case that would have caught the flash bug. **Owed:** whether 0.88 is too far — a dead panel is now nearly invisible while still being a live press target, and the argument for that being fine is that pressing a dead panel is a no-op. See `systems/ChargeCast` § The panel (2) and § Dead-panel transparency.
+
+## [2026-08-12] ingest | Panel alpha split retuned, 0.50 / 0.72
+
+Answering the question the previous entry left owed. Rather than pulling the dead value back from 0.88, the split moved wholesale: castable 0.72 -> **0.50**, dead 0.88 -> **0.72**. The old single value becomes the *dead* one and the castable state gets heavier instead.
+
+Better than softening 0.88 would have been. The split widens (0.22 against 0.16) while nothing is ever fainter than it was before the split existed, so the gain is bought by making live panels more present rather than by hiding dead ones — which matters because a dead panel is still a live press target. Two constants, no behaviour change.
