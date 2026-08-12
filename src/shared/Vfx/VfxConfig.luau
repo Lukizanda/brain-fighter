@@ -587,6 +587,49 @@ local function stoneRiseEmitters(): { EmitterSpec }
 	}
 end
 
+----------------------------------------------------------------------
+-- Charge motes
+----------------------------------------------------------------------
+-- The halo that swirls around a charging orb. Rate is the base for T1;
+-- ChargeOrbVfx multiplies it by tier and again at the ceiling, so this
+-- number sets the floor of the ramp rather than its whole range.
+--
+-- Small, fast, short-lived particles: this layer has to read as loose
+-- mana being pulled in, and anything slower or bigger reads as smoke
+-- coming off the player instead.
+local CHARGE_MOTE_BASE_RATE = 14
+
+local function chargeMotesEntry(palette: ColorPalette): EffectSpec
+	return {
+		emitters = {
+			{
+				template     = "ImpactBurst",
+				color        = palette,
+				rate         = CHARGE_MOTE_BASE_RATE,
+				lifetime     = NumberRange.new(0.30, 0.60),
+				size         = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.55),
+					NumberSequenceKeypoint.new(1.0, 0.05),
+				}),
+				-- Slow, because these are already *at* the orb — the inward
+				-- travel is the Part motes ChargeOrbVfx flies in from the
+				-- ring, not this layer.
+				speed        = NumberRange.new(1, 4),
+				spreadAngle  = Vector2.new(180, 180),
+				transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.25),
+					NumberSequenceKeypoint.new(1.0, 1.00),
+				}),
+			},
+		},
+		-- Sustained, so there is no natural end to declare. ChargeOrbVfx owns
+		-- the lifetime and never hands this entry to spawnEffect; the value is
+		-- here only because EffectSpec requires it.
+		totalDurationSec = 0,
+		anchor           = "caster",
+	}
+end
+
 VfxConfig.EFFECTS = {
 	-- ── Cast bursts ────────────────────────────────────────────────────
 	cast_red_t1   = castEntry(C.red,   1),
@@ -603,6 +646,27 @@ VfxConfig.EFFECTS = {
 	cast_green_t1 = castEntry(C.green, 1),
 	cast_green_t2 = castEntry(C.green, 2),
 	cast_green_t3 = castEntry(C.green, 3),
+
+	-- ── Charge motes ───────────────────────────────────────────────────
+	-- The sparkle halo around a hold-to-charge orb. Unlike every other
+	-- entry in this table these are *sustained*: the emitter runs for as
+	-- long as the player holds the panel, and its Rate is scaled by the
+	-- tier reached (frantic at the affordability ceiling).
+	--
+	-- That is why `rate` is set and `emitCount` / `durationSec` are not,
+	-- and why ChargeOrbVfx instantiates these itself rather than going
+	-- through spawnEffect: spawnEffect hands everything to Debris on a
+	-- duration decided at author time, and a charge has no author-time
+	-- duration. The spec is still authored here so the look lives with
+	-- every other look in the game rather than as literals in a module.
+	--
+	-- Budget: one sustained emitter per charging player, against
+	-- PERF.maxEmitters = 32. ChargeOrbVfx enforces its own ceiling so a
+	-- crowded arena degrades to orb-without-halo instead of eating the
+	-- whole allowance — see CHARGE_MOTES_* there.
+	charge_motes_red   = chargeMotesEntry(C.red),
+	charge_motes_green = chargeMotesEntry(C.green),
+	charge_motes_blue  = chargeMotesEntry(C.blue),
 
 	-- ── Impact bursts ──────────────────────────────────────────────────
 	-- Red flavor; reused for any onImpact { kind = "damage" } entry.
@@ -1581,6 +1645,20 @@ function VfxConfig.resolveBlockPopId(color: string?): string
 		return "block_pop_wild"
 	end
 	return "block_pop_red"
+end
+
+-- The sustained mote halo for a charge of `color`.
+--
+-- A resolver rather than a direct index for the same reason resolveCastId
+-- is one: the caller has a colour string off the wire (a character
+-- attribute, in this case) and should not be building effect ids by
+-- concatenation at three different call sites. Falls back to red so an
+-- unrecognised colour draws *something* — a silently haloless orb would
+-- read as the charge having failed.
+function VfxConfig.resolveChargeMotesId(color: string?): string
+	local id = "charge_motes_" .. tostring(color)
+	if VfxConfig.EFFECTS[id] then return id end
+	return "charge_motes_red"
 end
 
 -- Impact effects are keyed by effect kind, optionally refined by tier.

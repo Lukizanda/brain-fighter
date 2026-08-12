@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-08-10
+updated: 2026-08-12
 ---
 
 # Wiki Index
@@ -37,7 +37,8 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/SpellRegistry]] — Phase 1 config layer for the spell roster (R/G/B × T1–T4); tier costs 5/10/20/40, name/color/cost/targeting/`skill:SkillSpec`; consumed by SpellExecutor + SpellMenu HUD
 - [[systems/SpellExecutor]] — Phase 2 effect runner; dispatches `damage`/`heal`/`freeze`/`knockup`/`shield`/`buff` against caster/target (all real as of 5.2)
 - [[systems/MindFullManager]] — Phase 2 transition watcher over WordBuffer: rising-edge `mindFull` / falling-edge `mindFreed` signals for the shoot gate + HUD indicator
-- [[systems/CastAction]] — Phase 2 cast pipeline: `tapReservoir` (highest affordable) / `castSpecific` (chosen tier); drains reservoir, refunds on executor failure, fires `spellResolved`
+- [[systems/CastAction]] — Phase 2 cast pipeline: `castSpecific` (the production path since 5.8) + `resolveSpecAtCharge` (hold duration → tier); `tapReservoir` retired but kept for its tests. Drains the reservoir, fires `spellResolved`
+- [[systems/ChargeCast]] — Phase 5.8 (2026-08-12): press-hold-release on a colour panel picks the spell tier. Mana flows at 20/sec so T1 is a tap and T4 is a 1.75 s commitment; the charge clamps at what you can afford; nothing is drained until release, so cancelling is free. HUD gets tier notches + a reserve band + a persistent numeral; a character orb makes the windup a PvP tell. Supersedes the never-built drag-from-reservoir tier menu
 - [[systems/LetterBlock]] — Phase 3 entity: floating block prefab with `Block.Letter` + `Block.Color` attributes; chunky 4×4×4 cube with 6-face SurfaceGui letter glyph + colored ParticleEmitter; CollectionService tag drives the client bob/rotation animator (6°/s, sinusoidal bob)
 - [[systems/BlockSpawner]] — Phase 3 server-side populator: Scrabble-weighted letter picks (plus a 27th wildcard roll at ~4%), configurable color weights, auto-refill via CollectionService removed signal; maintains ~24 blocks in a 40x8x40 arena box
 - [[systems/Wildcard]] — the gold ★ block that stands in for any letter (`D★G` → DOG); ASCII `*` internally / `★` on screen, uncapped per word, length-indexed dictionary matcher, energy spread across all three reservoirs

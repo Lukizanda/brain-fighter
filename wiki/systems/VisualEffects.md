@@ -1,8 +1,8 @@
 ---
 type: system
-description: Visual effects — particle effects for spell casts/impacts (shipped via VfxController + spawnEffect + cross-client broadcast), projectile bodies and trails, UI feedback animations, and per-color theming. World cast/impact/projectile VFX are implemented; PERF guardrails and some lanes remain planned.
+description: Visual effects — particle effects for spell casts/impacts (shipped via VfxController + spawnEffect + cross-client broadcast), projectile bodies and trails, persistent status visuals (shield / freeze / burn / charge orb), UI feedback animations, and per-color theming. World cast/impact/projectile VFX are implemented; PERF guardrails and some lanes remain planned.
 status: implemented (core); planned (PERF guardrails, collect-pop)
-updated: 2026-08-10
+updated: 2026-08-12
 ---
 
 # Visual Effects
@@ -21,6 +21,9 @@ updated: 2026-08-10
 > - `src/shared/Vfx/StatusVisuals/InfernoVfx.luau` + `src/client/Vfx/InfernoVfxController.client.luau` — the burning-rig flames (2026-08-08). Attribute-driven off `_burning`, like ShieldVfx. Parents `ParticleEmitter`s straight onto every limb over `MIN_PART_VOLUME` rather than welding Parts, which is what makes the fire *engulf* the rig instead of being a bonfire it stands in — a ParticleEmitter parented to a BasePart inherits that part's volume for its Sphere/Surface emission shape.
 > - `src/shared/Vfx/ScreenImpact.luau` — the screen-space lane (2026-08-08): warm `ColorCorrectionEffect` + `BlurEffect` in `Lighting`, plus a camera shake via `Humanoid.CameraOffset`. Deliberately **not** `Camera.CFrame` — the default Roblox camera scripts own that and rewrite it every frame.
 > - `src/shared/Vfx/StatusVisuals/ShieldVfx.luau` + `src/client/Vfx/ShieldVfxController.client.luau` — the absorb-shield bubble. Unlike FreezeVfx it is **attribute-driven**: the controller watches `_shield` on each player character rather than being called from an effect handler, which is what gets it cross-client replication without a broadcast. See [[systems/SkillPipeline]] § "Shield — the bubble reads the attribute, not the cast".
+> - `src/shared/Vfx/StatusVisuals/ChargeOrbVfx.luau` + `src/client/Vfx/ChargeOrbController.client.luau` — the hold-to-charge orb (2026-08-12, [[systems/ChargeCast]]). Copies ShieldVfx's `start`/`update`/`stop` shape and its `_chargeColor` / `_chargeTier` attribute wire, and is the first persistent visual that must be *grown* while it runs. **It cannot be a `spawnEffect` entry**, and the reason is worth pinning: `spawnEffect` returns nothing, hands every instance it makes to `Debris` with a duration fixed at author time, and its only sustained branch is a `task.delay` that flips `Enabled = false`. A charge has no author-time duration and needs a handle. The mote halo's *look* still lives in `VfxConfig` as `charge_motes_<colour>` (rate-based `EmitterSpec`, resolved by `VfxConfig.resolveChargeMotesId`); only its lifetime is owned by the module. The converging mote Parts lift `collectStream`'s quadratic-Bézier flight, with the orb attachment as the destination and a ring around the caster as the source.
+>
+> **The only *sustained* emitter in the project.** Every other `EFFECTS` entry is a burst. `ChargeOrbVfx` therefore budgets explicitly rather than leaning on `PERF.maxEmitters = 32`: `MOTE_EMITTER_CAP = 6` concurrent halos and `MOTE_PART_CAP = 48` live mote Parts across every charging player on the client. Past either cap the orb keeps drawing and the layer degrades — flavour is lost, the tell is not. Measured 0 orphaned orbs / motes / halo attachments after 20 charge cycles.
 >
 > **Does NOT exist (fictional in the plan below):** `UiVfxController` (UI VFX live inline inside the HUD builders, not a standalone module), `src/shared/Vfx/init.luau` barrel, and `src/shared/Vfx/Templates/` (the `VfxTemplates` folder is Studio/MCP-managed, not Rojo `.model.json`).
 >
@@ -274,6 +277,11 @@ export type Config = {
     -- differently" (see Inferno, 2026-08-03).
     resolveCastId: (color: string, tier: number) -> string,
     resolveImpactId: (effectKind: string, tier: number?) -> string,
+    -- "charge_motes_red" etc, the sustained halo on a hold-to-charge orb.
+    -- Falls back to red for an unrecognised colour: a silently haloless orb
+    -- would read as the charge having failed. Consumed by ChargeOrbVfx, which
+    -- instantiates the emitter itself rather than going through spawnEffect.
+    resolveChargeMotesId: (color: string?) -> string,
 }
 ```
 

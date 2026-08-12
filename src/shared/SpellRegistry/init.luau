@@ -51,6 +51,21 @@ export type Spec = {
 local TIER_COSTS: { number } = { 5, 10, 20, 40 }
 local NUM_TIERS = #TIER_COSTS
 
+-- How fast a held cast charges, in mana-equivalent per second.
+--
+-- Hold-to-charge (wiki/systems/ChargeCast.md) does not get its own timing
+-- table. Mana *flows* into the charge at a constant rate and the tier
+-- thresholds are the costs directly above, so `chargeTimeFor` is a
+-- division rather than a second set of numbers to keep in sync with the
+-- first. At 20/sec that is T1 = 0s (a tap), T2 = 0.25s, T3 = 0.75s,
+-- T4 = 1.75s — T4 reads as a commitment for free, because it costs 8× a
+-- Firebolt and therefore takes 8× the mana to pour in.
+--
+-- This is the single tuning lever for how a hold *feels*. Moving it moves
+-- every tier's timing together, which is the point: the ratios between
+-- tiers are the cost table's business, not this constant's.
+local MANA_FLOW_PER_SEC = 20
+
 -- Red projectile tuning (Firebolt T1, Fireball T2). Inferno (T3) is
 -- instant and Volley (T4) has its own params block; their tuning lives
 -- in the spec literals below.
@@ -353,6 +368,31 @@ local function assertValidTier(tier: number, fnName: string)
 			3
 		)
 	end
+end
+
+-- Tier costs, read-only by convention. Exposed because the HUD draws the
+-- thresholds as notches on the reservoir bar and would otherwise need a
+-- second copy of the table — the exact drift this module exists to stop.
+SpellRegistry.TIER_COSTS = TIER_COSTS
+SpellRegistry.NUM_TIERS = NUM_TIERS
+SpellRegistry.MANA_FLOW_PER_SEC = MANA_FLOW_PER_SEC
+
+-- How long a colour panel must be held before `tier` is reachable.
+--
+-- Zero for T1: a tap fires the cheapest spell, and every tier above it is
+-- priced in seconds by how much more mana it costs than that tap. See
+-- MANA_FLOW_PER_SEC above for why this is derived rather than tabulated.
+function SpellRegistry.chargeTimeFor(tier: number): number
+	assertValidTier(tier, "chargeTimeFor")
+	return (TIER_COSTS[tier] - TIER_COSTS[1]) / MANA_FLOW_PER_SEC
+end
+
+-- How many tiers this colour actually has. Red is the only school with a
+-- T4, so anything drawing per-tier UI (the notches on the reservoir bar)
+-- has to ask rather than assume NUM_TIERS.
+function SpellRegistry.tierCount(color: Color): number
+	assertValidColor(color, "tierCount")
+	return #SPELLS[color]
 end
 
 -- Returns the Spec for the given color/tier. Errors on invalid args so

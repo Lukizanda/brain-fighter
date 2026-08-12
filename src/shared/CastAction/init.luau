@@ -5,14 +5,19 @@
 ----------------------------------------------------------------------
 -- The "Cast" step of the gameplay loop (see
 -- wiki/design/gameplay-loop.md § "Cast (reservoir-driven)"). Wires the
--- two cast UX gestures into actual spell fires:
+-- cast UX gesture into an actual spell fire:
 --
---   tap a reservoir         → CastAction.tapReservoir(color, …)
---                             fires the highest currently-affordable
---                             tier of that color (casual fast path).
---   drag-from → release on  → CastAction.castSpecific(color, tier, …)
---   tier entry                fires that specific tier (strategic
---                             path; supports "save big, fire small").
+--   press-hold-release on   → CastAction.resolveSpecAtCharge(…) picks
+--   a colour panel            the tier, CastAction.castSpecific(color,
+--                             tier, …) fires it. A quick tap is T1;
+--                             keeping the press down climbs through the
+--                             tiers you can afford. One gesture covers
+--                             both the casual fast path and "save big,
+--                             fire small". See wiki/systems/ChargeCast.md.
+--
+-- `tapReservoir` (fire the highest affordable tier) is the gesture that
+-- preceded it. It has no production caller since Phase 5.8 and is kept
+-- for the __tests scenarios that pin the selection rule.
 --
 -- Both gestures resolve to the same pipeline:
 --   1. Look up the spec.       (SpellRegistry)
@@ -193,6 +198,43 @@ function CastAction.resolveTapSpec(
 	local affordable = SpellRegistry.listAffordableSpells(color, reservoirs:get(color))
 	-- listAffordableSpells is sorted ascending; highest affordable is last.
 	return affordable[#affordable]
+end
+
+-- Which spell would releasing a `heldSec`-long charge on this reservoir
+-- fire? Pure — reads the reservoir, touches nothing.
+--
+-- The rule is the intersection of two ceilings, and both matter:
+--
+--   time         a tier is only reachable once the charge has flowed
+--                past its cost (SpellRegistry.chargeTimeFor).
+--   affordability a tier you cannot pay for is never reachable, no
+--                matter how long you hold. The charge stops dead at
+--                what you own rather than climbing into a fizzle — the
+--                HUD pulses there instead of growing, so the ceiling is
+--                legible without a text cue.
+--
+-- Returns nil below T1, which is the "released too early / too poor"
+-- case the caller surfaces as a cancel rather than a failed cast.
+--
+-- Lives here for the same reason `resolveTapSpec` does: the HUD has to
+-- know the tier *before* the release in order to draw it, and a second
+-- copy of the selection rule in the builder would drift from the one
+-- `castSpecific` is actually handed.
+function CastAction.resolveSpecAtCharge(
+	color: Color,
+	reservoirs: EnergyReservoirs.EnergyReservoirs,
+	heldSec: number
+): SpellRegistry.Spec?
+	local affordable = SpellRegistry.listAffordableSpells(color, reservoirs:get(color))
+	-- Ascending by tier, and chargeTimeFor is monotonic in tier, so the
+	-- last entry that clears the clock is the highest reachable one.
+	local reached: SpellRegistry.Spec? = nil
+	for _, spec in affordable do
+		if SpellRegistry.chargeTimeFor(spec.tier) <= heldSec then
+			reached = spec
+		end
+	end
+	return reached
 end
 
 -- Tap-cast: fire the highest currently-affordable tier of `color`.

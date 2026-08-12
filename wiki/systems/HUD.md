@@ -1,7 +1,7 @@
 ---
 type: system
-description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, reticle, settings menu, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu with embedded mana fill, MemorizeButton, MindFullIndicator), and the mobile DashButton. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291.)
-updated: 2026-08-10
+description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, reticle, settings menu, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu with mana fill + tier notches + hold-to-charge, MemorizeButton, MindFullIndicator), and the mobile DashButton. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291.)
+updated: 2026-08-12
 ---
 
 # HUD System
@@ -134,11 +134,12 @@ src/shared/Hud/
   -- Phase 4 gameplay widgets:
   BufferDisplayBuilder.luau       — letter-tile row from WordBuffer.tiles()
   BufferDisplayConfig.luau
-  ReservoirBarsBuilder.luau       — [unused] R/G/B energy bars; superceded by SpellMenu fill
-  ReservoirBarsConfig.luau        — [unused]
+  ReticleBuilder.luau             — crosshair
+  ReticleConfig.luau
   MemorizeButtonBuilder.luau      — Memorize action button (calls MemorizeAction.tryMemorize)
   MemorizeButtonConfig.luau
-  SpellMenuBuilder.luau           — 3-color spell panel; buttons fill with mana (bottom→top gradient); tap → CastAction.tapReservoir + energy popup
+  SpellMenuBuilder.luau           — 3-color spell panel; mana fill + tier notches + persistent numeral;
+                                    press-hold-release charges a tier (see [[systems/ChargeCast]])
   SpellMenuConfig.luau
   MindFullIndicatorBuilder.luau   — warning banner when WordBuffer is full
   MindFullIndicatorConfig.luau
@@ -151,7 +152,9 @@ src/client/UI/
   DamageFeedbackGui.client.luau   — directional damage indicators
   DeathScreenGui.client.luau      — death overlay
   SettingsMenuGui.client.luau     — settings menu mount
-  SpellMenuGui.client.luau        — BottomRight; fires tapReservoir on color tap; drives fill via energyReservoirs.changed
+  SpellMenuGui.client.luau        — BottomRight; consumes the builder's charge signals, resolves the
+                                    target at release, casts via castSpecific, drives the local charge
+                                    orb + the ChargeState relay; fill via energyReservoirs.changed
   DashButtonGui.client.luau       — BottomRight vertical column (touch-only); tap → _G.BrainFighter.requestDash()
   MindFullIndicatorGui.client.luau — TopCenter; shows/hides on mindFull/mindFreed
   BossHudGui.client.luau          — own ScreenGui (IgnoreGuiInset=true, y=8); boss health bar + phase label; hidden until a boss spawns
@@ -166,7 +169,7 @@ The first four read state through `PlayerSession.get()` and subscribe to signals
 |---|---|---|---|
 | BufferDisplay | BottomCenter | `wordBuffer.changed` | display tiles |
 | MemorizeButton | BottomCenter | `wordBuffer.changed` | `MemorizeAction.tryMemorize` |
-| SpellMenu | BottomRight | `energyReservoirs.changed` | gradient fill + `CastAction.tapReservoir`; tap shows energy popup |
+| SpellMenu | BottomRight | `energyReservoirs.changed` | fill + tier notches + persistent numeral; press-hold-release → `CastAction.castSpecific` at the charged tier ([[systems/ChargeCast]]) |
 | MindFullIndicator | TopCenter | `mindFull` / `mindFreed` | show/hide warning |
 | DashButton | BottomRight | `InputCategorizer` (touch toggle) | tap → `_G.BrainFighter.requestDash()` (mobile-only, hidden on KBM) |
 

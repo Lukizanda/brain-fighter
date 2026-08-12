@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server relay for client-initiated spell casts. Applies effects server-side because client Humanoid.Health writes don't replicate for server-owned rigs. Hardened in 5.4 — except affordability, which is blocked on client-side energy state.
-updated: 2026-08-03
+updated: 2026-08-12
 ---
 
 # SpellCastService
@@ -37,6 +37,16 @@ Hardened in Phase 5.4. Checks run cheapest-first; every failure drops the reques
 | 5 | Target liveness | Dropped **silently** — a target dying mid-flight is ordinary play, not an exploit |
 
 Check 2 closes a latent crash as well as an exploit. `SpellRegistry.getSpell` accepts any tier in 1–4, but only red defines a T4, so `green/4` returned `nil` and the old handler then errored indexing it — killing that invocation. `resolveSpec` nil-checks the lookup rather than trusting the tier range.
+
+### Not checked: hold duration (2026-08-12)
+
+[[systems/ChargeCast]] made the tier a function of how long the player held a colour panel. **The server does not and cannot verify that hold.** There is no server-side clock on the gesture; the `ChargeState` remote it does receive is a cosmetic broadcast (see below) that carries no timing guarantee, and adding one would mean timestamping a client-owned input across the wire.
+
+This is stated rather than fixed because it is not a hole. Hold-to-charge changed **which** tier the client picks, not **whether** the server prices it: the cast relay is byte-identical to before, check 2 still resolves the spec, and the ledger still debits `spec.cost`. A client that claims to have charged instantly buys itself *speed*, not mana — it still pays 40 for a T4 Volley, and if it never earned that 40 the affordability check refuses it exactly as it would a tapped one.
+
+What a lying client does gain is the ability to skip the 1.75 s windup, which is a PvP *tell* rather than a cost — an opponent watching for the charge orb would not see it coming. Closing that needs the same thing everything else here needs: a server that owns the gesture, not just the outcome. Filed with the authoritative-economy work below rather than as its own item.
+
+The `ChargeState` remote itself lives in `server/SpellCast/ChargeStateService.server.luau`, deliberately **not** in this handler. Different remote, different lifecycle, different posture: a cast changes health and mana and gets the five checks above; a charge state writes two character attributes and gets a well-formedness check plus its own rate budget. Folding a cosmetic broadcast into the handler that debits the energy ledger would put the two on one rate limit and one rejection path for no reason.
 
 ### Tuning
 

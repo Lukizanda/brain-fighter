@@ -1,7 +1,7 @@
 ---
 type: system
-description: Phase 2 action — the cast pipeline. tapReservoir fires the highest currently-affordable tier; castSpecific fires an explicitly-picked tier. Drains the reservoir on cast, refunds on executor failure, and fires the client-local `spellResolved` signal on success.
-updated: 2026-06-05
+description: Phase 2 action — the cast pipeline. castSpecific fires an explicitly-picked tier (the production path since 5.8's hold-to-charge); resolveSpecAtCharge picks that tier from a hold duration; tapReservoir is the retired highest-affordable rule, kept for its tests. Drains the reservoir on cast and fires the client-local `spellResolved` signal on success.
+updated: 2026-08-12
 ---
 
 # CastAction
@@ -35,15 +35,18 @@ export type CastResult = {
     drained: number?,       -- only on ok=true; energy deducted
 }
 
--- Tap a reservoir → highest currently-affordable tier of that color.
-CastAction.tapReservoir(
+-- Which tier would releasing a `heldSec`-long charge fire? Pure — reads
+-- the reservoir, touches nothing. nil below T1.
+CastAction.resolveSpecAtCharge(
     color: Color,
     reservoirs: EnergyReservoirs,
-    caster: Humanoid | Model,
-    target: Humanoid | Model | Vector3 | nil
-) -> CastResult
+    heldSec: number
+) -> Spec?
 
--- Drag → release on a specific tier entry.
+-- Which tier would a tap fire? Pure. The pre-5.8 selection rule.
+CastAction.resolveTapSpec(color: Color, reservoirs: EnergyReservoirs) -> Spec?
+
+-- Fire a specific tier. THE production entry point since 5.8.
 CastAction.castSpecific(
     color: Color,
     tier: number,          -- 1 | 2 | 3 | 4 (T4 exists for red only — Volley)
@@ -51,16 +54,29 @@ CastAction.castSpecific(
     caster: Humanoid | Model,
     target: Humanoid | Model | Vector3 | nil
 ) -> CastResult
+
+-- Fire the highest currently-affordable tier. NO production caller since
+-- 5.8; kept because __tests scenarios 1–4 pin the selection rule.
+CastAction.tapReservoir(
+    color: Color,
+    reservoirs: EnergyReservoirs,
+    caster: Humanoid | Model,
+    target: Humanoid | Model | Vector3 | nil
+) -> CastResult
 ```
+
+## Tier selection (Phase 5.8)
+
+`resolveSpecAtCharge` is the rule behind [[systems/ChargeCast]]. It returns the highest tier that is **both** time-reached (`SpellRegistry.chargeTimeFor(tier) <= heldSec`) **and** currently affordable — so the charge stops dead at the affordability ceiling rather than climbing into a fizzle — and `nil` below T1, which the caller surfaces as a cancel rather than a failed cast.
+
+It lives here for the same reason `resolveTapSpec` does: the HUD has to know the tier *before* the release in order to draw it, and a second copy of the selection rule in the builder would drift from the one `castSpecific` is actually handed. (`SpellMenuBuilder` does keep its own `tierAtHold` for the per-frame path — it cannot require this module without dragging `EnergyReservoirs` and `SpellExecutor` into the HUD layer — but both read the same two `SpellRegistry` functions, and scenario 15 pins that contract.)
 
 `Color` is the three-color string union shared with [[systems/EnergyReservoirs]] and [[systems/SpellRegistry]].
 
 ## The two entry points
 
-The dual gesture model is the load-bearing decision of the cast surface (see [[design/gameplay-loop|gameplay-loop]] § "Cast (reservoir-driven)") — it has to be honored at this layer too:
-
-- **`tapReservoir(color, ...)`** — the casual fast path. One touch fires the highest currently-affordable tier of that color. If the reservoir can't afford even T1 (cost 5), the call returns `{ ok = false, reason = "no affordable tier" }` and the HUD decides whether to surface a fizzle.
-- **`castSpecific(color, tier, ...)`** — the strategic path; what the drag-from-reservoir tier menu resolves to. The player saw all affordable tiers and picked one deliberately — usually the "save big, fire small" case where the highest affordable is *not* what they want. Returns a `{ ok = false, reason = "cannot afford <Name> (cost ..., have ...)" }` if the chosen tier is above the current energy, and a `{ ok = false, reason = "invalid color/tier: ..." }` if the caller passed garbage (handled gracefully, see [Errors](#errors)).
+- **`castSpecific(color, tier, ...)`** — the production path since Phase 5.8. The player chose this tier deliberately, by holding the colour panel until the charge reached it (see [[systems/ChargeCast]]); the "save big, fire small" case is a short hold on a full reservoir. Returns `{ ok = false, reason = "cannot afford <Name> (cost ..., have ...)" }` if the chosen tier is above the current energy, and `{ ok = false, reason = "invalid color/tier: ..." }` if the caller passed garbage (handled gracefully, see [Errors](#errors)).
+- **`tapReservoir(color, ...)`** — the gesture that preceded it: one touch fires the highest currently-affordable tier, returning `{ ok = false, reason = "no affordable tier" }` below T1. **No production caller since 5.8.** Deliberately not deleted — scenarios 1–4 of `__tests` pin the highest-affordable rule through it, and that rule is still what `SpellMenuBuilder` uses to place the charge ceiling.
 
 Both gestures resolve into the same internal pipeline:
 
@@ -106,7 +122,7 @@ No throttling — casts are rare-per-frame.
 
 ## Consumers
 
-- **HUD: SpellMenu** (shipped — [[systems/HUD]]) — calls `tapReservoir` on a single-tap of a reservoir bar; calls `castSpecific(color, tier, ...)` on a drag-release over a tier menu entry. Reads `CastResult.cast` to surface the cast feedback (spell name, drain animation on the bar, placement-target hand-off for `targetingMode == "placement"` once that lands).
+- **HUD: SpellMenu** (shipped — [[systems/HUD]], [[systems/ChargeCast]]) — `SpellMenuBuilder` owns the press-hold-release gesture and hands `SpellMenuGui` a `castRequested(color, tier)`; the coordinator resolves the enemy lock **at release** (a 1.75 s T4 charge is long enough for the world to move) and calls `castSpecific`. Reads `CastResult.cast` to relay the cast to [[systems/SpellCastService]] and to flash the panel; placement-target hand-off for `targetingMode == "placement"` still pending.
 - **VFX: VfxController** — connects to `CastAction.spellResolved` to play cast VFX locally and relay to the server (see [Signal](#signal)).
 - **Tutorial / scripted first cast** — may call either entry point directly to drive a scripted cast in an intro level.
 
@@ -122,7 +138,7 @@ require(game.ReplicatedStorage.Shared.CastAction.__tests).run()
 
 A passing run prints `[CastAction.__tests] all scenarios passed`. A failed assertion errors with the scenario's message.
 
-The nine scenarios (costs pinned to `TIER_COSTS = { 5, 10, 20, 40 }`, cap 60):
+The fifteen scenarios (costs pinned to `TIER_COSTS = { 5, 10, 20, 40 }`, cap 60):
 
 | # | Scenario | Pinned outcome |
 |---|---|---|
@@ -135,6 +151,14 @@ The nine scenarios (costs pinned to `TIER_COSTS = { 5, 10, 20, 40 }`, cap 60):
 | 7 | castSpecific("yellow", 1) | `ok=false, reason mentions "invalid"`; red unchanged (60) |
 | 8 | tap red, energy=15, target=nil | Fireball projectile has no resolvable target → executor refuses, **refund**: red back to 15, `ok=false, reason mentions "target"` |
 | 9 | castSpecific(green, 1), energy=15, target=nil (heal fallback) | Mend fires on caster (self-heal), drain 5, green=10; caster HP 50→65 |
+| 10 | `resolveSpecAtCharge(red, energy=0, held=10 s)` | `nil` — a hold on an empty reservoir never reaches T1, however long |
+| 11 | `resolveSpecAtCharge(red, energy=60, held=0)` | Firebolt (T1) — a tap is T1, **not** the highest affordable; the 5.8 behaviour change |
+| 12 | `resolveSpecAtCharge(red, energy=12, held=17.5 s)` | Fireball (T2) — clamped at the affordability ceiling, not the clock |
+| 13 | `resolveSpecAtCharge(red, energy=60)` at exactly `chargeTimeFor(3)` / midway 2→3 | T3 / T2 — the boundary is `<=`, asserted from both sides |
+| 14 | `resolveSpecAtCharge(green\|blue, energy=60, held=2×chargeTimeFor(4))` | T3 — the roster ceiling binds before the clock; neither school has a T4 |
+| 15 | `chargeTimeFor` contract | `chargeTimeFor(1) == 0` (a tap) and strictly increasing with tier |
+
+> Scenarios 10–15 express hold durations as `SpellRegistry.chargeTimeFor(t)` rather than as literal seconds, so they survive the retune of `MANA_FLOW_PER_SEC` that the first feel-check playtest is expected to produce.
 
 > Projectile-delivery spells (Firebolt T1, Fireball T2, Volley T4) launch a projectile that never finds a collidable target in the test rig, so the cast returns `ok=true` (delivery accepted) but no health change is observable; instant-delivery spells (Inferno T3, Mend G-T1) synchronously mutate Humanoid health and are the canonical end-to-end cases.
 

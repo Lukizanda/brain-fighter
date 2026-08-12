@@ -39,6 +39,30 @@ local FROZEN_ATTRIBUTE = "_frozen"
 -- value is simply there when they arrive.
 local BURNING_ATTRIBUTE = "_burning"
 
+-- The colour and tier of a spell currently being charged, set on the
+-- caster's character Model while a colour panel is held and cleared on
+-- release. `server/SpellCast/ChargeStateService` writes them from the
+-- ChargeState remote; `client/Vfx/ChargeOrbController` watches them and
+-- owns the orb.
+--
+-- Two attributes rather than one packed string because the tier is the
+-- thing that animates: a client tweening the orb between sizes wants a
+-- number it can lerp, and parsing "red:3" on every write to get one would
+-- be a string operation on the hot path for no gain.
+--
+-- The same replication argument as `_frozen` and `_shield`, and it is the
+-- whole reason the orb is affordable: the character is server-owned, so a
+-- server-written attribute lands on every client's copy of that rig with
+-- no fan-out RemoteEvent on the way out. The orb is a PvP tell — the
+-- point is that your opponent can see you winding up a T4 — and that
+-- costs one attribute write per tier crossing, not a broadcast per frame.
+--
+-- CHARGE_TIER_ATTR is 0 (or absent) while nothing is charging. A tier of
+-- 0 with a colour set is a legal transient: the press has registered but
+-- the charge has not reached T1.
+local CHARGE_COLOR_ATTR = "_chargeColor"
+local CHARGE_TIER_ATTR = "_chargeTier"
+
 -- CollectionService tags whose Models carry a Humanoid and can therefore
 -- be targeted by a skill. Player characters are NOT tagged — they're
 -- enumerated through `Players` instead.
@@ -88,6 +112,8 @@ local BARRIER_EXPIRES_AT = "_barrierExpiresAt"
 return {
 	FROZEN_ATTRIBUTE   = FROZEN_ATTRIBUTE,
 	BURNING_ATTRIBUTE  = BURNING_ATTRIBUTE,
+	CHARGE_COLOR_ATTR  = CHARGE_COLOR_ATTR,
+	CHARGE_TIER_ATTR   = CHARGE_TIER_ATTR,
 	DAMAGEABLE_TAGS    = DAMAGEABLE_TAGS,
 	BARRIER_TAG        = BARRIER_TAG,
 	BARRIER_EXPIRES_AT = BARRIER_EXPIRES_AT,

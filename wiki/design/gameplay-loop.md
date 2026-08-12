@@ -1,7 +1,7 @@
 ---
 type: design
 description: Canonical core loop — aim, shoot letter blocks, spell words in a 12-slot buffer, cast color-typed spells that drain per-color energy reservoirs to defeat the level monster
-updated: 2026-08-03
+updated: 2026-08-12
 ---
 
 # Gameplay Loop
@@ -20,7 +20,7 @@ The full cycle, as drawn in [`./gameplay-loop.excalidraw`](./gameplay-loop.excal
 4. **Arrange** — player drags buffer tiles into the order they want and double-clicks/taps to destroy unwanted letters. The buffer is the only place words are constructed.
 5. **Memorize** — the explicit commit button (icon-only, e.g. ✨) validates the buffered word against the dictionary. **Valid** → the word's energy transmutes into the matching per-color reservoirs and the buffer clears. **Invalid** → the button shakes, the buffer flashes red, and the buffer is **cleared anyway** — the letters are consumed, so a bad commit costs the collected tiles and the player must re-collect. *No spell fires from this action* — committing and casting are now separate. (Revised from an earlier "preserve on invalid" rule; see Memorize section below.)
 6. **Energy** — on a valid Memorize, `word_energy = Σ letter_values × length_multiplier`. Mixed-color words are allowed; energy is **split value-weighted by tile color** — each tile contributes its own `letter_value × length_multiplier` to *its* color's reservoir. Sum across colors equals whole-word energy. All blocks are colored. Energy persists across words, so the player can Memorize multiple words to stockpile before casting.
-7. **Cast** — the player spends energy by interacting with a color reservoir directly. **Tap** a reservoir = fire that color's highest currently-affordable tier. **Drag from** a reservoir = a vertical menu opens, listing **all currently-affordable tiers of that color** (Firebolt T1·5 / Fireball T2·10 / Inferno T3·20 / Volley T4·40 for red), with locked tiers greyed; release on the desired tier to fire it. Release outside = cancel. Casting drains *exactly the tier cost*, not the whole bar.
+7. **Cast** — the player spends energy by **pressing and holding** a color reservoir. The charge starts at T1 (so a quick tap is a Firebolt) and climbs through the tiers that colour can afford — Firebolt T1·5 at 0 s, Fireball T2·10 at 0.25 s, Inferno T3·20 at 0.75 s, Volley T4·40 at 1.75 s — stopping dead at the affordability ceiling. Release over the panel fires the tier you reached; release outside cancels. Casting drains *exactly the tier cost*, not the whole bar, and **nothing is drained until release**, so a cancelled hold costs nothing. See [[systems/ChargeCast]].
 8. **Spell** — the spell config's `targetingMode` decides what happens next: `auto` fires at the monster (or self, for buffs); `placement` hands the player an aimed reticle for the spell's footprint.
 9. **Effect** — the spell resolves against the monster (damage, debuff) or the player (heal, shield) or the world (wall, AOE).
 10. **Loop** — buffer drains on Memorize; player re-engages floating blocks. Level ends when the monster's HP hits zero.
@@ -67,15 +67,27 @@ An icon-only button next to the buffer converts the buffered word into mana.
 
 #### Cast (reservoir-driven)
 
-Each color's reservoir is the cast surface for that color.
+Each color's reservoir is the cast surface for that color. **Press it, hold to climb the tiers, release to fire what you reached.** Full system page: [[systems/ChargeCast]] (Phase 5.8, 2026-08-12).
 
-- **Tap a reservoir** = fire the highest currently-affordable tier of that color. Default fast-path; one touch, predictable.
-- **Drag from a reservoir** = a vertical menu opens alongside it, listing **all currently-affordable tiers of that color** (e.g. red: Firebolt T1·5, Fireball T2·10, Inferno T3·20, Volley T4·40). Affordable tiers are bright; tiers above the current energy are greyed/locked. Release on a tier to fire that spell.
-- **Release outside the menu** = cancel; no energy spent.
-- The menu opens **toward the screen interior** (reservoirs live on the right edge → menu opens to the left), so the player's finger doesn't occlude the choices.
-- **Placement-mode spells are visually marked** in the menu — a crosshair glyph (⌖) at the right edge of the entry, plus a **dashed outline** around the entry (auto-target entries use a solid outline). Two layered cues: the glyph identifies the targeting mode; the dashed outline signals "this entry has a second step after release." First-time use of any placement spell triggers a one-shot tutorial flash so the second aim step doesn't surprise the player.
+- **Press a reservoir** → the charge starts at T1 immediately, so a quick tap is a Firebolt.
+- **Keep holding** → the charge climbs through the tiers, priced in seconds by how much *more* mana each one costs than a tap: T2 at 0.25 s, T3 at 0.75 s, T4 at 1.75 s (`MANA_FLOW_PER_SEC = 20`). T4 reads as a commitment for free, because it costs 8× a Firebolt.
+- **It stops dead at what you can afford.** The panel pulses and the character orb strains rather than growing. You cannot charge into a fizzle.
+- **Release over the panel** = fire that tier. **Release outside it** = cancel; no energy spent.
+- **Nothing is drained until release.** The reserve band eaten out of the top of the fill, and the numeral counting down beside it, are a *promise*. Cancelling snaps both back — there is no refund because nothing was taken.
+- **The commitment is visible to everyone.** An orb over the caster's head grows with the tier and pops on release, so "he's been holding red for a second and a half" is a tactical read. Same deliberate leak as the collect stream in [[design/tap-to-pop]].
+- **Placement-mode spells** still need their second aim step; the marker treatment described below moves onto the panel rather than a menu entry, and is not built yet.
 
-*Why:* anchoring the cast on the color reservoir resolves two problems with the prior single-button drag-cast — (1) color is now explicit by virtue of which bar you touched, so there's no arbitrary tap-default rule, and (2) the menu has room to show all three tiers of that one color rather than compressing into one entry per color, which gives the "save big, fire small" decision a natural home. The placement-mode marker is layered (glyph + outline) because either alone is ambiguous — a single icon needs to be learned, but a dashed outline reinforces the meaning visually without requiring memory.
+*Why:* anchoring the cast on the color reservoir makes color explicit by virtue of which bar you touched, so there's no arbitrary tap-default rule. Making the *tier* a duration rather than a menu selection is what gives "save big, fire small" a home that costs one gesture: the choice is how long you commit, and the cost of overcommitting is a real one, because the hold is time an opponent can see and act on.
+
+> **Superseded 2026-08-12 — the drag-from-reservoir tier menu.** Kept because the reasoning is still the reason the cast lives on the reservoir at all.
+>
+> - **Tap a reservoir** = fire the highest currently-affordable tier. Default fast-path; one touch, predictable.
+> - **Drag from a reservoir** = a vertical menu opens alongside it, listing **all currently-affordable tiers of that color** (red: Firebolt T1·5, Fireball T2·10, Inferno T3·20, Volley T4·40). Affordable tiers bright; tiers above current energy greyed/locked. Release on a tier to fire it.
+> - **Release outside the menu** = cancel; no energy spent.
+> - The menu opens **toward the screen interior** (reservoirs live on the right edge → menu opens left), so the player's finger doesn't occlude the choices.
+> - **Placement-mode spells are visually marked** in the menu — a crosshair glyph (⌖) at the right edge of the entry, plus a **dashed outline** (auto-target entries use a solid outline). Two layered cues: the glyph identifies the targeting mode; the dashed outline signals "this entry has a second step after release." First-time use of any placement spell triggers a one-shot tutorial flash.
+>
+> *Why it was replaced:* it was never built, and by the time it came up for building the objection was that it costs a mode. A menu that opens over the arena hides the arena, and the tier decision then happens with the fight paused behind a panel — in a game whose other two verbs (pop, memorize) are single taps. Hold-to-charge asks the same question with no surface at all, works identically on mouse and touch, and turns the decision into something an opponent can read. What is genuinely lost is the *legend*: the menu named every tier and its price, and a hold does not. The notches, the reserve band and the numeral on the panel are what replace that, and they are weaker at teaching a first-time player which spell is which.
 
 ### Spawner
 

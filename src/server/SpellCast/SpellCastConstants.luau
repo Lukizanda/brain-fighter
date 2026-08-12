@@ -48,4 +48,22 @@ SpellCastConstants.CAST_REFILL_PER_SEC = 1 / (MIN_BLOCKS_PER_CAST * BlockTapConf
 -- can't flood the output.
 SpellCastConstants.REJECTION_LOG_THROTTLE_SEC = 10
 
+-- ChargeState flood guard (Phase 5.8, hold-to-charge).
+--
+-- Derived from the cast budget above rather than picked: one held cast
+-- sends at most one `start`, one `tier` per crossing (four, red being the
+-- only school with a T4) and one `end`. Six events per cast, and casts
+-- are already capped at CAST_REFILL_PER_SEC, so this is that ceiling
+-- times the per-cast event count and nothing more.
+--
+-- The consequence of a drop is cosmetic — an orb that misses a tier step
+-- or lingers a moment — which is why the budget is generous rather than
+-- tight. This remote writes two attributes and touches no gameplay state;
+-- there is nothing here worth being stingy about.
+local CHARGE_EVENTS_PER_CAST = 6
+
+SpellCastConstants.CHARGE_BURST_CAPACITY = CHARGE_EVENTS_PER_CAST * 2
+SpellCastConstants.CHARGE_REFILL_PER_SEC =
+	SpellCastConstants.CAST_REFILL_PER_SEC * CHARGE_EVENTS_PER_CAST
+
 return SpellCastConstants

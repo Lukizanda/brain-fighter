@@ -34,6 +34,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CastAction = require(ReplicatedStorage.Shared.CastAction)
 local EnergyReservoirs = require(ReplicatedStorage.Shared.EnergyReservoirs)
+local SpellRegistry = require(ReplicatedStorage.Shared.SpellRegistry)
 
 local TEST_MAX_HEALTH = 100
 local HEALTH_TOLERANCE = 0.01
@@ -279,6 +280,115 @@ function M.run()
 		)
 		model:Destroy()
 		r:destroy()
+	end
+
+	------------------------------------------------------------------
+	-- resolveSpecAtCharge — hold-to-charge tier selection (Phase 5.8)
+	------------------------------------------------------------------
+	-- Pure: reads the reservoir and the clock, touches nothing. Hold
+	-- durations are expressed as SpellRegistry.chargeTimeFor(t) rather
+	-- than as literals, so these stay correct if MANA_FLOW_PER_SEC moves
+	-- — and it is expected to, after the first feel-check playtest.
+
+	local function chargeTime(tier: number): number
+		return SpellRegistry.chargeTimeFor(tier)
+	end
+
+	-- Half the gap between two tiers' charge times. Used to sit a hold
+	-- unambiguously *between* thresholds.
+	local function midway(lowTier: number, highTier: number): number
+		return (chargeTime(lowTier) + chargeTime(highTier)) / 2
+	end
+
+	-- 10. A hold on an empty reservoir never reaches T1, no matter how
+	-- long. nil is the "cancel, cost nothing" signal — not a fizzled cast.
+	do
+		local r = EnergyReservoirs.new()
+		local spec = CastAction.resolveSpecAtCharge("red", r, 10)
+		assert(spec == nil, `charge red=0: should be nil, got "{spec and spec.name or "nil"}"`)
+		r:destroy()
+	end
+
+	-- 11. A tap (zero hold) with plenty of mana fires T1, NOT the highest
+	-- affordable tier. This is the behaviour change from tapReservoir: the
+	-- player climbs to a big spell deliberately instead of being given one.
+	do
+		local r = EnergyReservoirs.new()
+		r:add("red", 60)
+		local spec = CastAction.resolveSpecAtCharge("red", r, 0)
+		assert(spec ~= nil, "charge red=60 held=0: should resolve")
+		local s = spec :: { name: string, tier: number }
+		assert(s.tier == 1, `charge red=60 held=0: tier should be 1, got {s.tier}`)
+		assert(s.name == "Firebolt", `charge red=60 held=0: name should be "Firebolt", got "{s.name}"`)
+		assert(r:get("red") == 60, "charge is pure — reservoir must be untouched")
+		r:destroy()
+	end
+
+	-- 12. The charge stops dead at the affordability ceiling. red=12 affords
+	-- T1 (5) and T2 (10) but not T3 (20), so an arbitrarily long hold tops
+	-- out at Fireball. This is the case the HUD's ceiling pulse marks.
+	do
+		local r = EnergyReservoirs.new()
+		r:add("red", 12)
+		local spec = CastAction.resolveSpecAtCharge("red", r, chargeTime(4) * 10)
+		assert(spec ~= nil, "charge red=12 long hold: should resolve")
+		local s = spec :: { name: string, tier: number }
+		assert(s.tier == 2, `charge red=12 long hold: tier should clamp at 2, got {s.tier}`)
+		assert(s.name == "Fireball", `charge red=12 long hold: name should be "Fireball", got "{s.name}"`)
+		r:destroy()
+	end
+
+	-- 13. A hold sitting exactly ON a threshold resolves to the higher
+	-- tier — the comparison is `chargeTimeFor(tier) <= heldSec`. Held one
+	-- notch below it must still be the lower tier, which is what makes this
+	-- an assertion about the boundary rather than about rounding luck.
+	do
+		local r = EnergyReservoirs.new()
+		r:add("red", 60)
+
+		local atThreshold = CastAction.resolveSpecAtCharge("red", r, chargeTime(3))
+		assert(atThreshold ~= nil, "charge red=60 at T3 threshold: should resolve")
+		assert(
+			(atThreshold :: { tier: number }).tier == 3,
+			`charge red=60 at T3 threshold: tier should be 3, got {(atThreshold :: { tier: number }).tier}`
+		)
+
+		local justBelow = CastAction.resolveSpecAtCharge("red", r, midway(2, 3))
+		assert(justBelow ~= nil, "charge red=60 below T3 threshold: should resolve")
+		assert(
+			(justBelow :: { tier: number }).tier == 2,
+			`charge red=60 below T3 threshold: tier should be 2, got {(justBelow :: { tier: number }).tier}`
+		)
+
+		r:destroy()
+	end
+
+	-- 14. Green and blue have no T4. Holding past red's T4 charge time with
+	-- a full reservoir must still land on T3, because the roster ceiling
+	-- binds before the clock does.
+	do
+		for _, color in { "green", "blue" } do
+			local r = EnergyReservoirs.new()
+			r:add(color :: any, 60)
+			local spec = CastAction.resolveSpecAtCharge(color :: any, r, chargeTime(4) * 2)
+			assert(spec ~= nil, `charge {color}=60 long hold: should resolve`)
+			local s = spec :: { name: string, tier: number }
+			assert(s.tier == 3, `charge {color}=60 long hold: tier should be 3 (no T4), got {s.tier}`)
+			r:destroy()
+		end
+	end
+
+	-- 15. chargeTimeFor is the contract the HUD and the resolver share, so
+	-- pin its shape: T1 is free (a tap), and the times climb strictly with
+	-- tier. A regression that made T1 cost time would make every tap fizzle.
+	do
+		assert(chargeTime(1) == 0, `chargeTimeFor(1) should be 0 (a tap), got {chargeTime(1)}`)
+		for tier = 2, SpellRegistry.NUM_TIERS do
+			assert(
+				chargeTime(tier) > chargeTime(tier - 1),
+				`chargeTimeFor must increase with tier; t{tier} = {chargeTime(tier)} vs t{tier - 1} = {chargeTime(tier - 1)}`
+			)
+		end
 	end
 
 	print("[CastAction.__tests] all scenarios passed")

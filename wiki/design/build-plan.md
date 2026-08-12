@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-08-10
+updated: 2026-08-12
 ---
 
 # Build Plan
@@ -276,7 +276,29 @@ same day: `be2b1a2`, `14881d9`, `3204b0d`, `08a2e5a`, `e5f72cc` + `1080233` +
 
 **Milestone:** two clients, empty hands, no hotbar. Pointing at a block says whether a tap will land — and greys out past reach — blocks pop on **both screens**, and a colour-matched stream funnels onto whoever took it while they run. Both tap the same block on the same frame → exactly one letter, exactly one stream. Server logs do not verify stage 3; a second client does, and it has to be a moving one. *All of this is verified except the two-client line itself; see the stage 3 row for what a single client was able to establish.*
 
+## Phase 5.8 — Hold-to-charge tier selection ✅ **Complete 2026-08-12**
+
+Added and shipped 2026-08-12. Full system page: [[systems/ChargeCast]].
+
+**The finding:** the game has four spell tiers per colour and **no way for the player to choose one**. A tap fired whatever was currently affordable, so "save big, fire small" — the decision [[design/gameplay-loop]] § "Spell economy" is built around — was unreachable in-game. The design doc's answer was a drag-from-reservoir tier menu; it was never built, and by the time it came up for building the objection was that it costs a *mode*. A menu that opens over the arena hides the arena, in a game whose other two verbs are single taps.
+
+**The change:** press a colour panel and the charge climbs through the tiers you can afford; release to fire what you reached. Mana *flows* at `SpellRegistry.MANA_FLOW_PER_SEC`, so `chargeTimeFor(tier) = (cost − T1 cost) / flow` and there is no second tuning table — T4 costs 8× a Firebolt and therefore takes 8× as long to pour in.
+
+| Chunk | Item |
+|---|---|
+| 1 | ✅ **Charge state machine.** `SpellRegistry.chargeTimeFor` / `tierCount` / exported `TIER_COSTS`; `CastAction.resolveSpecAtCharge` (pure, clamps at the affordability ceiling, nil below T1); `SpellMenuBuilder` swaps `MouseButton1Click` for the `BufferDisplayBuilder` press/release idiom plus a Heartbeat live only while held. `castRequested` **changed signature** to `(color, tier)`. |
+| 2 | ✅ **Reservoir panel rework.** Tier notches at `TIER_COSTS[t] / FILL_MAX` (count from `tierCount`, so green gets three not four), desaturate-below-T1 off the **existing** `wasAffordable` edge flag, persistent numeral replacing the transient tap popup, charge reserve band + counting-down numeral, active-notch highlight, ceiling pulse, and `playFiredFlash` — written since Phase 4 and never called — finally wired. |
+| 3 | ✅ **Charge orb over the character, for all players.** New `StatusVisuals/ChargeOrbVfx` + `client/Vfx/ChargeOrbController` + `_chargeColor`/`_chargeTier` attributes + `ChargeState` remote + `server/SpellCast/ChargeStateService`. The existing VFX lane could not do this: `spawnEffect` returns nothing and bakes its duration at author time, so there is no handle to grow or stop. Attribute-driven like `_shield`, which is what makes "everyone sees it" nearly free. |
+| 4 | ✅ **Mana motes flowing into the orb.** `charge_motes_{red,green,blue}` + `resolveChargeMotesId`; convergence math lifted from `collectStream`, ring source, orb destination. The project's **only sustained emitter** — budgeted explicitly (6 halos / 48 mote Parts) rather than leaning on `PERF.maxEmitters`. |
+| 5 | ✅ **Trust, tests, wiki.** No new trust hole — the client already picked the tier and the server already prices it. What the server *cannot* verify is hold duration, now recorded in [[systems/SpellCastService]] § "Not checked: hold duration" rather than left implied. Six new `CastAction/__tests` scenarios (15 total). |
+
+**Reserve, spend on release** was the decision that kept the blast radius small. Nothing is drained while the charge is held; `castSpecific` drains exactly one tier cost on release. So cancelling is free, there is no refund path to get wrong, and [[systems/EnergyReservoirs]] needed **zero changes** — its `:drain` is all-or-nothing by contract, and a reservation model would have meant inventing a second, partial one.
+
+**Milestone:** a quick tap is a Firebolt and a held press is a Volley, the panel shows which notch you are at and what it will cost, and a second player can see the orb over your head grow and pop. Verified live in Studio: 15/15 tests, tier clamping at the ceiling on a thin reservoir, a cancelled charge leaving the reservoir untouched, the grey→saturated flip landing exactly on the T2 notch, an orb rendered **from the Client datamodel** on a rig the local player does not own, and zero orphans after 20 charge cycles. *Owed:* the feel check — whether a 1.75 s T4 hold reads as commitment or as lag. `MANA_FLOW_PER_SEC` is expected to move.
+
 ## Plan changelog
+
+- **2026-08-12**: Phase 5.8 added **and complete** — hold-to-charge tier selection ([[systems/ChargeCast]]). Supersedes the drag-from-reservoir tier menu that [[design/gameplay-loop]] has specified since the first design pass and that was never built: it costs a mode, and hiding the arena behind a panel to pick a tier is the wrong trade in a game whose other verbs are single taps. What is genuinely lost is the menu's *legend* — it named every tier and its price, and a hold does not; notches, a reserve band and a persistent numeral are weaker at teaching that to a first-time player, and the tutorial will have to carry it. Two secondary problems fixed alongside: a 0–60 reservoir bar moved 8% for a whole T1 cast (notches + saturate-at-castable), and there was no mid-charge feedback anywhere (reserve band, numeral, ceiling pulse, orb). The orb is deliberately a PvP tell — the same information leak as the collect stream in Phase 5.7.
 
 - **2026-08-10**: Phase 5.7 **complete**, with two documented divergences. The planned in-range glow became a single hover outline (Highlight render budget, and the question is only ever about the block under the cursor). Reach was raised 7× and reverted to LetterBlaster's original 200 once the "range is too short" report turned out to be a screen/viewport coordinate mismatch capping effective reach at ~30 studs — a raise that changes nothing a player can feel is evidence about the cause, not an argument for raising further. Also closed the two-client verification carried since Phase 5.6, as far as one client can: the receive path is confirmed, a stream aimed at another player is not.
 - **2026-08-10**: Phase 5.4's energy-ceiling ledger **redesigned into validated memorize** before any of it was built. The ledger's bound is informationally weak rather than badly tuned — `LENGTH_MULTIPLIER_EPIC` is the smallest multiplier that cannot reject real play, so the bound is already as tight as its inputs allow, and it still saturates at the 60 cap within ~8 s of shooting. The reframe: the useful question is whether the server ever learns a word was spelled. Validated memorize answers yes for roughly 2× the work, closes the shoot-but-never-spell cheat, hands Phase 5.5 the word its personal-best stats need, and is a stepping stone to a full authoritative economy rather than throwaway work. Ships in shadow mode first. Two couplings to Phase 5.7: the consume-rejection rollback from stage 4 keeps the client buffer and the server held-set in sync by construction, and PvP promotes this from a self-cheat to griefing — see [[systems/SpellCastService]].
