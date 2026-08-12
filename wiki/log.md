@@ -1454,3 +1454,15 @@ They are **not** a `ParticleEmitter` — that is a 3D instance and does not exis
 Two anti-lockstep details, both there because three panels usually light on the *same* Memorize and would otherwise animate as one rigid mechanism: per-mote size and twinkle-period jitter, and alternating spin direction per panel. The jitter is rolled once at build rather than per activation, so a panel's character is stable instead of rerolling every time its reservoir crosses T1.
 
 Verified by client screenshot, including two captures 1.5s apart to confirm the motes actually move and twinkle out of phase rather than sitting as a static ring of dots. Suppression and teardown ride the existing `refreshReadyGlow` predicate unchanged — holding green dropped its motes along with its halo, and releasing into a T2 Stone Wall that drained it to 0 left it dark while red and blue kept orbiting. Rotation resets to 0 on stop so a relit panel starts from a known pose. See `systems/ChargeCast` § The panel (3).
+
+## [2026-08-12] ingest | Dead spell panels recede as well as grey out
+
+Third pass on the same question: how loudly does the HUD say a colour can cast? The castable/dead distinction was expressed purely in colour, so a panel that could not cast still held its full weight in the layout. It now fades too — `FILL_BASE_TRANSPARENCY` 0.72 against a new `_DEAD` at 0.88. Alpha and saturation are separate channels and the eye reads them separately.
+
+Deliberately the **dead** value that moves rather than the live one. Making castable panels more opaque would brighten all three at once on a full reservoir, which is exactly when the HUD is already at its loudest; pushing the dead ones back costs nothing at that moment and pays out when only one colour is live.
+
+The interesting part is the bug it forced. `playFiredFlash` dims the base disc and tweens back, and it captured `origTransp` off the live frame when the flash *began*. That was harmless while the value was constant. With two values it is not: a cast is exactly the event that can drop a panel below T1, so the captured value would restore the castable alpha onto a panel that had just gone dead — and it would win, because the restore lands **after** the desaturation tween `setReservoirs` started. Now resolved from state when the flash ends. Sampling live state at the start of an animation and writing it back at the end is the general shape of this, and it stays latent until someone makes the sampled thing state-dependent.
+
+Build-time init also now calls the same `baseColorFor(color, false)` / `baseTransparencyFor(false)` selectors the tweens use, instead of restating the drained values inline — one definition of "dead" rather than two that can drift.
+
+Verified by client screenshot across all three states, including the cast-dry case that would have caught the flash bug. **Owed:** whether 0.88 is too far — a dead panel is now nearly invisible while still being a live press target, and the argument for that being fine is that pressing a dead panel is a no-op. See `systems/ChargeCast` § The panel (2) and § Dead-panel transparency.

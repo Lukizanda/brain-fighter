@@ -249,6 +249,15 @@ function SpellMenuBuilder.build(): Handle
 		return if canCast then bg else bg:Lerp(Defaults.DESATURATED_GREY, Defaults.DESATURATED_BLEND)
 	end
 
+	-- Alpha is a separate channel from saturation and the eye reads it
+	-- separately: grey alone still holds its ground in the layout, where
+	-- grey *and* faded falls back behind the panels that can actually cast.
+	local function baseTransparencyFor(canCast: boolean): number
+		return if canCast
+			then Defaults.FILL_BASE_TRANSPARENCY
+			else Defaults.FILL_BASE_TRANSPARENCY_DEAD
+	end
+
 	for i, color in COLOR_ORDER do
 		local spec = Defaults.COLORS[color]
 		local bgColor = spec.bg
@@ -274,8 +283,8 @@ function SpellMenuBuilder.build(): Handle
 		-- detector in setReservoirs only fires on a *change*. Building
 		-- saturated would leave three fully-coloured panels that cannot cast
 		-- anything until the first word is memorized.
-		fillBase.BackgroundColor3 = bgColor:Lerp(Defaults.DESATURATED_GREY, Defaults.DESATURATED_BLEND)
-		fillBase.BackgroundTransparency = Defaults.FILL_BASE_TRANSPARENCY
+		fillBase.BackgroundColor3 = baseColorFor(color, false)
+		fillBase.BackgroundTransparency = baseTransparencyFor(false)
 
 		-- FillDisc: grows out of the centre as mana accumulates.
 		local fillDisc = makeCircle("FillDisc", Z_FILL_DISC, panel)
@@ -895,6 +904,7 @@ function SpellMenuBuilder.build(): Handle
 				})
 				local baseTween = TweenService:Create(fillBases[color], Defaults.DESATURATED_TWEEN, {
 					BackgroundColor3 = baseColorFor(color, canCast),
+					BackgroundTransparency = baseTransparencyFor(canCast),
 				})
 				discTween:Play()
 				baseTween:Play()
@@ -955,7 +965,6 @@ function SpellMenuBuilder.build(): Handle
 		end)
 
 		-- Dim the FillBase briefly then recover
-		local origTransp = base.BackgroundTransparency
 		local dimTween = TweenService:Create(base, Defaults.FIRED_DIM_TWEEN, { BackgroundTransparency = 0.05 })
 		dimTween:Play()
 		table.insert(vfxTweens, dimTween)
@@ -963,7 +972,15 @@ function SpellMenuBuilder.build(): Handle
 		dimTween.Completed:Connect(function(status: Enum.PlaybackState)
 			if status == Enum.PlaybackState.Cancelled then return end
 			if not base.Parent then return end
-			local recoverTween = TweenService:Create(base, Defaults.FIRED_DIM_TWEEN, { BackgroundTransparency = origTransp })
+			-- Recover to the *state's* transparency, resolved when the flash
+			-- ends rather than sampled off the frame when it began. A cast is
+			-- exactly the event that can drop a panel below T1, so the
+			-- captured value would restore the castable alpha onto a panel
+			-- that just went dead — and it would win, because it lands after
+			-- the desaturation tween that setReservoirs started.
+			local recoverTween = TweenService:Create(base, Defaults.FIRED_DIM_TWEEN, {
+				BackgroundTransparency = baseTransparencyFor(wasAffordable[color]),
+			})
 			recoverTween:Play()
 			table.insert(vfxTweens, recoverTween)
 		end)

@@ -87,7 +87,7 @@ The shape is not decoration. A vertical bar reads as a *meter* — status you wa
 Seven changes, all of them in service of "a whole T1 cast should not look like a nudge":
 
 1. **Tier rings** — a ring at each `TIER_COSTS[t] / FILL_MAX` (8.3% / 16.7% / 33.3% / 66.7% of the diameter, against the cap of 60). Built as a `UIStroke` on a circular Frame, which is the cheapest true annulus the engine offers; the stroke grows *outward* from its frame, so a ring meant to sit centred on a radius is inset by its own thickness. Count comes from `SpellRegistry.tierCount(color)`, **not** `NUM_TIERS`: a fourth ring on green would mark a spell that does not exist. They are **dark**, unlike the flat bar's white notches — a ring spends most of its life on top of a lit fill disc, where white on bright is almost nothing, and a dark ring reads as a groove against both the fill and the empty base.
-2. **Saturate at castable** — a panel that cannot afford T1 is drained toward grey and snaps to full colour the frame it can. Driven off the **existing** `wasAffordable` edge flag that already triggers `playAffordBounce`; a second edge detector would be one more thing to fall out of step.
+2. **Saturate at castable** — a panel that cannot afford T1 is drained toward grey **and faded back** (`FILL_BASE_TRANSPARENCY` 0.72 → `_DEAD` 0.88), snapping to full colour and full weight the frame it can cast. Alpha and saturation are separate channels and the eye reads them separately: grey alone still holds its ground in the layout, where grey *and* transparent falls behind the panels that matter. It is deliberately the **dead** value that moves — making castable panels more opaque would brighten all three at once on a full reservoir, which is exactly when the HUD is already loudest. Driven off the **existing** `wasAffordable` edge flag that already triggers `playAffordBounce`; a second edge detector would be one more thing to fall out of step.
 3. **Ready glow** — a panel that *can* cast breathes a coloured halo at its rim (`ReadyBloom` + `ReadyGlow`). This is the positive half of (2), and it was added because the negative half is the weaker one: grey only reads as grey when there is a lit panel beside it to compare against, which is exactly the case that fails when all three are drained or all three are full. Two strokes rather than one — a single `UIStroke` is a hard line and reads as a *border*, a thing the panel has, where a crisp edge over a soft inner bloom reads as light coming off it. Both breathe on one tween each, started on the same frame with the same `TweenInfo` so they stay in phase without being driven together. Only the crisp stroke bleeds outward and only by its own 4px, so two lit neighbours keep 2px of air in the 10px `BUTTON_GAP`; the bloom is inset and faces inward.
    **Ready motes** ride the same lifecycle: six sparks orbiting just inside the rim. The halo is a static shape and the eye stops seeing it; motion is what survives peripheral vision, which is the only vision a corner-of-screen widget gets. They are **not** a `ParticleEmitter` — that is a 3D instance and does not exist in a `ScreenGui`. They are plain circular Frames parented to a transparent full-size ring whose **`Rotation`** is tweened, so the entire orbit is one tween and no per-frame code. This is a dividend of the shape change: on a circle, "orbit" and "rotate the parent" are the same operation, where the old rectangles would have needed a Heartbeat and a path. Sizes and twinkle periods are jittered per mote and the spin direction alternates per panel, because without either the three panels lit by one Memorize move in lockstep and read as one mechanism rather than three living things.
 4. **Persistent numeral** — `35/60`, in the middle of the circle. Replaces the transient `EnergyPopup` that appeared on tap and faded: a number you only see *after* committing is on the wrong side of the decision. It sat inset from the top-right corner while the panels were rectangles; on a circle the corners of the bounding box are empty space *outside* the disc, so it floated in the void — and retiring the spell name freed up the centre.
@@ -110,7 +110,9 @@ The spell name came **off the panel and onto the orb** — there is no room for 
 
 One structural change came along with (2): the fill's `UIGradient` used to be a `ColorSequence` of the panel's own hue, so the colour lived in two multiplied places at once. `TweenService` cannot tween a `ColorSequence`, which made the desaturation inexpressible as a tween. The gradient is now a **neutral** ramp (`FILL_GRADIENT_BOTTOM_TINT` → `TOP_TINT`) and `BackgroundColor3` carries all the hue. On a disc that top-lit ramp does a second job: it stops it reading as a flat coin.
 
-Panels are **built drained**, because every reservoir starts empty and an edge detector only fires on a change.
+Panels are **built drained**, because every reservoir starts empty and an edge detector only fires on a change. The build now calls the same `baseColorFor(color, false)` / `baseTransparencyFor(false)` selectors the tweens use rather than restating the drained values, so there is one definition of "dead" instead of two that can drift.
+
+The transparency split forced a fix in `playFiredFlash`, which dims the base and tweens back. It used to capture `origTransp` off the live frame when the flash *began* and restore that. A cast is exactly the event that can drop a panel below T1, so the captured value would restore the castable alpha onto a panel that had just gone dead — and it would win, because the restore lands **after** the desaturation tween `setReservoirs` started. It now resolves `baseTransparencyFor(wasAffordable[color])` when the flash ends. Sampling live state at the start of an animation and writing it back at the end is the general shape of this bug.
 
 There is **no `ClipsDescendants` anywhere in the panel**, deliberately. It clips to the *rectangle* and ignores `UICorner`, so it could not have masked a disc even if the layers needed masking — and they do not, because each one is sized to its own radius. The old `FillClip` did not survive the shape change.
 
@@ -210,6 +212,16 @@ Run live on 2026-08-12, session locks `ready-glow` then `ready-motes`. Verified 
 | Hold green | green's halo and motes **both gone**, replaced by the white ceiling ring; red + blue unaffected — the handoff is clean and only the pressed colour changes |
 | Release green, casting T2 Stone Wall (cost 10 → drained to 0) | green grey with **no halo and no motes**; red + blue at `10/60` still lit and orbiting |
 | Console | no errors across either cycle |
+
+### Dead-panel transparency
+
+Run live on 2026-08-12, session lock `dead-alpha`.
+
+| Check | Result |
+|---|---|
+| All three at `0/60` on spawn | panels recede to near-invisible — numeral and a faint rim only. The build-time path uses the dead selectors, so this is right without waiting for an edge |
+| Fill to 10 | all three snap forward to solid discs with halo + motes; the two states are now unmistakable at a glance |
+| Cast green dry (T2 Stone Wall, 10 → 0) | green settles at the **dead** alpha after the fired flash, not the castable one — the `origTransp` capture bug does not reproduce. Red + blue unchanged |
 
 ### The name label
 
