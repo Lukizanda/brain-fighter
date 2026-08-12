@@ -19,7 +19,7 @@
 -- with. The mote halo's *look* still lives in VfxConfig
 -- (`charge_motes_<colour>`); only its lifetime is owned here.
 --
--- Two layers:
+-- Three layers:
 --   orb    a neon Ball welded above the Head, growing with tier
 --   motes  Parts spawned on a ring around the caster that curve inward
 --          into the orb, plus the sustained particle halo on the orb
@@ -27,6 +27,15 @@
 --          the only difference is that the destination is the orb rather
 --          than a player's torso, and the source is a ring rather than a
 --          popped block.
+--   name   a BillboardGui over the orb naming the spell this charge would
+--          fire right now. It pops in on every tier crossing and
+--          dissipates on release. This is where the spell name went when
+--          the HUD panels became circles and it no longer fitted on one;
+--          putting it here rather than back on the HUD means it lands
+--          where the player is already looking mid-charge, and that an
+--          opponent reads it too — `setTier` resolves the name from the
+--          entry's own colour, so the remote path gets it with no extra
+--          wiring.
 --
 -- CLIENT ONLY, like every other module in this folder: the orb's particle
 -- halo and the mote flight are both things the server can create but
@@ -142,6 +151,48 @@ local MOTE_EMITTER_CAP = 6
 local HALO_RATE_PER_TIER = 1.25
 local HALO_CEILING_RATE_FACTOR = 2.2
 
+----------------------------------------------------------------------
+-- Name label
+----------------------------------------------------------------------
+
+-- Billboard footprint in studs (the Scale half of a BillboardGui's Size
+-- is studs, not a fraction). Wide enough for the longest name in the
+-- roster at a readable weight; the TextLabel is TextScaled, so "Mend"
+-- and "Sanctuary" fill the same box rather than jumping in size.
+local LABEL_WIDTH_STUDS  = 9
+local LABEL_HEIGHT_STUDS = 1.6
+
+-- Clearance between the top of the orb and the bottom of the text. The
+-- orb *grows*, so this is applied against its live radius every frame
+-- rather than baked once — otherwise a T4 orb swallows its own name.
+local LABEL_GAP_STUDS = 0.9
+
+-- Past this the label stops drawing. The orb is still visible much
+-- further out, which is the intent: at range an opponent should read
+-- *that* you are charging and roughly how big, not exactly what.
+local LABEL_MAX_DISTANCE_STUDS = 120
+
+-- Heavier than the HUD's GothamBold, because this one sits over an
+-- arbitrary 3D scene instead of a flat panel and has no background to
+-- separate it. Stroke does the rest.
+local LABEL_FONT = Enum.Font.GothamBlack
+local LABEL_TEXT_COLOR = Color3.fromRGB(255, 255, 255)
+local LABEL_STROKE_COLOR = Color3.fromRGB(12, 10, 18)
+local LABEL_STROKE_TRANSPARENCY = 0.1
+
+-- The pop. Back/Out overshoots and settles, which is the spring; scaling
+-- up from zero is what makes a tier crossing register as an *event*
+-- rather than a text swap you can miss.
+local LABEL_POP_FROM_SCALE = 0
+local LABEL_POP_TWEEN = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+
+-- The dissipate on a successful release: fade while drifting up, so the
+-- name leaves with the spell instead of being switched off. Longer than
+-- the orb's own RELEASE_TIME, which is why the billboard hangs off the
+-- head rather than off the orb — it has to outlive the flash.
+local LABEL_DISSIPATE_TIME = 0.3
+local LABEL_DISSIPATE_RISE_STUDS = 1.2
+
 local _liveMoteParts = 0
 local _liveMoteEmitters = 0
 
@@ -171,6 +222,13 @@ type Entry = {
 	motes: { Mote },
 	connection: RBXScriptConnection?,
 	released: boolean,
+	-- Name label. Built lazily on the first tier that names a spell, so a
+	-- press that never reaches T1 raises an orb and no text.
+	labelGui: BillboardGui?,
+	labelText: TextLabel?,
+	labelScale: UIScale?,
+	labelName: string?,
+	labelTween: Tween?,
 }
 
 local _active: { [Model]: Entry } = {}
@@ -199,6 +257,131 @@ local function diameterFor(tier: number, alpha: number): number
 	local reached = math.clamp(tier + alpha, 0, topTier)
 	local t = math.clamp((reached - 1) / (topTier - 1), 0, 1)
 	return ORB_DIAMETER_MIN + (ORB_DIAMETER_MAX - ORB_DIAMETER_MIN) * t
+end
+
+----------------------------------------------------------------------
+-- Name label
+----------------------------------------------------------------------
+
+-- The spell this charge would fire right now, or nil below T1.
+--
+-- Bounded by `tierCount` rather than by `getSpell` alone: getSpell
+-- validates the tier against the *roster* maximum of 4, and green tops
+-- out at 3, so `getSpell("green", 4)` passes validation and hands back
+-- nil. Reading `.name` off that is the crash this guard exists to avoid.
+local function spellNameFor(color: string, tier: number): string?
+	if tier < 1 then return nil end
+	local okCount, count = pcall(SpellRegistry.tierCount, color :: any)
+	if not okCount or typeof(count) ~= "number" or tier > (count :: number) then
+		return nil
+	end
+	local okSpec, spec = pcall(SpellRegistry.getSpell, color :: any, tier)
+	if not okSpec or typeof(spec) ~= "table" then return nil end
+	return (spec :: SpellRegistry.Spec).name
+end
+
+-- Parented to the head rather than to the orb, so the dissipate can
+-- outlive the orb's release flash — the orb is destroyed RELEASE_TIME
+-- after it fires, and the name is still drifting up at that point.
+local function buildLabel(entry: Entry, character: Model)
+	if entry.labelGui then return end
+
+	local head = resolveHead(character)
+	if not head then return end
+
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "SpellChargeName"
+	gui.Size = UDim2.fromScale(LABEL_WIDTH_STUDS, LABEL_HEIGHT_STUDS)
+	gui.MaxDistance = LABEL_MAX_DISTANCE_STUDS
+	gui.LightInfluence = 0
+	-- AlwaysOnTop deliberately off. The orb is occluded by cover and the
+	-- name has to be occluded with it — a label that reads through a wall
+	-- turns a PvP tell into a wallhack.
+	gui.AlwaysOnTop = false
+	gui.StudsOffsetWorldSpace = Vector3.new(0, ORB_HEIGHT_STUDS + LABEL_GAP_STUDS, 0)
+	gui.Parent = head
+
+	local text = Instance.new("TextLabel")
+	text.Name = "Name"
+	text.AnchorPoint = Vector2.new(0.5, 0.5)
+	text.Position = UDim2.fromScale(0.5, 0.5)
+	text.Size = UDim2.fromScale(1, 1)
+	text.BackgroundTransparency = 1
+	text.Font = LABEL_FONT
+	text.TextScaled = true
+	text.TextColor3 = LABEL_TEXT_COLOR
+	text.TextStrokeColor3 = LABEL_STROKE_COLOR
+	text.TextStrokeTransparency = LABEL_STROKE_TRANSPARENCY
+	text.Text = ""
+	text.Parent = gui
+
+	-- Anchored at its own centre above, so the pop grows out of the middle
+	-- rather than out of the top-left corner.
+	local scale = Instance.new("UIScale")
+	scale.Scale = LABEL_POP_FROM_SCALE
+	scale.Parent = text
+
+	entry.labelGui = gui
+	entry.labelText = text
+	entry.labelScale = scale
+end
+
+local function popLabel(entry: Entry, name: string)
+	local text, scale = entry.labelText, entry.labelScale
+	if not text or not scale then return end
+
+	-- Cancel first: without this a crossing landing inside the previous
+	-- pop leaves two tweens writing Scale, and the loser wins.
+	local previous = entry.labelTween
+	if previous then previous:Cancel() end
+
+	text.Text = name
+	text.TextTransparency = 0
+	text.TextStrokeTransparency = LABEL_STROKE_TRANSPARENCY
+	scale.Scale = LABEL_POP_FROM_SCALE
+
+	local tween = TweenService:Create(scale, LABEL_POP_TWEEN, { Scale = 1 })
+	entry.labelTween = tween
+	tween:Play()
+end
+
+-- Detaches the label from the entry and lets it finish on its own, so a
+-- teardown arriving mid-dissipate cannot cut it short. `rise` separates
+-- the two exits: a cast drifts the name upward as it fades, a cancel just
+-- goes, on the same clock as the orb's quiet collapse.
+local function dissipateLabel(entry: Entry, rise: boolean)
+	local gui, text = entry.labelGui, entry.labelText
+	local previous = entry.labelTween
+	if previous then previous:Cancel() end
+
+	entry.labelGui = nil
+	entry.labelText = nil
+	entry.labelScale = nil
+	entry.labelName = nil
+	entry.labelTween = nil
+
+	if not gui or not text then return end
+	if not gui.Parent then
+		gui:Destroy()
+		return
+	end
+
+	local duration = if rise then LABEL_DISSIPATE_TIME else COLLAPSE_TIME
+	local info = TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(text, info, {
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	}):Play()
+	if rise then
+		TweenService:Create(gui, info, {
+			StudsOffsetWorldSpace = gui.StudsOffsetWorldSpace
+				+ Vector3.new(0, LABEL_DISSIPATE_RISE_STUDS, 0),
+		}):Play()
+	end
+
+	task.delay(duration, function()
+		if gui.Parent then gui:Destroy() end
+	end)
 end
 
 local function bezier(p0: Vector3, p1: Vector3, p2: Vector3, t: number): Vector3
@@ -346,6 +529,14 @@ local function step(character: Model, entry: Entry, dt: number)
 		local wobbled = diameter * (1 + amp * math.sin(entry.clock * freq))
 		orb.Size = Vector3.one * wobbled
 
+		-- Ride the orb's live radius so the gap under the text stays constant
+		-- as it grows, instead of the orb creeping up into its own name.
+		local labelGui = entry.labelGui
+		if labelGui then
+			labelGui.StudsOffsetWorldSpace =
+				Vector3.new(0, ORB_HEIGHT_STUDS + wobbled / 2 + LABEL_GAP_STUDS, 0)
+		end
+
 		local light = entry.light
 		if light then
 			local t = math.clamp((diameter - ORB_DIAMETER_MIN) / (ORB_DIAMETER_MAX - ORB_DIAMETER_MIN), 0, 1)
@@ -458,6 +649,11 @@ function ChargeOrbVfx.start(character: Model, color: string)
 		motes        = {},
 		connection   = nil,
 		released     = false,
+		labelGui     = nil,
+		labelText    = nil,
+		labelScale   = nil,
+		labelName    = nil,
+		labelTween   = nil,
 	}
 
 	local attachment = Instance.new("Attachment")
@@ -494,6 +690,26 @@ function ChargeOrbVfx.setTier(character: Model, tier: number, alpha: number?, at
 	entry.alpha = math.clamp(alpha or 0, 0, 1)
 	entry.atCeiling = atCeiling == true
 
+	-- The name of the spell this release would fire. Built on the first
+	-- tier that names one — for T1 that is the press frame, because
+	-- chargeTimeFor(1) is zero — and re-popped on every crossing after.
+	--
+	-- The nil branch is not dead: `setChargeAffordability` can lower the
+	-- ceiling mid-hold if the reservoir is spent elsewhere, which can drop
+	-- a live charge back below T1.
+	if not entry.released then
+		local name = spellNameFor(entry.color, entry.tier)
+		if name then
+			buildLabel(entry, character)
+			if name ~= entry.labelName then
+				entry.labelName = name
+				popLabel(entry, name)
+			end
+		elseif entry.labelGui then
+			dissipateLabel(entry, false)
+		end
+	end
+
 	local halo = entry.halo
 	if halo then
 		local rate = entry.haloBaseRate * (1 + HALO_RATE_PER_TIER * math.max(tier - 1, 0))
@@ -517,6 +733,7 @@ function ChargeOrbVfx.release(character: Model, _tier: number?)
 	entry.released = true
 
 	releaseHalo(entry)
+	dissipateLabel(entry, true)
 
 	local orb = entry.orb
 	if orb.Parent then
@@ -550,6 +767,9 @@ function ChargeOrbVfx.stop(character: Model)
 	end
 	releaseHalo(entry)
 	clearMotes(entry)
+	-- No-op after a release, which already handed the label off to its own
+	-- dissipate; this is the cancel / death / despawn path.
+	dissipateLabel(entry, false)
 
 	local orb = entry.orb
 	if not orb.Parent then return end
@@ -576,12 +796,26 @@ function ChargeOrbVfx.isActive(character: Model): boolean
 	return _active[character] ~= nil
 end
 
-function ChargeOrbVfx.debugCounts(): { orbs: number, moteParts: number, moteEmitters: number }
-	local orbs = 0
-	for _ in _active do
+-- `labels` counts only labels still attached to a live charge. One
+-- mid-dissipate has already been handed off and is nobody's to count —
+-- scan the workspace for `SpellChargeName` if that is what you need.
+function ChargeOrbVfx.debugCounts(): {
+	orbs: number,
+	moteParts: number,
+	moteEmitters: number,
+	labels: number,
+}
+	local orbs, labels = 0, 0
+	for _, entry in _active do
 		orbs += 1
+		if entry.labelGui then labels += 1 end
 	end
-	return { orbs = orbs, moteParts = _liveMoteParts, moteEmitters = _liveMoteEmitters }
+	return {
+		orbs = orbs,
+		moteParts = _liveMoteParts,
+		moteEmitters = _liveMoteEmitters,
+		labels = labels,
+	}
 end
 
 return ChargeOrbVfx

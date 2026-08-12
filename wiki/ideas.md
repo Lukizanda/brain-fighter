@@ -11,25 +11,6 @@ Raw ideas, shower thoughts, and playtest observations. No commitment to build �
 
 ## Open Ideas
 
-### Spell name label above the charge orb
-*Captured: 2026-08-12*
-
-The spell name came off the cast panel when it became a circle — there is no room for "Sanctuary" inside a disc. The replacement idea: a small world-space label floating above the [[systems/ChargeCast]] charge orb, showing the name of the spell the current charge tier would fire, updating as the charge climbs.
-
-Attractive because it puts the name where the player's eyes already are during a hold (the orb, not the HUD corner), and because it doubles as a PvP read — an opponent seeing "STONE WALL" over your head knows what is coming.
-
-**The known weakness, and why this is filed rather than built:** an orb only exists *during* a charge. A label on it can tell you what you are about to fire, but it can never teach you the roster *before* you press. That is a different problem — a legend or a first-play tutorial beat — and this idea does not solve it. Worth building anyway if the in-charge read is valuable on its own; not worth building if it is meant to be the answer to "how does a new player learn the spells".
-
-**Design questions:**
-- BillboardGui on the orb, or reuse the [[systems/Tutorial]] overlay lane?
-- Does the label show for *other* players' orbs too (it would have to come off `_chargeTier` + `_chargeColor`, which already replicate), or only your own?
-- Does it show the name at the tier you are at, or the tier you are climbing toward?
-
-**Related systems:** `ChargeCast`, `ChargeOrbVfx`, `SpellRegistry`
-**Wiki pages:** `wiki/systems/ChargeCast.md`, `wiki/systems/VisualEffects.md`
-
----
-
 ### Arc-gauge cast panels (the alternative to the fill disc)
 *Captured: 2026-08-12*
 
@@ -67,4 +48,10 @@ Letter blocks on the field could periodically swap to a new random letter after 
 ## Shipped Ideas
 
 *(moved here once implemented)*
+
+### Spell name label above the charge orb — **shipped 2026-08-12**
+
+Captured and built the same day. The spell name came off the cast panel when it became a circle; it now lives on a `BillboardGui` over the [[systems/ChargeCast]] charge orb, popping in on each tier crossing and dissipating on release. Remote observers get it for nothing, because `ChargeOrbVfx.setTier` resolves the name from the entry's own colour and the controller already drives that off the replicated attributes.
+
+The weakness recorded when it was filed **still stands and was not solved**: an orb only exists *during* a charge, so this tells you what you are about to fire but cannot teach you the roster before you press. The legend problem is still open and still belongs to [[systems/Tutorial]].
 

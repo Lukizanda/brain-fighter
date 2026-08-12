@@ -93,7 +93,7 @@ Six changes, all of them in service of "a whole T1 cast should not look like a n
 5. **Active ring highlight** — the ring for the tier you are at thickens and **inverts to white**, the one moment it should be the brightest thing on the panel rather than the darkest.
 6. **Ceiling pulse** — a rim halo breathes when the charge tops out. A ring rather than the wash over the whole panel it used to be: the wash competed with the fill disc for the same pixels and a halo outside the largest possible fill competes with nothing. Still its own instance rather than a `UIScale` pulse, because `playAffordBounce` already owns the panel's `UIScale`, and two systems tweening one property is exactly the fight [[concepts/SingleOwnership]] exists to stop.
 
-The **spell name is gone**. There is no room for "Sanctuary" inside a circle, and this is the second bite out of the same problem — the drag-from-reservoir menu this feature superseded was the last place the roster was legible in-game. The replacement idea (a world-space label above the charge orb) is filed in [[ideas]], along with its known weakness: an orb only exists *during* a charge, so a label on it can never teach you the name before you press.
+The spell name came **off the panel and onto the orb** — there is no room for "Sanctuary" inside a circle. See § The name label below.
 
 One structural change came along with (2): the fill's `UIGradient` used to be a `ColorSequence` of the panel's own hue, so the colour lived in two multiplied places at once. `TweenService` cannot tween a `ColorSequence`, which made the desaturation inexpressible as a tween. The gradient is now a **neutral** ramp (`FILL_GRADIENT_BOTTOM_TINT` → `TOP_TINT`) and `BackgroundColor3` carries all the hue. On a disc that top-lit ramp does a second job: it stops it reading as a flat coin.
 
@@ -131,6 +131,21 @@ client (charging) ──ChargeState remote──► ChargeStateService ──Set
 **Attribute write order on `end` is load-bearing.** `ChargeStateService` writes the final tier *first*, then clears the colour. `ChargeOrbController` reads the tier on the frame the colour clears to choose between the release flash (tier > 0, the spell went out) and a quiet collapse (tier 0, a cancel). Clearing the colour first would make every cast look like a cancel. A residual `_chargeTier` number stays on the character after a charge ends; it is meaningless while `_chargeColor` is nil and the next `start` overwrites it.
 
 `ChargeOrbController` also watches `SkillConstants.DAMAGEABLE_TAGS`, so a future boss windup can reuse this lane instead of `BossWindupClient`'s bespoke per-frame glow. Nothing writes those attributes on a boss today.
+
+## The name label
+
+A `BillboardGui` over the orb naming the spell **this release would fire right now** — `Firebolt`, then `Fireball`, then `Volley` as the charge climbs. It pops in from zero scale on every crossing (`Back, Out`, which is the spring) and dissipates upward on release.
+
+This is where the spell name went when the panels became circles. Putting it on the orb rather than back on the HUD does two things the panel could not: it lands where the player is already looking mid-charge instead of in the corner they are pressing, and **an opponent reads it too**. That second one is free — `ChargeOrbVfx.setTier` resolves the name from the entry's own colour, and `ChargeOrbController` already drives `setTier` off the replicated attributes, so the remote path needed no new wiring at all.
+
+Four decisions worth keeping:
+
+- **`AlwaysOnTop` is off.** The orb is occluded by cover and the name is occluded with it. A label that reads through a wall turns a PvP tell into a wallhack.
+- **`MaxDistance = 120` studs**, well inside the orb's own visibility. At range an opponent should read *that* you are charging and roughly how big, not exactly what.
+- **Parented to the head, not to the orb.** The dissipate (0.3 s) outlives the orb's release flash (`RELEASE_TIME = 0.16 s`), and a label hanging off the orb would be destroyed mid-fade. `step` rides it on the orb's *live* radius each frame so the gap under the text stays constant as the orb grows.
+- **`spellNameFor` bounds the tier with `tierCount`, not `getSpell` alone.** `getSpell` validates against the roster maximum of 4 and green tops out at 3, so `getSpell("green", 4)` passes validation and returns **nil**. Reading `.name` off that is the crash the guard exists to avoid — the same off-by-one the tier rings dodge by counting from `tierCount`.
+
+**What it does not fix.** The label only exists *during* a charge, so it tells you what you are about to fire and still cannot teach you the roster before you press. The legend that the superseded drag-menu provided is still missing and still belongs to [[systems/Tutorial]]; this closes the mid-charge half of that gap, not the learning half.
 
 ## Trust
 
@@ -170,6 +185,17 @@ Run live on 2026-08-12, session lock `circle-panels`.
 | Hold to ceiling, red = 40 | reserve annulus swallowed the whole disc, numeral `0/60` in reserve gold, rim halo visible, orb + motes up |
 | Release off-panel | red `40/60`, reserve thickness 0, halo hidden, orbs 0, motes 0 |
 | Quick tap, green = 20 | drained 5 → **T1**, fill 0.333 → 0.250; all rings back to the resting dark |
+
+### The name label
+
+| Check | Result |
+|---|---|
+| Hold red = 40 to ceiling | `"Volley"`, GothamBlack, TextScaled, `UIScale` settled at 1.0, `MaxDistance` 120, `AlwaysOnTop` false; **1** label in the world |
+| Label tracks the orb's growth | `StudsOffsetWorldSpace.Y` = 5.196 = `ORB_HEIGHT_STUDS` 2.6 + live radius 1.70 + `LABEL_GAP_STUDS` 0.9 |
+| Release over the panel | red **40 → 0** (T4 Volley), label / orb / motes all 0 after the dissipate |
+| Hold red = 10, ceiling T2 | `"Fireball"` — the name follows the *reached* tier, not the roster maximum |
+| Release off-panel | red **10 → 10**, label gone, nothing cast |
+| Leak sweep, 12 start→tier→release/stop cycles | labels 0, orbs 0, motes 0, emitters 0 |
 
 **Still owed:** the feel check, now on two axes. Does a 1.75 s T4 hold read as a commitment or as lag (`MANA_FLOW_PER_SEC`), and does a disc that looks emptier than its numeral read as tension or as a bug (`FILL_RADIUS_EXPONENT`)? Both are expected to move after real play.
 
