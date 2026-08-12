@@ -89,6 +89,7 @@ Seven changes, all of them in service of "a whole T1 cast should not look like a
 1. **Tier rings** — a ring at each `TIER_COSTS[t] / FILL_MAX` (8.3% / 16.7% / 33.3% / 66.7% of the diameter, against the cap of 60). Built as a `UIStroke` on a circular Frame, which is the cheapest true annulus the engine offers; the stroke grows *outward* from its frame, so a ring meant to sit centred on a radius is inset by its own thickness. Count comes from `SpellRegistry.tierCount(color)`, **not** `NUM_TIERS`: a fourth ring on green would mark a spell that does not exist. They are **dark**, unlike the flat bar's white notches — a ring spends most of its life on top of a lit fill disc, where white on bright is almost nothing, and a dark ring reads as a groove against both the fill and the empty base.
 2. **Saturate at castable** — a panel that cannot afford T1 is drained toward grey and snaps to full colour the frame it can. Driven off the **existing** `wasAffordable` edge flag that already triggers `playAffordBounce`; a second edge detector would be one more thing to fall out of step.
 3. **Ready glow** — a panel that *can* cast breathes a coloured halo at its rim (`ReadyBloom` + `ReadyGlow`). This is the positive half of (2), and it was added because the negative half is the weaker one: grey only reads as grey when there is a lit panel beside it to compare against, which is exactly the case that fails when all three are drained or all three are full. Two strokes rather than one — a single `UIStroke` is a hard line and reads as a *border*, a thing the panel has, where a crisp edge over a soft inner bloom reads as light coming off it. Both breathe on one tween each, started on the same frame with the same `TweenInfo` so they stay in phase without being driven together. Only the crisp stroke bleeds outward and only by its own 4px, so two lit neighbours keep 2px of air in the 10px `BUTTON_GAP`; the bloom is inset and faces inward.
+   **Ready motes** ride the same lifecycle: six sparks orbiting just inside the rim. The halo is a static shape and the eye stops seeing it; motion is what survives peripheral vision, which is the only vision a corner-of-screen widget gets. They are **not** a `ParticleEmitter` — that is a 3D instance and does not exist in a `ScreenGui`. They are plain circular Frames parented to a transparent full-size ring whose **`Rotation`** is tweened, so the entire orbit is one tween and no per-frame code. This is a dividend of the shape change: on a circle, "orbit" and "rotate the parent" are the same operation, where the old rectangles would have needed a Heartbeat and a path. Sizes and twinkle periods are jittered per mote and the spin direction alternates per panel, because without either the three panels lit by one Memorize move in lockstep and read as one mechanism rather than three living things.
 4. **Persistent numeral** — `35/60`, in the middle of the circle. Replaces the transient `EnergyPopup` that appeared on tap and faded: a number you only see *after* committing is on the wrong side of the decision. It sat inset from the top-right corner while the panels were rectangles; on a circle the corners of the bounding box are empty space *outside* the disc, so it floated in the void — and retiring the spell name freed up the centre.
 5. **Charge reserve** — an annulus eaten out of the **outer edge** of the fill: what this release will spend. Sized to the post-spend radius with a stroke thick enough to reach the pre-spend radius, so it always hugs the fill edge and eats inward. The numeral counts down in step. Both snap back on cancel, which is the whole refund story. At T4 on a full reservoir the annulus swallows the entire disc and the numeral reads `0/60`, which is the correct and rather good-looking extreme.
 6. **Active ring highlight** — the ring for the tier you are at thickens and **inverts to white**, the one moment it should be the brightest thing on the panel rather than the darkest.
@@ -191,23 +192,24 @@ Run live on 2026-08-12, session lock `circle-panels`.
 
 | Check | Result |
 |---|---|
-| Panel structure | square 180px panels; children `FillBase / FillDisc / ChargeReserve / Ring_t1..N / ReadyBloom / ReadyGlow / CeilingPulse / Numeral / ColorLabel / PressTarget`; red 4 rings, green + blue 3; no `FillClip`, no `SpellLabel` |
+| Panel structure | square 180px panels; children `FillBase / FillDisc / ChargeReserve / Ring_t1..N / ReadyBloom / ReadyGlow / ReadyMotes / CeilingPulse / Numeral / ColorLabel / PressTarget`; red 4 rings, green + blue 3; no `FillClip`, no `SpellLabel` |
 | Ring geometry | ring stroke centres at diameter fractions **0.0837 / 0.1667 / 0.3337 / 0.6667** — exactly 5/10/20/40 over the cap of 60 |
 | Fill at 40 mana | diameter fraction 0.667, landing exactly on the T4 ring |
 | Hold to ceiling, red = 40 | reserve annulus swallowed the whole disc, numeral `0/60` in reserve gold, rim halo visible, orb + motes up |
 | Release off-panel | red `40/60`, reserve thickness 0, halo hidden, orbs 0, motes 0 |
 | Quick tap, green = 20 | drained 5 → **T1**, fill 0.333 → 0.250; all rings back to the resting dark |
 
-### Ready glow
+### Ready glow and motes
 
-Run live on 2026-08-12, session lock `ready-glow`. Verified by **client screenshot** at each state, not by reading properties — a halo is exactly the kind of thing that can exist in the tree and render as nothing.
+Run live on 2026-08-12, session locks `ready-glow` then `ready-motes`. Verified by **client screenshot** at each state, not by reading properties — a halo is exactly the kind of thing that can exist in the tree and render as nothing.
 
 | Check | Result |
 |---|---|
-| All three at 10 mana (T2 affordable) | all three panels carry a coloured rim halo, in phase |
-| Hold green | green's halo **gone**, replaced by the white ceiling ring; red + blue keep glowing — the handoff is clean and only the pressed colour changes |
-| Release green, casting T2 Stone Wall (cost 10 → drained to 0) | green grey with **no halo**; red + blue at `10/60` still glowing |
-| Console | no errors across the cycle |
+| All three at 10 mana (T2 affordable) | all three panels carry a coloured rim halo, in phase, each with orbiting motes |
+| Two captures 1.5 s apart | motes at different angles and different brightnesses — the spin tween and the per-mote twinkle jitter are both live, not a static ring of dots |
+| Hold green | green's halo and motes **both gone**, replaced by the white ceiling ring; red + blue unaffected — the handoff is clean and only the pressed colour changes |
+| Release green, casting T2 Stone Wall (cost 10 → drained to 0) | green grey with **no halo and no motes**; red + blue at `10/60` still lit and orbiting |
+| Console | no errors across either cycle |
 
 ### The name label
 

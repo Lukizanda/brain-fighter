@@ -220,6 +220,39 @@ local SpellMenuConfig = {
 		true
 	),
 
+	-- ── Ready motes ───────────────────────────────────────────────────
+	-- Sparks orbiting just inside the rim while the panel can cast. The
+	-- halo alone is a static shape that the eye stops seeing; motion is
+	-- what survives peripheral vision, and the cast panels live in the
+	-- corner of the screen where that is the only vision they get.
+	--
+	-- **Not a ParticleEmitter** — that is a 3D instance and does not exist
+	-- in a ScreenGui. These are plain circular Frames on a transparent ring
+	-- whose *Rotation* is tweened, so the orbit costs one tween per panel
+	-- and no per-frame code. Being circles already, the panels made this
+	-- the cheap option; on the old rectangles it would have needed a
+	-- Heartbeat and a path.
+	READY_MOTE_COUNT   = 6,
+	READY_MOTE_SIZE    = 6,
+	-- Sizes and twinkle periods are jittered per mote so the ring reads as
+	-- six sparks rather than one rotating cog. Without it, three panels
+	-- lit by the same Memorize twinkle in lockstep, which looks mechanical.
+	READY_MOTE_SIZE_JITTER = 2,
+	-- Fraction of the panel *radius*. At 0.46 of a 180px panel a 6px mote
+	-- sits just inside the 4px glow stroke, so nothing crosses BUTTON_GAP.
+	READY_MOTE_RADIUS  = 0.46,
+	-- Lit well past the halo: a spark reads as a spark by being near-white
+	-- at its core, and only keeps the panel's hue at the edges.
+	READY_MOTE_LIGHTEN = 130,
+	READY_MOTE_DIM     = 0.85,
+	READY_MOTE_BRIGHT  = 0.1,
+	READY_MOTE_ORBIT_SECONDS   = 6,
+	READY_MOTE_TWINKLE_SECONDS = 0.9,
+	READY_MOTE_TWINKLE_JITTER  = 0.35,
+	-- Linear and non-reversing: 360° is the same picture as 0°, so the
+	-- repeat is seamless and an eased orbit would visibly stall at the loop.
+	READY_MOTE_ORBIT_TWEEN_STYLE = Enum.EasingStyle.Linear,
+
 	-- UI VFX tweens
 	AFFORD_BOUNCE_TWEEN = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 	AFFORD_BOUNCE_SCALE = 1.08,

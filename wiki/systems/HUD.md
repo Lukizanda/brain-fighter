@@ -140,7 +140,7 @@ src/shared/Hud/
   MemorizeButtonConfig.luau
   SpellMenuBuilder.luau           — 3-color circular spell panels; mana fills outward from the centre,
                                     tier thresholds are concentric rings, numeral in the middle;
-                                    a rim halo breathes while the panel can cast;
+                                    a rim halo breathes and motes orbit while the panel can cast;
                                     press-hold-release charges a tier (see [[systems/ChargeCast]])
   SpellMenuConfig.luau
   MindFullIndicatorBuilder.luau   — warning banner when WordBuffer is full
@@ -171,7 +171,7 @@ The first four read state through `PlayerSession.get()` and subscribe to signals
 |---|---|---|---|
 | BufferDisplay | BottomCenter | `wordBuffer.changed` | display tiles |
 | MemorizeButton | BottomCenter | `wordBuffer.changed` | `MemorizeAction.tryMemorize` |
-| SpellMenu | BottomRight | `energyReservoirs.changed` | circular panels — centre-out fill + concentric tier rings + centred numeral + a ready halo while castable; press-hold-release → `CastAction.castSpecific` at the charged tier ([[systems/ChargeCast]]) |
+| SpellMenu | BottomRight | `energyReservoirs.changed` | circular panels — centre-out fill + concentric tier rings + centred numeral + a ready halo and orbiting motes while castable; press-hold-release → `CastAction.castSpecific` at the charged tier ([[systems/ChargeCast]]) |
 | MindFullIndicator | TopCenter | `mindFull` / `mindFreed` | show/hide warning |
 | DashButton | BottomRight | `InputCategorizer` (touch toggle) | tap → `_G.BrainFighter.requestDash()` (mobile-only, hidden on KBM) |
 

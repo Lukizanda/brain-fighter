@@ -32,6 +32,7 @@
 --   Ring_tN       — ring at TIER_COSTS[n] / FILL_MAX
 --   ReadyBloom /
 --   ReadyGlow     — coloured halo that breathes while the panel can cast
+--   ReadyMotes    — sparks orbiting inside the rim on the same lifecycle
 --   CeilingPulse  — rim halo that breathes at the affordability ceiling
 --   ColorLabel / Numeral — text overlays
 --   TextButton    — press detection (highest ZIndex in the panel)
@@ -80,16 +81,35 @@ export type Handle = {
 
 type TierRing = { frame: Frame, stroke: UIStroke, frac: number }
 
--- The two strokes of the ready halo, kept together because they are only
--- ever raised and lowered as one thing.
+-- Everything that says "this panel can cast": the two halo strokes and
+-- the orbiting motes. Kept together because they are only ever raised and
+-- lowered as one thing.
+--
+-- Each mote carries its own TweenInfo rather than sharing one, because
+-- the per-mote period jitter is what stops the ring reading as a cog.
+-- Built once, since the jitter should be stable for the panel's lifetime
+-- and not reroll every time the reservoir crosses T1.
+type ReadyMote = { frame: Frame, twinkle: TweenInfo }
+
 type ReadyGlow = {
 	glow: Frame,
 	glowStroke: UIStroke,
 	bloom: Frame,
 	bloomStroke: UIStroke,
+	moteRing: Frame,
+	moteSpin: TweenInfo,
+	-- Signed target rotation: TweenInfo carries duration, not destination,
+	-- so the spin *direction* has to live beside it.
+	spinTo: number,
+	motes: { ReadyMote },
 }
 
 local COLOR_ORDER = { "red", "green", "blue" }
+
+-- A full orbit. Named because it is a rotation *target*, not a count —
+-- the mote ring tweens to ±this and repeats, and 360° being the same
+-- picture as 0° is what makes the loop seamless.
+local FULL_TURN_DEGREES = 360
 
 -- ZIndex ladder, written down because it has to hold under BOTH
 -- ZIndexBehavior settings: Sibling (children compare within a parent) and
@@ -100,8 +120,9 @@ local Z_FILL_DISC    = 2
 local Z_RESERVE      = 3
 local Z_RING         = 4
 local Z_GLOW         = 5
-local Z_CEILING      = 6
-local Z_TEXT         = 7
+local Z_MOTE         = 6
+local Z_CEILING      = 7
+local Z_TEXT         = 8
 local Z_BUTTON       = 10
 
 local function lightenColor(c: Color3, amount: number): Color3
@@ -339,11 +360,62 @@ function SpellMenuBuilder.build(): Handle
 		glowRing.Size = UDim2.fromScale(1, 1)
 		glowRing.Visible = false
 
+		-- ReadyMotes: sparks orbiting just inside the rim. They hang off a
+		-- full-size transparent ring whose Rotation is tweened, so the whole
+		-- orbit is one tween and no per-frame code — which only works
+		-- because the panel is a circle and "orbit" is therefore the same
+		-- thing as "rotate the parent".
+		local moteRing = makeCircle("ReadyMotes", Z_MOTE, panel)
+		moteRing.Size = UDim2.fromScale(1, 1)
+		moteRing.BackgroundTransparency = 1
+		moteRing.Visible = false
+
+		local moteColor = lightenColor(bgColor, Defaults.READY_MOTE_LIGHTEN)
+		local motes: { ReadyMote } = {}
+		for m = 1, Defaults.READY_MOTE_COUNT do
+			local angle = (m - 1) / Defaults.READY_MOTE_COUNT * math.pi * 2
+			local size = Defaults.READY_MOTE_SIZE
+				+ math.random() * Defaults.READY_MOTE_SIZE_JITTER
+
+			local mote = makeCircle(string.format("Mote_%d", m), Z_MOTE, moteRing)
+			mote.Size = UDim2.fromOffset(size, size)
+			mote.Position = UDim2.fromScale(
+				0.5 + math.cos(angle) * Defaults.READY_MOTE_RADIUS,
+				0.5 + math.sin(angle) * Defaults.READY_MOTE_RADIUS
+			)
+			mote.BackgroundColor3 = moteColor
+			mote.BackgroundTransparency = 1
+
+			motes[m] = {
+				frame = mote,
+				twinkle = TweenInfo.new(
+					Defaults.READY_MOTE_TWINKLE_SECONDS
+						+ math.random() * Defaults.READY_MOTE_TWINKLE_JITTER,
+					Enum.EasingStyle.Sine,
+					Enum.EasingDirection.InOut,
+					-1,
+					true
+				),
+			}
+		end
+
 		readyGlows[color] = {
 			glow = glowRing,
 			glowStroke = glowStroke,
 			bloom = bloomRing,
 			bloomStroke = bloomStroke,
+			moteRing = moteRing,
+			moteSpin = TweenInfo.new(
+				Defaults.READY_MOTE_ORBIT_SECONDS,
+				Defaults.READY_MOTE_ORBIT_TWEEN_STYLE,
+				Enum.EasingDirection.InOut,
+				-1,
+				false
+			),
+			-- Alternating direction, so three lit panels read as three
+			-- separate things rather than one rigid mechanism.
+			spinTo = if i % 2 == 0 then -FULL_TURN_DEGREES else FULL_TURN_DEGREES,
+			motes = motes,
 		}
 
 		-- CeilingPulse: rim halo that breathes when a held charge has topped
@@ -515,6 +587,15 @@ function SpellMenuBuilder.build(): Handle
 		parts.bloomStroke.Transparency = 1
 		parts.glow.Visible = false
 		parts.bloom.Visible = false
+
+		-- Rotation is reset rather than left where it stopped, so a panel
+		-- that relights starts from a known pose instead of drifting from
+		-- wherever the last cast happened to interrupt it.
+		parts.moteRing.Rotation = 0
+		parts.moteRing.Visible = false
+		for _, mote in parts.motes do
+			mote.frame.BackgroundTransparency = 1
+		end
 	end
 
 	local function startReadyGlow(color: string)
@@ -533,7 +614,23 @@ function SpellMenuBuilder.build(): Handle
 		})
 		glowTween:Play()
 		bloomTween:Play()
-		readyTweens[color] = { glowTween, bloomTween }
+
+		parts.moteRing.Visible = true
+		local spinTween = TweenService:Create(parts.moteRing, parts.moteSpin, {
+			Rotation = parts.spinTo,
+		})
+		spinTween:Play()
+
+		local started: { Tween } = { glowTween, bloomTween, spinTween }
+		for _, mote in parts.motes do
+			mote.frame.BackgroundTransparency = Defaults.READY_MOTE_DIM
+			local twinkle = TweenService:Create(mote.frame, mote.twinkle, {
+				BackgroundTransparency = Defaults.READY_MOTE_BRIGHT,
+			})
+			twinkle:Play()
+			table.insert(started, twinkle)
+		end
+		readyTweens[color] = started
 	end
 
 	local function stopCeilingPulse(color: string)
