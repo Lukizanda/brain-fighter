@@ -1,6 +1,6 @@
 ---
 type: system
-description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, reticle, settings menu, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu with mana fill + tier notches + hold-to-charge, MemorizeButton, MindFullIndicator), and the mobile DashButton. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291.)
+description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, reticle, settings menu, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu as circular hold-to-charge panels with concentric tier rings, MemorizeButton, MindFullIndicator), and the mobile DashButton. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291.)
 updated: 2026-08-12
 ---
 
@@ -138,7 +138,8 @@ src/shared/Hud/
   ReticleConfig.luau
   MemorizeButtonBuilder.luau      — Memorize action button (calls MemorizeAction.tryMemorize)
   MemorizeButtonConfig.luau
-  SpellMenuBuilder.luau           — 3-color spell panel; mana fill + tier notches + persistent numeral;
+  SpellMenuBuilder.luau           — 3-color circular spell panels; mana fills outward from the centre,
+                                    tier thresholds are concentric rings, numeral in the middle;
                                     press-hold-release charges a tier (see [[systems/ChargeCast]])
   SpellMenuConfig.luau
   MindFullIndicatorBuilder.luau   — warning banner when WordBuffer is full
@@ -169,7 +170,7 @@ The first four read state through `PlayerSession.get()` and subscribe to signals
 |---|---|---|---|
 | BufferDisplay | BottomCenter | `wordBuffer.changed` | display tiles |
 | MemorizeButton | BottomCenter | `wordBuffer.changed` | `MemorizeAction.tryMemorize` |
-| SpellMenu | BottomRight | `energyReservoirs.changed` | fill + tier notches + persistent numeral; press-hold-release → `CastAction.castSpecific` at the charged tier ([[systems/ChargeCast]]) |
+| SpellMenu | BottomRight | `energyReservoirs.changed` | circular panels — centre-out fill + concentric tier rings + centred numeral; press-hold-release → `CastAction.castSpecific` at the charged tier ([[systems/ChargeCast]]) |
 | MindFullIndicator | TopCenter | `mindFull` / `mindFreed` | show/hide warning |
 | DashButton | BottomRight | `InputCategorizer` (touch toggle) | tap → `_G.BrainFighter.requestDash()` (mobile-only, hidden on KBM) |
 

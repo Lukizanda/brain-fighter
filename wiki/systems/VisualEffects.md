@@ -496,6 +496,8 @@ REJECT_TWEEN       = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirec
 
 ### 3.2 Energy bars (`src/shared/Hud/AttributeBarBuilder.luau` + `AttributeBarConfig.luau`)
 
+> **Stale — do not build as written.** Every trigger below hangs off `ReservoirBarsBuilder:setEnergy`, and `ReservoirBarsBuilder` / `ReservoirBarsConfig` were **deleted** in Phase 4.8 R-2. The mana fill has belonged to [[systems/ChargeCast]]'s circular spell panels since; a gain sweep and a drain ripple on a disc that fills from the centre are different effects, not the same ones re-pointed. Kept for the timings and the delta thresholds.
+
 The builder **already tweens fill width** on `:setValue` (line 162) using `Defaults.FILL_TWEEN`. Two additions:
 
 | Event | Spec | Where |
@@ -523,6 +525,8 @@ Delta detection: `ReservoirBarsBuilder` keeps a `lastEnergy: { red, green, blue 
 **Single-subscription invariant**: `:setEnergy` must be called from exactly one `changed` subscription per bar handle. The `lastEnergy` cache lives on the handle instance (not the builder module) so multiple bar instances in tests don't share state. Currently satisfied: one `changed` subscription drives the reservoir bars. If a second subscriber is added, it will compute incorrect deltas.
 
 ### 3.3 Spell menu (`src/shared/Hud/SpellMenuBuilder.luau` + `SpellMenuConfig.luau`)
+
+> **Shipped**, with two drifts from this spec. `playFiredFlash` is called after `CastAction.castSpecific`, not `tapReservoir` (retired in 5.8), and the affordability treatment became a full grey-blend (`DESATURATED_*`) rather than a transparency swap — the panel now drains toward grey below T1 instead of dimming. The flash overlay is a disc, since the panels are circles.
 
 Already does affordability via transparency. Add two micro-tweens:
 

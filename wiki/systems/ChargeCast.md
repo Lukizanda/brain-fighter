@@ -1,6 +1,6 @@
 ---
 type: system
-description: Phase 5.8 — hold-to-charge tier selection. Press a colour panel and the charge climbs through the tiers you can afford; release fires what you reached. Mana is reserved, never drained, until release, so cancelling is free. HUD notches + reserve band make the commitment legible, and a character orb makes it a PvP tell.
+description: Phase 5.8 — hold-to-charge tier selection. Press a colour panel and the charge climbs through the tiers you can afford; release fires what you reached. Mana is reserved, never drained, until release, so cancelling is free. The panels are circles that fill from the centre with concentric tier rings, and a character orb makes the windup a PvP tell.
 updated: 2026-08-12
 ---
 
@@ -53,8 +53,8 @@ This does **not** pop the block behind the HUD. [[systems/BlockShoot]]'s `BlockT
 |---|---|
 | `src/shared/SpellRegistry/init.luau` | `MANA_FLOW_PER_SEC`, `chargeTimeFor(tier)`, `tierCount(color)`, exported `TIER_COSTS` / `NUM_TIERS` |
 | `src/shared/CastAction/init.luau` | `resolveSpecAtCharge(color, reservoirs, heldSec)` — pure tier selection |
-| `src/shared/Hud/SpellMenuBuilder.luau` | the gesture, the panel rework, the four charge signals |
-| `src/shared/Hud/SpellMenuConfig.luau` | `NOTCH_*`, `DESATURATED_*`, `CHARGE_*`, `NUMERAL_*`, `FILL_GRADIENT_*` |
+| `src/shared/Hud/SpellMenuBuilder.luau` | the gesture, the circular panel, the five charge signals |
+| `src/shared/Hud/SpellMenuConfig.luau` | `PANEL_DIAMETER`, `PANEL_CORNER_RADIUS`, `FILL_RADIUS_EXPONENT`, `NOTCH_*`, `DESATURATED_*`, `CHARGE_*`, `NUMERAL_*`, `FILL_GRADIENT_*` |
 | `src/client/UI/SpellMenuGui.client.luau` | target resolution at release, the cast, the local orb, the `ChargeState` relay |
 | `src/shared/Vfx/StatusVisuals/ChargeOrbVfx.luau` | the orb + mote layers ([[systems/VisualEffects]]) |
 | `src/client/Vfx/ChargeOrbController.client.luau` | draws *other* players' orbs from the replicated attributes |
@@ -80,18 +80,39 @@ Why the tier selection exists **twice** — `CastAction.resolveSpecAtCharge` and
 
 ## The panel
 
+The panels are **circles**. Mana fills each one outward from the centre; the tier thresholds are concentric rings.
+
+The shape is not decoration. A vertical bar reads as a *meter* — status you watch — which was the right shape while a tap fired whatever you could afford. Press-and-hold needs the panel to read as something you push and keep pushing, and a disc in a column of round buttons does. It also matches the DASH button sitting directly below in the same `BottomRight` column, which was already a circle, and it echoes the charge orb rising over the caster's head.
+
 Six changes, all of them in service of "a whole T1 cast should not look like a nudge":
 
-1. **Notches** — hard lines inside `FillClip` at `TIER_COSTS[t] / FILL_MAX` (8.3% / 16.7% / 33.3% / 66.7% against the cap of 60). Count comes from `SpellRegistry.tierCount(color)`, **not** `NUM_TIERS`: a fourth line on green would mark a spell that does not exist.
+1. **Tier rings** — a ring at each `TIER_COSTS[t] / FILL_MAX` (8.3% / 16.7% / 33.3% / 66.7% of the diameter, against the cap of 60). Built as a `UIStroke` on a circular Frame, which is the cheapest true annulus the engine offers; the stroke grows *outward* from its frame, so a ring meant to sit centred on a radius is inset by its own thickness. Count comes from `SpellRegistry.tierCount(color)`, **not** `NUM_TIERS`: a fourth ring on green would mark a spell that does not exist. They are **dark**, unlike the flat bar's white notches — a ring spends most of its life on top of a lit fill disc, where white on bright is almost nothing, and a dark ring reads as a groove against both the fill and the empty base.
 2. **Saturate at castable** — a panel that cannot afford T1 is drained toward grey and snaps to full colour the frame it can. Driven off the **existing** `wasAffordable` edge flag that already triggers `playAffordBounce`; a second edge detector would be one more thing to fall out of step.
-3. **Persistent numeral** — `35/60`, top right. Replaces the transient `EnergyPopup` that appeared on tap and faded: a number you only see *after* committing is on the wrong side of the decision.
-4. **Charge reserve band** — the top slice of the fill this release will spend, growing downward as the tier climbs. The numeral counts down in step. Both snap back on cancel, which is the whole refund story.
-5. **Target notch highlight** — the notch for the tier you are at brightens and thickens.
-6. **Ceiling pulse** — a dedicated overlay Frame breathes when the charge tops out. An overlay rather than a `UIScale` pulse because `playAffordBounce` already owns the panel's `UIScale`, and two systems tweening one property is exactly the fight [[concepts/SingleOwnership]] exists to stop.
+3. **Persistent numeral** — `35/60`, in the middle of the circle. Replaces the transient `EnergyPopup` that appeared on tap and faded: a number you only see *after* committing is on the wrong side of the decision. It sat inset from the top-right corner while the panels were rectangles; on a circle the corners of the bounding box are empty space *outside* the disc, so it floated in the void — and retiring the spell name freed up the centre.
+4. **Charge reserve** — an annulus eaten out of the **outer edge** of the fill: what this release will spend. Sized to the post-spend radius with a stroke thick enough to reach the pre-spend radius, so it always hugs the fill edge and eats inward. The numeral counts down in step. Both snap back on cancel, which is the whole refund story. At T4 on a full reservoir the annulus swallows the entire disc and the numeral reads `0/60`, which is the correct and rather good-looking extreme.
+5. **Active ring highlight** — the ring for the tier you are at thickens and **inverts to white**, the one moment it should be the brightest thing on the panel rather than the darkest.
+6. **Ceiling pulse** — a rim halo breathes when the charge tops out. A ring rather than the wash over the whole panel it used to be: the wash competed with the fill disc for the same pixels and a halo outside the largest possible fill competes with nothing. Still its own instance rather than a `UIScale` pulse, because `playAffordBounce` already owns the panel's `UIScale`, and two systems tweening one property is exactly the fight [[concepts/SingleOwnership]] exists to stop.
 
-One structural change came along with (2): the fill bar's `UIGradient` used to be a `ColorSequence` of the panel's own hue, so the bar's colour lived in two multiplied places at once. `TweenService` cannot tween a `ColorSequence`, which made the desaturation inexpressible as a tween. The gradient is now a **neutral** ramp (`FILL_GRADIENT_BOTTOM_TINT` → `TOP_TINT`) and `BackgroundColor3` carries all the hue.
+The **spell name is gone**. There is no room for "Sanctuary" inside a circle, and this is the second bite out of the same problem — the drag-from-reservoir menu this feature superseded was the last place the roster was legible in-game. The replacement idea (a world-space label above the charge orb) is filed in [[ideas]], along with its known weakness: an orb only exists *during* a charge, so a label on it can never teach you the name before you press.
+
+One structural change came along with (2): the fill's `UIGradient` used to be a `ColorSequence` of the panel's own hue, so the colour lived in two multiplied places at once. `TweenService` cannot tween a `ColorSequence`, which made the desaturation inexpressible as a tween. The gradient is now a **neutral** ramp (`FILL_GRADIENT_BOTTOM_TINT` → `TOP_TINT`) and `BackgroundColor3` carries all the hue. On a disc that top-lit ramp does a second job: it stops it reading as a flat coin.
 
 Panels are **built drained**, because every reservoir starts empty and an edge detector only fires on a change.
+
+There is **no `ClipsDescendants` anywhere in the panel**, deliberately. It clips to the *rectangle* and ignores `UICorner`, so it could not have masked a disc even if the layers needed masking — and they do not, because each one is sized to its own radius. The old `FillClip` did not survive the shape change.
+
+## What the circle encodes, and what it does not
+
+`SpellMenuConfig.FILL_RADIUS_EXPONENT` is the single lever, and the trade is real:
+
+| N | Mapping | Reads as |
+|---|---|---|
+| **1** (current) | diameter ∝ mana | The rings land where the bar's notches did, so the 5/10/20/40 curve is unchanged: the first three tiers bunch near the middle and whip past, T4 is a long way out. Because area grows as the square, the disc looks **emptier than the numeral says**. |
+| 0.5 | area ∝ mana | The disc leaps out of the centre on the first few points then crawls. The rings space out almost evenly, which **flatters the cost curve** by hiding that T4 costs double T3. |
+
+Everything that has to line up with the fill edge — both tier rings, both edges of the reserve annulus — goes through one `radiusFractionFor`, so the exponent stays one lever rather than four call sites that have to agree.
+
+A consequence of N = 1 worth knowing before tuning it: at 8.3% and 16.7% of the diameter, the **T1 and T2 rings are very small** — on a 180px panel they are 15px and 30px across, and the centred numeral sits over them. The useful rings in practice are T3 and T4. The alternative that keeps linear encoding *and* readable spacing is an arc gauge (mana travels around a 270° ring, arc length ∝ mana, centre free for the numeral); it is filed in [[ideas]] rather than built, because it needs the two-half rotation mask and the disc is nearly free.
 
 ## The orb, and why it is an attribute
 
@@ -126,7 +147,7 @@ Everything below was run live in Studio (`start_stop_play`, session lock `charge
 | Check | Result |
 |---|---|
 | `CastAction.__tests` (15 scenarios, 6 new) | `all scenarios passed` |
-| Notch geometry | red 4 notches at y-scale 0.917/0.833/0.667/0.333; green + blue 3 |
+| Notch geometry (bar era) | red 4 notches at y-scale 0.917/0.833/0.667/0.333; green + blue 3 |
 | Quick tap, green = 40 | drained 5 → **T1 Mend**, not the highest affordable |
 | ~1.2 s hold, green = 35, ceiling T3 | drained 20 → **T3 Sanctuary**; attributes stepped `green\|1 → \|2 → \|3` |
 | 2.5 s hold, green = 15, ceiling T2 | drained 10 → **T2 Stone Wall** — clamped at the ceiling, not the clock |
@@ -137,7 +158,20 @@ Everything below was run live in Studio (`start_stop_play`, session lock `charge
 
 The orb check is the one that matters and is why it was run from the **Client** datamodel against a rig the local player does not own: per [[CLAUDE.md]] § Player-Facing Output, server logs and Studio's server view do not verify a player-facing effect. Driving the Boss's attributes from the Server VM and counting instances on the Client VM exercises the exact server-write → replicate → controller-draw path a second player would, without a second client.
 
-**Still owed:** the feel check. Does a 1.75 s T4 hold read as a commitment or as lag? `MANA_FLOW_PER_SEC` is expected to move after real play.
+### Circular panels
+
+Run live on 2026-08-12, session lock `circle-panels`.
+
+| Check | Result |
+|---|---|
+| Panel structure | square 180px panels; children `FillBase / FillDisc / ChargeReserve / Ring_t1..N / CeilingPulse / Numeral / ColorLabel / PressTarget`; red 4 rings, green + blue 3; no `FillClip`, no `SpellLabel` |
+| Ring geometry | ring stroke centres at diameter fractions **0.0837 / 0.1667 / 0.3337 / 0.6667** — exactly 5/10/20/40 over the cap of 60 |
+| Fill at 40 mana | diameter fraction 0.667, landing exactly on the T4 ring |
+| Hold to ceiling, red = 40 | reserve annulus swallowed the whole disc, numeral `0/60` in reserve gold, rim halo visible, orb + motes up |
+| Release off-panel | red `40/60`, reserve thickness 0, halo hidden, orbs 0, motes 0 |
+| Quick tap, green = 20 | drained 5 → **T1**, fill 0.333 → 0.250; all rings back to the resting dark |
+
+**Still owed:** the feel check, now on two axes. Does a 1.75 s T4 hold read as a commitment or as lag (`MANA_FLOW_PER_SEC`), and does a disc that looks emptier than its numeral read as tension or as a bug (`FILL_RADIUS_EXPONENT`)? Both are expected to move after real play.
 
 ## Cross-references
 

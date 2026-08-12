@@ -1400,3 +1400,11 @@ Verified live: 15/15 `CastAction/__tests` (six new, expressing holds as `chargeT
 **Owed:** the feel check. Whether 1.75 s reads as commitment or as lag is not a thing tests can answer, and `MANA_FLOW_PER_SEC` is expected to move.
 
 Pages touched: new [[systems/ChargeCast]]; [[design/gameplay-loop]], [[design/build-plan]], [[systems/CastAction]], [[systems/HUD]], [[systems/VisualEffects]], [[systems/SpellCastService]], [[index]]. Corrected while there: HUD's file list still carried `ReservoirBarsBuilder`/`Config` as `[unused]` entries — both were deleted in the Phase 4.8 R-2 cleanup — and omitted `ReticleBuilder`/`ReticleConfig`, which exist.
+
+## [2026-08-12] ingest | Spell cast panels became circles
+
+Follow-up to the 5.8 hold-to-charge landing. The three cast panels are now discs: mana fills outward from the centre, the tier thresholds are concentric rings (a `UIStroke` on a circular Frame — the cheapest true annulus the engine offers), the reserve is an annulus eaten off the fill's outer edge, and the ceiling pulse is a rim halo instead of a wash. Rationale is affordance: a bar reads as a meter you watch, and press-and-hold needs a panel that reads as something you push — which also lines the column up with the DASH button below it, already a circle.
+
+The spell name came off the panel (no room inside a disc) and the numeral moved from the top-right corner to the centre, since a circle's bounding-box corners are empty space outside the disc. `FILL_RADIUS_EXPONENT = 1` keeps the bar's cost curve exactly — rings at 8.3/16.7/33.3/66.7% of the diameter, verified live to four decimals — at the cost of the disc looking emptier than its numeral, and of T1/T2 rings small enough to sit under the numeral. That is the trade the exponent exists to reverse. Rings are dark rather than white: they spend their life on top of a lit fill, where white on bright is nothing.
+
+Two ideas filed rather than built: an **arc gauge** (mana around a 270° ring — linear encoding *and* readable tick spacing, but needs the two-half rotation mask), and a **spell name label above the charge orb**, with its known weakness recorded — an orb only exists during a charge, so it can never teach the roster before you press. See `systems/ChargeCast` § What the circle encodes, `systems/HUD`, `ideas`.

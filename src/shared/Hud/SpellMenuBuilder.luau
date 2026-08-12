@@ -1,9 +1,9 @@
 ----------------------------------------------------------------------
 -- SpellMenuBuilder
 ----------------------------------------------------------------------
--- Three spell cast panels (red / green / blue). Each panel contains a
--- layered fill that rises bottom-to-top as mana accumulates, hard notches
--- at the four tier thresholds, and a persistent mana numeral.
+-- Three circular spell cast panels (red / green / blue). Mana fills each
+-- one outward from the centre; the four tier thresholds are concentric
+-- rings; a persistent numeral sits in the middle.
 --
 -- **The gesture is press → hold → release** (Phase 5.8, hold-to-charge;
 -- see wiki/systems/ChargeCast.md). Press a panel and the charge starts at
@@ -17,15 +17,27 @@
 -- exactly one tier cost on release, so cancelling costs nothing and there
 -- is no refund path to get wrong.
 --
--- Panel layers (back to front):
---   FillBase  — always-visible dim bg (the "empty" container look)
---   FillClip  — clips the fill stack to rounded bounds (ClipsDescendants)
---     FillBar       — solid colour + neutral ramp, height = energy fraction
---     ChargeReserve — the slice of the fill this release will spend
---     Notch_tN      — hard line at TIER_COSTS[n] / FILL_MAX
---   CeilingPulse — overlay that breathes at the affordability ceiling
---   ColorLabel / SpellLabel / Numeral — text overlays
---   TextButton — press detection (highest ZIndex in the panel)
+-- The panels were vertical bars until the circles landed. Two things came
+-- with the shape: a bar reads as a *meter* — status you watch — where a
+-- disc in a column of round buttons reads as something you press and keep
+-- pressing, which is what the gesture actually is; and the disc echoes
+-- the charge orb that rises over the caster's head while it climbs.
+-- What the shape gives up is honest magnitude: see
+-- SpellMenuConfig.FILL_RADIUS_EXPONENT.
+--
+-- Panel layers (back to front) — every one is a circle:
+--   FillBase      — always-visible dim disc (the "empty" container look)
+--   FillDisc      — solid colour + top-lit ramp, diameter = energy fraction
+--   ChargeReserve — annulus at the fill's outer edge: what release spends
+--   Ring_tN       — ring at TIER_COSTS[n] / FILL_MAX
+--   CeilingPulse  — rim halo that breathes at the affordability ceiling
+--   ColorLabel / Numeral — text overlays
+--   TextButton    — press detection (highest ZIndex in the panel)
+--
+-- No ClipsDescendants anywhere, deliberately: it clips to the *rectangle*
+-- and ignores UICorner, so it could not have masked a disc even if the
+-- layers needed masking. They do not — each one is sized to its own
+-- radius.
 --
 -- Returned handle:
 --   .gui                 Frame to register with HudLayoutManager
@@ -34,7 +46,7 @@
 --   .chargeProgress      RBXScriptSignal<color, tier, alpha>
 --   .castRequested       RBXScriptSignal<color, tier>
 --   .chargeCancelled     RBXScriptSignal<color>
---   :setReservoirs(snap)                refresh fill, notches, numeral
+--   :setReservoirs(snap)                refresh fill, rings, numeral
 --   :setChargeAffordability(color, max) where the charge ceiling sits
 --   :playAffordBounce(color) / :playFiredFlash(color)
 --   :destroy()
@@ -64,6 +76,8 @@ export type Handle = {
 	destroy: (self: Handle) -> (),
 }
 
+type TierRing = { frame: Frame, stroke: UIStroke, frac: number }
+
 local COLOR_ORDER = { "red", "green", "blue" }
 
 -- ZIndex ladder, written down because it has to hold under BOTH
@@ -71,10 +85,9 @@ local COLOR_ORDER = { "red", "green", "blue" }
 -- the legacy Global (every number compares against every other). The
 -- values are chosen so the intended stacking survives either reading.
 local Z_FILL_BASE    = 1
-local Z_FILL_CLIP    = 2
-local Z_FILL_BAR     = 2
+local Z_FILL_DISC    = 2
 local Z_RESERVE      = 3
-local Z_NOTCH        = 4
+local Z_RING         = 4
 local Z_CEILING      = 5
 local Z_TEXT         = 6
 local Z_BUTTON       = 10
@@ -87,12 +100,59 @@ local function lightenColor(c: Color3, amount: number): Color3
 	)
 end
 
+-- Every layer is a square Frame turned into a circle by the same corner
+-- radius, anchored at its own centre so it grows symmetrically.
+local function makeCircle(name: string, zIndex: number, parent: Instance): Frame
+	local frame = Instance.new("Frame")
+	frame.Name = name
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.BorderSizePixel = 0
+	frame.ZIndex = zIndex
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = Defaults.PANEL_CORNER_RADIUS
+	corner.Parent = frame
+
+	frame.Parent = parent
+	return frame
+end
+
+-- A ring is a circle with no fill and a UIStroke — the stroke traces the
+-- corner radius, which is the cheapest true annulus the engine offers.
+local function makeRing(
+	name: string,
+	color: Color3,
+	thickness: number,
+	transparency: number,
+	zIndex: number,
+	parent: Instance
+): (Frame, UIStroke)
+	local frame = makeCircle(name, zIndex, parent)
+	frame.BackgroundTransparency = 1
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = color
+	stroke.Thickness = thickness
+	stroke.Transparency = transparency
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = frame
+
+	return frame, stroke
+end
+
+-- A UIStroke grows *outward* from its frame's bounds, so a ring meant to
+-- sit centred on a radius has to be inset by its own thickness.
+local function ringSize(frac: number, thickness: number): UDim2
+	return UDim2.new(frac, -thickness, frac, -thickness)
+end
+
 local SpellMenuBuilder = {}
 
 function SpellMenuBuilder.build(): Handle
 	local container = Instance.new("Frame")
 	container.Name = "SpellMenu"
-	container.Size = UDim2.new(0, Defaults.BUTTON_WIDTH, 0, 0)
+	container.Size = UDim2.new(0, Defaults.PANEL_DIAMETER, 0, 0)
 	container.AutomaticSize = Enum.AutomaticSize.Y
 	container.BackgroundTransparency = 1
 	container.BorderSizePixel = 0
@@ -115,25 +175,36 @@ function SpellMenuBuilder.build(): Handle
 	castEvent.Name            = "SpellMenuCast"
 	chargeCancelledEvent.Name = "SpellMenuChargeCancelled"
 
-	local panels: { [string]: Frame }        = {}
-	local fillBases: { [string]: Frame }     = {}
-	local fillBars: { [string]: Frame }      = {}
-	local reserveBands: { [string]: Frame }  = {}
-	local ceilingOverlays: { [string]: Frame } = {}
-	local notches: { [string]: { Frame } }   = {}
-	local spellLabels: { [string]: TextLabel } = {}
-	local numerals: { [string]: TextLabel }  = {}
-	local litColors: { [string]: Color3 }    = {}
+	local panels: { [string]: Frame }             = {}
+	local fillBases: { [string]: Frame }          = {}
+	local fillDiscs: { [string]: Frame }          = {}
+	local reserveBands: { [string]: Frame }       = {}
+	local reserveStrokes: { [string]: UIStroke }  = {}
+	local ceilingRings: { [string]: Frame }       = {}
+	local ceilingStrokes: { [string]: UIStroke }  = {}
+	local rings: { [string]: { TierRing } }       = {}
+	local numerals: { [string]: TextLabel }       = {}
+	local litColors: { [string]: Color3 }         = {}
 
 	local currentEnergy: { [string]: number } = { red = 0, green = 0, blue = 0 }
 	-- Highest tier this reservoir can pay for right now. 0 = below T1.
 	local chargeCeiling: { [string]: number } = { red = 0, green = 0, blue = 0 }
 
+	-- Mana → the fill disc's diameter as a fraction of the panel. Every
+	-- layer that has to line up with the fill edge — both tier rings and
+	-- both edges of the reserve band — goes through here, so
+	-- FILL_RADIUS_EXPONENT stays one lever instead of four call sites that
+	-- have to agree with each other.
+	local function radiusFractionFor(mana: number): number
+		local frac = math.clamp(mana / Defaults.FILL_MAX, 0, 1)
+		return frac ^ Defaults.FILL_RADIUS_EXPONENT
+	end
+
 	-- The two halves of "saturate at castable". A panel holding less than a
 	-- T1 cast is drained toward grey; the moment T1 becomes affordable it
 	-- snaps back to full colour. Both read litColors, which the build loop
 	-- below fills in, so these must not be called before it runs.
-	local function barColorFor(color: string, canCast: boolean): Color3
+	local function discColorFor(color: string, canCast: boolean): Color3
 		local lit = litColors[color]
 		return if canCast then lit else lit:Lerp(Defaults.DESATURATED_GREY, Defaults.DESATURATED_BLEND)
 	end
@@ -152,118 +223,90 @@ function SpellMenuBuilder.build(): Handle
 		local litColor = lightenColor(bgColor, 55)
 		litColors[color] = litColor
 
-		-- Outer panel — transparent container so fill layers compose cleanly
+		-- Outer panel — transparent square container; the circles inside it
+		-- are all centred on it.
 		local panel = Instance.new("Frame")
 		panel.Name = "Panel_" .. color
 		panel.LayoutOrder = i
-		panel.Size = UDim2.new(0, Defaults.BUTTON_WIDTH, 0, Defaults.BUTTON_HEIGHT)
+		panel.Size = UDim2.fromOffset(Defaults.PANEL_DIAMETER, Defaults.PANEL_DIAMETER)
 		panel.BackgroundTransparency = 1
 		panel.BorderSizePixel = 0
 
-		-- FillBase: always-visible dim layer — conveys the "empty" shape
-		local fillBase = Instance.new("Frame")
-		fillBase.Name = "FillBase"
-		fillBase.Size = UDim2.new(1, 0, 1, 0)
+		-- FillBase: always-visible dim disc — conveys the "empty" shape
+		local fillBase = makeCircle("FillBase", Z_FILL_BASE, panel)
+		fillBase.Size = UDim2.fromScale(1, 1)
 		-- Built drained, because every reservoir starts empty and the edge
 		-- detector in setReservoirs only fires on a *change*. Building
 		-- saturated would leave three fully-coloured panels that cannot cast
 		-- anything until the first word is memorized.
 		fillBase.BackgroundColor3 = bgColor:Lerp(Defaults.DESATURATED_GREY, Defaults.DESATURATED_BLEND)
 		fillBase.BackgroundTransparency = Defaults.FILL_BASE_TRANSPARENCY
-		fillBase.BorderSizePixel = 0
-		fillBase.ZIndex = Z_FILL_BASE
-		fillBase.Parent = panel
 
-		local baseCorner = Instance.new("UICorner")
-		baseCorner.CornerRadius = UDim.new(0, Defaults.CORNER_RADIUS)
-		baseCorner.Parent = fillBase
-
-		-- FillClip: clips the fill stack to the rounded panel shape
-		local fillClip = Instance.new("Frame")
-		fillClip.Name = "FillClip"
-		fillClip.Size = UDim2.new(1, 0, 1, 0)
-		fillClip.BackgroundTransparency = 1
-		fillClip.BorderSizePixel = 0
-		fillClip.ClipsDescendants = true
-		fillClip.ZIndex = Z_FILL_CLIP
-		fillClip.Parent = panel
-
-		local clipCorner = Instance.new("UICorner")
-		clipCorner.CornerRadius = UDim.new(0, Defaults.CORNER_RADIUS)
-		clipCorner.Parent = fillClip
-
-		-- FillBar: solid colour anchored to bottom, height tweens with mana
-		local fillBar = Instance.new("Frame")
-		fillBar.Name = "FillBar"
-		fillBar.AnchorPoint = Vector2.new(0, 1)
-		fillBar.Position = UDim2.new(0, 0, 1, 0)
-		fillBar.Size = UDim2.new(1, 0, 0, 0)
-		fillBar.BackgroundColor3 = litColor:Lerp(Defaults.DESATURATED_GREY, Defaults.DESATURATED_BLEND)
-		fillBar.BorderSizePixel = 0
-		fillBar.ZIndex = Z_FILL_BAR
-		fillBar.Parent = fillClip
+		-- FillDisc: grows out of the centre as mana accumulates.
+		local fillDisc = makeCircle("FillDisc", Z_FILL_DISC, panel)
+		fillDisc.Size = UDim2.fromScale(0, 0)
+		fillDisc.BackgroundColor3 = litColor:Lerp(Defaults.DESATURATED_GREY, Defaults.DESATURATED_BLEND)
 
 		-- Rotation=270: key 0 = bottom (darkened), key 1 = top (untouched).
 		-- Neutral tints only — a UIGradient multiplies its parent's
 		-- BackgroundColor3, so leaving hue out of it here is what lets the
-		-- desaturation below be one tween.
+		-- desaturation below be one tween. On a disc the top-lit ramp is
+		-- also what stops it reading as a flat coin.
 		local gradient = Instance.new("UIGradient")
 		gradient.Rotation = 270
 		gradient.Color = ColorSequence.new({
 			ColorSequenceKeypoint.new(0, Defaults.FILL_GRADIENT_BOTTOM_TINT),
 			ColorSequenceKeypoint.new(1, Defaults.FILL_GRADIENT_TOP_TINT),
 		})
-		gradient.Parent = fillBar
+		gradient.Parent = fillDisc
 
-		-- ChargeReserve: the top slice of the fill that this release will
-		-- spend. Sibling of FillBar rather than a child of it, so its height
-		-- is a fraction of the *panel* and matches the notch scale directly.
-		local reserve = Instance.new("Frame")
-		reserve.Name = "ChargeReserve"
-		reserve.AnchorPoint = Vector2.new(0, 0)
-		reserve.Position = UDim2.new(0, 0, 1, 0)
-		reserve.Size = UDim2.new(1, 0, 0, 0)
-		reserve.BackgroundColor3 = Defaults.CHARGE_RESERVE_COLOR
-		reserve.BackgroundTransparency = Defaults.CHARGE_RESERVE_TRANSPARENCY
-		reserve.BorderSizePixel = 0
-		reserve.Visible = false
-		reserve.ZIndex = Z_RESERVE
-		reserve.Parent = fillClip
+		-- ChargeReserve: the outer annulus of the fill that this release
+		-- will spend. Sized to the post-spend radius with a stroke thick
+		-- enough to reach the pre-spend radius, so it always hugs the fill
+		-- edge and eats inward.
+		local reserve, reserveStroke = makeRing(
+			"ChargeReserve",
+			Defaults.CHARGE_RESERVE_COLOR,
+			0,
+			Defaults.CHARGE_RESERVE_TRANSPARENCY,
+			Z_RESERVE,
+			panel
+		)
+		reserve.Size = UDim2.fromScale(Defaults.CHARGE_RESERVE_MIN_INNER_SCALE, Defaults.CHARGE_RESERVE_MIN_INNER_SCALE)
 
-		-- Tier notches. Red is the only school with a T4, so the count comes
-		-- from the registry rather than from NUM_TIERS — a fourth line on
+		-- Tier rings. Red is the only school with a T4, so the count comes
+		-- from the registry rather than from NUM_TIERS — a fourth ring on
 		-- green would mark a spell that does not exist.
-		local colorNotches: { Frame } = {}
+		local colorRings: { TierRing } = {}
 		for tier = 1, SpellRegistry.tierCount(color :: SpellRegistry.Color) do
-			local frac = SpellRegistry.TIER_COSTS[tier] / Defaults.FILL_MAX
-			local notch = Instance.new("Frame")
-			notch.Name = string.format("Notch_t%d", tier)
-			notch.AnchorPoint = Vector2.new(0, 0.5)
-			notch.Position = UDim2.new(0, 0, 1 - frac, 0)
-			notch.Size = UDim2.new(1, 0, 0, Defaults.NOTCH_THICKNESS)
-			notch.BackgroundColor3 = Defaults.NOTCH_COLOR
-			notch.BackgroundTransparency = Defaults.NOTCH_TRANSPARENCY
-			notch.BorderSizePixel = 0
-			notch.ZIndex = Z_NOTCH
-			notch.Parent = fillClip
-			colorNotches[tier] = notch
+			local frac = radiusFractionFor(SpellRegistry.TIER_COSTS[tier])
+			local ringFrame, ringStroke = makeRing(
+				string.format("Ring_t%d", tier),
+				Defaults.NOTCH_COLOR,
+				Defaults.NOTCH_THICKNESS,
+				Defaults.NOTCH_TRANSPARENCY,
+				Z_RING,
+				panel
+			)
+			ringFrame.Size = ringSize(frac, Defaults.NOTCH_THICKNESS)
+			colorRings[tier] = { frame = ringFrame, stroke = ringStroke, frac = frac }
 		end
-		notches[color] = colorNotches
+		rings[color] = colorRings
 
-		-- CeilingPulse: breathes when a held charge has topped out.
-		local ceiling = Instance.new("Frame")
-		ceiling.Name = "CeilingPulse"
-		ceiling.Size = UDim2.new(1, 0, 1, 0)
-		ceiling.BackgroundColor3 = Defaults.CHARGE_CEILING_PULSE_COLOR
-		ceiling.BackgroundTransparency = 1
-		ceiling.BorderSizePixel = 0
-		ceiling.Visible = false
-		ceiling.ZIndex = Z_CEILING
-		ceiling.Parent = panel
-
-		local ceilingCorner = Instance.new("UICorner")
-		ceilingCorner.CornerRadius = UDim.new(0, Defaults.CORNER_RADIUS)
-		ceilingCorner.Parent = ceiling
+		-- CeilingPulse: rim halo that breathes when a held charge has topped
+		-- out. Inset by twice its thickness so the stroke's outer edge lands
+		-- exactly on the panel rim instead of bleeding into the gap.
+		local ceilingRing, ceilingStroke = makeRing(
+			"CeilingPulse",
+			Defaults.CHARGE_CEILING_PULSE_COLOR,
+			Defaults.CHARGE_CEILING_RING_THICKNESS,
+			1,
+			Z_CEILING,
+			panel
+		)
+		local ceilingInset = Defaults.CHARGE_CEILING_RING_THICKNESS * 2
+		ceilingRing.Size = UDim2.new(1, -ceilingInset, 1, -ceilingInset)
+		ceilingRing.Visible = false
 
 		-- Color label: "RED" / "GREEN" / "BLUE"
 		local colorLabel = Instance.new("TextLabel")
@@ -280,44 +323,29 @@ function SpellMenuBuilder.build(): Handle
 		colorLabel.ZIndex = Z_TEXT
 		colorLabel.Parent = panel
 
-		-- Persistent mana numeral, top-right. Replaces the tap-triggered
-		-- EnergyPopup: a hold has to show what it is about to spend *while*
-		-- the player decides, not after they have committed.
+		-- Persistent mana numeral, centred. A hold has to show what it is
+		-- about to spend *while* the player decides, not after they have
+		-- committed.
 		local numeral = Instance.new("TextLabel")
 		numeral.Name = "Numeral"
-		numeral.AnchorPoint = Vector2.new(1, 0)
-		numeral.Position = UDim2.new(1, -Defaults.NUMERAL_INSET, 0, Defaults.NUMERAL_INSET)
-		numeral.Size = UDim2.new(1, -Defaults.NUMERAL_INSET * 2, 0, Defaults.NUMERAL_HEIGHT)
+		numeral.AnchorPoint = Vector2.new(0.5, 0.5)
+		numeral.Position = UDim2.fromScale(0.5, 0.5)
+		numeral.Size = UDim2.new(1, 0, 0, Defaults.NUMERAL_HEIGHT)
 		numeral.BackgroundTransparency = 1
 		numeral.Font = Defaults.NUMERAL_FONT
 		numeral.TextSize = Defaults.NUMERAL_SIZE
 		numeral.TextColor3 = Defaults.NUMERAL_DIM_COLOR
 		numeral.TextStrokeTransparency = Defaults.NUMERAL_STROKE
-		numeral.TextXAlignment = Enum.TextXAlignment.Right
+		numeral.TextXAlignment = Enum.TextXAlignment.Center
 		numeral.Text = string.format("0/%d", Defaults.FILL_MAX)
 		numeral.ZIndex = Z_TEXT
 		numeral.Parent = panel
 
-		-- Spell name label (vertically centered)
-		local spellLabel = Instance.new("TextLabel")
-		spellLabel.Name = "SpellLabel"
-		spellLabel.Size = UDim2.new(1, -4, 0, 18)
-		spellLabel.Position = UDim2.new(0, 2, 0.5, -9)
-		spellLabel.BackgroundTransparency = 1
-		spellLabel.Font = Defaults.SPELL_FONT
-		spellLabel.TextSize = Defaults.SPELL_SIZE
-		spellLabel.TextColor3 = Defaults.DIM_COLOR
-		spellLabel.TextStrokeTransparency = 1
-		spellLabel.Text = Defaults.NO_SPELL_TEXT
-		spellLabel.TextXAlignment = Enum.TextXAlignment.Center
-		spellLabel.TextWrapped = true
-		spellLabel.ZIndex = Z_TEXT
-		spellLabel.Parent = panel
-
-		-- TextButton: full-size press target (highest ZIndex in panel)
+		-- TextButton: full-square press target (highest ZIndex in panel).
+		-- Square rather than circular on purpose — see isOverPanel.
 		local btn = Instance.new("TextButton")
 		btn.Name = "PressTarget"
-		btn.Size = UDim2.new(1, 0, 1, 0)
+		btn.Size = UDim2.fromScale(1, 1)
 		btn.BackgroundTransparency = 1
 		btn.Text = ""
 		btn.AutoButtonColor = false
@@ -325,13 +353,14 @@ function SpellMenuBuilder.build(): Handle
 		btn.Parent = panel
 
 		panel.Parent = container
-		panels[color]       = panel
-		fillBases[color]    = fillBase
-		fillBars[color]     = fillBar
-		reserveBands[color] = reserve
-		ceilingOverlays[color] = ceiling
-		spellLabels[color]  = spellLabel
-		numerals[color]     = numeral
+		panels[color]         = panel
+		fillBases[color]      = fillBase
+		fillDiscs[color]      = fillDisc
+		reserveBands[color]   = reserve
+		reserveStrokes[color] = reserveStroke
+		ceilingRings[color]   = ceilingRing
+		ceilingStrokes[color] = ceilingStroke
+		numerals[color]       = numeral
 	end
 
 	local handle = {
@@ -367,43 +396,53 @@ function SpellMenuBuilder.build(): Handle
 			else Defaults.NUMERAL_DIM_COLOR
 	end
 
+	-- No branch for "nothing reserved": a pendingCost of 0 collapses the
+	-- band's two edges onto each other, which is a zero-thickness stroke,
+	-- which draws nothing. The clear path and the grow path are the same
+	-- arithmetic.
 	local function refreshReserve(color: string, pendingCost: number, tweenInfo: TweenInfo)
-		local band = reserveBands[color]
 		local energy = currentEnergy[color] or 0
-		local energyFrac = math.clamp(energy / Defaults.FILL_MAX, 0, 1)
-		local reserveFrac = math.clamp(pendingCost / Defaults.FILL_MAX, 0, energyFrac)
+		local outerFrac = radiusFractionFor(energy)
+		local innerFrac = math.max(
+			radiusFractionFor(math.max(energy - pendingCost, 0)),
+			Defaults.CHARGE_RESERVE_MIN_INNER_SCALE
+		)
+		-- Diameter difference halved, because the stroke grows outward on
+		-- both sides of the frame it hangs off.
+		local thickness = math.max((outerFrac - innerFrac) * Defaults.PANEL_DIAMETER / 2, 0)
 
-		if reserveFrac <= 0 then
-			-- Snap the position too: a band tweening to zero height from the
-			-- wrong Y reads as the mana sliding sideways out of the bar.
-			band.Position = UDim2.new(0, 0, 1 - energyFrac, 0)
-			local t = TweenService:Create(band, tweenInfo, { Size = UDim2.new(1, 0, 0, 0) })
-			t:Play()
-			table.insert(vfxTweens, t)
-			band.Visible = false
-			return
-		end
-
-		band.Visible = true
-		band.Position = UDim2.new(0, 0, 1 - energyFrac, 0)
-		local t = TweenService:Create(band, tweenInfo, { Size = UDim2.new(1, 0, reserveFrac, 0) })
-		t:Play()
-		table.insert(vfxTweens, t)
+		local sizeTween = TweenService:Create(reserveBands[color], tweenInfo, {
+			Size = UDim2.fromScale(innerFrac, innerFrac),
+		})
+		local strokeTween = TweenService:Create(reserveStrokes[color], tweenInfo, {
+			Thickness = thickness,
+		})
+		sizeTween:Play()
+		strokeTween:Play()
+		table.insert(vfxTweens, sizeTween)
+		table.insert(vfxTweens, strokeTween)
 	end
 
 	local function refreshNotches(color: string, activeTier: number)
-		for tier, notch in notches[color] do
+		for tier, ring in rings[color] do
 			local isActive = tier == activeTier
-			local t = TweenService:Create(notch, Defaults.NOTCH_TWEEN, {
-				BackgroundTransparency = if isActive
+			local thickness = if isActive
+				then Defaults.NOTCH_THICKNESS_ACTIVE
+				else Defaults.NOTCH_THICKNESS
+			local frameTween = TweenService:Create(ring.frame, Defaults.NOTCH_TWEEN, {
+				Size = ringSize(ring.frac, thickness),
+			})
+			local strokeTween = TweenService:Create(ring.stroke, Defaults.NOTCH_TWEEN, {
+				Thickness = thickness,
+				Color = if isActive then Defaults.NOTCH_ACTIVE_COLOR else Defaults.NOTCH_COLOR,
+				Transparency = if isActive
 					then Defaults.NOTCH_ACTIVE_TRANSPARENCY
 					else Defaults.NOTCH_TRANSPARENCY,
-				Size = UDim2.new(1, 0, 0, if isActive
-					then Defaults.NOTCH_THICKNESS_ACTIVE
-					else Defaults.NOTCH_THICKNESS),
 			})
-			t:Play()
-			table.insert(vfxTweens, t)
+			frameTween:Play()
+			strokeTween:Play()
+			table.insert(vfxTweens, frameTween)
+			table.insert(vfxTweens, strokeTween)
 		end
 	end
 
@@ -413,18 +452,18 @@ function SpellMenuBuilder.build(): Handle
 			existing:Cancel()
 			ceilingTweens[color] = nil
 		end
-		local overlay = ceilingOverlays[color]
-		overlay.BackgroundTransparency = 1
-		overlay.Visible = false
+		local stroke = ceilingStrokes[color]
+		stroke.Transparency = 1
+		ceilingRings[color].Visible = false
 	end
 
 	local function startCeilingPulse(color: string)
 		if ceilingTweens[color] then return end
-		local overlay = ceilingOverlays[color]
-		overlay.Visible = true
-		overlay.BackgroundTransparency = Defaults.CHARGE_CEILING_PULSE_MIN
-		local t = TweenService:Create(overlay, Defaults.CHARGE_CEILING_PULSE_TWEEN, {
-			BackgroundTransparency = Defaults.CHARGE_CEILING_PULSE_MAX,
+		local stroke = ceilingStrokes[color]
+		ceilingRings[color].Visible = true
+		stroke.Transparency = Defaults.CHARGE_CEILING_PULSE_MIN
+		local t = TweenService:Create(stroke, Defaults.CHARGE_CEILING_PULSE_TWEEN, {
+			Transparency = Defaults.CHARGE_CEILING_PULSE_MAX,
 		})
 		t:Play()
 		ceilingTweens[color] = t
@@ -538,6 +577,12 @@ function SpellMenuBuilder.build(): Handle
 		evaluateCharge()
 	end
 
+	-- Deliberately a *rectangle* test against the panel's bounding box,
+	-- even though the panel draws as a circle. The corners are live but
+	-- invisible, which makes drag-off-to-cancel slightly harder to trigger
+	-- by accident — and an accidental cancel costs the player a whole
+	-- charge, where an accidental cast costs them mana they were about to
+	-- spend anyway. The error should fall on the forgiving side.
 	local function isOverPanel(color: string, screenPos: Vector2): boolean
 		local panel = panels[color]
 		if not panel or not panel.Parent then return false end
@@ -614,9 +659,9 @@ function SpellMenuBuilder.build(): Handle
 			local energy = (snapshot :: any)[color] or 0
 			currentEnergy[color] = energy
 
-			local fraction = math.clamp(energy / Defaults.FILL_MAX, 0, 1)
-			local fillTween = TweenService:Create(fillBars[color], Defaults.FILL_TWEEN, {
-				Size = UDim2.new(1, 0, fraction, 0),
+			local fraction = radiusFractionFor(energy)
+			local fillTween = TweenService:Create(fillDiscs[color], Defaults.FILL_TWEEN, {
+				Size = UDim2.fromScale(fraction, fraction),
 			})
 			fillTween:Play()
 			table.insert(vfxTweens, fillTween)
@@ -638,20 +683,17 @@ function SpellMenuBuilder.build(): Handle
 				if canCast then
 					handle:playAffordBounce(color)
 				end
-				local barTween = TweenService:Create(fillBars[color], Defaults.DESATURATED_TWEEN, {
-					BackgroundColor3 = barColorFor(color, canCast),
+				local discTween = TweenService:Create(fillDiscs[color], Defaults.DESATURATED_TWEEN, {
+					BackgroundColor3 = discColorFor(color, canCast),
 				})
 				local baseTween = TweenService:Create(fillBases[color], Defaults.DESATURATED_TWEEN, {
 					BackgroundColor3 = baseColorFor(color, canCast),
 				})
-				barTween:Play()
+				discTween:Play()
 				baseTween:Play()
-				table.insert(vfxTweens, barTween)
+				table.insert(vfxTweens, discTween)
 				table.insert(vfxTweens, baseTween)
 			end
-
-			spellLabels[color].Text = if topSpell then topSpell.name else Defaults.NO_SPELL_TEXT
-			spellLabels[color].TextColor3 = if canCast then Defaults.TEXT_COLOR else Defaults.DIM_COLOR
 
 			-- Keep the numeral and the reserve band honest against the new
 			-- energy, including for a colour being held right now.
@@ -691,18 +733,11 @@ function SpellMenuBuilder.build(): Handle
 		local panel = panels[color]
 		local base = fillBases[color]
 
-		-- White flash overlay
-		local overlay = Instance.new("Frame")
-		overlay.Name = "FiredFlash"
-		overlay.Size = UDim2.new(1, 0, 1, 0)
+		-- White flash disc
+		local overlay = makeCircle("FiredFlash", Z_BUTTON - 1, panel)
+		overlay.Size = UDim2.fromScale(1, 1)
 		overlay.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		overlay.BackgroundTransparency = 0
-		overlay.BorderSizePixel = 0
-		overlay.ZIndex = Z_BUTTON - 1
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, Defaults.CORNER_RADIUS)
-		corner.Parent = overlay
-		overlay.Parent = panel
 		local flashTween = TweenService:Create(overlay, Defaults.FIRED_FLASH_TWEEN, { BackgroundTransparency = 1 })
 		flashTween:Play()
 		table.insert(vfxTweens, flashTween)
