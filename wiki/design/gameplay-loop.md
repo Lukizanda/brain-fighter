@@ -70,7 +70,7 @@ An icon-only button next to the buffer converts the buffered word into mana.
 Each color's reservoir is the cast surface for that color. **Press it, hold to climb the tiers, release to fire what you reached.** Full system page: [[systems/ChargeCast]] (Phase 5.8, 2026-08-12).
 
 - **Press a reservoir** → the charge starts at T1 immediately, so a quick tap is a Firebolt.
-- **Keep holding** → the charge climbs through the tiers, priced in seconds by how much *more* mana each one costs than a tap: T2 at 0.25 s, T3 at 0.75 s, T4 at 1.75 s (`MANA_FLOW_PER_SEC = 20`). T4 reads as a commitment for free, because it costs 8× a Firebolt.
+- **Keep holding** → the charge climbs through the tiers, priced in seconds by how much *more* mana each one costs than a tap: T2 at 1 s, T3 at 3 s, T4 at 7 s (`MANA_FLOW_PER_SEC = 5`). T4 reads as a commitment for free, because it costs 8× a Firebolt.
 - **It stops dead at what you can afford.** The panel pulses and the character orb strains rather than growing. You cannot charge into a fizzle.
 - **Release over the panel** = fire that tier. **Release outside it** = cancel; no energy spent.
 - **Nothing is drained until release.** The reserve band eaten out of the top of the fill, and the numeral counting down beside it, are a *promise*. Cancelling snaps both back — there is no refund because nothing was taken.

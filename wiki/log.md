@@ -1416,3 +1416,11 @@ The name that came off the cast panel when it became a circle is back, on the or
 Four things pinned in the code and on the page. `AlwaysOnTop` is off — a label that reads through a wall turns a tell into a wallhack. `MaxDistance` is 120, inside the orb's own visibility, so distant opponents read *that* you are charging, not exactly what. The GUI hangs off the **head** rather than the orb, because the 0.3 s dissipate outlives the orb's 0.16 s release flash. And `spellNameFor` bounds the tier with `tierCount` rather than `getSpell` alone — `getSpell` validates against the roster maximum of 4 while green tops out at 3, so `getSpell("green", 4)` passes validation and returns nil; the same off-by-one the tier rings dodge.
 
 Idea moved from Open to Shipped in `ideas`, with the weakness it was filed with left standing: the label only exists during a charge, so it still cannot teach a new player the roster *before* they press. That half of the legend gap is still open and still belongs to `systems/Tutorial` — recorded in `design/gameplay-loop` rather than quietly closed. See `systems/ChargeCast` § The name label, `systems/VisualEffects`.
+
+## [2026-08-12] ingest | Charge timing retuned, MANA_FLOW_PER_SEC 20 -> 5
+
+First pass at the feel check owed since 5.8 shipped. Holds are 4x longer: T2 goes 0.25s -> 1s, T3 0.75s -> 3s, T4 1.75s -> 7s. T1 stays a tap at any rate, because `chargeTimeFor` measures cost *above* T1.
+
+The lever behaved as designed — one constant moved and nothing else had to. The HUD rings, the orb growth curve, the reserve band and the six `CastAction/__tests` charge scenarios all derive from `chargeTimeFor` rather than from literal seconds, so the suite still passes unchanged and no second tuning table drifted out of step.
+
+What did need updating was prose: the constant's own comment and four wiki pages quoted the old table. Fixed in `systems/ChargeCast` (charge model), `design/gameplay-loop`, `systems/SpellCastService` (the skip-the-windup note, which is now worth *more* to a lying client — the longer the windup, the bigger the tell being skipped) and `index`. Worth flagging as a design consequence rather than a pure tuning one: a 7s T4 is long enough that an opponent has real time to react to the orb, which pushes the charge from a tell toward a commitment they can punish.

@@ -20,14 +20,14 @@ Mana *flows* into the charge at a constant rate and the tier thresholds are the 
 chargeTimeFor(tier) = (TIER_COSTS[tier] - TIER_COSTS[1]) / MANA_FLOW_PER_SEC
 ```
 
-At `MANA_FLOW_PER_SEC = 20`:
+At `MANA_FLOW_PER_SEC = 5` (retuned down from 20 on 2026-08-12, the first pass at the feel check):
 
 | Tier | Cost | Hold |
 |---|---|---|
 | T1 | 5 | 0 s — a tap |
-| T2 | 10 | 0.25 s |
-| T3 | 20 | 0.75 s |
-| T4 | 40 | 1.75 s |
+| T2 | 10 | 1 s |
+| T3 | 20 | 3 s |
+| T4 | 40 | 7 s |
 
 T4 reads as a commitment for free, because it costs 8× a Firebolt and therefore takes 8× the mana to pour in. `MANA_FLOW_PER_SEC` (`SpellRegistry`) is the single lever for how a hold *feels*; moving it moves every tier together, which is the point — the ratios between tiers belong to the cost table, not to this constant.
 
@@ -197,7 +197,9 @@ Run live on 2026-08-12, session lock `circle-panels`.
 | Release off-panel | red **10 → 10**, label gone, nothing cast |
 | Leak sweep, 12 start→tier→release/stop cycles | labels 0, orbs 0, motes 0, emitters 0 |
 
-**Still owed:** the feel check, now on two axes. Does a 1.75 s T4 hold read as a commitment or as lag (`MANA_FLOW_PER_SEC`), and does a disc that looks emptier than its numeral read as tension or as a bug (`FILL_RADIUS_EXPONENT`)? Both are expected to move after real play.
+**Feel check, first pass (2026-08-12):** `MANA_FLOW_PER_SEC` moved **20 → 5**, taking T4 from a 1.75 s hold to a 7 s one and T2 from 0.25 s to a full second. The lever did exactly what it exists for — no code, no test and no HUD constant had to move with it, because everything derives from `chargeTimeFor`. Whether 7 s is where it lands is a further play question; a hold that long makes the orb's PvP tell much easier to react to, which is a design consequence and not only a tuning one.
+
+**Still owed:** the other axis — does a disc that looks emptier than its numeral read as tension or as a bug (`FILL_RADIUS_EXPONENT`)?
 
 ## Cross-references
 

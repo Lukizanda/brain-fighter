@@ -296,7 +296,7 @@ Added and shipped 2026-08-12. Full system page: [[systems/ChargeCast]].
 
 **Milestone:** a quick tap is a Firebolt and a held press is a Volley, the panel shows which notch you are at and what it will cost, and a second player can see the orb over your head grow and pop. Verified live in Studio: 15/15 tests, tier clamping at the ceiling on a thin reservoir, a cancelled charge leaving the reservoir untouched, the grey→saturated flip landing exactly on the T2 notch, an orb rendered **from the Client datamodel** on a rig the local player does not own, and zero orphans after 20 charge cycles. *Owed:* the feel check — whether a 1.75 s T4 hold reads as commitment or as lag. `MANA_FLOW_PER_SEC` is expected to move.
 
-> **Since shipped:** the panels in chunk 2 are no longer vertical bars. They are circles that fill from the centre, with the tier notches as concentric rings and the spell name retired. See the follow-up entry in the changelog below and [[systems/ChargeCast]] § What the circle encodes.
+> **Since shipped:** the panels in chunk 2 are no longer vertical bars. They are circles that fill from the centre, with the tier notches as concentric rings; the spell name moved off the panel and onto a label over the charge orb. And the feel check owed above has had its first pass — `MANA_FLOW_PER_SEC` went **20 → 5**, so a T4 is a 7 s hold rather than 1.75 s. See the follow-up entries in the changelog below, [[systems/ChargeCast]] § The charge model and § The name label.
 
 ## Plan changelog
 

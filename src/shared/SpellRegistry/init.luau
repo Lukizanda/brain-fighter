@@ -57,14 +57,14 @@ local NUM_TIERS = #TIER_COSTS
 -- table. Mana *flows* into the charge at a constant rate and the tier
 -- thresholds are the costs directly above, so `chargeTimeFor` is a
 -- division rather than a second set of numbers to keep in sync with the
--- first. At 20/sec that is T1 = 0s (a tap), T2 = 0.25s, T3 = 0.75s,
--- T4 = 1.75s — T4 reads as a commitment for free, because it costs 8× a
--- Firebolt and therefore takes 8× the mana to pour in.
+-- first. At 5/sec that is T1 = 0s (a tap), T2 = 1s, T3 = 3s, T4 = 7s —
+-- T4 reads as a commitment for free, because it costs 8× a Firebolt and
+-- therefore takes 8× the mana to pour in.
 --
 -- This is the single tuning lever for how a hold *feels*. Moving it moves
 -- every tier's timing together, which is the point: the ratios between
 -- tiers are the cost table's business, not this constant's.
-local MANA_FLOW_PER_SEC = 20
+local MANA_FLOW_PER_SEC = 5
 
 -- Red projectile tuning (Firebolt T1, Fireball T2). Inferno (T3) is
 -- instant and Volley (T4) has its own params block; their tuning lives
