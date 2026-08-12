@@ -30,6 +30,8 @@
 --   FillDisc      — solid colour + top-lit ramp, diameter = energy fraction
 --   ChargeReserve — annulus at the fill's outer edge: what release spends
 --   Ring_tN       — ring at TIER_COSTS[n] / FILL_MAX
+--   ReadyBloom /
+--   ReadyGlow     — coloured halo that breathes while the panel can cast
 --   CeilingPulse  — rim halo that breathes at the affordability ceiling
 --   ColorLabel / Numeral — text overlays
 --   TextButton    — press detection (highest ZIndex in the panel)
@@ -78,6 +80,15 @@ export type Handle = {
 
 type TierRing = { frame: Frame, stroke: UIStroke, frac: number }
 
+-- The two strokes of the ready halo, kept together because they are only
+-- ever raised and lowered as one thing.
+type ReadyGlow = {
+	glow: Frame,
+	glowStroke: UIStroke,
+	bloom: Frame,
+	bloomStroke: UIStroke,
+}
+
 local COLOR_ORDER = { "red", "green", "blue" }
 
 -- ZIndex ladder, written down because it has to hold under BOTH
@@ -88,8 +99,9 @@ local Z_FILL_BASE    = 1
 local Z_FILL_DISC    = 2
 local Z_RESERVE      = 3
 local Z_RING         = 4
-local Z_CEILING      = 5
-local Z_TEXT         = 6
+local Z_GLOW         = 5
+local Z_CEILING      = 6
+local Z_TEXT         = 7
 local Z_BUTTON       = 10
 
 local function lightenColor(c: Color3, amount: number): Color3
@@ -182,9 +194,11 @@ function SpellMenuBuilder.build(): Handle
 	local reserveStrokes: { [string]: UIStroke }  = {}
 	local ceilingRings: { [string]: Frame }       = {}
 	local ceilingStrokes: { [string]: UIStroke }  = {}
+	local readyGlows: { [string]: ReadyGlow }     = {}
 	local rings: { [string]: { TierRing } }       = {}
 	local numerals: { [string]: TextLabel }       = {}
 	local litColors: { [string]: Color3 }         = {}
+	local glowColors: { [string]: Color3 }        = {}
 
 	local currentEnergy: { [string]: number } = { red = 0, green = 0, blue = 0 }
 	-- Highest tier this reservoir can pay for right now. 0 = below T1.
@@ -293,6 +307,45 @@ function SpellMenuBuilder.build(): Handle
 		end
 		rings[color] = colorRings
 
+		-- ReadyBloom / ReadyGlow: the "this one is loaded" halo. Built as two
+		-- strokes so the edge reads as light rather than as a border — the
+		-- bloom is a wide faint wash inset inside the rim, the glow a crisp
+		-- line sitting on it. Only the glow bleeds outward, and only by its
+		-- own thickness, which is what keeps two lit neighbours out of each
+		-- other's BUTTON_GAP.
+		local glowColor = lightenColor(bgColor, Defaults.READY_GLOW_LIGHTEN)
+		glowColors[color] = glowColor
+
+		local bloomRing, bloomStroke = makeRing(
+			"ReadyBloom",
+			glowColor,
+			Defaults.READY_BLOOM_THICKNESS,
+			1,
+			Z_GLOW,
+			panel
+		)
+		local bloomInset = Defaults.READY_BLOOM_THICKNESS * 2
+		bloomRing.Size = UDim2.new(1, -bloomInset, 1, -bloomInset)
+		bloomRing.Visible = false
+
+		local glowRing, glowStroke = makeRing(
+			"ReadyGlow",
+			glowColor,
+			Defaults.READY_GLOW_THICKNESS,
+			1,
+			Z_GLOW,
+			panel
+		)
+		glowRing.Size = UDim2.fromScale(1, 1)
+		glowRing.Visible = false
+
+		readyGlows[color] = {
+			glow = glowRing,
+			glowStroke = glowStroke,
+			bloom = bloomRing,
+			bloomStroke = bloomStroke,
+		}
+
 		-- CeilingPulse: rim halo that breathes when a held charge has topped
 		-- out. Inset by twice its thickness so the stroke's outer edge lands
 		-- exactly on the panel rim instead of bleeding into the gap.
@@ -376,6 +429,9 @@ function SpellMenuBuilder.build(): Handle
 	local vfxTweens: { Tween } = {}
 	local connections: { RBXScriptConnection } = {}
 	local ceilingTweens: { [string]: Tween } = {}
+	-- Both strokes of one panel's halo. Started on the same frame with the
+	-- same TweenInfo, so they stay in phase without being driven together.
+	local readyTweens: { [string]: { Tween } } = {}
 
 	------------------------------------------------------------------
 	-- Charge visuals
@@ -446,6 +502,40 @@ function SpellMenuBuilder.build(): Handle
 		end
 	end
 
+	local function stopReadyGlow(color: string)
+		local existing = readyTweens[color]
+		if not existing then return end
+		for _, t in existing do
+			t:Cancel()
+		end
+		readyTweens[color] = nil
+
+		local parts = readyGlows[color]
+		parts.glowStroke.Transparency = 1
+		parts.bloomStroke.Transparency = 1
+		parts.glow.Visible = false
+		parts.bloom.Visible = false
+	end
+
+	local function startReadyGlow(color: string)
+		if readyTweens[color] then return end
+		local parts = readyGlows[color]
+		parts.glow.Visible = true
+		parts.bloom.Visible = true
+		parts.glowStroke.Transparency = Defaults.READY_GLOW_DIM
+		parts.bloomStroke.Transparency = Defaults.READY_BLOOM_DIM
+
+		local glowTween = TweenService:Create(parts.glowStroke, Defaults.READY_GLOW_TWEEN, {
+			Transparency = Defaults.READY_GLOW_BRIGHT,
+		})
+		local bloomTween = TweenService:Create(parts.bloomStroke, Defaults.READY_GLOW_TWEEN, {
+			Transparency = Defaults.READY_BLOOM_BRIGHT,
+		})
+		glowTween:Play()
+		bloomTween:Play()
+		readyTweens[color] = { glowTween, bloomTween }
+	end
+
 	local function stopCeilingPulse(color: string)
 		local existing = ceilingTweens[color]
 		if existing then
@@ -488,6 +578,21 @@ function SpellMenuBuilder.build(): Handle
 
 	local press: Press? = nil
 	local heartbeatConn: RBXScriptConnection? = nil
+
+	-- One predicate rather than start/stop calls scattered through the
+	-- press handlers: the halo means "you could press this", which stops
+	-- being information the instant you do press it, and while a charge is
+	-- held the rim belongs to the ceiling pulse. Both start and stop are
+	-- idempotent, so every state change can just call this and let it
+	-- settle.
+	local function refreshReadyGlow(color: string)
+		local held = press ~= nil and press.color == color
+		if wasAffordable[color] and not held then
+			startReadyGlow(color)
+		else
+			stopReadyGlow(color)
+		end
+	end
 
 	local function applyChargeVisual(color: string, tier: number)
 		local pendingCost = pendingCostFor(tier)
@@ -569,6 +674,7 @@ function SpellMenuBuilder.build(): Handle
 	local function beginPress(color: string)
 		if press then return end
 		press = { color = color, startClock = os.clock(), tier = 0, started = false }
+		refreshReadyGlow(color)
 		stopHeartbeat()
 		heartbeatConn = RunService.Heartbeat:Connect(evaluateCharge)
 		-- Evaluate on the press frame, not on the next Heartbeat: T1's charge
@@ -602,6 +708,10 @@ function SpellMenuBuilder.build(): Handle
 
 		local color = p.color
 		clearChargeVisual(color)
+		-- `press` is already nil above, so this re-raises the halo if the
+		-- panel is still castable. If the release spent the reservoir dry it
+		-- comes straight back down on the next setReservoirs.
+		refreshReadyGlow(color)
 
 		if p.tier >= 1 and isOverPanel(color, screenPos) then
 			castEvent:Fire(color, p.tier)
@@ -695,6 +805,8 @@ function SpellMenuBuilder.build(): Handle
 				table.insert(vfxTweens, baseTween)
 			end
 
+			refreshReadyGlow(color)
+
 			-- Keep the numeral and the reserve band honest against the new
 			-- energy, including for a colour being held right now.
 			local pendingCost = if press and press.color == color then pendingCostFor(press.tier) else 0
@@ -770,6 +882,12 @@ function SpellMenuBuilder.build(): Handle
 			t:Cancel()
 		end
 		table.clear(ceilingTweens)
+		for _, pair in readyTweens do
+			for _, t in pair do
+				t:Cancel()
+			end
+		end
+		table.clear(readyTweens)
 		for _, t in vfxTweens do
 			t:Cancel()
 		end

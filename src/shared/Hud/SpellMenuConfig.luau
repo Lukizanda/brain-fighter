@@ -183,6 +183,43 @@ local SpellMenuConfig = {
 		true
 	),
 
+	-- ── Ready glow ────────────────────────────────────────────────────
+	-- A panel that can afford at least T1 breathes a coloured halo at its
+	-- rim. The desaturation above already says "this one is dead"; nothing
+	-- said "this one is loaded, press it", and a *negative* cue is the
+	-- weaker half of the pair — grey only reads as grey once you have a lit
+	-- panel next to it to compare against, which is exactly the case that
+	-- does not hold when all three are drained or all three are full.
+	--
+	-- Two strokes rather than one, because a single UIStroke is a hard line
+	-- and reads as a border — a thing the panel *has* — where a crisp edge
+	-- over a soft inner bloom reads as light coming off it. Both breathe on
+	-- one tween each, in phase.
+	--
+	-- Deliberately slow. The ceiling pulse below is 0.42s and means "act
+	-- now, this is as big as it gets"; at ~1.2s this one is an idle
+	-- heartbeat that should never compete with it for attention. The two
+	-- never share the rim anyway — the glow is suppressed for whichever
+	-- colour is being pressed.
+	READY_GLOW_LIGHTEN         = 70,
+	READY_GLOW_THICKNESS       = 4,
+	READY_GLOW_DIM             = 0.62,
+	READY_GLOW_BRIGHT          = 0.05,
+	-- The inner bloom: thicker, fainter, and inset so it stays inside the
+	-- rim. Keeping it inward-facing is what stops the halo eating BUTTON_GAP
+	-- — only the 4px crisp stroke bleeds outward, so two adjacent lit panels
+	-- still have 2px of air between them.
+	READY_BLOOM_THICKNESS      = 10,
+	READY_BLOOM_DIM            = 1,
+	READY_BLOOM_BRIGHT         = 0.72,
+	READY_GLOW_TWEEN = TweenInfo.new(
+		1.2,
+		Enum.EasingStyle.Sine,
+		Enum.EasingDirection.InOut,
+		-1,
+		true
+	),
+
 	-- UI VFX tweens
 	AFFORD_BOUNCE_TWEEN = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 	AFFORD_BOUNCE_SCALE = 1.08,
