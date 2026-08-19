@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local BlockSpawner = require(ReplicatedStorage.Shared.BlockSpawner)
+local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 
 local log = Logger.new("BlockSpawnerService")
 
@@ -39,10 +40,19 @@ local function resolveSpawnOpts(): BlockSpawner.Opts
 		log:warn(string.format("No parts tagged '%s' found — using default spawn box", SPAWN_VOLUME_TAG))
 	end
 
+	-- Derived from the prefab's real geometry rather than configured in
+	-- studs, so it can never fall out of step with GameConfig.BLOCK_SCALE
+	-- the way the old BLOCK_MIN_SPACING literal did.
+	local minSpacing = LetterBlocks.tumbleDiameter() * GameConfig.BLOCK_SPACING_CLEARANCE
+	log:info(string.format(
+		"block spacing: %.2f studs (tumble diameter %.2f x clearance %.2f)",
+		minSpacing, LetterBlocks.tumbleDiameter(), GameConfig.BLOCK_SPACING_CLEARANCE
+	))
+
 	return {
 		boxes = if #boxes > 0 then boxes else nil,
 		density = GameConfig.BLOCK_SPAWN_DENSITY,
-		minSpacing = GameConfig.BLOCK_MIN_SPACING,
+		minSpacing = minSpacing,
 		respawnDelay = GameConfig.BLOCK_RESPAWN_DELAY,
 	}
 end

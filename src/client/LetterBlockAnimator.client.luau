@@ -37,11 +37,25 @@ local N_BUCKETS             = 4
 
 local BOB_AMPLITUDE_STUDS = 0.5
 local BOB_PERIOD_SECONDS = 1.5
-local ROTATION_DEGREES_PER_SECOND = 6
+
+-- Was 6 deg/s, which is a full turn per minute -- slow enough that the
+-- eye does not register it as motion at all, so a field of blocks read
+-- as static scenery.
+local ROTATION_DEGREES_PER_SECOND = 28
+
+-- ...and about a tilted axis rather than straight Y. A vertical spin
+-- sweeps the same four side faces past the camera forever and keeps the
+-- top and bottom permanently hidden; tilting it tumbles the block, so
+-- every face takes a turn and the lighting changes across them as it
+-- goes. The azimuth of the tilt is rolled per block, for the same
+-- reason the bob phase is: a field turning on one shared axis reads as
+-- a mechanism.
+local SPIN_TILT_DEGREES = 20
 
 local TAU = math.pi * 2
 local BOB_FREQUENCY = TAU / BOB_PERIOD_SECONDS
 local ROTATION_RADIANS_PER_SECOND = math.rad(ROTATION_DEGREES_PER_SECOND)
+local SPIN_TILT_RADIANS = math.rad(SPIN_TILT_DEGREES)
 
 ----------------------------------------------------------------------
 -- Spawn-in intro tunables
@@ -118,9 +132,22 @@ type State = {
 	basePosition: Vector3,
 	phaseOffset: number,
 	rotation: number,
+	spinAxis: Vector3,
 	bucket: number,
 	intro: Intro?,
 }
+
+-- Unit vector SPIN_TILT_DEGREES off vertical, at a random compass
+-- bearing. Rolled once at track time so a block's tumble is a stable
+-- trait rather than something that rerolls mid-life.
+local function randomSpinAxis(): Vector3
+	local azimuth = math.random() * TAU
+	return Vector3.new(
+		math.sin(SPIN_TILT_RADIANS) * math.cos(azimuth),
+		math.cos(SPIN_TILT_RADIANS),
+		math.sin(SPIN_TILT_RADIANS) * math.sin(azimuth)
+	)
+end
 
 local trackedBlocks: { [Model]: State } = {}
 
@@ -154,6 +181,11 @@ local function collectFades(block: Model): { FadeTarget }
 	-- The letter glyph is a TextLabel per cube face. Stroke fades with
 	-- the text; leaving it opaque would draw a black outline around an
 	-- invisible letter.
+	--
+	-- The face border (a UIStroke per SurfaceGui, see LetterBlocks) has
+	-- the same failure at block scale: it is not a Transparency the
+	-- Cube fade reaches, so an unfaded one draws a full-opacity dark
+	-- wireframe box around a block that has not arrived yet.
 	for _, descendant in ipairs(block:GetDescendants()) do
 		if descendant:IsA("TextLabel") then
 			table.insert(fades, {
@@ -165,6 +197,22 @@ local function collectFades(block: Model): { FadeTarget }
 				instance = descendant,
 				property = "TextStrokeTransparency",
 				finalValue = descendant.TextStrokeTransparency,
+			})
+		elseif descendant:IsA("UIStroke") then
+			table.insert(fades, {
+				instance = descendant,
+				property = "Transparency",
+				finalValue = descendant.Transparency,
+			})
+		elseif descendant:IsA("Frame") then
+			-- The face panel is an opaque plate and would otherwise hang
+			-- in the air through the whole intro. Captured rather than
+			-- assumed: the border Frame is also a Frame and is authored
+			-- fully transparent, so it lerps 1 -> 1 and stays a no-op.
+			table.insert(fades, {
+				instance = descendant,
+				property = "BackgroundTransparency",
+				finalValue = descendant.BackgroundTransparency,
 			})
 		end
 	end
@@ -253,6 +301,7 @@ local function track(block: Instance, withIntro: boolean)
 		basePosition = block:GetPivot().Position,
 		phaseOffset = math.random() * BOB_PERIOD_SECONDS,
 		rotation = 0,
+		spinAxis = randomSpinAxis(),
 		bucket = math.random(0, N_BUCKETS - 1),
 		intro = intro,
 	}
@@ -332,7 +381,7 @@ RunService.Heartbeat:Connect(function(dt)
 				local bobOffset = math.sin((now + state.phaseOffset) * BOB_FREQUENCY) * BOB_AMPLITUDE_STUDS
 				block:PivotTo(
 					CFrame.new(state.basePosition + Vector3.new(0, bobOffset, 0))
-					* CFrame.Angles(0, state.rotation, 0)
+					* CFrame.fromAxisAngle(state.spinAxis, state.rotation)
 				)
 			end
 		else

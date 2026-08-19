@@ -247,24 +247,58 @@ end
 -- Spawn / track helpers
 ----------------------------------------------------------------------
 
-local function spawnOne(): Model
-	local cf = pickCFrame()
+-- Rejection sampling, but keeping the roomiest candidate seen rather
+-- than the last one rolled.
+--
+-- The previous loop re-rolled on collision and, when every attempt
+-- collided, fell through and spawned at the LAST rejected position --
+-- which is an arbitrary failing candidate, not the least-bad one, and
+-- it did so silently. That made a too-dense arena indistinguishable
+-- from a healthy one right up until blocks visibly interpenetrated.
+--
+-- Now a spacing failure degrades to "as far from its neighbours as 20
+-- rolls could manage" and says so in the log.
+local function pickSpacedCFrame(): CFrame
 	local minDist = resolvedOpts.minSpacing
-	if minDist > 0 then
-		for _ = 1, MAX_SPAWN_ATTEMPTS do
-			local clear = true
-			for block in active do
-				if (cf.Position - block:GetPivot().Position).Magnitude < minDist then
-					clear = false
-					break
-				end
+	if minDist <= 0 then
+		return pickCFrame()
+	end
+
+	local best = pickCFrame()
+	local bestClearance = -1
+
+	for attempt = 1, MAX_SPAWN_ATTEMPTS do
+		local cf = if attempt == 1 then best else pickCFrame()
+
+		-- Distance to the nearest existing block. Stays math.huge on an
+		-- empty arena, which clears the check on the first attempt.
+		local clearance = math.huge
+		for block in active do
+			local d = (cf.Position - block:GetPivot().Position).Magnitude
+			if d < clearance then
+				clearance = d
 			end
-			if clear then
-				break
-			end
-			cf = pickCFrame()
+		end
+
+		if clearance >= minDist then
+			return cf
+		end
+		if clearance > bestClearance then
+			best = cf
+			bestClearance = clearance
 		end
 	end
+
+	log:warn(string.format(
+		"no clear spawn point in %d attempts — wanted %.1f studs, best was %.1f. "
+			.. "Arena is too dense for %d blocks; lower BLOCK_SPAWN_DENSITY or add spawn volume.",
+		MAX_SPAWN_ATTEMPTS, minDist, bestClearance, resolvedOpts.targetCount
+	))
+	return best
+end
+
+local function spawnOne(): Model
+	local cf = pickSpacedCFrame()
 	-- A wildcard's color is fixed to gold rather than rolled, so it can't
 	-- masquerade as a reservoir color the player might be hunting for.
 	local letter = pickLetter()

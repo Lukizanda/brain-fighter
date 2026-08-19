@@ -1,7 +1,7 @@
 ---
 type: system
 description: Floating letter-block prefab — the in-world entity the player shoots to spell words. Spawn API, color tints, CollectionService tag for the animator, and the spawn-in intro.
-updated: 2026-08-08
+updated: 2026-08-20
 ---
 
 # LetterBlock
@@ -36,10 +36,13 @@ The Cube properties: `Size = 4×4×4`, `Anchored = true`, `CanCollide = false`, 
 
 - `src/shared/LetterBlocks/init.luau` — module: spawn / applyVisualState / constants.
 - `src/shared/LetterBlocks/Template/init.meta.json` — Template Model, `ignoreUnknownInstances`, default attributes (`Block.Letter = "A"`, `Block.Color = "red"`).
-- `src/client/LetterBlockAnimator.client.luau` — CollectionService Heartbeat loop: bob 0.5 studs / 1.5 s period, Y-axis rotation 6 deg/s, per-block phase offset, distance-bucketed culling, and the spawn-in intro.
+- `src/client/LetterBlockAnimator.client.luau` — CollectionService Heartbeat loop: bob 0.5 studs / 1.5 s period, tumble 28 deg/s about an axis tilted 20° off vertical, per-block phase offset and tilt bearing, distance-bucketed culling, and the spawn-in intro.
 - `BrainFighter.rbxl` (not under Rojo) — holds the MCP-created Cube + SurfaceGuis + ParticleEmitter children of `Template`. Saving the `.rbxl` is what persists them.
 
-## Behavioural verification (2026-05-14 playtest)
+## Behavioural verification (2026-05-14 playtest — superseded)
+
+> The yaw figures below are **historical**. The animator span the block about Y at 6 deg/s until 2026-08-20; it now tumbles at 28 deg/s about a tilted axis. See § Face treatment and tumble.
+
 
 Spawned a block at `(0, 12, 0)` via MCP `execute_luau`, sampled `block:GetPivot()` at three timestamps:
 
@@ -81,6 +84,40 @@ Wired into the Cube's `Color`, every SurfaceGui-driven label tint, and the Parti
 The face label goes through `Wildcard.toDisplay(letter)`, so a wildcard's stored `*` renders as `★` while every other letter passes through uppercased.
 
 **These tints are not usable as an outline colour on the block itself.** The Phase 5.7 hover affordance tried it and the highlight was invisible: an outline drawn in the block's own tint has no contrast against the block, and it fails for all four tints simultaneously because each tint *is* the colour of the block wearing it. Anything that has to read *against* a block needs an off-palette colour — the hover outline uses white. See [[systems/BlockShoot]] § Hover affordance.
+
+Refined 2026-08-20: the constraint is on *value*, not on hue. A tint driven far enough toward black (72 % for the face border, 84 % for the panel) reads fine against its own block and keeps colour identity — a red block's edge is deep maroon, not the same black as a blue one's. What is unusable is the tint at full saturation. Note the remaining budget: white and grey are spoken for by the hover and out-of-reach cues, so any *permanent* mark on a block has to be dark, or it steals the hover cue's only channel.
+
+## Face treatment and tumble (2026-08-20)
+
+Blocks read as flat floating swatches: a saturated cube has no silhouette against the skybox, and a white glyph on a saturated fill loses to the fill. Four changes, all driven from `applyVisualState` so they are versioned in Rojo rather than authored into the `.rbxl` Template.
+
+**Border.** A `UIStroke` (12 px) inside each face SurfaceGui, coloured with the block's tint driven 72 % to black. *Not* a `Highlight` per block — the engine renders a bounded number (~31) and the arena holds 40, the same budget that makes [[systems/BlockShoot|BlockTapController]]'s hover highlight a reused singleton. A face the camera cannot see is not drawn, so what renders is exactly the visible silhouette.
+
+**Panel + glyph inversion.** A dark plate (tint → 84 % black) inset in each face, with the glyph lightened toward white by 75 % instead of plain white — a red block's letter reads hot red, a blue one's icy blue. The cube body deliberately stays saturated: darkening it would collapse body and border to the same value, and the border cannot be lightened to compensate because white and grey are the hover and out-of-reach cues. The surviving colour ring between panel and border is what still reads once the glyph is too small to resolve.
+
+**Value tell.** The `Mana` emitter's rate (6 → 26) and spark size (0.24 → 0.62) scale continuously with `EnergyEconomy.letterValue`, so a Q looks worth ten times an E. Continuous rather than banded into rarity tiers — the Scrabble values already are the scale, and a threshold here would invent a second one free to drift. `letterValue` returns **0** for a wildcard (it has no fixed value); `tellValueFor` pins it to the maximum instead, or the most valuable block in the arena would render as the dullest.
+
+**Tumble.** 6 deg/s → **28 deg/s**, about an axis tilted 20° off vertical with a per-block bearing. A vertical spin sweeps the same four side faces past the camera forever and keeps top and bottom permanently hidden; a tilted one gives every face a turn. The bearing is rolled once at track time, like the bob phase, so a field does not turn as one mechanism.
+
+### Two engine facts this depends on
+
+`Model:ScaleTo` treats these properties differently, and the difference is load-bearing:
+
+| Property | Scaled by `ScaleTo`? | Consequence |
+|---|---|---|
+| `SurfaceGui.PixelsPerStud` | yes, **inversely** (50 → 33.3 at 1.5×) | face canvas is a constant 200×200 px at any `BLOCK_SCALE` |
+| `UIStroke.Thickness`, `UDim` offsets | no | border thickness needs no scale correction |
+| `ParticleEmitter.Size` | yes (it is a length) | spark size **must** be multiplied by the current scale |
+
+`spawn()` applies the visual state *before* scaling, so `applyValueTell` takes `block:GetScale()`: at spawn it is 1 and `ScaleTo` multiplies afterwards; on an idempotent re-apply the block is already scaled and nothing multiplies again. Writing the bare constant would make a re-applied block's sparks shrink by `BLOCK_SCALE` against a freshly spawned one.
+
+`LetterBlocks.tumbleDiameter()` (`edge × BLOCK_SCALE × √3` = 10.39 studs shipped) exists because [[systems/BlockSpawner]] needs the sweep radius for spacing. It lives here because it is a fact about the prefab's geometry — see that page for the overlap bug the old hand-set constant caused.
+
+### Costs and open questions
+
+The arena now carries **1,200 GUI instances** (240 SurfaceGui + 480 Frame + 240 UIStroke + 240 TextLabel). Render cost is **unmeasured**: an in-Studio A/B read 15.0 fps with decor on, decor hidden, and *every SurfaceGui disabled*, so the test was floor-limited and had no resolution. Needs a real client.
+
+One frame during verification showed a face rendering without its border or panel. All six faces verify as populated and `Enabled`, and face-on renders correctly, so it is a render-side drop rather than missing data — Roblox does budget SurfaceGui rendering and 240 is a lot. If faces drop in play, the lever is decorating fewer faces per block.
 
 ## CollectionService tag → animator
 

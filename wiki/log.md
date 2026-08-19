@@ -1472,3 +1472,27 @@ Verified by client screenshot across all three states, including the cast-dry ca
 Answering the question the previous entry left owed. Rather than pulling the dead value back from 0.88, the split moved wholesale: castable 0.72 -> **0.50**, dead 0.88 -> **0.72**. The old single value becomes the *dead* one and the castable state gets heavier instead.
 
 Better than softening 0.88 would have been. The split widens (0.22 against 0.16) while nothing is ever fainter than it was before the split existed, so the gain is bought by making live panels more present rather than by hiding dead ones — which matters because a dead panel is still a live press target. Two constants, no behaviour change.
+
+## [2026-08-20] ingest | Letter blocks got a face, and stopped overlapping
+
+Two pieces of one session: a polish pass on the blocks, and the overlap bug the polish exposed.
+
+**The face.** Blocks read as flat floating swatches — a saturated cube has no silhouette against the skybox, and a white glyph on a saturated fill loses to the fill. Four changes, all driven from `applyVisualState` so they are versioned in Rojo rather than authored into the `.rbxl` Template, which is where the Cube and its six SurfaceGuis already live and drift.
+
+A `UIStroke` border per face, deliberately **not** a `Highlight` per block: the engine renders a bounded number (~31) against an arena of 40, which is the same budget that already forced `BlockTapController` to keep one reused hover highlight. A dark inset panel behind the glyph, with the glyph lightened toward white rather than plain white, so a red block's letter reads hot red. And a value tell — the mana emitter's rate and spark size scale continuously with `EnergyEconomy.letterValue`, so a Q looks worth ten times an E and scanning the arena becomes a decision rather than a hunt.
+
+Three things pinned by measurement rather than assumption. `Model:ScaleTo` scales `SurfaceGui.PixelsPerStud` **inversely**, so a face canvas is a constant 200 px at any `BLOCK_SCALE` and the border thickness needs no correction — but it *does* scale `ParticleEmitter.Size`, and `spawn()` applies visuals before scaling, so `applyValueTell` takes the current scale or a re-applied block's sparks shrink by `BLOCK_SCALE` against a fresh one. `letterValue` returns 0 for a wildcard, which would have rendered the most valuable block in the arena as the dullest. And the intro fade had to learn about `UIStroke.Transparency` and `Frame.BackgroundTransparency`, or a refilling block flashes an opaque plate and wireframe before it arrives.
+
+Corrected on `systems/LetterBlock` while there: the standing rule that the palette tints are unusable as an outline colour is about *value*, not hue — driven far enough toward black they read fine and keep colour identity. The real remaining constraint is that white and grey belong to the hover and out-of-reach cues, so any permanent mark on a block must be dark or it steals the hover cue's only channel.
+
+**The overlap.** User reported blocks interpenetrating and worsening over time. Two bugs compounding. `BLOCK_MIN_SPACING` was a literal 4 studs guarding 6-stud blocks — `BLOCK_SCALE = 1.5` had made the 4×4×4 template 6 wide, and `BLOCK_SCALE`'s own comment asked whoever changed it to update the spacing by hand. That coupling broke silently the first time it moved. Spacing is now derived: `LetterBlocks.tumbleDiameter()` returns the cube's circumsphere (`edge × BLOCK_SCALE × √3`), and `BLOCK_SPACING_CLEARANCE` is a multiplier that cannot drift out of step with block size.
+
+The second bug is the more interesting one. The retry loop re-rolled on collision and, when every attempt collided, fell through and spawned at the **last rejected** position — an arbitrary failing candidate rather than the least-bad one, and silently. A too-dense arena was indistinguishable from a healthy one right until blocks visibly overlapped. `pickSpacedCFrame` now keeps the roomiest candidate seen and warns on exhaustion, naming the lever. The general shape: a fallback that picks the *last* thing it tried is a fallback with no opinion, and one that does not log is a bug that reports itself as working.
+
+Worth recording honestly that the tumble caused the report. A Y-only spin sweeps a cylinder needing ~8.5 studs; a tilted tumble sweeps the full circumsphere at 10.39. The bug predated the change, but widening the requirement is what made it visible.
+
+Verified on the server VM across all 780 pairs, then 60 blocks churned through the refill path (destroy half, wait out the 3 s cooldown, re-survey, ×3): zero pairs inside the required clearance on every round, closest 10.63–11.51 studs, no density warnings. Headroom was never the constraint — 397,600 cu studs holding 40 blocks is 6 % fill.
+
+**Owed:** render cost is unmeasured. The arena now carries 1,200 GUI instances, and an in-Studio A/B read exactly 15.0 fps with decor on, decor hidden, and *every* SurfaceGui disabled — a floor-limited test with no resolution, not a clean result. One frame also showed a face rendering without its border while all six verified as populated and enabled, which points at Roblox's SurfaceGui render budget. Both need a real client.
+
+Pages touched: [[systems/LetterBlock]], [[systems/BlockSpawner]], [[index]].

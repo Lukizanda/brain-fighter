@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server-side letter-block populator — maintains a target count of floating LetterBlocks in the arena with Scrabble-weighted letter distribution, configurable color weights, and a per-block respawn cooldown.
-updated: 2026-08-08
+updated: 2026-08-20
 ---
 
 # BlockSpawner
@@ -47,7 +47,7 @@ type Opts = {
         blue: number?,
     }?,
     parent: Instance?,           -- default workspace
-    minSpacing: number?,         -- minimum studs between block centers; 0 disables (see GameConfig.BLOCK_MIN_SPACING)
+    minSpacing: number?,         -- minimum studs between block centers; 0 disables. BlockSpawnerService derives it from LetterBlocks.tumbleDiameter() × GameConfig.BLOCK_SPACING_CLEARANCE
     respawnDelay: number?,       -- seconds before a consumed block is replaced; 0 refills next frame (see GameConfig.BLOCK_RESPAWN_DELAY)
 }
 ```
@@ -92,6 +92,31 @@ The `activeCount >= targetCount` bound is what makes a stale timer harmless: one
 
 Raising the delay thins the arena under sustained fire: steady-state missing blocks ≈ delay × kills-per-second. At 3 s and roughly one kill per second, that is ~3 blocks short of target — barely visible against ~40. A much longer cooldown is a scarcity mechanic, not just polish, and should be tuned against [[design/gameplay-loop]]'s spellability heuristic.
 
+### Spacing (fixed 2026-08-20)
+
+Blocks were visibly interpenetrating, and worsening as the arena churned. Two bugs compounded.
+
+**The threshold was smaller than a block.** `GameConfig.BLOCK_MIN_SPACING` was a literal `4` studs while `BLOCK_SCALE = 1.5` made blocks 6 studs wide, so the check passed on pairs that were plainly overlapping. `BLOCK_SCALE`'s own comment asked whoever changed it to update the spacing by hand — a coupling that broke silently the first time it moved.
+
+Spacing is now **derived from the prefab's geometry**: `LetterBlocks.tumbleDiameter()` returns the cube's circumsphere, `edge × BLOCK_SCALE × √3` (10.39 studs at the shipped scale). Two blocks that far apart cannot intersect at *any* orientation. `BLOCK_MIN_SPACING` is retired; `GameConfig.BLOCK_SPACING_CLEARANCE` is a **multiplier** on that diameter, which cannot drift out of step with block size the way a stud literal did.
+
+Why the circumsphere and not the 6-stud edge: [[systems/LetterBlock]]'s animator tumbles blocks on a tilted axis, so a block sweeps a sphere rather than a cylinder. The tumble change raised the required clearance from ~8.5 studs to 10.39 and is what made the latent bug visible.
+
+**The retry loop failed silently in the worst way.** After `MAX_SPAWN_ATTEMPTS` collisions it fell through and spawned at the *last rejected* position — an arbitrary failing candidate, not the least-bad one — with no log. A too-dense arena was indistinguishable from a healthy one until you could see the overlap. `pickSpacedCFrame` now keeps the roomiest candidate seen and warns on exhaustion, naming `BLOCK_SPAWN_DENSITY` as the lever.
+
+Headroom was never the constraint: the shipped arena is 397,600 cu studs holding 40 blocks — 6% fill even at full tumble clearance.
+
+**Verified 2026-08-20** on the server VM, all 780 pairs measured, then 60 blocks churned through the refill path (destroy half, wait out the 3 s cooldown, re-survey ×3):
+
+| | blocks | pairs closer than 10.39 | closest pair |
+|---|---|---|---|
+| initial fill | 40 | 0 | 10.96 |
+| after 20 refills | 40 | 0 | 10.63 |
+| after 40 refills | 40 | 0 | 11.04 |
+| after 60 refills | 40 | 0 | 11.51 |
+
+No density warnings fired across all 60 spawns.
+
 ### Random yaw on spawn
 
 Each block spawns with a random initial Y-axis rotation so a cluster doesn't look grid-aligned before the client animator's per-block phase offset kicks in.
@@ -104,7 +129,7 @@ Each block spawns with a random initial Y-axis rotation so a cluster doesn't loo
 | Density | 2 blocks per 1000 studs³ | `GameConfig.BLOCK_SPAWN_DENSITY` |
 | Arena box | 40×8×40 studs, Y 8–16 (reference) | `BlockSpawnVolume` tagged parts |
 | Color weights | uniform (1, 1, 1) | gameplay-loop § Spawner |
-| Min spacing | 4 studs between block centers | `GameConfig.BLOCK_MIN_SPACING` |
+| Min spacing | derived — 10.39 studs at `BLOCK_SCALE = 1.5` | `LetterBlocks.tumbleDiameter()` × `GameConfig.BLOCK_SPACING_CLEARANCE` |
 | Respawn cooldown | 3 s per consumed block | `GameConfig.BLOCK_RESPAWN_DELAY`; `0` refills next frame |
 | Wildcard frequency | `4` → 4/102 ≈ 3.9% | `WILDCARD_FREQUENCY` in `BlockSpawner/init.luau`; `0` disables |
 

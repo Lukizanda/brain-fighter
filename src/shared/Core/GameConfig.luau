@@ -58,8 +58,23 @@ local GameConfig = {
 	-- Default 2 ≈ 26 blocks in the 40×8×40 reference arena.
 	----------------------------------------------------------------------
 	BLOCK_SPAWN_DENSITY = 0.1,
-	BLOCK_MIN_SPACING = 4,            -- minimum studs between block centers; 0 disables
-	BLOCK_SCALE = 1.5,                -- uniform scale multiplier on the 4×4×4 template (e.g. 0.5 = 2 studs, 2 = 8 studs); increase BLOCK_MIN_SPACING proportionally when scaling up
+	BLOCK_SCALE = 1.5,                -- uniform scale multiplier on the 4×4×4 template (e.g. 0.5 = 2 studs, 2 = 8 studs)
+
+	----------------------------------------------------------------------
+	-- Minimum spacing between block centres, as a multiple of the sphere
+	-- a block sweeps while it tumbles (LetterBlocks.tumbleDiameter).
+	--
+	-- 1.0 = two blocks can never visibly intersect at any orientation.
+	-- Below 1.0 they may clip while turning; below ~0.58 they overlap
+	-- even sitting still. 0 disables the spacing check entirely.
+	--
+	-- Expressed as a multiplier rather than in studs on purpose. This was
+	-- a literal 4 studs while BLOCK_SCALE made the blocks 6 studs wide,
+	-- so the check passed on pairs that were plainly interpenetrating —
+	-- a hand-maintained coupling that broke the first time BLOCK_SCALE
+	-- moved. A multiplier cannot drift out of step with the block size.
+	----------------------------------------------------------------------
+	BLOCK_SPACING_CLEARANCE = 1,
 	BLOCK_RESPAWN_DELAY = 3,          -- seconds between a block being consumed and its replacement spawning; 0 refills on the next frame. Each consumed block is replaced independently, so N rapid kills come back staggered the same way they went out. Raising this thins the arena under sustained fire — steady-state missing blocks ≈ delay × kills-per-second.
 
 	----------------------------------------------------------------------
