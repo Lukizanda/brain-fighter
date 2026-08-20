@@ -1522,3 +1522,17 @@ Pages touched: [[systems/LetterBlock]], [[index]].
 ## [2026-08-20] ingest | Phase 6 planned — lobby & PvE/PvP mode selection
 
 Design pass with the user on a welcome lobby, prompted by wanting a PvP mode. New page `design/lobby.md`; Phase 6 + changelog entry added to `design/build-plan.md`; index updated. The finding: mode choice is a **session-container** problem, not UI — `GameModeService`/`RoundManager` are a server-wide singleton and `BlockSpawner` pools every `BlockSpawnVolume` globally, so two groups can't be in different modes at once. Decided: hub place with in-place arena zones (multi-place rejected — cross-place identity needs the unbuilt Phase 5.5 persistence; whole-server vote rejected — makes PvE hostage to PvP), co-op queued PvE with `minPlayers = 1`, 1v1 duels on a 2-pad pool, diegetic portals with live queue counts over a menu screen. Also pinned a trap worth not rediscovering: **`PLAYER_VS_PLAYER_ENABLED` does not gate spell damage** — spells write `Humanoid.Health` directly and bypass `applyDamage`, so 5.1's deferred split-brain unification is a Phase 6 prerequisite. Stage 5 (duels) gated behind Phase 5.4; stages 1–4 aren't. No code written.
+
+## [2026-08-20] ingest | Phase 6 stage 1 — RoundManager becomes per-session
+
+`RoundManager` moved from a server-wide singleton (state in file-locals, module-table API) to `RoundManager.new(deps)` with `arenaId` and a roster, plus the project's `:disable()` / `:destroy()` pair. `GameModeService` is now a session manager: it owns `sessions[arenaId]` and `playerSessions[player]`, creates exactly one `Default` session at boot, and its two `RoundManager.isActive()` calls became an `isPlayerRoundActive(player)` lookup. Pure refactor — one `NoOp` session, whole server, no observable change.
+
+The reason the refactor exists went in with it: `broadcastState` was `FireAllClients`, which with N sessions hands a duellist the boss arena's round state. It now iterates the session roster and `FireClient`s each member; `waitForPlayers` gates on roster count instead of `#Players:GetPlayers()`. Payload shape deliberately untouched — `GameStateGui` / `RoundTimerGui` / `DeathScreenGui` are out of scope.
+
+Also resolved the `task.cancel(roundThread)` question the brief raised: it is dropped. It was redundant with the `running` flag (every await is a `task.wait` behind a liveness check) and strictly worse — `task.cancel` errors on an already-finished thread, which the old `stop()` could reach because it never cleared `roundThread` on natural exit, and would error if a mode callback re-entered from the round thread. A `_generation` counter replaces the one thing cancel bought: no overlap between a winding-down loop and an immediate `start()`.
+
+Verified by Studio playtest — clean boot, `[RoundManager] [Default] Session created with mode: No-Op` → `Waiting` → `Active`, player spawned, and a client-side listener confirmed 3 `GameStateChanged` payloads in 3.2s with `roundState = Active` (so the per-roster `FireClient` reaches players at the same ~1/s cadence `FireAllClients` did). Two Edit-mode harness sessions with disjoint rosters also ran concurrently — impossible before — with zero cross-session leakage.
+
+Left deliberately: `ScoreTracker` (3 `FireAllClients` sites) and `SpawnManager` are still singletons with the same problem — Phase 6 stage 2/4. `BossService` / `BossStates` broadcast globally too and are unscoped.
+
+Pages touched: [[systems/GameMode]] (rewritten off its singleton + `6610291`-stale file tree), [[index]].

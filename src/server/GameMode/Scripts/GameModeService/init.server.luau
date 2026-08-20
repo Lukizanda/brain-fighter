@@ -1,9 +1,18 @@
 ----------------------------------------------------------------------
 -- GameModeService
 ----------------------------------------------------------------------
--- Server orchestrator that wires together:
---   RoundManager (state machine), ScoreTracker (kill/death tracking),
---   SpawnManager (intelligent spawning), and a GameModeDefinition.
+-- Server session manager. Owns a table of RoundManager sessions keyed by
+-- arena id, assigns each player to one, and wires them to:
+--   ScoreTracker (kill/death tracking), SpawnManager (intelligent spawning),
+--   and a GameModeDefinition.
+--
+-- Phase 6 stage 1 (see `wiki/design/lobby.md`) turned RoundManager from a
+-- server-wide singleton into a per-session instance. Exactly one session is
+-- created at boot and every player joins it, so behaviour is identical to the
+-- singleton — the seam is here for stages 3-5 to hang arenas off.
+--
+-- ScoreTracker and SpawnManager are still server-wide singletons. They have
+-- the same problem and it is stage 2/4 work.
 --
 -- Hooks into existing Health system via BindableEvents.
 -- Does NOT modify the damage pipeline — listens to events only.
@@ -18,6 +27,10 @@ local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeCons
 local GameModes = require(ReplicatedStorage.Shared.GameMode.Modes)
 
 local ACTIVE_MODE_ATTRIBUTE = "ActiveGameMode"
+
+-- The single whole-server arena slot. Stage 2 replaces this with ids read
+-- from tagged arena zones; until then every player lands here.
+local DEFAULT_ARENA_ID = "Default"
 
 local ScoreTracker = require(script.ScoreTracker)
 local SpawnManager = require(script.SpawnManager)
@@ -55,6 +68,60 @@ local requestedModeKey = workspace:GetAttribute(ACTIVE_MODE_ATTRIBUTE)
 local activeMode, resolvedModeKey = GameModes.get(requestedModeKey)
 
 ----------------------------------------------------------------------
+-- Sessions
+----------------------------------------------------------------------
+
+local sessions: { [string]: RoundManager.RoundManager } = {}
+local playerSessions: { [Player]: RoundManager.RoundManager } = {}
+
+local function createSession(arenaId: string, modeDefinition: any): RoundManager.RoundManager
+	local session = RoundManager.new({
+		arenaId = arenaId,
+		gameStateChangedRemote = gameStateChangedRemote,
+		roundStartedEvent = roundStartedEvent,
+		roundEndedEvent = roundEndedEvent,
+		modeDefinition = modeDefinition,
+		scoreTracker = ScoreTracker,
+	})
+
+	sessions[arenaId] = session
+	return session
+end
+
+-- Which session a joining player belongs to. Stage 1: the one whole-server
+-- session. Stage 3 replaces this with lobby/queue assignment — see
+-- `wiki/design/lobby.md` § Slot allocation.
+local function pickSessionFor(_player: Player): RoundManager.RoundManager?
+	return sessions[DEFAULT_ARENA_ID]
+end
+
+local function assignPlayerToSession(player: Player)
+	local session = pickSessionFor(player)
+	if not session then
+		log:warn("No session available for", player.Name)
+		return
+	end
+
+	playerSessions[player] = session
+	session:addPlayer(player)
+end
+
+local function unassignPlayer(player: Player)
+	local session = playerSessions[player]
+	if session then
+		session:removePlayer(player)
+		playerSessions[player] = nil
+	end
+end
+
+-- "Is *this player's* round active" — the per-session replacement for the
+-- singleton's global `RoundManager.isActive()`.
+local function isPlayerRoundActive(player: Player): boolean
+	local session = playerSessions[player]
+	return session ~= nil and session:isActive()
+end
+
+----------------------------------------------------------------------
 -- Player management
 ----------------------------------------------------------------------
 
@@ -62,6 +129,7 @@ local function onPlayerAdded(player: Player)
 	activeMode.onPlayerJoin(player)
 
 	ScoreTracker.addPlayer(player)
+	assignPlayerToSession(player)
 
 	-- Per-character setup: spawn protection + Died → respawn loop.
 	-- Defined as a local so we can both Connect it for future spawns
@@ -72,7 +140,7 @@ local function onPlayerAdded(player: Player)
 		local humanoid = character:WaitForChild("Humanoid")
 
 		-- Spawn protection: ForceField blocks all damage for a short duration
-		if RoundManager.isActive() then
+		if isPlayerRoundActive(player) then
 			local forceField = Instance.new("ForceField")
 			forceField.Parent = character
 			task.delay(GameModeConstants.SPAWN_PROTECTION_DURATION, function()
@@ -85,7 +153,7 @@ local function onPlayerAdded(player: Player)
 		-- Auto-respawn: when character dies during an active round,
 		-- wait the configured respawn time then respawn at best spawn
 		humanoid.Died:Connect(function()
-			if not RoundManager.isActive() then
+			if not isPlayerRoundActive(player) then
 				return
 			end
 
@@ -120,6 +188,7 @@ local function onPlayerAdded(player: Player)
 end
 
 local function onPlayerRemoving(player: Player)
+	unassignPlayer(player)
 	ScoreTracker.removePlayer(player)
 	log:info("Player removing:", player.Name)
 end
@@ -172,13 +241,9 @@ local function initialize()
 
 	SpawnManager.initialize({ spawnTag = activeMode.getConfig().spawnTag })
 
-	RoundManager.initialize({
-		gameStateChangedRemote = gameStateChangedRemote,
-		roundStartedEvent = roundStartedEvent,
-		roundEndedEvent = roundEndedEvent,
-		modeDefinition = activeMode,
-		scoreTracker = ScoreTracker,
-	})
+	-- Create the session before wiring players, so every player added below
+	-- has somewhere to be assigned.
+	createSession(DEFAULT_ARENA_ID, activeMode)
 
 	-- Wire up player events
 	for _, player in Players:GetPlayers() do
@@ -190,8 +255,11 @@ local function initialize()
 	-- Wire up Health system events
 	playerEliminatedEvent.Event:Connect(onPlayerEliminated)
 
-	-- Start the round loop
-	RoundManager.start()
+	-- Start each session's round loop
+	for arenaId, session in sessions do
+		session:start()
+		log:info("Session started:", arenaId)
+	end
 
 	log:info("Initialized — round loop started")
 end
