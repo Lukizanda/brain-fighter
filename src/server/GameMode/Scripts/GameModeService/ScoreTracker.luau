@@ -10,10 +10,20 @@
 --   ScoreTracker.initialize({ scoreUpdateRemote = ..., killFeedRemote = ... })
 --   ScoreTracker.addPlayer(player)
 --   ScoreTracker.recordKill(killer, victim, weaponName)
+--
+-- Phase 6 stage 3 scoped the outgoing broadcasts: ScoreUpdate and KillFeed
+-- go to the session the kill happened in, via `BroadcastAudience`, instead of
+-- every client on the server. The scores themselves are still one server-wide
+-- table — per-session score state is stage 5's problem, and a duellist can
+-- still therefore read the boss arena's names off their scoreboard. What is
+-- fixed here is that they no longer get a kill feed scrolling past for a
+-- fight they are not in. See `wiki/design/lobby.md` § Broadcast audience.
 ----------------------------------------------------------------------
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local BroadcastAudience = require(ReplicatedStorage.Shared.GameMode.BroadcastAudience)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local log = Logger.new("ScoreTracker")
 
@@ -120,7 +130,10 @@ end
 ----------------------------------------------------------------------
 -- Score broadcast
 ----------------------------------------------------------------------
-local function broadcastScores()
+-- `audience` is who sees the update, not whose scores are in it. The
+-- serialized table stays server-wide so the payload shape — and everything
+-- ScoreboardGui derives from it — is untouched.
+local function broadcastScores(audience: { Player })
 	local scoreUpdateRemote = refs.scoreUpdateRemote
 	if not scoreUpdateRemote then
 		return
@@ -137,16 +150,16 @@ local function broadcastScores()
 		}
 	end
 
-	scoreUpdateRemote:FireAllClients(serialized)
+	BroadcastAudience.fire(scoreUpdateRemote, audience, serialized)
 end
 
-local function broadcastKillFeed(killer: Player?, victim: Player, weaponName: string)
+local function broadcastKillFeed(audience: { Player }, killer: Player?, victim: Player, weaponName: string)
 	local killFeedRemote = refs.killFeedRemote
 	if not killFeedRemote then
 		return
 	end
 
-	killFeedRemote:FireAllClients({
+	BroadcastAudience.fire(killFeedRemote, audience, {
 		killerId = killer and killer.UserId or 0,
 		killerName = killer and killer.Name or "Environment",
 		victimId = victim.UserId,
@@ -243,8 +256,11 @@ function ScoreTracker.recordKill(killer: Player?, victim: Player, weaponName: st
 		#assistants
 	))
 
-	broadcastKillFeed(killer, victim, weaponName)
-	broadcastScores()
+	-- Anchored on the victim, not the killer: a victim is always a real Player
+	-- in a session, where an environment kill has no killer to resolve from.
+	local audience = BroadcastAudience.forPlayer(victim)
+	broadcastKillFeed(audience, killer, victim, weaponName)
+	broadcastScores(audience)
 
 	return assistants
 end
@@ -260,9 +276,12 @@ function ScoreTracker.recordBotKill(killer: Player?, victimDisplayName: string, 
 		updateLeaderstats(killer)
 	end
 
+	-- The victim is a bot, so the killer is the only anchor available.
+	local audience = BroadcastAudience.forPlayer(killer)
+
 	local killFeedRemote = refs.killFeedRemote
 	if killFeedRemote then
-		killFeedRemote:FireAllClients({
+		BroadcastAudience.fire(killFeedRemote, audience, {
 			killerId = killer and killer.UserId or 0,
 			killerName = killer and killer.Name or "Environment",
 			victimId = -1, -- sentinel: non-Player victim
@@ -272,7 +291,7 @@ function ScoreTracker.recordBotKill(killer: Player?, victimDisplayName: string, 
 		})
 	end
 
-	broadcastScores()
+	broadcastScores(audience)
 
 	log:info(string.format(
 		"Bot kill: %s -> %s (weapon=%s)",
@@ -290,7 +309,11 @@ function ScoreTracker.getAllScores(): { [Player]: { kills: number, deaths: numbe
 	return scores
 end
 
-function ScoreTracker.resetAll()
+-- `audience` is the roster of the session starting a round. Callers that have
+-- one should pass it; omitting it falls back to every client, which is right
+-- for a genuinely server-wide reset and wrong for a per-session one — the
+-- reason the parameter exists rather than being resolved in here.
+function ScoreTracker.resetAll(audience: { Player }?)
 	for player, score in scores do
 		score.kills = 0
 		score.deaths = 0
@@ -298,7 +321,7 @@ function ScoreTracker.resetAll()
 		updateLeaderstats(player)
 	end
 	recentDamage = {}
-	broadcastScores()
+	broadcastScores(audience or Players:GetPlayers())
 	log:info("All scores reset")
 end
 

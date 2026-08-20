@@ -7,12 +7,17 @@
 --   and a GameModeDefinition.
 --
 -- Phase 6 stage 1 (see `wiki/design/lobby.md`) turned RoundManager from a
--- server-wide singleton into a per-session instance. Exactly one session is
--- created at boot and every player joins it, so behaviour is identical to the
--- singleton — the seam is here for stages 3-5 to hang arenas off.
+-- server-wide singleton into a per-session instance. Stage 2 bound the
+-- world to it: each session names an arena slot, and SpawnManager resolves
+-- that arena's spawn pads. Exactly one session is created at boot and every
+-- player joins it, so behaviour is identical to the singleton — the seam is
+-- here for stages 4-6 to hang arenas off.
 --
--- ScoreTracker and SpawnManager are still server-wide singletons. They have
--- the same problem and it is stage 2/4 work.
+-- Stage 3 scoped the rest of the screen-space broadcasts: this file
+-- registers a `BroadcastAudience` resolver over the session tables, which is
+-- how ScoreTracker and BossService reach a roster without being handed one.
+-- ScoreTracker is still a server-wide singleton — its *scores* are stage 5's
+-- problem; only its audience moved.
 --
 -- Hooks into existing Health system via BindableEvents.
 -- Does NOT modify the damage pipeline — listens to events only.
@@ -22,15 +27,13 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
+local BroadcastAudience = require(ReplicatedStorage.Shared.GameMode.BroadcastAudience)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
 local GameModes = require(ReplicatedStorage.Shared.GameMode.Modes)
 
 local ACTIVE_MODE_ATTRIBUTE = "ActiveGameMode"
-
--- The single whole-server arena slot. Stage 2 replaces this with ids read
--- from tagged arena zones; until then every player lands here.
-local DEFAULT_ARENA_ID = "Default"
 
 local ScoreTracker = require(script.ScoreTracker)
 local SpawnManager = require(script.SpawnManager)
@@ -84,15 +87,19 @@ local function createSession(arenaId: string, modeDefinition: any): RoundManager
 		scoreTracker = ScoreTracker,
 	})
 
+	-- Bind the arena's spawn pads at the same moment its session exists, so
+	-- there is one place that knows an arena was created.
+	SpawnManager.registerArena(arenaId, modeDefinition.getConfig().spawnTag)
+
 	sessions[arenaId] = session
 	return session
 end
 
--- Which session a joining player belongs to. Stage 1: the one whole-server
--- session. Stage 3 replaces this with lobby/queue assignment — see
+-- Which session a joining player belongs to. Stage 2: the one whole-server
+-- session. Stage 4 replaces this with lobby/queue assignment — see
 -- `wiki/design/lobby.md` § Slot allocation.
 local function pickSessionFor(_player: Player): RoundManager.RoundManager?
-	return sessions[DEFAULT_ARENA_ID]
+	return sessions[Arena.DEFAULT_ID]
 end
 
 local function assignPlayerToSession(player: Player)
@@ -119,6 +126,39 @@ end
 local function isPlayerRoundActive(player: Player): boolean
 	local session = playerSessions[player]
 	return session ~= nil and session:isActive()
+end
+
+-- Which arena to spawn a player into. Falls back to the default arena for a
+-- player with no session — the same "put them somewhere" instinct as
+-- SpawnManager's SpawnLocation fallback.
+local function arenaIdForPlayer(player: Player): string
+	local session = playerSessions[player]
+	return session and session:getArenaId() or Arena.DEFAULT_ID
+end
+
+----------------------------------------------------------------------
+-- Broadcast audience
+----------------------------------------------------------------------
+-- ScoreTracker and BossService also send screen-space remotes, and neither
+-- can be handed a roster the way RoundManager holds one: ScoreTracker is a
+-- server-wide singleton and BossService is a top-level Script nothing
+-- injects into. Registering a resolver over the session tables gives them
+-- the same answer without either of them learning what a session is.
+--
+-- `nil` means "no session", which BroadcastAudience reads as "fall back to
+-- every client" — deliberately not the same as an empty roster.
+local function registerBroadcastAudience()
+	BroadcastAudience.setResolver({
+		forPlayer = function(player: Player): { Player }?
+			local session = playerSessions[player]
+			return session and session:getPlayers()
+		end,
+
+		forArena = function(arenaId: string): { Player }?
+			local session = sessions[arenaId]
+			return session and session:getPlayers()
+		end,
+	})
 end
 
 ----------------------------------------------------------------------
@@ -165,7 +205,7 @@ local function onPlayerAdded(player: Player)
 				return
 			end
 
-			local spawnCFrame = SpawnManager.getBestSpawn(player)
+			local spawnCFrame = SpawnManager.getBestSpawn(player, arenaIdForPlayer(player))
 			player:LoadCharacter()
 
 			-- PivotTo after character loads
@@ -232,6 +272,12 @@ local function initialize()
 	log:info(string.format("Initializing with mode: %s (key=%s, requested=%s)",
 		activeMode.name, resolvedModeKey, tostring(requestedModeKey)))
 
+	-- First, so nothing broadcasts before an audience can be resolved. The
+	-- resolver reads the session tables lazily, so it is safe to register
+	-- before any session exists — an unresolved lookup falls back to every
+	-- client, which is exactly the pre-stage-3 behaviour.
+	registerBroadcastAudience()
+
 	-- Initialize sub-systems with dependency injection
 	ScoreTracker.initialize({
 		scoreUpdateRemote = scoreUpdateRemote,
@@ -239,11 +285,12 @@ local function initialize()
 		playerDamagedEvent = playerDamagedEvent,
 	})
 
-	SpawnManager.initialize({ spawnTag = activeMode.getConfig().spawnTag })
+	SpawnManager.initialize()
 
 	-- Create the session before wiring players, so every player added below
-	-- has somewhere to be assigned.
-	createSession(DEFAULT_ARENA_ID, activeMode)
+	-- has somewhere to be assigned. createSession registers the arena's
+	-- spawns, so this must precede any getBestSpawn call.
+	createSession(Arena.DEFAULT_ID, activeMode)
 
 	-- Wire up player events
 	for _, player in Players:GetPlayers() do

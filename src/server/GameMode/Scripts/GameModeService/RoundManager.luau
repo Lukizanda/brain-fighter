@@ -218,8 +218,11 @@ function RoundManager:_activeRound(generation: number): (number?, string?)
 	local config = self._refs.modeDefinition.getConfig()
 	self._timeRemaining = GameConfig.ROUND_TIMER_ENABLED and config.timeLimit or 0
 
-	-- Reset scores and notify
-	self._refs.scoreTracker.resetAll()
+	-- Reset scores and notify. The roster goes with it so the resulting
+	-- ScoreUpdate lands on this session's players rather than the server —
+	-- the scores it resets are still server-wide (stage 5), the broadcast is
+	-- not. See `wiki/design/lobby.md` § Broadcast audience.
+	self._refs.scoreTracker.resetAll(self:getPlayers())
 	self._refs.modeDefinition.onRoundStart()
 	self._refs.roundStartedEvent:Fire()
 

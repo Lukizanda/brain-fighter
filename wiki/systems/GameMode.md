@@ -1,6 +1,6 @@
 ---
 type: system
-description: Game mode framework — GameModeService as a session manager, per-session RoundManager instances, ScoreTracker, SpawnManager, mode registry. FFA/TDM modes + TeamService DELETED (2026-06-22, commit 6610291); NoOpMode is the only registered mode.
+description: Game mode framework — GameModeService as a session manager, per-session RoundManager instances, ScoreTracker, per-arena SpawnManager over the shared Arena vocabulary, mode registry, and the BroadcastAudience seam that scopes screen-space remotes to a session roster. FFA/TDM modes + TeamService DELETED (2026-06-22, commit 6610291); NoOpMode is the only registered mode.
 updated: 2026-08-20
 ---
 
@@ -28,13 +28,90 @@ session:disable()    -- reversible halt
 session:destroy()    -- disable + drop all state
 ```
 
-`GameModeService` is the **session manager**: it owns `sessions[arenaId]` and `playerSessions[player]`, creates exactly one session at boot (`DEFAULT_ARENA_ID = "Default"`), and assigns every player to it. Behaviour is therefore identical to the singleton — the seam exists for Phase 6 stages 3–5 to hang real arenas off. Where the singleton asked `RoundManager.isActive()`, the service now asks `isPlayerRoundActive(player)`, a `playerSessions` lookup.
+`GameModeService` is the **session manager**: it owns `sessions[arenaId]` and `playerSessions[player]`, creates exactly one session at boot (`Arena.DEFAULT_ID = "Default"`), and assigns every player to it. Behaviour is therefore identical to the singleton — the seam exists for Phase 6 stages 3–5 to hang real arenas off. Where the singleton asked `RoundManager.isActive()`, the service now asks `isPlayerRoundActive(player)`, a `playerSessions` lookup.
 
 **Broadcast is per-roster, not `FireAllClients`.** `_broadcastState` iterates the session's roster and `FireClient`s each member. With one session this is unobservable, but with two live sessions a duellist would otherwise receive the boss arena's round state — that leak is the reason the refactor exists. The **payload shape is unchanged** (`roundState`, `timeRemaining`, `winnerId`, `winnerName`, `winnerTeamName`); `GameStateGui`, `RoundTimerGui` and `DeathScreenGui` consume it untouched. `_waitForPlayers` likewise gates on the roster count rather than `#Players:GetPlayers()`.
 
 **`disable()` does not `task.cancel` the round thread.** The singleton's `stop()` did both, which was redundant — every await point in the machine is a `task.wait` inside an `_isLive` check, so clearing the `_running` flag unwinds the loop on its own within a second. Cancelling additionally errors on a thread that has already finished (the old `stop()` never cleared `roundThread` on natural exit) and would error if a mode callback such as `onRoundEnd` ever called back into the session from the round thread itself. The one thing cancel bought — no overlap between a winding-down loop and a `start()` issued in the same second — is covered by a `_generation` counter the loop checks at every await point.
 
-**Still singletons:** `ScoreTracker` and `SpawnManager`. They have the same server-wide problem; instancing them is Phase 6 stage 2/4 work.
+**Still a singleton:** `ScoreTracker`. Its *audience* was scoped in stage 3 (below), but its scores remain server-wide — that is stage 5 work.
+
+## Arena binding (Phase 6 stage 2, 2026-08-20)
+
+A session names an arena slot; stage 2 gave that name something to resolve against. `src/shared/GameMode/Arena.luau` is the shared vocabulary — `ID_ATTRIBUTE = "ArenaId"`, `DEFAULT_ID = "Default"`, the `SpawnTags` table, and `Arena.idOf(instance)`. It exists because three scripts across two domains read those strings, and as literals they would be three copies of a coupling with nothing holding them in step. [[systems/BlockSpawner]] and [[systems/Boss]] resolve arenas through the same module.
+
+**`Arena.idOf` treats a missing attribute as `DEFAULT_ID`**, which is the load-bearing decision. The shipped scene's parts are tagged but unattributed; requiring the attribute would have stopped the shipped arena working while every log stayed clean.
+
+### SpawnManager is per-arena
+
+`getSpawnPoints()` read one file-local `spawnTag` set at `initialize()`. It now keys off the arena:
+
+| | Before | After |
+|---|---|---|
+| Registration | `initialize({ spawnTag })`, once | `registerArena(arenaId, spawnTag)`, called by `createSession` as each session is built |
+| Candidate set | every part carrying the tag | parts carrying **that arena's** tag whose `Arena.idOf` matches |
+| Lookup | `getBestSpawn(player)` | `getBestSpawn(player, arenaId)`, resolved from `playerSessions` |
+
+Two arenas can therefore share a tag name and still keep their pads apart — which is what stage 6's pad pool needs, since both duel pads are `PvPArenaSpawn`.
+
+`Arena.SpawnTags` declares `LobbySpawn` / `PvEArenaSpawn` / `PvPArenaSpawn` ahead of the geometry that will carry them (stages 4–6), so scene authoring and mode config cannot pick different spellings of the same idea. Nothing is tagged with them yet.
+
+**The `SpawnLocation` fallback is deliberately *not* filtered by arena.** It is the misconfigured-scene path — nothing is tagged for this arena — and its job is to put the player somewhere rather than at origin; narrowing it by arena would make the empty case empty again. The shipped place reaches this path on every spawn: `NoOpMode`'s `spawnTag` is `FFASpawn` and nothing in the scene carries that tag, so every player lands on `Workspace.Arena.SpawnZone.SpawnLocation`. `filterSpawnsForPlayer` is unchanged — it was already tag/attribute-driven, and its `TEAMS_ENABLED` early-out still short-circuits the whole team path.
+
+## Broadcast audience (Phase 6 stage 3, 2026-08-20)
+
+`RoundManager` can fire at its own roster because it holds one. The other
+screen-space senders cannot: `ScoreTracker` is a server-wide singleton, and
+`BossService` is a top-level Script that nothing injects into. Rather than give
+each of them its own answer, stage 3 added one seam.
+
+`src/shared/GameMode/BroadcastAudience.luau` is a late-binding pointer at the
+session tables — it stores **no roster of its own**. `GameModeService`
+registers a resolver at the top of `initialize()`:
+
+```lua
+BroadcastAudience.setResolver({
+    forPlayer = function(player) local s = playerSessions[player] return s and s:getPlayers() end,
+    forArena  = function(arenaId) local s = sessions[arenaId]     return s and s:getPlayers() end,
+})
+```
+
+and callers resolve **per fire**, never caching, because a roster changes under
+a long-lived boss. `BroadcastAudience.fire(remote, audience, ...)` then does the
+`FireClient` loop, skipping players who left since resolution.
+
+**The fallback is everyone, not nobody.** An unresolved lookup returns
+`Players:GetPlayers()` — today's pre-stage-3 behaviour — plus a warn throttled
+to 30 s (the boss health path fires at 10 Hz and would otherwise bury the log).
+Degrading to an empty audience would silently blank a HUD, which is the failure
+mode that costs a playtest to notice. Returning an *empty table* from a resolver
+is distinct and is honoured as-is: that means "a real session with nobody in it".
+
+The nine screen-space sites now scoped:
+
+| Remote | Sites | Audience anchor |
+|---|---|---|
+| `ScoreUpdate` | `ScoreTracker` ×1 | the kill's victim (or the round-starting session's roster, via `resetAll(audience)`) |
+| `KillFeed` | `ScoreTracker` ×2 | victim for a player kill, killer for a bot kill |
+| `BossPhaseChanged` | `BossService` ×3 | `Arena.idOf(BossPoint)` |
+| `BossHealthChanged` | `BossService` ×3 | `Arena.idOf(BossPoint)` |
+
+Kill feed is anchored on the **victim, not the killer** — a victim is always a
+real `Player` in a session, where an environment kill has no killer to resolve
+from. `recordBotKill` inverts this of necessity: its victim is a bot.
+
+**`ScoreTracker`'s scores are still server-wide** — only its *audience* moved.
+A duellist therefore still reads the boss arena's names off their scoreboard;
+what stage 3 fixes is the kill feed scrolling past for a fight they are not in.
+Per-session score state is stage 5. This was a deliberate split: the payload
+shape had to stay byte-identical because `ScoreboardGui` and `KillFeedGui` are
+out of scope.
+
+**Out of scope by design:** the eight world-space VFX sites keep
+`FireAllClients`. Particles spawn at a world position, so another arena never
+renders them — only pays to instantiate them, which is a throughput question
+[[systems/VisualEffects]]' `PERF` guardrails already own. See [[design/lobby]]
+§ Broadcast audience for the full inventory.
 
 ## Current gating (2026-05-13)
 
@@ -57,19 +134,21 @@ With both flags off the only registered mode is `NoOpMode` (`src/shared/GameMode
 
 ```
 src/shared/GameMode/
+  Arena.luau                        — arena slot vocabulary: ArenaId attribute, Default id, SpawnTags, idOf()
   GameModeConstants.luau            — MIN_PLAYERS, durations, RoundState enum
   GameModeDefinition.luau           — the interface each mode implements
   GameModeTypes.luau                — type definitions
   Modes/init.luau                   — mode registry (NoOp only; DEFAULT_MODE = "NoOp")
   Modes/NoOpMode.luau               — the only registered mode
+  BroadcastAudience.luau            — who receives a screen-space remote (resolver registered by GameModeService)
   Remotes/                          — GameStateChanged, ScoreUpdate, KillFeed (.model.json each)
 src/server/GameMode/
   Events/                           — RoundStarted, RoundEnded BindableEvents (.model.json each)
   Scripts/GameModeService/
     init.server.luau                — session manager + player/kill wiring
     RoundManager.luau               — per-session state machine: Waiting → Countdown → Active → PostRound
-    ScoreTracker.luau               — per-player kills/deaths/assists (still a singleton)
-    SpawnManager.luau               — picks SpawnLocation per mode (still a singleton)
+    ScoreTracker.luau               — per-player kills/deaths/assists (scores still server-wide; audience scoped stage 3)
+    SpawnManager.luau               — picks a spawn per arena; SpawnLocation fallback when nothing is tagged
   Scripts/NametagService.server.luau — nametags above heads
 src/server/Arena/
   DeathZoneService.server.luau      — fall-kill volume (CollectionService tag "DeathZone")
@@ -120,4 +199,5 @@ Both the ForceField and the respawn use `isPlayerRoundActive(player)` — the pl
 
 - Phase 6 session/lobby plan → [[design/lobby]], [[design/build-plan]] § Phase 6
 - Death zone wiring → `src/server/Arena/DeathZoneService.server.luau`
-- Kill feed remote → `gameModeRemotes.KillFeed` (`KillFeedGui` consumes it)
+- Kill feed remote → `gameModeRemotes.KillFeed` (`KillFeedGui` consumes it), scoped per session — see § Broadcast audience
+- Boss HUD remotes use the same seam → [[systems/Boss]] § Broadcast audience

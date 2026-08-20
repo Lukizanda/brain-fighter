@@ -18,13 +18,25 @@
 -- the full lifecycle so DeathHandler won't respawn or create templates.
 -- humanoid.Died fires naturally when health reaches 0 (from SpellExecutor
 -- direct writes or applyDamage.process firearm hits).
+--
+-- Audience (Phase 6 stage 3): BossHealthChanged and BossPhaseChanged draw
+-- the BossHudGui, so they are screen-space — a duellist receiving them gets
+-- a boss health bar over a fight that has no boss in it. The boss is not
+-- owned by a session today, so the question "whose HUD" is answered the same
+-- way every other arena-bound thing in the place answers it: BossPoint
+-- carries an ArenaId attribute, and the audience is that arena's roster.
+-- Stage 5's `Modes/PvEBoss.luau` takes ownership of the boss arena and will
+-- set that attribute rather than inheriting the default; nothing below has
+-- to change for it. See `wiki/design/lobby.md` § Broadcast audience.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
 
-local BossConfig = require(ReplicatedStorage.Shared.Boss.BossConfig)
-local Logger     = require(ReplicatedStorage.Shared.Core.Logger)
+local BossConfig        = require(ReplicatedStorage.Shared.Boss.BossConfig)
+local Arena             = require(ReplicatedStorage.Shared.GameMode.Arena)
+local BroadcastAudience = require(ReplicatedStorage.Shared.GameMode.BroadcastAudience)
+local Logger            = require(ReplicatedStorage.Shared.Core.Logger)
 
 local BossSpawner    = require(script.Parent.Scripts.BossSpawner)
 local BossController = require(script.Parent.Scripts.BossController)
@@ -46,7 +58,16 @@ local HEALTH_THROTTLE_SEC = 0.1  -- max frequency of BossHealthChanged fires
 -- Heartbeat connection and Died listener.
 -- ---------------------------------------------------------------
 local function startBossCycle(bossPoint: BasePart)
-	log:info("Starting boss cycle")
+	-- Resolved per cycle rather than per fire: re-read on respawn so retagging
+	-- BossPoint takes effect, but not 10× a second on the health path. The
+	-- roster behind the id is still read at each fire — players join and leave
+	-- a session while a boss is alive.
+	local arenaId = Arena.idOf(bossPoint)
+	local function bossAudience(): { Player }
+		return BroadcastAudience.forArena(arenaId)
+	end
+
+	log:info(string.format("Starting boss cycle in arena %s", arenaId))
 
 	local typeName = tostring(bossPoint:GetAttribute("BossType") or BossConfig.DEFAULT_TYPE)
 	local typeSpec = BossConfig.BOSS_TYPES[typeName]
@@ -70,7 +91,7 @@ local function startBossCycle(bossPoint: BasePart)
 
 	-- Controller: phase-change callback fires the RemoteEvent
 	local controller = BossController.new(boss, typeSpec, function(phaseIndex: number, _phaseSpec: any)
-		BossPhaseChanged:FireAllClients(phaseIndex)
+		BroadcastAudience.fire(BossPhaseChanged, bossAudience(), phaseIndex)
 		log:info("Boss entered phase", phaseIndex)
 	end)
 
@@ -80,9 +101,10 @@ local function startBossCycle(bossPoint: BasePart)
 		return
 	end
 
-	-- Announce spawn to all clients
-	BossPhaseChanged:FireAllClients(1)
-	BossHealthChanged:FireAllClients(humanoid.MaxHealth, humanoid.MaxHealth, 1)
+	-- Announce spawn to the arena
+	local spawnAudience = bossAudience()
+	BroadcastAudience.fire(BossPhaseChanged, spawnAudience, 1)
+	BroadcastAudience.fire(BossHealthChanged, spawnAudience, humanoid.MaxHealth, humanoid.MaxHealth, 1)
 
 	-- Throttled HP forwarding
 	local lastHealthSendTime = 0
@@ -91,7 +113,8 @@ local function startBossCycle(bossPoint: BasePart)
 		local now = os.clock()
 		if now - lastHealthSendTime < HEALTH_THROTTLE_SEC then return end
 		lastHealthSendTime = now
-		BossHealthChanged:FireAllClients(health, humanoid.MaxHealth, controller:getPhaseIndex())
+		BroadcastAudience.fire(BossHealthChanged, bossAudience(),
+			health, humanoid.MaxHealth, controller:getPhaseIndex())
 	end)
 
 	-- Main tick loop
@@ -105,8 +128,9 @@ local function startBossCycle(bossPoint: BasePart)
 		controller:destroy()
 
 		-- Signal defeat (phaseIndex 0 = no boss)
-		BossHealthChanged:FireAllClients(0, humanoid.MaxHealth, PHASE_DEFEATED)
-		BossPhaseChanged:FireAllClients(PHASE_DEFEATED)
+		local deathAudience = bossAudience()
+		BroadcastAudience.fire(BossHealthChanged, deathAudience, 0, humanoid.MaxHealth, PHASE_DEFEATED)
+		BroadcastAudience.fire(BossPhaseChanged, deathAudience, PHASE_DEFEATED)
 
 		log:info(string.format("Boss defeated — respawning in %d s", typeSpec.respawnDelaySec))
 

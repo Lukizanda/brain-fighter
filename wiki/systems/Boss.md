@@ -1,7 +1,7 @@
 ---
 type: system
-description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD.
-updated: 2026-05-18
+description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. HUD remotes are scoped to the BossPoint's arena roster (Phase 6 stage 3).
+updated: 2026-08-20
 ---
 
 # Boss
@@ -18,8 +18,8 @@ Supersedes [[systems/BossAdapter]] (Phase 3 static Model). The `src/server/BossA
 |---|---|
 | `src/shared/Boss/BossConfig.luau` | `BOSS_TYPES` registry + `DEFAULT_TYPE`; per-type vitals, phases, and per-skill params |
 | `src/shared/Boss/BossTypes.luau` | `BossBlackboard` + `BossTypeSpec` types; `rigName` and `hipHeight` optional fields |
-| `src/shared/Boss/BossEvents/BossHealthChanged.model.json` | RemoteEvent — fires `(currentHP, maxHP, phaseIndex)` on HP change (throttled 0.1s) |
-| `src/shared/Boss/BossEvents/BossPhaseChanged.model.json` | RemoteEvent — fires `phaseIndex` (0 = defeated/no boss) |
+| `src/shared/Boss/BossEvents/BossHealthChanged.model.json` | RemoteEvent — fires `(currentHP, maxHP, phaseIndex)` on HP change (throttled 0.1s). Scoped to the BossPoint's arena roster, not `FireAllClients` — see § Broadcast audience |
+| `src/shared/Boss/BossEvents/BossPhaseChanged.model.json` | RemoteEvent — fires `phaseIndex` (0 = defeated/no boss). Same scoping |
 | `src/shared/Boss/BossEvents/BossPartDestroyed.model.json` | RemoteEvent — scaffold for future destructible-part system |
 
 ### Server (ServerScriptService)
@@ -135,6 +135,47 @@ Part projectiles in spread. Each is `CanCollide = false` with a `LinearVelocity`
 - **Phase label** — Roman numeral ("Phase I", "Phase II" …) on `BossPhaseChanged`
 - **Late-join** — on load reads `workspace.Boss` humanoid directly; defaults to phase 1 if no `BossPhaseChanged` has fired
 
+## Broadcast audience (Phase 6 stage 3, 2026-08-20)
+
+`BossHealthChanged` and `BossPhaseChanged` draw `BossHudGui`, so they are
+**screen-space**: a player in another arena receiving them gets a boss health
+bar over a fight that has no boss in it. Position is irrelevant — it is a GUI.
+All six sites now route through [[systems/GameMode]]'s `BroadcastAudience`
+instead of `FireAllClients`.
+
+**Which roster?** The boss is not owned by a session today — it exists in the
+world, not in a mode — so this was a genuine question rather than a lookup. It
+is answered the same way every other arena-bound thing in the place answers it:
+`BossPoint` carries the shared `ArenaId` attribute, and the audience is that
+arena's roster.
+
+```lua
+local arenaId = Arena.idOf(bossPoint)          -- per cycle
+BroadcastAudience.fire(BossHealthChanged, BroadcastAudience.forArena(arenaId), ...)
+```
+
+`Arena.idOf` is read **once per boss cycle**, not per fire — re-reading on
+respawn means retagging `BossPoint` takes effect, without doing an attribute
+lookup 10× a second on the health path. The *roster* behind that id is still
+resolved at every fire, because players join and leave a session while a boss
+is alive.
+
+Nothing here has to change when stage 5's `Modes/PvEBoss.luau` takes ownership
+of the boss arena: it sets the attribute rather than letting `BossPoint`
+inherit `Arena.DEFAULT_ID`. That was the point of using the attribute instead
+of threading a session reference through `BossService` — a large refactor for a
+seam that stage 5 would immediately redo.
+
+**Boot ordering.** `BossService` starts its cycle *before* `GameModeService`
+registers the resolver, so the spawn announcement resolves through the
+"everyone" fallback. Harmless: there are no players in the server at that
+point, and `BossHudGui`'s existing late-join path (which reads `workspace.Boss`
+directly) is what actually populates the bar for a player who joins after the
+boss spawned. That was already true with `FireAllClients`.
+
+The boss **windup VFX** in `BossStates.luau:176` deliberately keeps
+`FireAllClients` — it is world-space. See [[design/lobby]] § Broadcast audience.
+
 ## Integration Points
 
 No changes needed in other systems:
@@ -188,3 +229,5 @@ Add a new boss type by adding another entry to `BOSS_TYPES`; switch the active b
 - [[systems/SpellExecutor]] — effect runner; damages Boss Humanoid directly
 - [[systems/Health]] — applyDamage pipeline; boss receives firearm hits the same as any NPC
 - [[systems/BossAdapter]] — superseded Phase 3 MVP (static Model, no AI)
+- [[systems/GameMode]] § Broadcast audience — the `BroadcastAudience` seam the boss HUD remotes route through
+- [[design/lobby]] § Broadcast audience — why the six HUD sites moved and the windup VFX did not
