@@ -91,7 +91,9 @@ Refined 2026-08-20: the constraint is on *value*, not on hue. A tint driven far 
 
 Blocks read as flat floating swatches: a saturated cube has no silhouette against the skybox, and a white glyph on a saturated fill loses to the fill. Four changes, all driven from `applyVisualState` so they are versioned in Rojo rather than authored into the `.rbxl` Template.
 
-**Border.** A `UIStroke` (12 px) inside each face SurfaceGui, coloured with the block's tint driven 72 % to black. *Not* a `Highlight` per block — the engine renders a bounded number (~31) and the arena holds 40, the same budget that makes [[systems/BlockShoot|BlockTapController]]'s hover highlight a reused singleton. A face the camera cannot see is not drawn, so what renders is exactly the visible silhouette.
+**Border.** A `UIStroke` inside each face SurfaceGui, coloured with the block's tint driven 72 % to black. *Not* a `Highlight` per block — the engine renders a bounded number (~31) and the arena holds 40, the same budget that makes [[systems/BlockShoot|BlockTapController]]'s hover highlight a reused singleton. A face the camera cannot see is not drawn, so what renders is exactly the visible silhouette (confirmed by measurement — see § Costs).
+
+Thickness is **not** a constant — see § Border thickness is distance-scaled. It shipped as one on 2026-08-20 and did not work.
 
 **Panel + glyph inversion.** A dark plate (tint → 84 % black) inset in each face, with the glyph lightened toward white by 75 % instead of plain white — a red block's letter reads hot red, a blue one's icy blue. The cube body deliberately stays saturated: darkening it would collapse body and border to the same value, and the border cannot be lightened to compensate because white and grey are the hover and out-of-reach cues. The surviving colour ring between panel and border is what still reads once the glyph is too small to resolve.
 
@@ -106,18 +108,55 @@ Blocks read as flat floating swatches: a saturated cube has no silhouette agains
 | Property | Scaled by `ScaleTo`? | Consequence |
 |---|---|---|
 | `SurfaceGui.PixelsPerStud` | yes, **inversely** (50 → 33.3 at 1.5×) | face canvas is a constant 200×200 px at any `BLOCK_SCALE` |
-| `UIStroke.Thickness`, `UDim` offsets | no | border thickness needs no scale correction |
+| `UIStroke.Thickness`, `UDim` offsets | no | border thickness needs no scale correction — and combined with the row above, `BLOCK_SCALE` cancels out of `borderThicknessFor` entirely |
 | `ParticleEmitter.Size` | yes (it is a length) | spark size **must** be multiplied by the current scale |
 
 `spawn()` applies the visual state *before* scaling, so `applyValueTell` takes `block:GetScale()`: at spawn it is 1 and `ScaleTo` multiplies afterwards; on an idempotent re-apply the block is already scaled and nothing multiplies again. Writing the bare constant would make a re-applied block's sparks shrink by `BLOCK_SCALE` against a freshly spawned one.
 
 `LetterBlocks.tumbleDiameter()` (`edge × BLOCK_SCALE × √3` = 10.39 studs shipped) exists because [[systems/BlockSpawner]] needs the sweep radius for spacing. It lives here because it is a fact about the prefab's geometry — see that page for the overlap bug the old hand-set constant caused.
 
-### Costs and open questions
+## Border thickness is distance-scaled (2026-08-20)
 
-The arena now carries **1,200 GUI instances** (240 SurfaceGui + 480 Frame + 240 UIStroke + 240 TextLabel). Render cost is **unmeasured**: an in-Studio A/B read 15.0 fps with decor on, decor hidden, and *every SurfaceGui disabled*, so the test was floor-limited and had no resolution. Needs a real client.
+A canvas pixel is a fixed fraction of the face, so a constant `UIStroke.Thickness` has a width **on screen** that falls off with distance like everything else. Measured at 1536×660, FOV 70, against a 12 px stroke on the 200 px canvas:
 
-One frame during verification showed a face rendering without its border or panel. All six faces verify as populated and `Enabled`, and face-on renders correctly, so it is a render-side drop rather than missing data — Roblox does budget SurfaceGui rendering and 240 is a lot. If faces drop in play, the lever is decorating fewer faces per block.
+| Camera distance | Face height | Border width |
+|---|---|---|
+| 40 studs | 70.7 px | 4.24 px |
+| 90 studs | 31.4 px | 1.89 px |
+| 130 studs | 21.8 px | 1.31 px |
+| 180 studs | 15.7 px | **0.94 px** |
+| 250 studs | 11.3 px | **0.68 px** |
+
+Below ~1 px a line is sub-pixel and renders intermittently on subpixel coverage — and these blocks tumble at 28°/s, which changes each face's projected angle every frame. So the border flickered in and out on distant blocks. **That is the "one frame showed a face without its border" observation: reproducible, not a stray frame, and not a render budget.**
+
+The severity came from the arena being 219×20×248 studs, not the 40×8×40 in the config comments (that is only the fallback; real bounds come from tagged `BlockSpawnVolume` parts). Profiled by viewer position, the fraction of blocks with a solid (≥2 px) border was **8 % from the arena centre and 0 % from the player spawn**. The border's stated job is the silhouette at distance, and distance was exactly where it stopped drawing.
+
+**The fix.** `LetterBlocks.borderThicknessFor(distance, pixelsPerStud, fov, viewportHeight)` returns the canvas thickness that renders as `BORDER_TARGET_SCREEN_PIXELS` (5.5 — what the old 12 px measured at ~30 studs, so near blocks are unchanged). `LetterBlockAnimator` drives it per block from **camera** distance, rounded and only written on change, on the same rolling bucket as the transform but deliberately *not* behind the transform's cull gate — that gate freezes distant blocks, which are precisely the ones needing correction as the camera approaches.
+
+The cube edge cancels out of the derivation, so neither the cube size nor `BLOCK_SCALE` appears in it: `ScaleTo` drives `PixelsPerStud` inversely to the part and the two exactly offset. That is deliberate — a hand-maintained coupling to `BLOCK_SCALE` in this very system is what produced the [[systems/BlockSpawner]] overlap bug.
+
+**Clamped [6, 20], and the ceiling is geometry, not taste.** The stroke spans 0..T from the canvas edge and the panel starts at 26 px, so T ≥ 26 buries the panel — and the ring of block colour between border and panel is the only thing carrying red/green/blue once the glyph is too small to read, which is *which reservoir the letter feeds*. 20 keeps a 6 px ring. The cost: the target width only holds to ~51 studs, beyond which the border still thins — but from 20 px instead of 12, a 67 % wider edge at every range past it. Solid range goes **85 → 141 studs**; 180 and 250 come back out of sub-pixel. A block at 314 studs is still 0.90 px, which is only reachable from outside the arena.
+
+`applyBorderThickness` writes thickness and the frame's inset together because they are one setting: the stroke is centred on the frame's edge, so the frame must be inset by exactly the thickness or the stroke lands half outside the canvas and gets clipped.
+
+### Costs — measured 2026-08-20
+
+Measured with `Stats.RenderBreakdown` and `Stats.FrameRateManager`, which report per-frame **counts** and so are immune to Studio's frame pacing. 40 blocks, all on screen, quality pinned to Level21:
+
+| | faces on | faces off | cost |
+|---|---|---|---|
+| UI draw calls | 121 | 1 | **+120** |
+| Batches | 233 | 113 | +120 |
+| UI triangles | 7,598 | 10 | +7,590 |
+| Render thread | 3.65 ms | 3.37 ms | ~0.3 ms *(below the instrument's noise)* |
+
+**The cost metric is visible faces, not instances.** 121 draws ÷ 40 blocks = 3.0, exactly the most faces of a cube a camera can see: culling is already exact and complete, and the 1,200-instance figure is not what the renderer charges for. Hiding any *single* element (border, panel, or glyph) left draws at 121 — a face's contents batch into one draw call, so the decoration is nearly free and only the face count matters. Per visible face: ~36 triangles of border, ~22 of glyph, ~4 of panel.
+
+Draw count is flat across camera distance out to 350 studs and flat across every quality level from Level01 to Level21. **Verdict: not a performance concern**, and the previously-proposed lever ("decorate fewer faces per block") would not have helped.
+
+Two corrections to the record this replaces. The earlier A/B that "read 15.0 fps in every condition" was not floor-limited — 15.0 was a *ceiling*: `RenderAverage` sat at exactly 66.668 ms (1/15 s) while `RenderThreadAverage` was 2.4 ms, i.e. the renderer did 2.4 ms of work and slept for 64. All three conditions were above the cap, which is why they tied. And SurfaceGui culling is **not** quality-dependent: an apparent 88 → 119 draw jump when quality was raised turned out to be a camera move made in the same step.
+
+**Still open:** `borderThicknessFor` is pure and would suit a `__tests` suite, but `LetterBlocks` has none and adding one means wiring a new suite into the TestRunner. The live animator path (Heartbeat driving thickness in a running game) is verified by construction and by an Edit-mode replay of the same computation, not by a playtest — Studio's play mode was wedged in the MCP proxy during the session that made the change.
 
 ## CollectionService tag → animator
 

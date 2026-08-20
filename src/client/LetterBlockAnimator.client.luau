@@ -128,6 +128,14 @@ type Intro = {
 	emitters: { ParticleEmitter },
 }
 
+-- One face's border: the stroke that draws it and the frame it is
+-- centred on. They move together (see LetterBlocks.applyBorderThickness)
+-- so they are cached together.
+type BorderTarget = {
+	frame: Frame,
+	stroke: UIStroke,
+}
+
 type State = {
 	basePosition: Vector3,
 	phaseOffset: number,
@@ -135,6 +143,9 @@ type State = {
 	spinAxis: Vector3,
 	bucket: number,
 	intro: Intro?,
+	borders: { BorderTarget },
+	pixelsPerStud: number,
+	borderThickness: number,
 }
 
 -- Unit vector SPIN_TILT_DEGREES off vertical, at a random compass
@@ -234,6 +245,51 @@ local function collectEmitters(block: Model): { ParticleEmitter }
 	return emitters
 end
 
+-- A canvas-pixel stroke shrinks on screen with distance, so a constant
+-- one is sub-pixel across most of the arena and flickers as the block
+-- tumbles. The animator owns UIStroke.Thickness after spawn and holds
+-- the border at a roughly constant width on screen; LetterBlocks sets
+-- only the first-frame default.
+--
+-- Ownership sits here for the same reason the intro does: this module
+-- already writes each block's visual state every frame, and a second
+-- system driving the same property would fight it
+-- (wiki/concepts/SingleOwnership.md).
+--
+-- Cached at track time rather than walked per frame -- this runs over
+-- every block on a rolling schedule, and a GetDescendants per block per
+-- frame is exactly the cost the bucketing exists to avoid.
+--
+-- PixelsPerStud is read once here, while the block is at its settled
+-- scale. It must NOT be re-read later: Model:ScaleTo drives it
+-- inversely, so sampling it mid-intro would read a value up to 1/
+-- INTRO_START_SCALE_FRACTION too large and blow the thickness straight
+-- to its ceiling for the length of the intro.
+local function collectBorders(block: Model): ({ BorderTarget }, number)
+	local borders: { BorderTarget } = {}
+	local pixelsPerStud = 0
+
+	local cube = block:FindFirstChild(CUBE_CHILD_NAME)
+	if not cube then
+		return borders, pixelsPerStud
+	end
+
+	for _, surface in ipairs(cube:GetChildren()) do
+		if surface:IsA("SurfaceGui") then
+			pixelsPerStud = surface.PixelsPerStud
+			local frame = surface:FindFirstChild(LetterBlocks.BORDER_FRAME_NAME)
+			if frame and frame:IsA("Frame") then
+				local stroke = frame:FindFirstChildOfClass("UIStroke")
+				if stroke then
+					table.insert(borders, { frame = frame, stroke = stroke })
+				end
+			end
+		end
+	end
+
+	return borders, pixelsPerStud
+end
+
 local function buildIntro(block: Model): Intro?
 	-- No cube means no visual to fade; let the block appear as-is
 	-- rather than half-animating a malformed prefab.
@@ -295,6 +351,10 @@ local function track(block: Instance, withIntro: boolean)
 	if not block:IsA("Model") then return end
 	if trackedBlocks[block] then return end
 
+	-- Before buildIntro: it scales the block down, and collectBorders has
+	-- to sample PixelsPerStud at the settled scale.
+	local borders, pixelsPerStud = collectBorders(block)
+
 	local intro = if withIntro then buildIntro(block) else nil
 
 	trackedBlocks[block] = {
@@ -304,6 +364,12 @@ local function track(block: Instance, withIntro: boolean)
 		spinAxis = randomSpinAxis(),
 		bucket = math.random(0, N_BUCKETS - 1),
 		intro = intro,
+		borders = borders,
+		pixelsPerStud = pixelsPerStud,
+		-- Deliberately not the spawn default: a sentinel guarantees the
+		-- first pass writes, rather than matching by luck and leaving a
+		-- block on a thickness nobody computed.
+		borderThickness = -1,
 	}
 
 	-- Apply frame zero here rather than waiting for the next Heartbeat.
@@ -343,10 +409,40 @@ RunService.Heartbeat:Connect(function(dt)
 	local hrp = character and character:FindFirstChild("HumanoidRootPart")
 	local playerPos: Vector3? = if hrp then (hrp :: BasePart).Position else nil
 
+	local camera = workspace.CurrentCamera
+
 	local now = os.clock()
 	for block, state in pairs(trackedBlocks) do
 		if block.Parent then
 			state.rotation = (state.rotation + ROTATION_RADIANS_PER_SECOND * dt) % TAU
+
+			-- Border thickness rides the same rolling bucket as the
+			-- transform but NOT the same shouldUpdate gate below. That
+			-- gate freezes distant blocks, and distant blocks are exactly
+			-- the ones whose border is about to disappear -- a block held
+			-- still still needs its thickness corrected when the CAMERA
+			-- moves toward it.
+			--
+			-- Camera, not the character: the border's width on screen is
+			-- a projection, and the projection is from the camera.
+			if camera and state.bucket == frameCount and #state.borders > 0 then
+				local thickness = math.round(LetterBlocks.borderThicknessFor(
+					(state.basePosition - camera.CFrame.Position).Magnitude,
+					state.pixelsPerStud,
+					camera.FieldOfView,
+					camera.ViewportSize.Y
+				))
+				-- Rounded and compared before writing. A sub-pixel change
+				-- in stroke width is not visible, and skipping it makes a
+				-- standing player one comparison per block per bucket
+				-- instead of twelve property writes.
+				if thickness ~= state.borderThickness then
+					state.borderThickness = thickness
+					for _, target in ipairs(state.borders) do
+						LetterBlocks.applyBorderThickness(target.frame, target.stroke, thickness)
+					end
+				end
+			end
 
 			local intro = state.intro
 			if intro then

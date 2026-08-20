@@ -1496,3 +1496,25 @@ Verified on the server VM across all 780 pairs, then 60 blocks churned through t
 **Owed:** render cost is unmeasured. The arena now carries 1,200 GUI instances, and an in-Studio A/B read exactly 15.0 fps with decor on, decor hidden, and *every* SurfaceGui disabled — a floor-limited test with no resolution, not a clean result. One frame also showed a face rendering without its border while all six verified as populated and enabled, which points at Roblox's SurfaceGui render budget. Both need a real client.
 
 Pages touched: [[systems/LetterBlock]], [[systems/BlockSpawner]], [[index]].
+
+## [2026-08-20] ingest | The block faces cost less than feared, and the border never worked
+
+Closing the two items the face-treatment session left owed. Both answers inverted the question.
+
+**Render cost.** The instrument was the problem, not the machine. The previous A/B "read 15.0 fps with decor on, decor hidden, and every SurfaceGui disabled, so the test was floor-limited" — but 15.0 in the *cheapest* condition is not a floor, it is a ceiling, and `RenderAverage` sitting at exactly 66.668 ms (1/15 s) against a `RenderThreadAverage` of 2.4 ms says the renderer did 2.4 ms of work and slept for 64. All three conditions were above the cap, which is the only reason they tied. A duration that lands on exactly 1/15 s is a pacing target, not a measurement.
+
+`Stats.RenderBreakdown` and `Stats.FrameRateManager` report per-frame **counts**, so they do not care about pacing at all. 40 blocks on screen cost **+120 draw calls, +120 batches, +7,590 triangles** and a render-thread delta of ~0.3 ms that is smaller than the spread between two identical replicates — so the timing is honestly unresolvable and the counts are the result.
+
+The useful finding is what the counts are *of*. 121 draws over 40 blocks is 3.0 — exactly the most faces of a cube a camera can see, so culling is already exact and the 1,200-instance figure is not what the renderer charges for. Hiding the border, the panel or the glyph individually left draws at 121: a face's contents batch into one call, so the decoration is nearly free and only face count matters. Flat across distance to 350 studs and across every quality level. Not a performance concern, and the lever the last entry proposed — decorating fewer faces per block — would not have moved it.
+
+**The border.** Not a render budget, not quality, not the fade. A 12 px stroke on a 200 px canvas is 6 % of the face, so its width *on screen* is 4.2 px at 40 studs, 0.94 at 180 and 0.68 at 250. Below a pixel a line renders on subpixel coverage, and these blocks tumble at 28°/s, so it flickers frame to frame. Reproducible, not the stray frame it was recorded as.
+
+What made it severe was a stale number: the arena is **219×20×248 studs**, not the 40×8×40 the index asserted (that figure is the config's fallback; real bounds come from tagged `BlockSpawnVolume` parts). Profiled by viewer position, the share of blocks with a solid border was 8 % from the arena centre and **0 % from the player spawn**. The border's stated purpose is the silhouette at distance. It worked everywhere except the case it was added for.
+
+Thickness is now derived per block from camera distance to hold ~5.5 px on screen, driven by `LetterBlockAnimator` on the same rolling bucket as the transform but deliberately not behind the transform's cull gate — that gate freezes distant blocks, which are exactly the ones that need correcting as the camera closes. The cube edge cancels out of the derivation, so `BLOCK_SCALE` does not appear in it; deriving rather than hand-setting is the direct lesson of the `BLOCK_MIN_SPACING` overlap bug in the entry above.
+
+Clamped [6, 20] where the ceiling is geometry: the stroke spans 0..T from the canvas edge and the panel starts at 26, and the ring of block colour between them is the only thing carrying red/green/blue once the glyph is unreadable — which is *which reservoir the letter feeds*. So the target width only holds to ~51 studs and past that the border thins from 20 px instead of 12. Solid range 85 → 141 studs; 180 and 250 come back out of sub-pixel.
+
+Two process notes. The measurement mattered more than the fix: three plausible hypotheses (SurfaceGui render budget, quality-level culling, fade desync) were each disconfirmed by a controlled test, and one of them — quality-level culling — I had already called a "smoking gun" off a reading where I moved the camera and the quality level in the same step. And verification was Edit-mode: Studio's play mode wedged in the MCP proxy, so the fix is confirmed by replaying the animator's exact computation on real blocks at controlled distances plus before/after captures, not by a playtest. The live Heartbeat path is unverified in a running game.
+
+Pages touched: [[systems/LetterBlock]], [[index]].

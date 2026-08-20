@@ -52,11 +52,53 @@ local DEFAULT_COLOR = "red"
 -- what renders is exactly the visible silhouette.
 local BORDER_FRAME_NAME = "Border"
 
--- Thickness is in canvas pixels and needs no scaling: Model:ScaleTo
--- scales SurfaceGui.PixelsPerStud inversely to the part (4 studs x 50
--- and 6 studs x 33.3 are both a 200 px canvas) and leaves
--- UIStroke.Thickness alone, so one constant holds at any BLOCK_SCALE.
+-- Thickness is in canvas pixels, which is a fixed fraction of the face
+-- -- so the border's width ON SCREEN falls off with distance like
+-- everything else. Measured 2026-08-20: a 12 px stroke on the 200 px
+-- face renders 4.2 px wide at 40 studs, 1.9 at 90, 1.3 at 130 and
+-- 0.94 at 180, where it is sub-pixel and flickers in and out frame to
+-- frame as the block tumbles.
+--
+-- That is the whole point of the border failing in the one case it was
+-- added for. Its job is the silhouette at distance, and past ~85 studs
+-- it stops drawing reliably; from the arena centre only 8 % of blocks
+-- had a solid edge, and from the player spawn none did.
+--
+-- So thickness is not a constant. LetterBlockAnimator drives it per
+-- block from camera distance to hold a roughly constant width on
+-- screen: `borderThicknessFor` is the math, `applyBorderThickness`
+-- writes it. The value below is only the spawn default, covering the
+-- frame or two before the animator's first pass reaches a new block.
+--
+-- Deriving it rather than hand-picking it is deliberate. A constant
+-- here is coupled to BLOCK_SCALE, the camera FOV and the viewport, and
+-- a hand-maintained coupling in this exact system is what produced the
+-- BLOCK_MIN_SPACING overlap bug -- see `tumbleDiameter` below.
 local BORDER_THICKNESS_PIXELS = 12
+
+-- Target width on screen, in real screen pixels. 5.5 is what the 12 px
+-- stroke measured at ~30 studs, which is the range the border was
+-- eyeballed at and liked -- so near blocks keep the chunky edge
+-- ArtDirection asks for and only the far ones change.
+local BORDER_TARGET_SCREEN_PIXELS = 5.5
+
+-- Floor, so a block right in the player's face keeps a real edge
+-- instead of a hairline.
+local BORDER_MIN_THICKNESS_PIXELS = 6
+
+-- Ceiling set by the face's own geometry rather than by taste. The
+-- stroke spans 0..T from the canvas edge and the panel starts at
+-- PANEL_INSET_PIXELS, so T >= that would bury the panel. It has to stop
+-- well short: the ring of block colour between border and panel is the
+-- only thing still carrying red/green/blue once the glyph is too small
+-- to read, and colour is which reservoir the letter feeds. 20 keeps a
+-- 6 px ring.
+--
+-- The cost is that the target width cannot be held past ~51 studs.
+-- Beyond that the border still thins with distance -- but from 20 px
+-- instead of 12, a 67 % wider edge at every range past it, which is
+-- what pulls the far half of the arena back out of sub-pixel.
+local BORDER_MAX_THICKNESS_PIXELS = 20
 
 -- The stroke is the block's own tint driven most of the way to black,
 -- not a shared black -- a red block's edge is deep maroon and a blue
@@ -70,11 +112,6 @@ local BORDER_THICKNESS_PIXELS = 12
 -- the block's *own* tint is invisible against the block.
 local BORDER_DARKEN = 0.72
 local BLACK = Color3.new(0, 0, 0)
-
--- The border frame is inset by exactly its own thickness so a
--- centre-applied stroke lands flush with the canvas edge instead of
--- half outside it, where the face bounds would clip it.
-local BORDER_INSET_PIXELS = BORDER_THICKNESS_PIXELS
 
 -- The border frames the face, so it wins when it overlaps the glyph.
 local BORDER_Z_INDEX = 2
@@ -151,9 +188,56 @@ LetterBlocks.TAG = TAG
 LetterBlocks.LETTER_ATTRIBUTE = LETTER_ATTRIBUTE
 LetterBlocks.COLOR_ATTRIBUTE = COLOR_ATTRIBUTE
 LetterBlocks.COLOR_TINTS = COLOR_TINTS
+-- Exported so LetterBlockAnimator can find the border it drives without
+-- restating the name.
+LetterBlocks.BORDER_FRAME_NAME = BORDER_FRAME_NAME
 
 local TemplatePath = script:WaitForChild("Template")
 LetterBlocks.Template = TemplatePath
+
+-- Thickness and the frame's inset are one setting, not two. The stroke
+-- is centred on the frame's edge, so the frame has to be inset by
+-- exactly the thickness for the stroke to land flush inside the canvas
+-- rather than half outside it, where the face bounds clip it. Writing
+-- either alone is the bug this function exists to make unavailable.
+function LetterBlocks.applyBorderThickness(border: Frame, stroke: UIStroke, thickness: number)
+	stroke.Thickness = thickness
+	border.Size = UDim2.new(1, -thickness, 1, -thickness)
+end
+
+-- Canvas pixels of stroke that render as BORDER_TARGET_SCREEN_PIXELS on
+-- screen for a block `distanceStuds` away.
+--
+-- A face `edge` studs across projects to
+--     facePx = edge * viewportHeight / (2 * d * tan(fov / 2))
+-- screen pixels, and its canvas is `edge * pixelsPerStud` canvas pixels
+-- across, so holding a target screen width means
+--     thickness = target * canvasPx / facePx
+-- The edge cancels out of that, which is why neither the cube size nor
+-- BLOCK_SCALE appears below: Model:ScaleTo scales PixelsPerStud
+-- inversely to the part and the two changes exactly offset (see the
+-- scaling table on wiki/systems/LetterBlock.md). One less coupling to
+-- maintain by hand.
+function LetterBlocks.borderThicknessFor(
+	distanceStuds: number,
+	pixelsPerStud: number,
+	fovDegrees: number,
+	viewportHeight: number
+): number
+	-- A zero viewport is a real state (minimised window), and a zero
+	-- distance divides by nothing useful -- fall back rather than emit a
+	-- NaN thickness that would silently blank every border.
+	if distanceStuds <= 0 or pixelsPerStud <= 0 or viewportHeight <= 0 then
+		return BORDER_THICKNESS_PIXELS
+	end
+
+	local thickness = BORDER_TARGET_SCREEN_PIXELS
+		* pixelsPerStud
+		* 2 * distanceStuds * math.tan(math.rad(fovDegrees) / 2)
+		/ viewportHeight
+
+	return math.clamp(thickness, BORDER_MIN_THICKNESS_PIXELS, BORDER_MAX_THICKNESS_PIXELS)
+end
 
 -- Find-or-create rather than create: applyVisualState is documented
 -- idempotent and re-runs whenever a block's attributes change, so a
@@ -169,7 +253,6 @@ local function applyFaceBorder(surface: SurfaceGui, tint: Color3)
 		border.BackgroundTransparency = 1
 		border.AnchorPoint = Vector2.new(0.5, 0.5)
 		border.Position = UDim2.fromScale(0.5, 0.5)
-		border.Size = UDim2.new(1, -BORDER_INSET_PIXELS, 1, -BORDER_INSET_PIXELS)
 		border.ZIndex = BORDER_Z_INDEX
 		border.Parent = surface
 	end
@@ -180,9 +263,13 @@ local function applyFaceBorder(surface: SurfaceGui, tint: Color3)
 		stroke = strokeChild
 	else
 		stroke = Instance.new("UIStroke")
-		stroke.Thickness = BORDER_THICKNESS_PIXELS
 		stroke.Parent = border
 	end
+
+	-- Re-apply keeps whatever thickness the animator last set, so an
+	-- attribute change mid-flight does not snap every border back to the
+	-- spawn default and wait for the next bucket to correct it.
+	LetterBlocks.applyBorderThickness(border, stroke, strokeChild and stroke.Thickness or BORDER_THICKNESS_PIXELS)
 
 	stroke.Color = tint:Lerp(BLACK, BORDER_DARKEN)
 end
