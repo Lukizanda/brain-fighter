@@ -149,14 +149,14 @@ Add an objective-shaped win condition rather than overloading kills.
 
 *Added 2026-08-20 after stage 1 shipped.* `RoundManager`'s `FireAllClients` was
 not a one-off — it was the first of a class, and the original stage table treated
-it as a detail. Eleven `FireAllClients` sites remain in `src/`. They do **not**
-all matter equally, and the split is by what the *consumer* does with the
+it as a detail. **Seventeen** `FireAllClients` sites remain in `src/`. They do
+**not** all matter equally, and the split is by what the *consumer* does with the
 payload, not by which system sends it:
 
 | | Sites | With two arenas live |
 |---|---|---|
-| **Screen-space (HUD)** | `BossHealthChanged` / `BossPhaseChanged` → `BossHudGui` (`BossService` ×5); `ScoreUpdate` → `ScoreboardGui`, `KillFeed` → `KillFeedGui` (`ScoreTracker` ×3) | **Broken.** A duellist gets the boss's health bar on screen and the boss room's kill feed. Position is irrelevant — it's a GUI. |
-| **World-space (VFX)** | `VfxBroadcast` ×5, `VfxBroadcastService` ×1, `SkillDelivery` ×1, boss windup (`BossStates` ×1) | **Costs, doesn't break.** Particles spawn at a world position, so a player in another arena never sees them — but pays to instantiate them. |
+| **Screen-space (HUD)** — 9 | `BossPhaseChanged` ×3 (`BossService` 73/84/109) + `BossHealthChanged` ×3 (85/94/108) → `BossHudGui`; `ScoreUpdate` ×1 (`ScoreTracker` 140) → `ScoreboardGui`; `KillFeed` ×2 (149/265) → `KillFeedGui` | **Broken.** A duellist gets the boss's health bar on screen and the boss room's kill feed. Position is irrelevant — it's a GUI. |
+| **World-space (VFX)** — 8 | `VfxBroadcast` ×5, `VfxBroadcastService` ×1, `SkillDelivery` ×1, boss windup (`BossStates` 176) | **Costs, doesn't break.** Particles spawn at a world position, so a player in another arena never sees them — but pays to instantiate them. |
 
 **Only the HUD half is Phase 6 work** (stage 3 below). The VFX half is a
 throughput problem owned by [[systems/VisualEffects]]' `PERF` guardrails, which
@@ -174,7 +174,7 @@ leave it.
 |---|---|---|
 | 1 | ✅ **Done 2026-08-20 (`b38a99c`).** `RoundManager.new(deps)` with `arenaId`, a roster and `:disable()`/`:destroy()`; `GameModeService` owns `sessions[arenaId]` + `playerSessions[player]`, one `Default` session at boot. Per-roster `FireClient` landed with it, and `_waitForPlayers` gates on roster count. **Diverged from plan:** `task.cancel` was removed rather than kept — the old `stop()` never cleared `roundThread` on natural exit, so a second `stop()` would have thrown; a `_generation` counter checked at each await point covers the overlap case cancel was there for. Verified by a client-side listener plus a two-session disjoint-roster cross-talk test. | — |
 | 2 | **Arena binding.** `ArenaId` attribute on `BlockSpawnVolume`; per-arena block pools in `BlockSpawner`. New `LobbySpawn` / `PvEArenaSpawn` / `PvPArenaSpawn` tags — `SpawnManager.filterSpawnsForPlayer` already resolves spawns by tag, so this is data. | — |
-| 3 | **Broadcast audience.** The six HUD sites above: `ScoreTracker`'s `ScoreUpdate` + `KillFeed` ×2, `BossService`'s `BossHealthChanged` ×3 / `BossPhaseChanged` ×2. Copy the roster pattern stage 1 established. VFX lane explicitly out — see above. | Before stage 5 |
+| 3 | **Broadcast audience.** The nine HUD sites above: `ScoreTracker`'s `ScoreUpdate` ×1 + `KillFeed` ×2, `BossService`'s `BossPhaseChanged` ×3 + `BossHealthChanged` ×3. Copy the roster pattern stage 1 established. VFX lane explicitly out — see above. | Before stage 6 |
 | 4 | **Hub greybox + player state.** Lobby zone, two portals, practice blocks, `InLobby/Queued/InArena` state and the HUD suppression table above. Still `NoOp` behind the portals. | — |
 | 5 | **PvE mode.** `Modes/PvEBoss.luau` — co-op, `minPlayers = 1`, objective win condition, boss arena slot. Queue → round → back to lobby. | — |
 | 6 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `PLAYER_VS_PLAYER_ENABLED = true`, timer + countdown back on. | **After Phase 5.4** |
