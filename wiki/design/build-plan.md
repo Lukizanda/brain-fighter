@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-08-12
+updated: 2026-08-20
 ---
 
 # Build Plan
@@ -298,7 +298,42 @@ Added and shipped 2026-08-12. Full system page: [[systems/ChargeCast]].
 
 > **Since shipped:** the panels in chunk 2 are no longer vertical bars. They are circles that fill from the centre, with the tier notches as concentric rings; the spell name moved off the panel and onto a label over the charge orb. And the feel check owed above has had its first pass — `MANA_FLOW_PER_SEC` went **20 → 5**, so a T4 is a 7 s hold rather than 1.75 s. See the follow-up entries in the changelog below, [[systems/ChargeCast]] § The charge model and § The name label.
 
+## Phase 6 — Lobby & mode selection
+
+Added 2026-08-20. Full plan in [[design/lobby]]. Prompted by the decision to add a PvP mode.
+
+**The finding:** a welcome lobby reads like UI work and isn't. Mode choice is a **session-container** problem — `GameModeService` + `RoundManager` are a server-wide singleton (one round, one mode, everybody in it), `Modes/init.luau` registers only `NoOp` since `6610291`, and `BlockSpawner` pools every tagged `BlockSpawnVolume` globally. There is no way to express "these three are fighting the boss and those two are duelling". The menu is the cheap part.
+
+**The decision:** a **hub place with in-place arena zones** — one `.rbxl`, lobby zone plus arena zones in the same server. Multi-place + `TeleportService` was rejected on a hard dependency, not on taste: cross-place identity needs [[design/persistence-progression]], which is Phase 5.5 and unbuilt, so a teleported player arrives with nothing — and it splits a pre-launch population across places, making a 1v1 queue unfillable. A whole-server mode vote (no hub, lobby as `RoundManager.Waiting`) was rejected for making PvE hostage to PvP: a solo player in an empty server could never start anything. Outgrowing the hub later changes *where a session lives*, not *what a session is*.
+
+**Shape:** PvE is **co-op** — one boss arena, `minPlayers = 1`, everyone queued at round start goes in together, so a lone player never waits. PvP is **1v1 duels on a pool of authored pads** (2 for v1; the pad count *is* the concurrency limit). Selection is **diegetic portals with live queue counts**, not a menu screen — same argument that reshaped [[systems/ChargeCast]]: a menu costs a mode in a game whose verbs are all single taps.
+
+| Stage | Item | Gate |
+|---|---|---|
+| 1 | **Session container.** `RoundManager` singleton → `RoundManager.new(modeDef, arenaId)`; `GameModeService` becomes a session manager owning N sessions. No behaviour change — one session, `NoOp`, whole server. | — |
+| 2 | **Arena binding.** `ArenaId` on `BlockSpawnVolume` + per-arena block pools; `LobbySpawn` / `PvEArenaSpawn` / `PvPArenaSpawn` tags. `SpawnManager.filterSpawnsForPlayer` already resolves by tag, so this is data. | — |
+| 3 | **Hub greybox + player state.** Lobby zone, two portals, practice blocks, `InLobby/Queued/InArena` and the HUD suppression table. Still `NoOp` behind the portals. | — |
+| 4 | **PvE mode.** `Modes/PvEBoss.luau` — co-op, objective win condition, boss arena slot. | — |
+| 5 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `PLAYER_VS_PLAYER_ENABLED = true`, timer + countdown back on. | **After 5.4** |
+| 6 | **Wiki + tests.** `wiki/systems/Lobby.md`, rewrite the NoOp-only [[systems/GameMode]] record, session lifecycle tests. | — |
+
+**The lobby does not unblock PvP, and shipping it must not be mistaken for shipping PvP.** Three live blockers, recorded in full in [[design/lobby]] § What this does *not* unblock:
+
+- **`PLAYER_VS_PLAYER_ENABLED` does not gate the damage path players actually use.** It gates `applyDamage.process`; spells write `Humanoid.Health` directly. Flipping it changes nothing for spells. Deferred in 5.1 as "unify when 5.4 hardening moves casting server-side" — that debt comes due here.
+- **Client-trusted affordability** (5.4 validated memorize). Already re-judged on 2026-08-10 for exactly this reason; in a 1v1 it is the most visible cheat there is.
+- **`ROUND_TIMER_ENABLED` / `ROUND_COUNTDOWN_ENABLED` are both `false`.** A duel with no clock does not end.
+
+Hence the gate column: stages 1–4 are safe against the current trust model (PvE co-op cheating is self-cheating); stage 5 lands after Phase 5.4.
+
+**Interface change:** `GameModeDefinition` is kill-centric (`onPlayerKill`, `scoreLimit`, `checkWinCondition` over kills/deaths/assists). That fits a duel nearly unchanged and a boss fight badly — add an objective-shaped win condition rather than modelling "the boss died" as a player kill.
+
+**Milestone:** two clients join, land in the lobby with no combat HUD, pop a practice block, and walk to different portals. One fights the boss solo while the other waits at a full duel pad **and can see why**. Both return to the lobby when their round ends, and the server never had more than one session per slot.
+
+**Open:** mid-round leave/forfeit rules, duel disconnect handling, spectating. The progression board is deferred to Phase 5.5 — leave wall space.
+
 ## Plan changelog
+
+- **2026-08-20**: Phase 6 added — lobby & mode selection ([[design/lobby]]). Planning the PvP mode surfaced that the welcome lobby is a session-container refactor, not UI: `RoundManager`/`GameModeService` are a server-wide singleton and `BlockSpawner` pools all volumes globally, so no two groups of players can be in different modes at once. Decided: hub place with in-place arena zones (multi-place blocked on unbuilt 5.5 persistence; whole-server vote makes PvE hostage to PvP), co-op queued PvE so solo players never wait, 1v1 duels on a 2-pad pool, diegetic portals over a menu screen. Also pinned the thing most likely to be assumed away: **`PLAYER_VS_PLAYER_ENABLED` does not gate spell damage** — spells bypass `applyDamage` entirely, so the 5.1 split-brain deferral is a Phase 6 prerequisite, alongside 5.4's client-trusted affordability and the two disabled round-timing flags. Stage 5 is explicitly gated behind 5.4; stages 1–4 are not.
 
 - **2026-08-12** (follow-up): the 5.8 cast panels **became circles**. Mana fills a disc outward from the centre, the tier thresholds are concentric rings, the reserve is an annulus off the fill's outer edge, and the ceiling pulse is a rim halo. The argument is affordance, not decoration: a bar reads as a meter you watch, which was right while a tap fired whatever you could afford, and press-and-hold needs a panel that reads as something you push and keep pushing. It also matches the DASH button below it in the same column, already a circle, and echoes the charge orb. Costs: the spell name is gone (no room in a disc — a *second* bite out of the legend problem 5.8 already took one out of, and the replacement idea is filed in [[ideas]] with its weakness recorded), and under `FILL_RADIUS_EXPONENT = 1` the disc looks emptier than its numeral says while the T1/T2 rings are small enough to sit under it. That exponent is one lever with two documented settings; which reads better is a feel question. The arc gauge that would keep linear encoding *and* readable tick spacing is filed rather than built — Roblox has no radial fill, so it needs the two-half rotation mask, where the disc is nearly free.
 
