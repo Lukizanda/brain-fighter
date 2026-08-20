@@ -1,25 +1,33 @@
 ----------------------------------------------------------------------
 -- SpawnManager
 ----------------------------------------------------------------------
--- Intelligent spawn point selection for game modes.
+-- Intelligent spawn point selection, per arena.
 -- Uses CollectionService tags to find spawn points in the workspace.
 -- Scores each spawn by distance to nearest living enemy and picks
 -- the safest one.
 --
+-- Each session registers its arena's spawn tag; a spawn candidate is a
+-- part carrying that tag whose `ArenaId` resolves to the same arena. Two
+-- arenas can therefore share a tag name (the two duel pads of stage 6 are
+-- both `PvPArenaSpawn`) and still keep their pads apart. See
+-- `wiki/design/lobby.md` § Session model.
+--
 -- Extensible:
---   - Tag name is configurable (default: GameModeConstants.SPAWN_TAG)
+--   - Tag name comes from the mode definition's `spawnTag`
 --   - Team-aware: pass a team filter to exclude friendly spawns
 --   - Falls back to default SpawnLocations if no tagged spawns exist
 --
 -- Usage:
 --   SpawnManager.initialize()
---   local cf = SpawnManager.getBestSpawn(player)
+--   SpawnManager.registerArena("Default", "FFASpawn")
+--   local cf = SpawnManager.getBestSpawn(player, "Default")
 ----------------------------------------------------------------------
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
 local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
@@ -27,9 +35,10 @@ local log = Logger.new("SpawnManager")
 
 local SpawnManager = {}
 
--- Set by initialize({ spawnTag = ... }). If no tag is provided or no
--- tagged spawns exist in workspace, falls back to any SpawnLocation.
-local spawnTag: string? = nil
+-- Spawn tag per arena id, populated by registerArena(). An arena with no
+-- registered tag, or whose tag matches nothing in the workspace, falls
+-- back to any SpawnLocation.
+local arenaSpawnTags: { [string]: string } = {}
 local initialized = false
 
 ----------------------------------------------------------------------
@@ -66,18 +75,26 @@ local function getLivingEnemyPositions(excludePlayer: Player?, teamFilter: strin
 	return positions
 end
 
-local function getSpawnPoints(): { BasePart }
+local function getSpawnPoints(arenaId: string): { BasePart }
 	local spawns = {}
 
+	local spawnTag = arenaSpawnTags[arenaId]
 	if spawnTag then
 		for _, obj in CollectionService:GetTagged(spawnTag) do
-			if obj:IsA("BasePart") and obj:IsDescendantOf(workspace) then
+			if obj:IsA("BasePart") and obj:IsDescendantOf(workspace) and Arena.idOf(obj) == arenaId then
 				table.insert(spawns, obj)
 			end
 		end
 	end
 
-	-- Fallback: use any SpawnLocation in workspace
+	-- Fallback: use any SpawnLocation in workspace.
+	--
+	-- Deliberately NOT filtered by arena. It is the misconfigured-scene
+	-- path — nothing is tagged for this arena — and its whole job is to
+	-- put the player somewhere rather than at origin. Narrowing it by
+	-- arena would make the empty case empty again. The shipped place
+	-- reaches this path today: nothing carries the FFASpawn tag, so every
+	-- player lands on Arena.SpawnZone.SpawnLocation.
 	if #spawns == 0 then
 		for _, descendant in workspace:GetDescendants() do
 			if descendant:IsA("SpawnLocation") then
@@ -151,29 +168,43 @@ end
 -- Public API
 ----------------------------------------------------------------------
 
-function SpawnManager.initialize(config: { spawnTag: string? }?)
+function SpawnManager.initialize()
 	if initialized then
 		log:warn("Already initialized")
 		return
 	end
 
-	if config and config.spawnTag then
-		spawnTag = config.spawnTag
+	initialized = true
+	log:info("Initialized — awaiting arena registrations")
+end
+
+-- Binds an arena to the spawn tag its mode authors pads with. Called by
+-- GameModeService as each session is created.
+function SpawnManager.registerArena(arenaId: string, spawnTag: string?)
+	if spawnTag then
+		arenaSpawnTags[arenaId] = spawnTag
+	else
+		arenaSpawnTags[arenaId] = nil
 	end
 
-	initialized = true
-	local spawns = getSpawnPoints()
-	log:info(string.format("Initialized with %d spawn points (tag: %s)",
-		#spawns, spawnTag or "<none — SpawnLocation fallback>"))
+	local spawns = getSpawnPoints(arenaId)
+	log:info(string.format("[%s] registered with %d spawn points (tag: %s)",
+		arenaId, #spawns, spawnTag or "<none — SpawnLocation fallback>"))
+end
+
+function SpawnManager.unregisterArena(arenaId: string)
+	arenaSpawnTags[arenaId] = nil
 end
 
 -- Returns the best CFrame to spawn at, avoiding nearby enemies.
+-- arenaId: which arena's pads to draw from; defaults to the default arena.
 -- teamFilter: optional team name to only consider enemies from that team.
-function SpawnManager.getBestSpawn(player: Player, teamFilter: string?): CFrame
-	local spawns = filterSpawnsForPlayer(getSpawnPoints(), player)
+function SpawnManager.getBestSpawn(player: Player, arenaId: string?, teamFilter: string?): CFrame
+	local resolvedArenaId = arenaId or Arena.DEFAULT_ID
+	local spawns = filterSpawnsForPlayer(getSpawnPoints(resolvedArenaId), player)
 
 	if #spawns == 0 then
-		log:warn("No spawn points found, using origin")
+		log:warn(string.format("[%s] No spawn points found, using origin", resolvedArenaId))
 		return CFrame.new(0, 10, 0)
 	end
 
@@ -195,7 +226,8 @@ function SpawnManager.getBestSpawn(player: Player, teamFilter: string?): CFrame
 	local spawnCFrame = bestSpawn.CFrame + Vector3.new(0, 3, 0)
 
 	log:info(string.format(
-		"Best spawn for %s: %s (dist to nearest enemy: %s)",
+		"[%s] Best spawn for %s: %s (dist to nearest enemy: %s)",
+		resolvedArenaId,
 		player.Name,
 		bestSpawn.Name,
 		bestScore == math.huge and "no enemies" or string.format("%.0f studs", bestScore)
@@ -204,9 +236,9 @@ function SpawnManager.getBestSpawn(player: Player, teamFilter: string?): CFrame
 	return spawnCFrame
 end
 
--- Returns all spawn points (for debug/visualization)
-function SpawnManager.getSpawnPoints(): { BasePart }
-	return getSpawnPoints()
+-- Returns all spawn points for an arena (for debug/visualization)
+function SpawnManager.getSpawnPoints(arenaId: string?): { BasePart }
+	return getSpawnPoints(arenaId or Arena.DEFAULT_ID)
 end
 
 return SpawnManager

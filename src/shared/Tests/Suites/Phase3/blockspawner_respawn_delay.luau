@@ -5,6 +5,7 @@ local BlockSpawner = require(ReplicatedStorage.Shared.BlockSpawner)
 local TEST_TARGET = 6
 local TEST_DELAY = 1.2
 local TEST_PARENT_NAME = "TestRespawnDelayContainer"
+local TEST_ARENA_ID = "TestRespawnDelay"
 
 -- Two blocks, so the test also catches the failure mode where the first
 -- expiring timer refills the whole arena instead of one block.
@@ -19,24 +20,24 @@ return {
 	name = "BlockSpawner holds a consumed block for respawnDelay before replacing it",
 
 	setup = function(ctx)
-		BlockSpawner.stop()
-
 		local container = Instance.new("Folder")
 		container.Name = TEST_PARENT_NAME
 		container.Parent = workspace
 		ctx.container = container
 
-		BlockSpawner.start({
+		ctx.spawner = BlockSpawner.new({
+			arenaId = TEST_ARENA_ID,
 			targetCount = TEST_TARGET,
 			boxMin = Vector3.new(-10, 10, -10),
 			boxMax = Vector3.new(10, 18, 10),
 			parent = container,
 			respawnDelay = TEST_DELAY,
 		})
+		ctx.spawner:start()
 	end,
 
 	run = function(ctx)
-		local blocks = BlockSpawner.getActiveBlocks()
+		local blocks = ctx.spawner:getActiveBlocks()
 		ctx.initialCount = #blocks
 
 		for i = 1, DESTROY_COUNT do
@@ -44,10 +45,10 @@ return {
 		end
 
 		task.wait(DURING_COOLDOWN_WAIT)
-		ctx.duringCooldown = #BlockSpawner.getActiveBlocks()
+		ctx.duringCooldown = #ctx.spawner:getActiveBlocks()
 
 		task.wait(PAST_COOLDOWN_WAIT)
-		ctx.afterCooldown = #BlockSpawner.getActiveBlocks()
+		ctx.afterCooldown = #ctx.spawner:getActiveBlocks()
 	end,
 
 	verify = function(ctx)
@@ -83,9 +84,8 @@ return {
 	end,
 
 	teardown = function(ctx)
-		BlockSpawner.stop()
-		for _, block in BlockSpawner.getActiveBlocks() do
-			block:Destroy()
+		if ctx.spawner then
+			ctx.spawner:destroy()
 		end
 		if ctx.container then
 			ctx.container:Destroy()

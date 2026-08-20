@@ -1,30 +1,36 @@
 ---
 type: system
-description: Server-side letter-block populator — maintains a target count of floating LetterBlocks in the arena with Scrabble-weighted letter distribution, configurable color weights, and a per-block respawn cooldown.
+description: Server-side letter-block populator — one instance per arena, maintaining that arena's target count of floating LetterBlocks with Scrabble-weighted letter distribution, configurable color weights, and a per-block respawn cooldown.
 updated: 2026-08-20
 ---
 
 # BlockSpawner
 
-Server-side populator that keeps a target count of [[systems/LetterBlock|LetterBlock]] Models alive in the arena. When a block is destroyed (consumed by [[systems/BlockShoot|BlockShoot]], despawned, etc.), the spawner schedules a single replacement via the CollectionService removed signal, after a `GameConfig.BLOCK_RESPAWN_DELAY` cooldown.
+Server-side populator that keeps a target count of [[systems/LetterBlock|LetterBlock]] Models alive in **one arena**. When a block is destroyed (consumed by [[systems/BlockShoot|BlockShoot]], despawned, etc.), the spawner schedules a single replacement via the CollectionService removed signal, after a `GameConfig.BLOCK_RESPAWN_DELAY` cooldown.
+
+**One pool per arena since Phase 6 stage 2** (2026-08-20). It was a file-local singleton that treated every tagged `BlockSpawnVolume` in the world as one pool — see § Arena binding below. The shipped game runs exactly one pool, `Default`, so nothing about it looks different yet.
 
 ## Files
 
-- `src/shared/BlockSpawner/init.luau` — module: start / stop / rerollAll / getActiveBlocks / pickers / tunables.
-- `src/server/BlockSpawner/BlockSpawnerService.server.luau` — server bootstrap that calls `BlockSpawner.start()`, resolving `BlockSpawnVolume`-tagged parts and the `GameConfig` tunables.
+- `src/shared/BlockSpawner/init.luau` — the pool class: `new` / start / disable / destroy / rerollAll / getActiveBlocks / pickers / tunables.
+- `src/server/BlockSpawner/BlockSpawnerService.server.luau` — server bootstrap that groups `BlockSpawnVolume`-tagged parts by arena and starts one pool per group, threading the `GameConfig` tunables.
+- `src/shared/GameMode/Arena.luau` — the shared `ArenaId` / `Default` vocabulary, also used by [[systems/GameMode]].
 - `src/shared/Tests/Suites/Phase3/blockspawner_respawn_delay.luau` — asserts the arena stays short mid-cooldown and returns to *exactly* target after, catching a refill-to-target regression.
 
 ## API
 
-`require(ReplicatedStorage.Shared.BlockSpawner)` returns the module table.
+`require(ReplicatedStorage.Shared.BlockSpawner)` returns the class table; `BlockSpawner.new(opts?)` returns a pool.
 
 | Member | Type | Notes |
 |---|---|---|
-| `.start(opts?)` | `(Opts?) -> ()` | Fills arena to target count **immediately** (the cooldown applies to replacements, not the initial fill), hooks CollectionService removed signal for auto-refill. No-ops if already running. |
-| `.stop()` | `() -> ()` | Disconnects the refill listener. Existing blocks remain, and any in-flight respawn timers no-op on their `running` check. |
-| `.rerollAll()` | `() -> ()` | Destroys all active blocks. Each queues its own replacement, so the field returns one cooldown later. **No callers** as of 2026-08-08 — it is a documented escape hatch from [[design/gameplay-loop]], not a shipped mechanic. |
-| `.getActiveBlocks()` | `() -> { Model }` | Snapshot of currently tracked blocks. |
-| `.LETTER_FREQUENCIES` | `{ [string]: number }` | Scrabble-standard 98-tile distribution used for weighted letter picks. |
+| `.new(opts?)` | `(Opts?) -> BlockSpawner` | Resolves opts and the volume-weighted box table. Spawns nothing until `:start()`. |
+| `:start()` | `() -> ()` | Fills this arena to target count **immediately** (the cooldown applies to replacements, not the initial fill), hooks CollectionService removed signal for auto-refill. No-ops if already running or destroyed. |
+| `:disable()` | `() -> ()` | Reversible halt. Disconnects the refill listener; existing blocks remain standing and in-flight respawn timers no-op on their `_running` check. A later `:start()` tops the surviving set back up to target. |
+| `:destroy()` | `() -> ()` | `:disable()`, then destroys this pool's blocks and clears its state. Permanent. |
+| `:rerollAll()` | `() -> ()` | Destroys this pool's blocks. Each queues its own replacement, so the field returns one cooldown later. **No callers** as of 2026-08-08 — it is a documented escape hatch from [[design/gameplay-loop]], not a shipped mechanic. |
+| `:getActiveBlocks()` | `() -> { Model }` | Snapshot of the blocks *this pool* tracks. Another arena's blocks are never included. |
+| `:getArenaId()` / `:getTargetCount()` | `() -> string` / `() -> number` | Identity and resolved target, for logging and assertions. |
+| `.LETTER_FREQUENCIES` | `{ [string]: number }` | Scrabble-standard 98-tile distribution used for weighted letter picks. Module-level: derived from constants, so it is built once at require rather than per pool. |
 
 ### Opts type
 
@@ -32,6 +38,8 @@ Server-side populator that keeps a target count of [[systems/LetterBlock|LetterB
 type BoxDef = { boxMin: Vector3, boxMax: Vector3 }
 
 type Opts = {
+    arenaId: string?,            -- which arena slot this pool is; default Arena.DEFAULT_ID
+
     -- Target count: explicit > density-computed > hardcoded default (24)
     targetCount: number?,        -- explicit override; ignores density
     density: number?,            -- blocks per 1000 cubic studs (see GameConfig.BLOCK_SPAWN_DENSITY)
@@ -56,13 +64,31 @@ type Opts = {
 
 ## Studio setup
 
-Tag any `BasePart` in Workspace with the `BlockSpawnVolume` CollectionService tag to define a spawn region. You can have as many tagged parts as you want — all are active simultaneously.
+Tag any `BasePart` in Workspace with the `BlockSpawnVolume` CollectionService tag to define a spawn region, and give it an `ArenaId` string attribute to say which arena it belongs to. Volumes sharing an id are one pool; you can have as many as you want, and all are active simultaneously.
 
-**Circular boss arena example**: place 4–8 rectangular parts arranged in a ring around the boss, each tagged `BlockSpawnVolume`. Blocks will distribute across them weighted by volume, so equal-sized parts produce equal density.
+**A volume with no `ArenaId` belongs to `Default`.** The attribute is how you opt a volume *out* of the default arena, never how you opt one in — the shipped arena's eight volumes carry no attribute at all.
 
-Density is controlled by `GameConfig.BLOCK_SPAWN_DENSITY` (default 2 = ~26 blocks in the 40×8×40 reference arena). The total block count auto-adjusts as you add or resize volumes.
+**Circular boss arena example**: place 4–8 rectangular parts arranged in a ring around the boss, each tagged `BlockSpawnVolume` and attributed with the same `ArenaId`. Blocks distribute across them weighted by volume, so equal-sized parts produce equal density.
+
+Density is controlled by `GameConfig.BLOCK_SPAWN_DENSITY` and applies **per arena**: a pool's target is density × *that arena's* volume / 1000. The count auto-adjusts as you add or resize that arena's volumes, and resizing one arena never changes another's count.
 
 ## Design decisions
+
+### Arena binding (Phase 6 stage 2, 2026-08-20)
+
+The spawner held its state — `running`, `resolvedOpts`, `activeCount`, the box and letter tables — in file-locals, so the module *was* the arena. `BlockSpawnerService` collected every part tagged `BlockSpawnVolume` anywhere in the world into one array and called `start()` once. With the hub place of [[design/lobby]] that breaks in three ways at once: two arenas would draw spawn positions from each other's boxes, share a single target count, and refill each other's consumed blocks.
+
+It is now one instance per arena, following the idiom [[systems/GameMode]]'s `RoundManager` established in stage 1 — `new(deps)` plus the project's `disable()` / `destroy()` pair. `BlockSpawnerService` groups the tagged volumes by `Arena.idOf(part)` and starts one pool per group.
+
+**Density was the subtle half.** `targetCount = density × total_volume / 1000` summed *all* tagged volumes. Per-arena it has to be that arena's volume, and the difference is invisible while one arena exists — the single-arena case gives the right answer either way, so the bug would have shipped and surfaced only when the second arena over- or under-filled. Verified live by building two pools over disjoint boxes of 100k and 50k cu studs: they resolved to 10 and 5 blocks, where the summed-volume bug gives 15 each.
+
+**Absence means default, not error.** The shipped arena's volumes are tagged but carry no `ArenaId`. Requiring the attribute — or treating unattributed parts as their own slot — would have silently stopped the shipped arena spawning while every log stayed clean. `Arena.idOf` resolves absent or blank to `Arena.DEFAULT_ID`; see the note in that module.
+
+**Isolation is structural, not conventional.** The `LetterBlock` CollectionService tag is global, so every pool's removed handler fires for every pool's blocks. What separates them is the `_active` set lookup that was already there for O(1) "one of ours?": a pool ignores a removal it doesn't recognise, so it cannot count or refill another arena's block.
+
+**Verified 2026-08-20** by playtest — the shipped arena boots to one `Default` pool, 8 boxes, 397,600 cu studs, target 40, spawned 40, all inside tagged volumes; a client-fired `ConsumeBlock` popped a block and the pool refilled to 40. Two probe pools then confirmed disjoint targets, independent refill, blocks confined to their own boxes, and no movement in the live arena's count.
+
+A side effect worth knowing: the Phase 3 suites no longer have to stop the live spawner to isolate themselves. Under the singleton each fixture called `BlockSpawner.stop()` in `setup` and never restarted it, so running a block test left the real arena frozen for the rest of the playtest. They now build their own pool in their own arena id.
 
 ### Letter distribution: Scrabble-frequency soft heuristic
 
@@ -86,7 +112,7 @@ Delaying that same call would have been wrong. `maintainCount` fills *every* mis
 
 `maintainCount` is still used, but only by `start()` for the initial fill — the cooldown is about *replacing* blocks, and an empty arena at round start should populate immediately.
 
-The `activeCount >= targetCount` bound is what makes a stale timer harmless: one surviving a `stop()` / `start()` cycle finds the arena already full and no-ops, so it cannot push the count over target.
+The `_activeCount >= targetCount` bound is what makes a stale timer harmless: one surviving a `disable()` / `start()` cycle finds the arena already full and no-ops, so it cannot push the count over target.
 
 **Measured** (2026-08-08 playtest, `BLOCK_RESPAWN_DELAY = 3`): blocks destroyed at t = 0.00 / 1.02 / 2.02 were replaced at t = 3.08 / 4.05 / 5.06 — each 3.03–3.08 s after its own destruction, staggered rather than bursting, ending back at exactly the target count.
 
@@ -125,9 +151,9 @@ Each block spawns with a random initial Y-axis rotation so a cluster doesn't loo
 
 | Parameter | Default | Source |
 |---|---|---|
-| Target count | density-computed (≈26 at default density) | `GameConfig.BLOCK_SPAWN_DENSITY` |
-| Density | 2 blocks per 1000 studs³ | `GameConfig.BLOCK_SPAWN_DENSITY` |
-| Arena box | 40×8×40 studs, Y 8–16 (reference) | `BlockSpawnVolume` tagged parts |
+| Target count | density-computed **per arena** — 40 in the shipped `Default` arena | `GameConfig.BLOCK_SPAWN_DENSITY` × that arena's volume ÷ 1000 |
+| Density | 0.1 blocks per 1000 studs³ | `GameConfig.BLOCK_SPAWN_DENSITY` |
+| Arena box | shipped: 8 volumes, 397,600 studs³ · module fallback: 40×8×40, Y 8–16 | `BlockSpawnVolume` tagged parts, grouped by `ArenaId` |
 | Color weights | uniform (1, 1, 1) | gameplay-loop § Spawner |
 | Min spacing | derived — 10.39 studs at `BLOCK_SCALE = 1.5` | `LetterBlocks.tumbleDiameter()` × `GameConfig.BLOCK_SPACING_CLEARANCE` |
 | Respawn cooldown | 3 s per consumed block | `GameConfig.BLOCK_RESPAWN_DELAY`; `0` refills next frame |

@@ -24,8 +24,10 @@ local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 -- number and made every value of it feel identical. See the aim note in
 -- BlockTapController.tryPop.
 --
--- Deliberately shorter than the arena. The BlockSpawnVolume parts span
--- roughly 240 × 259 studs (corner to corner ~353), so the far edge of
+-- Deliberately shorter than the arena. The default arena's eight
+-- BlockSpawnVolume parts span roughly 240 × 259 studs together (corner to
+-- corner ~353) — per-arena since Phase 6 stage 2, and this is the one the
+-- game ships with — so the far edge of
 -- the field is out of reach by design — you close on blocks rather than
 -- clearing the map from spawn. That also keeps the server's derived
 -- bound meaningful as an anti-grief limit rather than a formality.
