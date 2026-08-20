@@ -1536,3 +1536,7 @@ Verified by Studio playtest — clean boot, `[RoundManager] [Default] Session cr
 Left deliberately: `ScoreTracker` (3 `FireAllClients` sites) and `SpawnManager` are still singletons with the same problem — Phase 6 stage 2/4. `BossService` / `BossStates` broadcast globally too and are unscoped.
 
 Pages touched: [[systems/GameMode]] (rewritten off its singleton + `6610291`-stale file tree), [[index]].
+
+## [2026-08-20] ingest | Phase 6 gained a broadcast-audience stage
+
+Follow-up to stage 1 (`b38a99c`). Grepping `FireAllClients` across `src/` after the RoundManager refactor found **eleven** remaining sites, not the one the plan had treated as a detail — the broadcast audience is a class of bug, not a RoundManager quirk. Split recorded in `design/lobby.md` § Broadcast audience: the six **screen-space** sites genuinely break with two arenas (`BossService`'s BossHealthChanged ×3 / BossPhaseChanged ×2 → BossHudGui, `ScoreTracker`'s ScoreUpdate + KillFeed ×2 → Scoreboard/KillFeed GUIs — a duellist would get the boss's health bar on screen), while the **world-space** VFX lane (`VfxBroadcast` ×5, `VfxBroadcastService`, `SkillDelivery`, boss windup) costs instantiation but is never seen from another arena, so it stays with VisualEffects' existing PERF guardrails rather than gaining a roster lookup on the game's hottest path. `DevSmokeTestKillFeed`'s three sites are a dev harness, left alone. New stage 3 in both `design/lobby.md` and `design/build-plan.md`; hub/PvE/duel/wiki renumbered 3–6 → 4–7. No code changed in this ingest.

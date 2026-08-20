@@ -310,12 +310,13 @@ Added 2026-08-20. Full plan in [[design/lobby]]. Prompted by the decision to add
 
 | Stage | Item | Gate |
 |---|---|---|
-| 1 | **Session container.** `RoundManager` singleton → `RoundManager.new(modeDef, arenaId)`; `GameModeService` becomes a session manager owning N sessions. No behaviour change — one session, `NoOp`, whole server. | — |
+| 1 | ✅ **Done 2026-08-20 (`b38a99c`).** `RoundManager.new(deps)` with `arenaId` + roster + `:disable()`/`:destroy()`; `GameModeService` owns `sessions[arenaId]` + `playerSessions[player]`. Per-roster `FireClient` landed with it. `task.cancel` **removed** rather than kept — the old `stop()` never cleared `roundThread` on natural exit, so a second `stop()` would have thrown; a `_generation` counter covers the overlap case. Verified by a client-side listener + a two-session disjoint-roster cross-talk test. | — |
 | 2 | **Arena binding.** `ArenaId` on `BlockSpawnVolume` + per-arena block pools; `LobbySpawn` / `PvEArenaSpawn` / `PvPArenaSpawn` tags. `SpawnManager.filterSpawnsForPlayer` already resolves by tag, so this is data. | — |
-| 3 | **Hub greybox + player state.** Lobby zone, two portals, practice blocks, `InLobby/Queued/InArena` and the HUD suppression table. Still `NoOp` behind the portals. | — |
-| 4 | **PvE mode.** `Modes/PvEBoss.luau` — co-op, objective win condition, boss arena slot. | — |
-| 5 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `PLAYER_VS_PLAYER_ENABLED = true`, timer + countdown back on. | **After 5.4** |
-| 6 | **Wiki + tests.** `wiki/systems/Lobby.md`, rewrite the NoOp-only [[systems/GameMode]] record, session lifecycle tests. | — |
+| 3 | **Broadcast audience** *(added 2026-08-20)*. Six HUD sites: `ScoreTracker`'s `ScoreUpdate` + `KillFeed` ×2, `BossService`'s `BossHealthChanged` ×3 / `BossPhaseChanged` ×2. Copy stage 1's roster pattern. VFX lane out of scope — see [[design/lobby]] § Broadcast audience. | Before stage 6 |
+| 4 | **Hub greybox + player state.** Lobby zone, two portals, practice blocks, `InLobby/Queued/InArena` and the HUD suppression table. Still `NoOp` behind the portals. | — |
+| 5 | **PvE mode.** `Modes/PvEBoss.luau` — co-op, objective win condition, boss arena slot. | — |
+| 6 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `PLAYER_VS_PLAYER_ENABLED = true`, timer + countdown back on. | **After 5.4** |
+| 7 | **Wiki + tests.** `wiki/systems/Lobby.md`, rewrite the NoOp-only [[systems/GameMode]] record, session lifecycle tests. | — |
 
 **The lobby does not unblock PvP, and shipping it must not be mistaken for shipping PvP.** Three live blockers, recorded in full in [[design/lobby]] § What this does *not* unblock:
 
@@ -323,7 +324,7 @@ Added 2026-08-20. Full plan in [[design/lobby]]. Prompted by the decision to add
 - **Client-trusted affordability** (5.4 validated memorize). Already re-judged on 2026-08-10 for exactly this reason; in a 1v1 it is the most visible cheat there is.
 - **`ROUND_TIMER_ENABLED` / `ROUND_COUNTDOWN_ENABLED` are both `false`.** A duel with no clock does not end.
 
-Hence the gate column: stages 1–4 are safe against the current trust model (PvE co-op cheating is self-cheating); stage 5 lands after Phase 5.4.
+Hence the gate column: stages 1–5 are safe against the current trust model (PvE co-op cheating is self-cheating); stage 6 lands after Phase 5.4.
 
 **Interface change:** `GameModeDefinition` is kill-centric (`onPlayerKill`, `scoreLimit`, `checkWinCondition` over kills/deaths/assists). That fits a duel nearly unchanged and a boss fight badly — add an objective-shaped win condition rather than modelling "the boss died" as a player kill.
 
@@ -332,6 +333,8 @@ Hence the gate column: stages 1–4 are safe against the current trust model (Pv
 **Open:** mid-round leave/forfeit rules, duel disconnect handling, spectating. The progression board is deferred to Phase 5.5 — leave wall space.
 
 ## Plan changelog
+
+- **2026-08-20** (follow-up): Phase 6 stage 1 shipped (`b38a99c`) and **the plan gained a stage**. Auditing the remaining `FireAllClients` sites after the refactor found eleven, not the one `RoundManager` owned — so the broadcast audience was a *class* of bug the original stage table had mistaken for a detail. New stage 3 covers the six that matter; hub/PvE/duel/wiki renumbered 3–6 → 4–7 (stages 1 and 2 unmoved). The useful split turned out not to be by system but by **what the consumer does with the payload**: HUD remotes (`BossHealthChanged`/`BossPhaseChanged`/`ScoreUpdate`/`KillFeed`) are screen-space and genuinely break — a duellist would get the boss's health bar — while the VFX lane (`VfxBroadcast`, `SkillDelivery`, boss windup) is world-positioned, so a player in another arena never sees it and only pays to instantiate it. That half stays with [[systems/VisualEffects]]' existing `PERF` guardrails rather than gaining a roster lookup on the hottest path in the game. Stage 1 also diverged once: `task.cancel` was removed, not preserved — the old `stop()` never cleared `roundThread` on natural exit, so a second `stop()` would have thrown.
 
 - **2026-08-20**: Phase 6 added — lobby & mode selection ([[design/lobby]]). Planning the PvP mode surfaced that the welcome lobby is a session-container refactor, not UI: `RoundManager`/`GameModeService` are a server-wide singleton and `BlockSpawner` pools all volumes globally, so no two groups of players can be in different modes at once. Decided: hub place with in-place arena zones (multi-place blocked on unbuilt 5.5 persistence; whole-server vote makes PvE hostage to PvP), co-op queued PvE so solo players never wait, 1v1 duels on a 2-pad pool, diegetic portals over a menu screen. Also pinned the thing most likely to be assumed away: **`PLAYER_VS_PLAYER_ENABLED` does not gate spell damage** — spells bypass `applyDamage` entirely, so the 5.1 split-brain deferral is a Phase 6 prerequisite, alongside 5.4's client-trusted affordability and the two disabled round-timing flags. Stage 5 is explicitly gated behind 5.4; stages 1–4 are not.
 
