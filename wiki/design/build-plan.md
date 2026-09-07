@@ -356,7 +356,7 @@ Added 2026-09-08 from [[design/system-audit-2026-09]]. Full tickable plan with o
 
 **Milestone:** `grep -rn "\.Health\s*=" src` hits `applyDamage` only; two sessions with disjoint rosters run rounds without touching each other's scores, spawns or targets; every `__tests.luau` is reachable from the autorunner; the boundary page lists no client-trusted gameplay remote.
 
-**Blocked on the user:** Q1–Q11 in [[design/system-audit-2026-09]] § Needs your input. Chunks 0, 2, 3, 5 need no answer; chunk 1 needs Q8; chunk 4 needs Q1/Q2; chunk 6 needs Q3; chunk 7 needs Q9; chunk 8 needs Q6/Q7; chunk 9 needs Q10; chunk 12 needs Q5.
+**Decisions:** Q1–Q11 answered 2026-09-08 (recommended option on every one); recorded in [[design/refactor-plan-2026-09]] § Decisions. No chunk is blocked on input. Next action is chunk 0.
 
 ## Plan changelog
 

@@ -147,6 +147,8 @@ Where wiki and code *agree* and I think both are wrong: the singleton `ScoreTrac
 
 ## Needs your input
 
+> **Answered 2026-09-08.** The user validated the recommended option on every question. The decisions are recorded in [[design/refactor-plan-2026-09]] § Decisions and on each chunk's `Decision:` line; this section stays as the record of the options that were considered.
+
 Each is a call I cannot make from the code. Answer inline; the refactor plan assumes the recommended option where it needs one.
 
 **Q1 — Damage authority (F1).** Where should player spell damage land?

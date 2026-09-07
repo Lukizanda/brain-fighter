@@ -10,7 +10,7 @@ Executes the findings in [[design/system-audit-2026-09]] (F-numbers below refer 
 
 ## How to pick up work
 
-1. Pick the **lowest-numbered chunk whose `Depends on` are all `done`** and whose `Blocked on` questions are answered (answers live in [[design/system-audit-2026-09]] § Needs your input, or in the chunk's `Decision:` line once the user has replied).
+1. Pick the **lowest-numbered chunk whose `Depends on` are all `done`**. Every question is answered (§ Decisions below and each chunk's `Decision:` line); the audit page § Needs your input is the record of the options that were considered.
 2. Set the chunk's `Status:` line to `claimed — <session name> — <date>` before editing anything. One chunk per session; stop and report if you discover work outside the chunk's `Owns`.
 3. Re-verify each item's `file:line` against `src/` before changing it — the audit is a snapshot.
 4. Tick items as they land (`- [x]`). When every item is ticked and the done condition holds, set `Status: done — <date> — <commit>` and append a one-line note under the chunk if anything diverged.
@@ -18,6 +18,24 @@ Executes the findings in [[design/system-audit-2026-09]] (F-numbers below refer 
 6. **Playtest lock** applies to every chunk marked `Playtest: yes`. Cap at two playtest iterations per session; escalate with a diagnosis after that.
 
 Status legend: `open` · `claimed — session — date` · `done — date — commit` · `dropped — reason`.
+
+## Decisions (2026-09-08)
+
+The user read and validated the recommendations on the audit page. Every question is answered; no chunk is blocked on input any more. Each chunk carries its own `Decision:` line below; this is the summary.
+
+| Q | Decision |
+|---|---|
+| Q1 | All spell damage/heal through `applyDamage.process` via an injected sink; direct `Health` writes deleted. |
+| Q2 | PvP gate is `allowsPvP` on the mode config, resolved through the victim's session. Global `PLAYER_VS_PLAYER_ENABLED` deleted. |
+| Q3 | Ledger reset hook + tile cap first, one measured playtest, flip `ENFORCE` in the same session only on zero honest rejections. |
+| Q4 | Charge-tier trust stays accepted; record on the PvP page; revisit once duels are playable. |
+| Q5 | Settings menu cut (builder, config, script, `P` keybind); tracker filed for a future settings surface. |
+| Q6 | `SessionRegistry` module before Phase 6 stage 5. |
+| Q7 | `TEAMS_ENABLED` and team branches deleted; `allowsPvP`, `timeLimit`, `countdownSec` move to mode config; the three global flags deleted. |
+| Q8 | Wire the seven unit suites under `Suites/Unit`; delete the dead Multiplayer suites and the Melee suite; fixture-gated suites build their own dummy in `setup`. |
+| Q9 | Accept one RTT on impact cues; delete the client-originated relay. |
+| Q10 | Boss/NPC per-session as its own chunk (9) immediately before stage 5. |
+| Q11 | `shared/Hud` stays where it is. |
 
 Risk: **L** = deletions and renames with grep-verified zero consumers; **M** = behaviour-preserving restructure with suite coverage; **H** = changes authority, ownership, or replication and needs a two-client check.
 
@@ -50,16 +68,17 @@ Wiki: [[systems/HUD]] (Reticle/TouchControl rows), [[systems/Tests]] no change y
 
 Status: open
 Findings: F41, F42, F43, drift 9
-Risk: L · Playtest: **yes** (one `RunTests = "all"` run; clear the attribute after) · Depends on: chunk 0 · Blocked on: **Q8**
+Risk: L · Playtest: **yes** (one `RunTests = "all"` run; clear the attribute after) · Depends on: chunk 0 · Blocked on: nothing (Q8 answered)
+Decision: Q8(a) — wire the seven unit suites; delete `drop_request_zone_gated`, `respawnzone_tracks_hrp_presence`, `applydamage_credits_bot_kill`, `restoreToSafeSpawn` and `Suites/Melee/*`; NPC suites build their own Patroller in `setup`.
 
 Owns: `src/shared/Tests/**`, `src/server/Tests/TestAutoRunner.server.luau`, every `src/shared/*/__tests.luau` (return shape only), `wiki/systems/Tests.md`.
 Must not touch: the modules under test.
 
-- [ ] Delete `Suites/Multiplayer/{drop_request_zone_gated,respawnzone_tracks_hrp_presence}.luau` and `Helpers/restoreToSafeSpawn.luau`; trim `multiplayer_invariants.luau` to remotes that exist (drop the Weapon.Remotes and TDM blocks); decide `applydamage_credits_bot_kill` (needs Teams + BotSpawner → delete with Q8(a)).
-- [ ] Delete `Suites/Melee/*` only if Q8(a); otherwise header-mark fixture-gated.
+- [ ] Delete `Suites/Multiplayer/{drop_request_zone_gated,respawnzone_tracks_hrp_presence,applydamage_credits_bot_kill}.luau` and `Helpers/restoreToSafeSpawn.luau`; trim `multiplayer_invariants.luau` to remotes that exist (drop the Weapon.Remotes and TDM blocks).
+- [ ] Delete `Suites/Melee/*` (Q8: the melee chain is dead; chunk 11 removes the modules).
 - [ ] Normalise all ten `__tests.luau` to `return { run = function() ... end }` — `EnergyEconomy` and `Dictionary` must stop executing on require.
 - [ ] Add `Suites/Unit/` with one wrapper per unwired module (WordBuffer, EnergyEconomy, EnergyReservoirs, Dictionary, SpellRegistry, MemorizeAction, MindFullManager), same shape as `Suites/Skills/castaction_tests.luau`.
-- [ ] NPC suites: `setup` clones `ServerStorage.AIWorldData.Rigs.Patroller` if `Patroller_1` is absent, or header-mark fixture-gated. **[UNVERIFIED]** in the audit — the run will settle it.
+- [ ] NPC suites: `setup` clones `ServerStorage.AIWorldData.Rigs.Patroller` if `Patroller_1` is absent (Q8: fixtures are built, not assumed). **[UNVERIFIED]** in the audit whether the place still has one — the run will settle it.
 - [ ] Run `all`; record pass/fail per suite in the log entry; clear `RunTests`.
 - [ ] Rewrite [[systems/Tests]]: discovery rules, suite table with status, `__tests` wiring, fixture requirements.
 
@@ -100,7 +119,7 @@ Must not touch: `SpellMenuGui` cast logic (chunk 7), any hand-built ScreenGui po
 - [ ] [[concepts/HudGate]]: add the rule "owners never write the gated property".
 - [ ] TopRight `stackVertical` (or BuffTray to its own region).
 - [ ] Delete the `_G.PlayerHud` writes; replace `_G.BrainFighter.requestDash` with a `client/DashApi` ModuleScript.
-- [ ] Config extraction for SpellMenu, SettingsMenu (skip if Q5(a) chosen — it will be deleted), AttributeBar, BuffTray, PortalPanel, MemorizeButton.
+- [ ] Config extraction for SpellMenu, AttributeBar, BuffTray, PortalPanel, MemorizeButton (SettingsMenu is deleted in chunk 12 per Q5 — do not extract it).
 
 Done when: the lobby-death → arena-entry playtest shows no overlay; `grep _G.PlayerHud` is empty; the six Builders contain no inline geometry/colour literals outside a Config read.
 
@@ -110,7 +129,8 @@ Done when: the lobby-death → arena-entry playtest shows no overlay; `grep _G.P
 
 Status: open
 Findings: F1, F2, drift 1, 2 · plus cause id for F34's kill-feed "Unknown"
-Risk: **H** · Playtest: **yes** — spell kill on the dummy credits the kill feed; boss damage unchanged; shield absorbs a spell hit once (not twice) · Depends on: chunk 1, chunk 2 · Blocked on: **Q1, Q2**
+Risk: **H** · Playtest: **yes** — spell kill on the dummy credits the kill feed; boss damage unchanged; shield absorbs a spell hit once (not twice) · Depends on: chunk 1, chunk 2 · Blocked on: nothing (Q1, Q2 answered)
+Decision: Q1(a) + Q2(a) — every spell damage/heal goes through `applyDamage.process` via an injected sink; PvP gate is `allowsPvP` on the mode config resolved through the victim's session; `GameConfig.PLAYER_VS_PLAYER_ENABLED` is deleted here (chunk 8 moves the other flags).
 
 Owns: `src/shared/Skills/SkillEffects.luau` (damage/heal handlers + the sink injection), `src/server/Health/Scripts/HealthService/{init.server,applyDamage}.luau`, `src/shared/Health/DamageTypes.luau` (cause id), `src/server/Arena/DeathZoneService.server.luau`, `src/shared/Skills/SkillBuffs.luau:230-262` (second drain site), `src/shared/Skills/SkillTypes.luau` (DeliveryCtx source), `GameModeService/init.server.luau:390-420` (`onPlayerEliminated` weapon name), `Suites/Skills/*`.
 Must not touch: `SkillDelivery` handlers beyond passing `ctx.source` through; `ScoreTracker` internals; respawn code (chunk 5).
@@ -138,7 +158,7 @@ Owns: `GameModeService/init.server.luau:319-372` (Died handler), `HealthService/
 Must not touch: `DeathHandler` (non-player rigs — correct as is); session tables.
 
 - [ ] `Players.CharacterAutoLoads = false` in GameModeService `initialize`; GameModeService is the only `LoadCharacter` caller for players.
-- [ ] `RequestRespawn` becomes a request the session answers (early respawn allowed only while dead, checked against the live Humanoid, not `pendingRespawns`) or is deleted with the button — pick the one the death screen UX wants and say which.
+- [ ] `RequestRespawn` becomes a request the session answers (early respawn allowed only while dead, checked against the live Humanoid, not `pendingRespawns`) or is deleted with the button — pick the one the death screen UX wants and record it in the divergence log.
 - [ ] `pendingRespawns` cleared on `CharacterAdded` (or removed if the remote goes).
 - [ ] `recentDamage` entries expire on insert; key dropped on `Died`/`Destroying`.
 - [ ] Name the two SpawnManager offsets.
@@ -152,7 +172,8 @@ Wiki: [[systems/Health]] § Respawn, [[systems/GameMode]] § Respawn.
 
 Status: open
 Findings: F8, F9, F19 (`RoundStarted`), A28 tile cap
-Risk: M · Playtest: **yes** — memorize, cast, round restart, confirm `[EconomyService]` reset line and zero would-reject lines across a full honest round · Depends on: chunk 1 · Blocked on: **Q3**
+Risk: M · Playtest: **yes** — memorize, cast, round restart, confirm `[EconomyService]` reset line and zero would-reject lines across a full honest round · Depends on: chunk 1 · Blocked on: nothing (Q3 answered)
+Decision: Q3(a) — reset hook and tile cap land first; one measured honest playtest; flip `ENFORCE = true` in the same session only if the shadow log shows zero honest rejections. Q4(a) — charge-tier trust stays accepted; add the note to [[design/lobby]] when this chunk touches the wiki.
 
 Owns: `src/server/Economy/*`, `RoundManager.luau` (`roundStartedEvent` payload only), `Suites/Economy/*`, `wiki/systems/SpellCastService.md` (affordability section + frontmatter), `wiki/index.md` (SpellCastService line).
 Must not touch: `SpellCastService` handler order; client reservoirs.
@@ -171,7 +192,8 @@ Done when: the reset line appears on round start; `ENFORCE` state matches the wi
 
 Status: open
 Findings: F6, F7, F29 (`spellResolved` bindable + lazy cache), F21 (SpellCastController)
-Risk: **H** · Playtest: **yes, two clients** — caster sees cast cue instantly and impact on confirm; the second client sees both once; a rate-limited cast draws nothing on the second client · Depends on: chunk 4 · Blocked on: **Q9**
+Risk: **H** · Playtest: **yes, two clients** — caster sees cast cue instantly and impact on confirm; the second client sees both once; a rate-limited cast draws nothing on the second client · Depends on: chunk 4 · Blocked on: nothing (Q9 answered)
+Decision: Q9(a) — impact cues arrive on server confirmation; prediction draws the cast cue only; the client-originated relay is deleted outright.
 
 Owns: `src/server/Vfx/VfxBroadcastService.server.luau` (delete), `src/shared/Vfx/Remotes/{BroadcastSpellVfx,SpellVfxEvent}.model.json` (delete), `src/client/Vfx/VfxController.client.luau`, `src/shared/Skills/SkillVisuals.luau`, `src/shared/Skills/SkillDelivery.luau:129-134,157,611-630` (ProjectileVfxEvent → VfxBroadcast; lazy cache), `src/shared/Vfx/VfxBroadcast.luau` (new `projectile` kind), `src/shared/CastAction/init.luau:69-100` (`spellResolved` exposure), new `src/client/SpellCastController.client.luau`, `src/client/UI/SpellMenuGui.client.luau` (cast/target code moves out).
 Must not touch: `VfxConfig` entries; status-visual controllers (chunk 10).
@@ -192,7 +214,8 @@ Wiki: [[design/client-server-boundary]], [[systems/VisualEffects]], [[systems/HU
 
 Status: open
 Findings: F12, F13 (roster), F16, F34 (team plumbing + definition trim), Q7 flags
-Risk: **H** · Playtest: **yes, two sessions** (the disjoint-roster cross-talk test stage 3 never ran) — a round start in one arena leaves the other's scores intact; the scoreboard in each shows only its roster · Depends on: chunk 5, chunk 6 · Blocked on: **Q6, Q7**
+Risk: **H** · Playtest: **yes, two sessions** (the disjoint-roster cross-talk test stage 3 never ran) — a round start in one arena leaves the other's scores intact; the scoreboard in each shows only its roster · Depends on: chunk 5, chunk 6 · Blocked on: nothing (Q6, Q7 answered)
+Decision: Q6(a) + Q7(a) — `SessionRegistry` module lands here, before Phase 6 stage 5; `TEAMS_ENABLED` and every team branch deleted; `allowsPvP`, `timeLimit`, `countdownSec` on the mode config; `ROUND_TIMER_ENABLED` and `ROUND_COUNTDOWN_ENABLED` deleted; `RoundTimerGui` reads the payload.
 
 Owns: new `src/server/GameMode/Scripts/SessionRegistry.luau`, `GameModeService/init.server.luau` (thin bootstrap), `LobbyService.server.luau:37-38,182,198,216` (call the module), `Events/{TransferPlayer,SetPlayerQueued}.model.json` (delete), `ScoreTracker.luau` (`new(roster)`), `RoundManager.luau` (owns its tracker; `winnerTeamName` out), `SpawnManager.luau:50` (roster), `NametagService.server.luau` (team branch), `applyDamage.luau:57-69` (team branch), `GameModeDefinition.luau`, `GameModeTypes.luau` (delete), `Modes/{NoOpMode,LobbyMode}.luau`, `Arena.luau` (SpawnTags gains the default), `GameConfig.luau` (four flags → mode config), `RoundTimerGui.client.luau` (reads payload), `BroadcastAudience.luau` (resolver reads the module).
 Must not touch: boss/NPC spawning (chunk 9); `BlockShootService`.
@@ -213,7 +236,8 @@ Wiki: [[systems/GameMode]] (the stage-7 rewrite — do it here), [[design/lobby]
 
 Status: open
 Findings: F14, F15, F30 (Hittables helper as the filter seam)
-Risk: **H** · Playtest: **yes, two arenas** — a boss in one arena never targets the other's players; a hub player cannot pop arena blocks even in range · Depends on: chunk 8 · Blocked on: **Q10**
+Risk: **H** · Playtest: **yes, two arenas** — a boss in one arena never targets the other's players; a hub player cannot pop arena blocks even in range · Depends on: chunk 8 · Blocked on: nothing (Q10 answered)
+Decision: Q10(a) — this chunk runs as its own session immediately before Phase 6 stage 5; stage 5 is then only `Modes/PvEBoss.luau` and the queue.
 
 Owns: `src/shared/BlockSpawner/init.luau:426-437` (ArenaId stamp), `src/server/BlockShoot/BlockShootService.server.luau` (+ `BlockShootValidation`), new `src/shared/Skills/Hittables.luau`, `SkillDelivery.luau:146-200` and `CosmeticProjectile.luau:160-190` (use it), `Perception.luau:82`, `BossService.server.luau` (per-arena BossPoint), `NPCService.server.luau` (per-arena spawns, `destroy()`), `Suites/Hardening/blockshoot_*`, `Suites/Phase3/*`.
 Must not touch: mode files; `LobbyService`.
@@ -272,12 +296,13 @@ Wiki: [[systems/Boss]], [[systems/NPC]], [[systems/Weapon]] (final REMOVED note)
 
 Status: open
 Findings: F24, F25, F38 (remaining)
-Risk: L–M · Playtest: **yes** (each ported GUI renders at two viewport sizes) · Depends on: chunk 3 · Blocked on: **Q5**
+Risk: L–M · Playtest: **yes** (each ported GUI renders at two viewport sizes) · Depends on: chunk 3 · Blocked on: nothing (Q5 answered)
+Decision: Q5(a) — settings menu is cut (builder, config, script, `P` keybind); file a tracker for a real settings surface. Q11 — `shared/Hud` stays.
 
 Owns: `src/client/UI/{DeathScreenGui,DamageFeedbackGui,GameStateGui,ScoreboardGui,BossHudGui,KillFeedGui}.client.luau` + new Builder/Config pairs; `SettingsMenu*` (delete per Q5(a)); `HudConstants.LAYERS`.
 Must not touch: HudGate; region registrations.
 
-- [ ] Settings menu resolved per Q5.
+- [ ] Delete `SettingsMenuGui.client.luau`, `SettingsMenuBuilder.luau`, `SettingsMenuConfig.luau` and the `P` keybind; file a `task` tracker for a future settings surface.
 - [ ] `HudConstants.LAYERS`; each self-owned ScreenGui reads it and gets a `UIScale` from `HudLayoutManager`.
 - [ ] Port the six GUIs to Builder+Config, one per commit.
 

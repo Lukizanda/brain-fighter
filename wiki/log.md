@@ -1655,3 +1655,9 @@ Whole-`src/` design audit against the June/UI/boundary audits as baseline; three
 **Closed since June:** Skills Humanoid leak, BossAdapter, template cut, Skills tests, effect stubs, `damageAmpMultiplier`, boundary stages 1–6. **Still open and now load-bearing:** the split-brain damage path — `SkillEffects` writes `Humanoid.Health` directly, so a spell kill never fires `PlayerEliminated` and Phase 6 stage 6 cannot credit a duel; the server-wide `ScoreTracker`, spawn threat scoring and boss/NPC targeting that stage 5 needs per-session; a three-way respawn ownership split with a stale `pendingRespawns` entry; the `HudGate` reveal on DeathScreenGui (owner writes the gated property); the client-originated `BroadcastSpellVfx` relay the boundary audit never listed; a server ledger that never resets while the client does. Seven of ten `__tests.luau` are not reachable from the autorunner, and three Multiplayer suites require deleted systems.
 
 Pages touched: [[design/system-audit-2026-09]] (new), [[design/refactor-plan-2026-09]] (new), [[design/build-plan]] (Phase 7 + changelog), [[index]].
+
+## [2026-09-08] ingest | Audit questions Q1–Q11 answered; refactor plan unblocked
+
+The user validated the recommended option on all eleven questions from [[design/system-audit-2026-09]]. Recorded as a § Decisions table plus a `Decision:` line on each affected chunk in [[design/refactor-plan-2026-09]]; the three chunk items that had been written conditionally (Melee suite, settings config extraction, bot-kill suite) are now unconditional. Nothing in the plan has started; chunk 0 is next.
+
+Pages touched: [[design/refactor-plan-2026-09]], [[design/system-audit-2026-09]] (answered banner), [[design/build-plan]] (Phase 7 decisions line).
