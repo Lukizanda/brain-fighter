@@ -1,7 +1,7 @@
 ---
 type: system
 description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. HUD remotes are scoped to the BossPoint's arena roster (Phase 6 stage 3).
-updated: 2026-08-20
+updated: 2026-09-07
 ---
 
 # Boss
@@ -39,7 +39,7 @@ Supersedes [[systems/BossAdapter]] (Phase 3 static Model). The `src/server/BossA
 
 | File | Purpose |
 |---|---|
-| `src/client/UI/BossHudGui.client.luau` | Health bar + phase label; registered with HudLayoutManager "TopCenter" |
+| `src/client/UI/BossHudGui.client.luau` | Health bar + phase label; owns its own ScreenGui (DisplayOrder 15, IgnoreGuiInset) — not a HudLayoutManager region |
 
 ## Boss Model
 
@@ -129,7 +129,7 @@ Part projectiles in spread. Each is `CanCollide = false` with a `LinearVelocity`
 
 ## Client HUD
 
-`BossHudGui` registered to HudLayoutManager **TopCenter** region. Hidden until a boss spawns.
+`BossHudGui` owns **its own ScreenGui** (DisplayOrder 15, `IgnoreGuiInset = true`), positioned flush at the top where the round timer used to sit. It was moved off HudLayoutManager's TopCenter region — see `wiki/log.md`. Hidden until a boss spawns; [[concepts/HudGate]] gates it as `ArenaOnly` via `.Enabled`.
 
 - **Health bar** — red fill, TweenService 0.25 s Quad animation on `BossHealthChanged`
 - **Phase label** — Roman numeral ("Phase I", "Phase II" …) on `BossPhaseChanged`
@@ -225,7 +225,7 @@ Add a new boss type by adding another entry to `BOSS_TYPES`; switch the active b
 ## See also
 
 - [[systems/NPC]] — shared StateMachine, Perception, Actions modules reused verbatim
-- [[systems/HUD]] — HudLayoutManager region system; BossHudGui uses TopCenter
+- [[systems/HUD]] — HudLayoutManager region system; BossHudGui deliberately sits outside it with its own ScreenGui
 - [[systems/SpellExecutor]] — effect runner; damages Boss Humanoid directly
 - [[systems/Health]] — applyDamage pipeline; boss receives firearm hits the same as any NPC
 - [[systems/BossAdapter]] — superseded Phase 3 MVP (static Model, no AI)

@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phase 6 plan (2026-08-20) — a welcome lobby and PvE/PvP mode selection. The finding is that mode choice is a session-container problem, not a menu problem; GameModeService and RoundManager are server-wide singletons. Decision = hub place with in-place arena zones, co-op queued PvE, 1v1 queued duels on a pad pool. Records what PvP needs that the lobby does not provide.
-updated: 2026-08-20
+updated: 2026-09-07
 ---
 
 # Lobby & Mode Selection
@@ -101,20 +101,35 @@ with no numbers on it reads as broken when nobody else is on.
 ## Player state
 
 Each player is `InLobby | Queued | InArena`. This is the gate a lot of existing
-systems need and currently lack:
+systems need and currently lack.
 
-- `GameplayHudGui`, `SpellMenuGui`, `BuffTrayGui`, `BossHudGui` — suppressed in lobby
-- `BlockTapController` — inert in lobby **except** on the practice blocks
-- `DashButtonGui` — stays live; movement is not mode-specific
-- `SettingsMenuGui` — always available
+**Revised 2026-09-07 — the lobby teaches the full loop**, so the suppression
+list is much shorter than first planned. What stays on screen is everything the
+core verb touches; what hides is round and competition chrome:
+
+- **Hidden in lobby:** health bar, `BossHudGui`, `DamageFeedbackGui`,
+  `KillFeedGui`, `ScoreboardGui`, `RoundTimerGui`, `GameStateGui`,
+  `DeathScreenGui`, `TeamScoreGui`
+- **Live in lobby:** letter tiles, `MemorizeButton`, `SpellMenuGui`,
+  `MindFullIndicatorGui`, `BuffTrayGui`, `DashButtonGui`, `SettingsMenuGui`
+- `BlockTapController` — live in the lobby; lobby blocks need no special case
+
+The mechanism is [[concepts/HudGate]]: a declared policy per element, made a
+**required argument** on `HudLayoutManager:register` so a new HUD element cannot
+silently leak into the lobby. Six GUIs own their own `ScreenGui` rather than
+registering, and are gated on `.Enabled` through the same policy table.
 
 ## In the lobby for v1
 
 - **Tutorial entry** — [[systems/Tutorial]] (Phase 5.3) gets a natural front door.
 - **Settings access** — `SettingsMenuGui` exists; surface it.
-- **Practice blocks** — a handful of `LetterBlock`s that pop and buffer but grant
-  no energy. The lobby should teach the core verb before the portal asks you to
-  pick a mode built on it.
+- **Practice blocks + a target dummy** — the lobby teaches the **whole** loop:
+  tap a block, buffer letters, memorize for real energy, cast at a dummy. The
+  earlier "buffer but grant no energy" plan taught the setup without the payoff,
+  and was specifying the wrong seam anyway — energy is granted at memorize, not
+  at pop, so there was no per-block grant to suppress. Lobby blocks are just
+  blocks. The dummy is a `Damageable`-tagged model; `DeathHandler` already
+  clones a template and respawns it, so it is Studio work rather than code.
 - **Live queue counts** — above.
 
 **Not in v1:** the word-PB / progression board. It depends on Phase 5.5
@@ -175,13 +190,184 @@ leave it.
 | 1 | ✅ **Done 2026-08-20 (`b38a99c`).** `RoundManager.new(deps)` with `arenaId`, a roster and `:disable()`/`:destroy()`; `GameModeService` owns `sessions[arenaId]` + `playerSessions[player]`, one `Default` session at boot. Per-roster `FireClient` landed with it, and `_waitForPlayers` gates on roster count. **Diverged from plan:** `task.cancel` was removed rather than kept — the old `stop()` never cleared `roundThread` on natural exit, so a second `stop()` would have thrown; a `_generation` counter checked at each await point covers the overlap case cancel was there for. Verified by a client-side listener plus a two-session disjoint-roster cross-talk test. | — |
 | 2 | ✅ **Done 2026-08-20.** `ArenaId` attribute on `BlockSpawnVolume`; `BlockSpawner.new(opts)` is one pool per arena with `:disable()`/`:destroy()`, and `BlockSpawnerService` groups the tagged volumes by id. `SpawnManager` resolves per arena via `registerArena` + `getBestSpawn(player, arenaId)`. New shared `GameMode/Arena.luau` holds the `ArenaId` / `Default` / `SpawnTags` vocabulary. **The subtle part was density:** `count = density × volume / 1000` summed *every* tagged volume, which is the right answer for one arena and the wrong one for two — verified per-arena with two probe pools resolving to 10 and 5 rather than 15 each. **Absent `ArenaId` resolves to `Default`**, because the shipped arena's eight volumes are tagged but unattributed and requiring the attribute would have emptied it silently. The three new spawn tags are declared but nothing carries them yet. | — |
 | 3 | ✅ **Done 2026-08-20.** All nine HUD sites route through a new `shared/GameMode/BroadcastAudience.luau` — a late-binding pointer at `GameModeService`'s session tables, resolved per fire. `ScoreTracker` and `BossService` both needed it because neither *holds* a roster the way `RoundManager` does. **The boss judgement call:** rather than thread a session through `BossService` (a refactor stage 5 immediately redoes), it resolves `Arena.idOf(BossPoint)` — one attribute read per boss cycle, roster resolved per fire. Fallback on an unresolved lookup is *everyone* (pre-stage-3 behaviour) plus a throttled warn, never an empty audience. **Deliberately incomplete:** ScoreTracker's scores are still server-wide, so another arena's names still appear on the scoreboard — only the audience moved, since the payload shape is frozen for `ScoreboardGui`/`KillFeedGui`. VFX lane untouched as planned. **Not fully verified:** the two-session disjoint-roster test did not run (MCP `start_stop_play` wedged); single-session boot is clean. | Before stage 6 |
-| 4 | **Hub greybox + player state.** Lobby zone, two portals, practice blocks, `InLobby/Queued/InArena` state and the HUD suppression table above. Still `NoOp` behind the portals. | — |
+| 4 | **Hub greybox + player state.** Lobby arena slot with its own session, `transferPlayer`, hub greybox, two portals, practice blocks, `InLobby/Queued/InArena` and the HUD suppression table above. Lands as 4a/4b/4c — see § Stage 4 detail. | — |
 | 5 | **PvE mode.** `Modes/PvEBoss.luau` — co-op, `minPlayers = 1`, objective win condition, boss arena slot. Queue → round → back to lobby. | — |
 | 6 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `PLAYER_VS_PLAYER_ENABLED = true`, timer + countdown back on. | **After Phase 5.4** |
 | 7 | **Wiki + tests.** `wiki/systems/Lobby.md`, `GameMode` page rewritten off its NoOp-only record, session lifecycle tests. | — |
 
 *Stage numbering changed 2026-08-20: broadcast audience inserted as the new stage
 3, pushing hub/PvE/duel/wiki from 3–6 to 4–7. Stages 1 and 2 are unmoved.*
+
+## Stage 4 detail
+
+*Planned 2026-09-07.* Stage 4 is the largest stage in this phase because it is
+the first one a player can see. Four decisions were taken before writing it, and
+they are what make the rest of the stage mechanical.
+
+### Decision 1 — the lobby is an arena slot with a session
+
+Rejected: "the lobby is the absence of a session" (`playerSessions[player] ==
+nil`). It looks cheaper and is not. Stages 1–3 spent their whole budget making
+*arena id* the key that spawns, block pools and broadcast audiences agree on; a
+lobby with no id puts a `nil` branch back into every one of them, and the
+practice blocks — which are `BlockSpawner` output like any other block — would
+have no pool to belong to.
+
+So: `Arena.LOBBY_ID = "Lobby"`, a `Modes/LobbyMode.luau`, and a second session
+created at boot. The lobby session is **created but never `start()`ed**, which
+is how it runs no round without `RoundManager` learning what a lobby is. That
+needs one new field on the mode config, `runsRounds: boolean`, because
+"GameModeService should skip `start()` for this mode" is a property of the mode,
+not something to special-case on an arena id.
+
+The payoff is that the interesting primitive falls out for free:
+
+```lua
+GameModeService.transferPlayer(player, targetArenaId)
+```
+
+Remove from one roster, add to another, restamp the player's attributes, respawn
+at the target arena's pads. Stage 5 (queue → boss arena → back) and stage 6
+(queue → duel pad → back) are both *calls to this function*. Getting it built and
+exercised in stage 4 is most of why stage 4 is worth doing before the modes
+exist.
+
+### Decision 2 — the portals really move you, against the NoOp mode
+
+The stage table said "still `NoOp` behind the portals", which reads as: press the
+portal, become `Queued`, nothing happens. That leaves `InArena` unreachable, and
+`InArena` is the state the entire HUD suppression table is written against — it
+would ship unverified and then be debugged in stage 5 alongside brand-new mode
+code.
+
+Instead the PvE portal transfers into the existing `Default` session. That
+session runs `NoOp`, so there is no boss and nothing to win, but the player
+crosses the boundary for real: roster moves, arena id changes, combat HUD comes
+back, blocks in that arena become poppable and grant energy. A return pad carries
+them back. The mode is still `NoOp`; the *transfer* is not.
+
+The PvP portal enqueues honestly. Zero duel pads are authored in stage 4, so the
+queue holds and the sign reads `0/0 duelling · 1 waiting`. That is a real queue
+with a real answer, not a stub — stage 6 authors two pads and the same code
+starts dequeuing.
+
+### Decision 3 — player state lives on the Player instance
+
+`PlayerState` (`InLobby` / `Queued` / `InArena`) and `ArenaId` are written by the
+server as **attributes on the `Player` instance**. No remote, no handshake, no
+join-order race: attributes replicate to every client automatically and are
+readable the moment a client asks. `Arena.idOf` already reads an `ArenaId`
+attribute off scene parts, so the same word means the same thing on a player.
+
+This also answers the portal signs. Occupancy and queue length go on the portal
+part as attributes; the sign is a client-built `BillboardGui` that reads them.
+Zero remotes on the whole read path.
+
+### Decision 4 — portal confirm is a Builder panel, not a ProximityPrompt
+
+Per § Mode selection UX. A `ProximityPrompt` has nowhere to put
+`2/2 duelling · 1 waiting`, and it is a visual language nothing else in this game
+speaks. `PortalPanelBuilder` + `PortalPanelConfig` + a client coordinator, the
+same triple as every other surface.
+
+**The client does not decide anything.** The panel fires a `PortalRequest` remote
+naming the portal; the server re-checks that the player is `InLobby` and actually
+standing near that portal before transferring. A client-trusted portal is
+precisely the class of bug § What this does *not* unblock is about.
+
+### Sub-stages
+
+Stage 4 lands in three commits, in this order, each independently verifiable.
+
+**4a — session container (server only, no geometry).** ✅ **Done 2026-09-07.** `Arena.LOBBY_ID`,
+`Arena.STATE_ATTRIBUTE`, `Arena.PlayerState`; `Modes/LobbyMode.luau` +
+`runsRounds` on the mode config; `GameModeService` creates the lobby session at
+boot, joins players to it instead of `Default`, and gains `transferPlayer`.
+Verified by attribute reads and a scripted transfer — no world changes needed.
+
+*Known trap:* the respawn loop in `onPlayerAdded` only fires when
+`isPlayerRoundActive(player)`. A player who dies in the lobby is therefore never
+respawned at all today. 4a rewrites that gate as "has a session", resolving the
+arena through the existing `arenaIdForPlayer`.
+
+*Shipped, with two consequences worth writing down.* Verified live: a joining
+player reads `PlayerState=InLobby ArenaId=Lobby`, `TransferPlayer:Invoke` moves
+them to `InArena`/`Default` and back, and an unknown arena id is refused rather
+than silently dropping the player out of every roster.
+
+**The arena round no longer starts on its own.** `_waitForPlayers` gates on
+roster count, and the Default roster is now empty at boot, so the arena sits in
+`WaitingForPlayers` until somebody transfers in. That is correct — it is what
+"a round is a session, not a server" means — but it changes what three HUD
+scripts see: `GameStateGui`, `RoundTimerGui` and `DeathScreenGui` all key off
+`roundState`, and a lobby player now receives no `GameStateChanged` at all. They
+are on 4c's suppression list anyway. Nothing in the gameplay chain — blocks,
+energy, casting, boss — turned out to be coupled to round state, which is why
+this was safe to land before the HUD work.
+
+**A session left empty mid-round stays Active.** Transferring the last player
+out does not end the round. Harmless for `NoOp`; stage 6 must not inherit it, or
+a duel pad will never free. It belongs to the mode's win condition, not to
+`transferPlayer`, so it is deliberately not fixed here.
+
+*Also deliberate:* the transfer **pivots** the character rather than reloading
+it. Reloading is the more obvious "fresh start" but it resets health, drops the
+equipped Tool and rebuilds every `ResetOnSpawn` ScreenGui, on a path a player
+crosses repeatedly. Restoring health belongs to a mode's round start, where it
+can mean something.
+
+**4b — the hub.** `Workspace.Lobby` greybox authored via MCP under a
+`ChangeHistoryService` waypoint: floor and walls, two portal pads with arches,
+`LobbySpawn` pads, a small `BlockSpawnVolume`, a `Damageable` target dummy, and
+a `LobbyReturn` pad inside the existing arena. All tagged and
+`ArenaId`-attributed. The existing `Arena.SpawnZone.SpawnLocation` stops being
+where players land — 4a shipped with no lobby pads authored, so both arenas
+currently resolve through `SpawnManager`'s misconfigured-scene fallback to the
+same `SpawnLocation`, and a transfer moves a player's roster without moving
+their body.
+
+*Revised 2026-09-07, and it got smaller.* 4b was planned to stamp `ArenaId` onto
+every spawned block so `BlockShootService` could refuse lobby blocks energy and
+reject cross-arena pops. Both halves are now dropped. The first because
+[[concepts/HudGate]] § Practice blocks established that the player-facing grant
+happens at **memorize**, not at pop — there was no per-block grant to suppress,
+and since the lobby grants real energy, lobby pops must reach the shadow ledger
+too or the memorize they feed becomes unaffordable when `ENFORCE` flips. The
+second because the hub sits hundreds of studs from the arena and
+`BlockShootValidation.checkRange` already refuses a pop at that distance; an
+arena-id check would be a second lock on a door that is shut. Lobby blocks are
+ordinary blocks, and 4b is Studio work plus tags.
+
+**4c — what the player sees.** HUD suppression per [[concepts/HudGate]]: a
+required policy argument on `HudLayoutManager:register` for the nine
+region-registered elements, and `HudGate.bindScreenGui` for the six that own
+their own `ScreenGui`. That page owns the design and the per-element policy
+table; this one owns only the fact that stage 4c is when it lands.
+
+Also 4c: `PortalPanelBuilder` + `PortalPanelConfig` + `PortalPanelGui`, the
+portal sign billboards, the `BlockTapController` read of `PlayerState` (not a
+`GuiObject`, so outside HudGate), and `EnergyReservoirs:reset()` cleared by the
+client on the transition into `Active` — see [[concepts/HudGate]] § Resolved.
+That last one is not a lobby bug: `RoundManager._activeRound` resets scores and
+not energy, so round 2 of any session already inherits round 1's mana. The
+lobby only makes it visible.
+
+### Verification
+
+`start_stop_play` has wedged repeatedly, so stage 4 is designed to need **one**
+playtest, not a loop. Everything 4a asserts is an attribute, so it is checkable
+by a probe script rather than by eye. The one thing that genuinely requires a
+client is HUD suppression, which is verified the way this project verifies
+anything player-facing: a client-side visibility count and a client screenshot,
+never a server log. Two playtests maximum before escalating.
+
+### Deliberately not in stage 4
+
+- **Real queue dequeuing.** No pads exist to dequeue into (stage 6).
+- **ScoreTracker's server-wide scores.** Still stage 5. A lobby player's name will
+  still appear on an arena scoreboard.
+- **Tutorial entry.** Wall space is left for it; [[systems/Tutorial]] is 5.3.
+- **The progression board.** Blocked on Phase 5.5 persistence.
 
 ## Milestone
 
@@ -198,3 +384,5 @@ and the server never had more than one session per slot.
   re-queue the survivor.
 - **Spectating.** Free tension-builder for waiting duellists, or a whole feature.
   Not scoped here.
+*(Resolved 2026-09-07 — lobby energy carryover. Answer: reset at round start,
+not at arena entry. Folded into § Stage 4 plan step 5.)*
