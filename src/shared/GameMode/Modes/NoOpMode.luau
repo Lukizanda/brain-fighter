@@ -41,6 +41,10 @@ function NoOpMode.getConfig()
 		respawnTime = GameModeConstants.RESPAWN_TIME,
 		teamBased = false,
 		spawnTag = "FFASpawn",
+		-- Idle, but it is still a round: RoundManager enters Active and
+		-- stays there, which is what gives spawn protection and the respawn
+		-- loop something to key on.
+		runsRounds = true,
 	}
 end
 

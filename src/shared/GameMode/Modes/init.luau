@@ -13,6 +13,12 @@
 
 local Modes = {
 	NoOp = require(script.NoOpMode),
+	-- The hub. Never resolved through the "ActiveGameMode" attribute —
+	-- GameModeService requires it directly for the lobby session, because
+	-- which mode the *arena* runs and the existence of a lobby are separate
+	-- questions. Registered here anyway so the registry stays the one list
+	-- of modes.
+	Lobby = require(script.LobbyMode),
 }
 
 local DEFAULT_MODE = "NoOp"

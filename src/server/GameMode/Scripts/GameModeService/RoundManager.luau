@@ -338,6 +338,14 @@ function RoundManager:getArenaId(): string
 	return self.arenaId
 end
 
+-- The mode definition this session runs. With two sessions live, "the
+-- active mode" stops being a single answer: a player's respawn time and
+-- kill credit come from *their* session's mode, not from whichever one the
+-- server booted with.
+function RoundManager:getMode(): any
+	return self._refs.modeDefinition
+end
+
 function RoundManager:getState(): string
 	return self._currentState
 end

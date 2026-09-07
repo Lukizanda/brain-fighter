@@ -18,15 +18,41 @@
 -- them in step.
 ----------------------------------------------------------------------
 
+export type PlayerState = "InLobby" | "Queued" | "InArena"
+
 local Arena = {}
 
 -- Attribute carried by arena-bound scene parts — BlockSpawnVolume today,
 -- spawn pads and zone triggers as later stages author them.
 Arena.ID_ATTRIBUTE = "ArenaId"
 
--- The slot an unattributed part belongs to, and the only slot the server
--- runs today.
+-- The slot an unattributed part belongs to, and the arena the shipped
+-- greybox runs in.
 Arena.DEFAULT_ID = "Default"
+
+-- The hub. A slot like any other — it has spawn pads, a block pool and a
+-- session — but its mode never starts a round. See `wiki/design/lobby.md`
+-- § Stage 4 detail, decision 1: making the lobby an arena rather than the
+-- *absence* of one is what keeps a `nil` branch out of spawns, block pools
+-- and broadcast audiences.
+Arena.LOBBY_ID = "Lobby"
+
+-- Where a player is in the lobby → arena cycle, written by GameModeService
+-- as an attribute on the Player instance and read by the client HUD.
+--
+-- Attributes rather than a remote: they replicate on their own and are
+-- readable the moment a client asks, so there is no join-order race between
+-- a LocalScript starting and the server telling it where the player is.
+Arena.PlayerState = {
+	InLobby = "InLobby",
+	Queued = "Queued",
+	InArena = "InArena",
+}
+
+-- Attributes carried by the *Player* instance. `ID_ATTRIBUTE` is reused
+-- deliberately: "which arena does this belong to" is the same question
+-- whether it is asked of a spawn pad or of a person.
+Arena.STATE_ATTRIBUTE = "PlayerState"
 
 -- Authoring vocabulary for spawn pads. A mode definition names one of these
 -- in its `spawnTag`, and `SpawnManager` resolves the pads carrying it that

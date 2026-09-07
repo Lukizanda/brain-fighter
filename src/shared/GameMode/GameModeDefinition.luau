@@ -25,6 +25,15 @@ export type GameModeDefinition = {
 		-- Team modes will typically return a per-team mapping via
 		-- getTeamConfig instead; this is the FFA / single-pool default.
 		spawnTag: string,
+
+		-- Whether GameModeService should call `start()` on this mode's
+		-- session. False for LobbyMode: the hub is a real session with a
+		-- roster and spawn pads, it just has no round to run. Expressed
+		-- here rather than as an arena-id check in GameModeService because
+		-- "does this run rounds" is a property of the mode.
+		--
+		-- Optional; absent means true, so existing modes are unaffected.
+		runsRounds: boolean?,
 	},
 
 	-- Called when a player joins the game. Modes apply team assignment
