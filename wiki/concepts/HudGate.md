@@ -90,6 +90,33 @@ Luau flags any new element that skips it.
 `Visible = false` is safe inside the stacked regions — `UIListLayout` excludes
 invisible children, so a hidden element leaves no gap.
 
+## The gate must not reveal, and the flag that seemed to do it
+
+`BossHudGui` hides itself until a boss spawns and `DeathScreenGui` until the
+player dies. A gate that wrote `Enabled = true` on entering an arena would show
+an empty boss bar and a death overlay to a living player. So the gate ANDs its
+policy over what the owner last asked for:
+
+    effective = ownerWants and policyAllows
+
+Learning `ownerWants` is where the trap is. **Roblox fires
+`GetPropertyChangedSignal` deferred.** The first implementation set an
+`applying` flag around the gate's own write and cleared it on the next line; by
+the time the handler ran the flag was false, so the gate read its own
+suppression back as the owner wanting the element hidden. The lobby looked
+perfect and the arena came back with no health bar, no kill feed and no boss
+HUD — the failure only exists in the direction you test second.
+
+The fix carries no flag. It keys off the gate's state at the moment of the
+write:
+
+- **gate open** — the gate never writes, so any change is the owner's.
+- **gate closed, value went true** — only the owner does that. Record the
+  intent and re-suppress; this is the leak the module exists to stop.
+- **gate closed, value went false** — ambiguous, so assume it was ours and
+  preserve the owner's intent. If it really was the owner, their next write
+  with the gate open corrects it.
+
 ## Nil means visible
 
 Before the server sets the attribute it is `nil`, and `nil` degrades to
@@ -126,7 +153,7 @@ registers **three** elements and they do not agree.
 | `BossHudGui` | `ArenaOnly` | own ScreenGui, gated via `.Enabled` |
 | `DamageFeedbackGui` | `ArenaOnly` | fires on damage *taken*; nothing in the lobby damages you |
 | `KillFeedGui`, `ScoreboardGui`, `RoundTimerGui`, `GameStateGui`, `DeathScreenGui`, `TeamScoreGui` | `ArenaOnly` | round and competition surfaces with no lobby meaning |
-| portal confirm panel, queue counts | `LobbyOnly` | arrive with stage 4 geometry |
+| portal confirm panel | `Always` | **corrected on implementation.** `LobbyOnly` stops being right the moment the arena contains a portal, and stage 4b put a return pad there. Proximity decides whether the panel is on screen; the arena check decides which portals are near you. `LobbyOnly` currently has no users. |
 
 `TeamScoreGui` is additionally suppressed at boot by `TEAMS_ENABLED`; the
 policy is what it gets when teams return.

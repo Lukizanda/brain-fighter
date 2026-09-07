@@ -74,6 +74,12 @@ local roundEndedEvent = gameModeEvents.RoundEnded
 -- Invocation returns true on success, false with a reason logged otherwise.
 local transferPlayerFunction = gameModeEvents.TransferPlayer
 
+-- Queue membership, set by LobbyService. `Queued` is the one part of
+-- PlayerState that cannot be derived from a roster — a queued player is
+-- standing in the lobby like everybody else — so it is pushed in rather
+-- than read out. This file stays the only writer of the attribute.
+local setPlayerQueuedFunction = gameModeEvents.SetPlayerQueued
+
 -- Health system events (listen only — no modification)
 local healthEvents = ServerScriptService.Server.Health.Events
 local playerEliminatedEvent = healthEvents.PlayerEliminated
@@ -146,10 +152,12 @@ end
 -- Publish the player's position in the lobby → arena cycle onto the Player
 -- instance, where every client can read it without a remote.
 --
--- The state is *derived* from the session's mode rather than stored, so it
--- cannot drift out of step with the roster it describes. `Queued` is not
--- reachable yet: it belongs to stage 4c's portal queue, which is the only
--- thing that can hold a player in the hub while they wait for a slot.
+-- The arena half is *derived* from the session's mode rather than stored,
+-- so it cannot drift out of step with the roster it describes. `Queued` is
+-- the exception and has to be pushed in: a queued player is standing in
+-- the lobby like everybody else, so no roster distinguishes them.
+local queued: { [Player]: true } = {}
+
 local function publishPlayerState(player: Player)
 	local session = playerSessions[player]
 	if not session then
@@ -158,9 +166,25 @@ local function publishPlayerState(player: Player)
 		return
 	end
 
+	local state: string
+	if modeRunsRounds(session:getMode()) then
+		state = Arena.PlayerState.InArena
+	elseif queued[player] then
+		state = Arena.PlayerState.Queued
+	else
+		state = Arena.PlayerState.InLobby
+	end
+
 	player:SetAttribute(Arena.ID_ATTRIBUTE, session:getArenaId())
-	player:SetAttribute(Arena.STATE_ATTRIBUTE,
-		modeRunsRounds(session:getMode()) and Arena.PlayerState.InArena or Arena.PlayerState.InLobby)
+	player:SetAttribute(Arena.STATE_ATTRIBUTE, state)
+end
+
+-- Queue membership is meaningless once a player is in an arena, so
+-- entering one clears it rather than leaving a stale flag to surface on
+-- the way back out.
+local function setPlayerQueued(player: Player, isQueued: boolean)
+	queued[player] = isQueued or nil
+	publishPlayerState(player)
 end
 
 local function assignPlayerToSession(player: Player)
@@ -181,6 +205,7 @@ local function unassignPlayer(player: Player)
 		session:removePlayer(player)
 		playerSessions[player] = nil
 	end
+	queued[player] = nil
 	publishPlayerState(player)
 end
 
@@ -227,6 +252,9 @@ local function transferPlayer(player: Player, targetArenaId: string): boolean
 
 	playerSessions[player] = target
 	target:addPlayer(player)
+	-- Either they got the slot they queued for or they went home. Both
+	-- end the wait, and a stale flag would surface on the way back out.
+	queued[player] = nil
 	publishPlayerState(player)
 
 	-- After the roster move, so the spawn scoring sees the player as
@@ -426,6 +454,18 @@ local function initialize()
 			return false
 		end
 		return transferPlayer(player, targetArenaId)
+	end
+
+	setPlayerQueuedFunction.OnInvoke = function(player: Player, isQueued: boolean): boolean
+		if typeof(player) ~= "Instance" or not player:IsA("Player") then
+			log:warn("SetPlayerQueued invoked with bad arguments")
+			return false
+		end
+		if not playerSessions[player] then
+			return false
+		end
+		setPlayerQueued(player, isQueued == true)
+		return true
 	end
 
 	-- Wire up player events

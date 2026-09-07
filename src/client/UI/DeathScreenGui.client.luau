@@ -16,6 +16,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local HealthConstants = require(ReplicatedStorage.Shared.Health.HealthConstants)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
+local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 
 local log = Logger.new("DeathScreen")
 
@@ -38,6 +39,9 @@ screenGui.DisplayOrder = 30 -- above damage flash
 screenGui.IgnoreGuiInset = true
 screenGui.Enabled = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Round and competition chrome: no meaning in the hub.
+HudGate.bindScreenGui(screenGui, HudGate.Policy.ArenaOnly)
 
 local overlay = Instance.new("Frame")
 overlay.Size = UDim2.new(1, 0, 1, 0)

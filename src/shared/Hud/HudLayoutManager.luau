@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local HudConstants = require(script.Parent.HudConstants)
+local HudGate = require(script.Parent.HudGate)
 local InputCategorizer = require(ReplicatedStorage.Shared.Core.InputCategorizer)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
@@ -98,10 +99,20 @@ function HudLayoutManager:getRegion(regionName: string): Frame
 	return region
 end
 
-function HudLayoutManager:register(regionName: string, element: GuiObject)
+-- `policy` is **required**. Every HUD element has to declare what it does
+-- in the lobby, because the failure mode is silent: an element that
+-- wrongly hides is reported in the first playtest, an element that wrongly
+-- shows in the lobby is a wart nobody files. Making the argument
+-- mandatory breaks all nine existing call sites on purpose — each one
+-- became a deliberate decision. See [[concepts/HudGate]].
+function HudLayoutManager:register(regionName: string, element: GuiObject, policy: HudGate.Policy)
+	assert(policy ~= nil,
+		"HudLayoutManager:register requires a HudGate policy (Always / ArenaOnly / LobbyOnly) for " .. element.Name)
+
 	local region = self:getRegion(regionName)
 	if region then
 		element.Parent = region
+		HudGate.bindElement(element, policy)
 	end
 end
 

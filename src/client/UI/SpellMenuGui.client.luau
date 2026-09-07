@@ -32,6 +32,7 @@ local NPCConstants      = require(ReplicatedStorage.Shared.NPC.NPCConstants)
 local VfxConfig         = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 local ChargeOrbVfx      = require(ReplicatedStorage.Shared.Vfx.StatusVisuals.ChargeOrbVfx)
 local PlayerSession     = require(script.Parent.Parent.PlayerSession)
+local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 
 local spellCastRemote  = ReplicatedStorage.Shared.SpellCast.Remotes.SpellCastServer :: RemoteEvent
 local chargeStateRemote = ReplicatedStorage.Shared.SpellCast.Remotes.ChargeState :: RemoteEvent
@@ -96,7 +97,7 @@ local session = PlayerSession.get()
 local menu = SpellMenuBuilder.build()
 
 menu.gui.LayoutOrder = 1
-HudLayoutManager:register("BottomRight", menu.gui)
+HudLayoutManager:register("BottomRight", menu.gui, HudGate.Policy.Always)
 
 -- Render initial state
 menu:setReservoirs(session.energyReservoirs:snapshot())

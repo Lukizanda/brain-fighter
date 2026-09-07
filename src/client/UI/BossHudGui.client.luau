@@ -19,6 +19,7 @@ local TweenService      = game:GetService("TweenService")
 local UserInputService  = game:GetService("UserInputService")
 
 local Logger           = require(ReplicatedStorage.Shared.Core.Logger)
+local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 
 local bossEvents        = ReplicatedStorage.Shared.Boss.BossEvents
 local BossHealthChanged = bossEvents.BossHealthChanged :: RemoteEvent
@@ -41,6 +42,9 @@ screenGui.DisplayOrder   = 15
 screenGui.ResetOnSpawn   = false
 screenGui.IgnoreGuiInset = true
 screenGui.Parent         = Players.LocalPlayer:WaitForChild("PlayerGui")
+
+-- Round and competition chrome: no meaning in the hub.
+HudGate.bindScreenGui(screenGui, HudGate.Policy.ArenaOnly)
 
 local container = Instance.new("Frame")
 container.Name               = "BossHud"

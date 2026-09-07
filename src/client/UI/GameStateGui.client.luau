@@ -14,6 +14,7 @@ local TweenService = game:GetService("TweenService")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
+local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 
 local log = Logger.new("GameStateGui")
 
@@ -38,6 +39,9 @@ screenGui.DisplayOrder = 30 -- above scoreboard
 screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Round and competition chrome: no meaning in the hub.
+HudGate.bindScreenGui(screenGui, HudGate.Policy.ArenaOnly)
 
 -- Full-screen overlay
 local overlay = Instance.new("Frame")

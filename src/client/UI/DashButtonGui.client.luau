@@ -15,6 +15,7 @@ local HudLayoutManager  = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
 local DashButtonBuilder = require(ReplicatedStorage.Shared.Hud.DashButtonBuilder)
 local DashButtonConfig  = require(ReplicatedStorage.Shared.Hud.DashButtonConfig)
 local InputCategorizer  = require(ReplicatedStorage.Shared.Core.InputCategorizer)
+local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 
 local log = Logger.new("DashButtonGui")
 
@@ -22,7 +23,7 @@ local DASH_REGION = "BottomRight"
 
 local dashButton = DashButtonBuilder.build()
 dashButton.gui.LayoutOrder = DashButtonConfig.LAYOUT_ORDER
-HudLayoutManager:register(DASH_REGION, dashButton.gui)
+HudLayoutManager:register(DASH_REGION, dashButton.gui, HudGate.Policy.Always)
 
 -- BottomRight column geometry (screen margin + SpellMenu↔DASH gap) is
 -- owned by HudConstants.REGIONS.BottomRight, applied by HudLayoutManager.

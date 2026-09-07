@@ -19,6 +19,7 @@ end
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
+local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 
 local log = Logger.new("RoundTimerGui")
 
@@ -36,6 +37,9 @@ screenGui.DisplayOrder = 15
 screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Round and competition chrome: no meaning in the hub.
+HudGate.bindScreenGui(screenGui, HudGate.Policy.ArenaOnly)
 
 local container = Instance.new("Frame")
 container.Name = "TimerContainer"

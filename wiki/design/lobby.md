@@ -376,7 +376,7 @@ north to `(-570, ., 80)` and the volume's z-extent pulled back to `[0, 56]`.
 until the place file is saved and committed. Same as the arena greybox it sits
 beside.
 
-**4c — what the player sees.** HUD suppression per [[concepts/HudGate]]: a
+**4c — what the player sees.** ✅ **Done 2026-09-07.** HUD suppression per [[concepts/HudGate]]: a
 required policy argument on `HudLayoutManager:register` for the nine
 region-registered elements, and `HudGate.bindScreenGui` for the six that own
 their own `ScreenGui`. That page owns the design and the per-element policy
@@ -389,6 +389,44 @@ client on the transition into `Active` — see [[concepts/HudGate]] § Resolved.
 That last one is not a lobby bug: `RoundManager._activeRound` resets scores and
 not energy, so round 2 of any session already inherits round 1's mana. The
 lobby only makes it visible.
+
+*Shipped, and the interesting part was a Roblox detail.* Verified client-side,
+which is the only verification that counts here: in the hub the health bar,
+kill feed, boss HUD, scoreboard, game state and damage feedback are all off
+while the buffer, memorize button, spell menu, MindFull indicator and buff tray
+stay live; walking a portal turns the first set back on. `LobbyService` logged
+the whole loop — `took Boss Fight -> Default`, `took Return to Lobby -> Lobby`,
+`queued for Duel (position 1)`, `left the queue`, and
+`Portal refused ... out of range (80 studs)`.
+
+**The bug worth recording: property-changed signals are deferred.** HudGate
+tells its own writes from the owner's so it can suppress without revealing. The
+first implementation set an `applying` flag around the write and cleared it
+immediately after — but Roblox fires `GetPropertyChangedSignal` deferred, so the
+flag was already false when the handler ran. The gate read its own suppression
+back as *the owner wanting the element hidden*, and nothing ever came back on
+entering an arena. The first playtest showed a correct lobby and an arena with
+no health bar. The fix keys off the gate's state at the time of the write
+instead of a flag: with the gate open the gate never writes, so any change is
+the owner's; with it closed, a value going **true** can only be the owner and is
+recorded, and a value going false is assumed to be ours.
+
+**`LobbyOnly` has no users, and the reason is the return pad.** The policy table
+assigned the portal panel `LobbyOnly`, which is wrong the moment the arena
+contains a portal of its own. The panel is `Always`; **proximity** decides
+whether it is on screen and the arena check decides which portals are near you.
+The enum value stays for a surface that really is lobby-only.
+
+**Two non-findings that look like findings.** `DashButtonGui` stays hidden in
+both zones — it is touch-only and its owner never asked for it, which is the
+"never reveals" rule doing its job rather than a gate failure. And
+`RoundTimerGui` returns early on `ROUND_TIMER_ENABLED = false`, so it has no
+ScreenGui at all today; its binding is correct and dead until stage 6 turns the
+timer back on.
+
+The return pad moved from 17 studs off the arena spawn to 52, onto the bridge:
+arriving in the arena inside the return prompt's range greeted the player with
+"Return to lobby".
 
 ### Verification
 

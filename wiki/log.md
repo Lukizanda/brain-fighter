@@ -1602,3 +1602,21 @@ Authored `Workspace.Lobby` via MCP under two `ChangeHistoryService` waypoints: a
 The geometry lives in `BrainFighter.rbxl`, not in git. Rojo maps only `ReplicatedStorage`, `ServerScriptService`, `StarterGui` and `StarterPlayer`, so `Workspace.Lobby` is safe from a sync deleting it — and is not versioned until the place file is saved and committed.
 
 Pages touched: [[design/lobby]] (4b marked done, with the spawn-fallback interaction and the geometry-not-in-git note).
+
+## [2026-09-07] ingest | Phase 6 stage 4c — the HUD knows where you are, and the portals work
+
+Stage 4 closes. [[concepts/HudGate]] is implemented as `src/shared/Hud/HudGate.luau`: a required third argument on `HudLayoutManager:register` for the nine region-registered elements, and `HudGate.bindScreenGui` for the six that own a ScreenGui. Making the argument mandatory broke all nine call sites on purpose. Plus `PortalPanelBuilder`/`PortalPanelConfig`/`PortalGui` for the confirm panel and floating signs, `src/server/Lobby/LobbyService.server.luau` for the server half, and `EnergyReservoirs:reset()` cleared on the transition into `Active`.
+
+**The bug worth the entry: Roblox fires property-changed signals deferred.** HudGate has to tell its own writes from the owning script's, because a gate that force-*shows* on arena entry would reveal an empty boss bar and a death overlay to a living player — `BossHudGui` and `DeathScreenGui` both manage their own visibility. The first implementation set an `applying` flag around the write and cleared it on the next line. Deferred signals meant the flag was already false when the handler ran, so the gate read its own suppression back as *the owner wanting the element hidden*. The playtest showed a perfect lobby and an arena with no health bar, no kill feed and no boss HUD — a bug that only exists in the direction nobody tests first. The fix removes the flag: with the gate open it never writes, so any change is the owner's; with it closed, a value going true can only be the owner, and a value going false is assumed to be ours.
+
+**`LobbyOnly` ended up with no users.** The concept page assigned the portal panel `LobbyOnly`, which stops being right the moment the arena contains a portal — and stage 4b put a return pad there. The panel is `Always`, gated by proximity and by the same arena check the server makes. The enum value stays for a surface that really is lobby-only.
+
+**Two non-findings.** `DashButtonGui` is hidden in both zones because it is touch-only and its owner never asked for it — the "gate never reveals" rule working, not failing. `RoundTimerGui` returns early on `ROUND_TIMER_ENABLED = false` and has no ScreenGui at all; its binding is correct and dead until stage 6.
+
+The server half refuses everything the client could lie about: the part must carry the `ModePortal` tag, the player must be within `SERVER_RANGE_STUDS` (34, deliberately looser than the client's 22 so a walking tap is not lost to latency), and the portal must belong to the arena the player is standing in. Verified: `Portal refused for ZandaLuki (Pad): out of range (80 studs)`. Counts are published as attributes on the pad rather than pushed over a remote, so a late-joining client reads current numbers the moment it asks — the sign shows `0/2 in - 1 waiting` while somebody waits for a duel pad that stage 6 has not built yet.
+
+`EnergyReservoirs:reset()` fires once per colour that actually moved, and `EnergyRoundReset` clears on the *transition* into Active rather than on every one of RoundManager's per-second Active broadcasts. Verified live (`round went Active (from nil) — reservoirs cleared`) and by two new cases in `__tests` covering the fire count and the silent-on-empty path, run green in Edit mode.
+
+Also: the return pad moved 17 → 52 studs from the arena spawn, because arriving in the arena inside the return prompt's range greeted the player with "Return to lobby".
+
+Pages touched: [[design/lobby]] (4c marked done; the deferred-signal finding and the LobbyOnly correction).

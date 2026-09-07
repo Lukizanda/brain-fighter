@@ -162,6 +162,25 @@ function EnergyReservoirs:snapshot(): Snapshot
 	}
 end
 
+-- Empty every reservoir, firing `changed` once per colour that actually
+-- moved so the HUD redraws without three no-op signals on a fresh start.
+--
+-- Added for Phase 6 stage 4c. The lobby grants real energy, so a player
+-- could otherwise fill every colour to CAP_PER_COLOR in the hub and walk
+-- into a duel pre-loaded. But this is not really a lobby problem:
+-- `RoundManager._activeRound` already resets scores and never reset
+-- energy, so round 2 of any multi-round session inherited round 1's mana.
+-- The lobby only made it visible. Fixed where rounds begin, which fixes
+-- both — see `wiki/concepts/HudGate.md` § Resolved.
+function EnergyReservoirs:reset()
+	for _, color in COLORS do
+		if self._values[color] ~= 0 then
+			self._values[color] = 0
+			self._changedEvent:Fire(color)
+		end
+	end
+end
+
 function EnergyReservoirs:destroy()
 	if self._changedEvent then
 		self._changedEvent:Destroy()

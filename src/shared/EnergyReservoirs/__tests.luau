@@ -217,6 +217,45 @@ function M.run()
 		r:destroy()
 	end
 
+	-- reset empties every color and signals only the ones that moved
+	do
+		local r = EnergyReservoirs.new()
+		r:add("red", 20)
+		r:add("blue", 5)
+		task.wait() -- drain the adds so they don't bleed into the count below
+
+		local fired = {}
+		local conn = r.changed:Connect(function(color) table.insert(fired, color) end)
+
+		r:reset()
+		task.wait()
+
+		assertEq("reset empties red", "red", r:get("red"), 0)
+		assertEq("reset empties blue", "blue", r:get("blue"), 0)
+		assertEq("reset empties green", "green", r:get("green"), 0)
+		-- green was already 0, so it must not fire: a fresh round should
+		-- not redraw three bars that never moved.
+		assertEq("reset fires once per moved color", "fire count", #fired, 2)
+
+		conn:Disconnect()
+		r:destroy()
+	end
+
+	-- reset on an untouched reservoir is silent
+	do
+		local r = EnergyReservoirs.new()
+		local fired = 0
+		local conn = r.changed:Connect(function() fired += 1 end)
+
+		r:reset()
+		task.wait()
+
+		assertEq("reset of empty reservoir is silent", "fire count", fired, 0)
+
+		conn:Disconnect()
+		r:destroy()
+	end
+
 	print("[EnergyReservoirs.__tests] all scenarios passed")
 	return true
 end

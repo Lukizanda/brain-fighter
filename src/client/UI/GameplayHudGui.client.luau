@@ -19,6 +19,7 @@ local Dictionary            = require(ReplicatedStorage.Shared.Dictionary)
 local VfxConfig             = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 local PlayerSession         = require(script.Parent.Parent.PlayerSession)
 local EconomyReport         = require(script.Parent.Parent.EconomyReport)
+local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 
 local log = Logger.new("GameplayHudGui")
 
@@ -65,9 +66,9 @@ display.gui.LayoutOrder  = LAYOUT.TILES
 healthBar.gui.LayoutOrder = LAYOUT.HEALTH
 btn.gui.LayoutOrder      = LAYOUT.ABSORB
 
-HudLayoutManager:register("BottomCenter", display.gui)
-HudLayoutManager:register("BottomCenter", healthBar.gui)
-HudLayoutManager:register("BottomCenter", btn.gui)
+HudLayoutManager:register("BottomCenter", display.gui, HudGate.Policy.Always)
+HudLayoutManager:register("BottomCenter", healthBar.gui, HudGate.Policy.ArenaOnly)
+HudLayoutManager:register("BottomCenter", btn.gui, HudGate.Policy.Always)
 
 -- Health adapter: subscribe Humanoid properties → bar, torn down on respawn
 local player = Players.LocalPlayer

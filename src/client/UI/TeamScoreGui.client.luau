@@ -19,6 +19,7 @@ local Teams = game:GetService("Teams")
 local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local HudLayoutManager = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 
 local log = Logger.new("TeamScoreGui")
 
@@ -195,7 +196,7 @@ end
 ----------------------------------------------------------------------
 -- Hookup
 ----------------------------------------------------------------------
-HudLayoutManager:register("TopCenter", container)
+HudLayoutManager:register("TopCenter", container, HudGate.Policy.ArenaOnly)
 
 rebuildEntries()
 refresh()

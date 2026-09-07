@@ -13,13 +13,14 @@ local Logger                  = require(ReplicatedStorage.Shared.Core.Logger)
 local HudLayoutManager        = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
 local MindFullIndicatorBuilder = require(ReplicatedStorage.Shared.Hud.MindFullIndicatorBuilder)
 local PlayerSession           = require(script.Parent.Parent.PlayerSession)
+local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 
 local log = Logger.new("MindFullIndicatorGui")
 
 local session = PlayerSession.get()
 local indicator = MindFullIndicatorBuilder.build()
 
-HudLayoutManager:register("TopCenter", indicator.gui)
+HudLayoutManager:register("TopCenter", indicator.gui, HudGate.Policy.Always)
 
 -- Sync to current state immediately
 indicator:setActive(session.mindFullManager:isMindFull())

@@ -15,6 +15,7 @@ local TweenService = game:GetService("TweenService")
 
 local HudLayoutManager = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 
 local log = Logger.new("KillFeedGui")
 
@@ -59,7 +60,7 @@ layout.SortOrder = Enum.SortOrder.LayoutOrder
 layout.Padding = UDim.new(0, ENTRY_PADDING)
 layout.Parent = container
 
-HudLayoutManager:register("TopRight", container)
+HudLayoutManager:register("TopRight", container, HudGate.Policy.ArenaOnly)
 
 ----------------------------------------------------------------------
 -- State

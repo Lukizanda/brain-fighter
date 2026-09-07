@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 local log = Logger.new("ScoreboardGui")
 
 local player = Players.LocalPlayer
@@ -40,6 +41,9 @@ screenGui.DisplayOrder = 25 -- above other HUD
 screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Round and competition chrome: no meaning in the hub.
+HudGate.bindScreenGui(screenGui, HudGate.Policy.ArenaOnly)
 
 -- Dimmed background
 local dimmer = Instance.new("Frame")

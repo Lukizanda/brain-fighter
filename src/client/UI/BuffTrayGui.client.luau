@@ -18,11 +18,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local BuffTrayBuilder = require(ReplicatedStorage.Shared.Hud.BuffTrayBuilder)
 local HudLayoutManager = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 
 local log = Logger.new("BuffTray")
 
 local tray = BuffTrayBuilder.build()
-HudLayoutManager:register("TopRight", tray.gui)
+HudLayoutManager:register("TopRight", tray.gui, HudGate.Policy.Always)
 
 _G.PlayerHud = _G.PlayerHud or {}
 _G.PlayerHud.BuffTray = tray
