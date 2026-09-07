@@ -1586,3 +1586,19 @@ Verified live rather than by inspection: a joining player reads `InLobby`/`Lobby
 **Stage 4b shrank in the reconciliation.** A concurrent session's [[concepts/HudGate]] established that the player-facing energy grant happens at **memorize**, not at pop, which inverted the "practice blocks grant no energy" plan — there was no per-block grant to suppress, and since the lobby grants real energy, lobby pops must reach the shadow ledger *too*. The planned `ArenaId` stamp on spawned blocks went with it: the hub sits hundreds of studs from the arena and `BlockShootValidation.checkRange` already refuses a pop at that distance. 4b is now Studio work plus tags.
 
 Pages touched: [[design/lobby]] (§ Stage 4 detail added; stage 4 row rewritten; 4a marked done; 4b/4c reconciled against HudGate), [[concepts/HudGate]] (new, by the parallel session; § reference corrected), [[systems/Boss]] (BossHudGui's own-ScreenGui correction), [[index]].
+
+## [2026-09-07] ingest | Phase 6 stage 4b — the hub exists, and a transfer now moves your body
+
+Authored `Workspace.Lobby` via MCP under two `ChangeHistoryService` waypoints: a 140 × 140 walled shell at `(-600, 202, 28)` with corner pillars, two portal arches, five `LobbySpawn` pads, a practice-block volume, a target dummy, and a `LobbyReturnPad` on the arena side. Floor top matches the arena plaza at `y = 203`; the hub sits 533 studs clear of the nearest arena block volume, which is what lets `BlockShootValidation.checkRange` refuse cross-arena pops without an arena-id check — the reason stage 4b was able to drop the planned `ArenaId` stamp on spawned blocks.
+
+**The spawn change had a non-obvious second half.** Disabling `Arena.SpawnZone.SpawnLocation` is what makes Roblox's initial spawn land a joining player in the hub. But the arena's pad also had to be tagged `FFASpawn`, because `SpawnManager`'s `SpawnLocation` fallback is deliberately not arena-filtered (it is the misconfigured-scene path, and `Default` was still reaching it). Adding a `SpawnLocation` to the lobby while `Default` still fell through would have made the hub a candidate *arena* spawn. Both arenas now resolve by tag and neither reaches the fallback: `[Lobby] registered with 5 spawn points`, `[Default] registered with 1`.
+
+`BlockSpawnerService` reports `2 arena(s): Default=40, Lobby=8` — the per-arena density arithmetic from stage 2 doing its job unmodified on a second pool. A transfer now moves the body, `(-650, 207, 28)` ↔ `(257, 206, 26)`, where in 4a it moved only the roster.
+
+**The dummy cost no code**, as [[concepts/HudGate]] predicted: cloned from `ServerStorage.AIWorldData.Rigs.Patroller`, anchored at the root, tagged `Damageable`, and `DeathHandler` logged `Created template for 'TargetDummy'` on sight. `HealthService` overrides the authored 200 HP with its own 100 — correct, it owns that number. The `DamageableTemplates` copy in ServerStorage draws a second `Damageable initialized` line because `HealthService` scans the tag rather than the workspace; cosmetic, pre-dates this stage.
+
+**One layout bug, found by screenshot rather than by log.** The block volume was centred on the hub and swallowed the dummy, so blocks spawned in front of the one thing you are meant to cast at. Every server log was clean. Dummy moved north, volume z-extent pulled back — the same lesson as the VFX rule in [[CLAUDE.md]], reached from the other direction: a clean server log says nothing about what the player is looking at.
+
+The geometry lives in `BrainFighter.rbxl`, not in git. Rojo maps only `ReplicatedStorage`, `ServerScriptService`, `StarterGui` and `StarterPlayer`, so `Workspace.Lobby` is safe from a sync deleting it — and is not versioned until the place file is saved and committed.
+
+Pages touched: [[design/lobby]] (4b marked done, with the spawn-fallback interaction and the geometry-not-in-git note).

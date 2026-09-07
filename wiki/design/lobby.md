@@ -316,7 +316,7 @@ equipped Tool and rebuilds every `ResetOnSpawn` ScreenGui, on a path a player
 crosses repeatedly. Restoring health belongs to a mode's round start, where it
 can mean something.
 
-**4b — the hub.** `Workspace.Lobby` greybox authored via MCP under a
+**4b — the hub.** ✅ **Done 2026-09-07.** `Workspace.Lobby` greybox authored via MCP under a
 `ChangeHistoryService` waypoint: floor and walls, two portal pads with arches,
 `LobbySpawn` pads, a small `BlockSpawnVolume`, a `Damageable` target dummy, and
 a `LobbyReturn` pad inside the existing arena. All tagged and
@@ -337,6 +337,44 @@ second because the hub sits hundreds of studs from the arena and
 `BlockShootValidation.checkRange` already refuses a pop at that distance; an
 arena-id check would be a second lock on a door that is shut. Lobby blocks are
 ordinary blocks, and 4b is Studio work plus tags.
+
+*Shipped.* Hub origin `(-600, 202, 28)`, floor top at `y = 203` to match the
+arena plaza, 533 studs clear of the nearest arena block volume. 140 × 140 walled
+shell with corner pillars, two portal arches (`ModePortal`-tagged pads carrying
+`TargetArenaId` / `ModeLabel` / `Occupancy` / `Capacity` / `Waiting`, the last
+three declared empty for 4c to write), five `LobbySpawn` pads, a 70 × 20 × 56
+practice-block volume, a target dummy, and a `LobbyReturnPad` in the arena.
+Verified live: `[Lobby] registered with 5 spawn points`, `[Default] registered
+with 1`, `2 arena(s): Default=40, Lobby=8`, and a transfer now moves the body
+— `(-650, 207, 28)` ↔ `(257, 206, 26)` — where in 4a it moved only the roster.
+
+**The spawn change had two halves, and only one is obvious.** Disabling
+`Arena.SpawnZone.SpawnLocation` is what makes Roblox's own initial spawn land a
+joining player in the hub. The non-obvious half is that the arena's pad *also*
+had to be tagged `FFASpawn`: `SpawnManager`'s `SpawnLocation` fallback is
+deliberately **not** arena-filtered (it is the misconfigured-scene path), so
+with `Default` still resolving through it, adding a `SpawnLocation` to the lobby
+would have made the hub a candidate arena spawn and teleported arena players
+into it. Both arenas now resolve by tag and neither reaches the fallback.
+
+**The dummy cost no code, as predicted.** `DeathHandler` logged `Created
+template for 'TargetDummy'` on sight and `HealthService` adopted it. Two notes:
+`HealthService` sets it to its own 100 HP, overriding the 200 authored on the
+rig — the health system owns that number, which is correct. And the
+`DamageableTemplates` copy in `ServerStorage` draws its own `Damageable
+initialized` line, because `HealthService` scans the tag rather than the
+workspace. Cosmetic, pre-dates this stage, left alone.
+
+**Found by screenshot, not by log:** the block volume was originally centred on
+the hub and swallowed the dummy, so blocks spawned in front of the one thing
+you are meant to cast at. Server logs were clean throughout. The dummy moved
+north to `(-570, ., 80)` and the volume's z-extent pulled back to `[0, 56]`.
+
+**The geometry lives in `BrainFighter.rbxl`, not in git** — Rojo maps only
+`ReplicatedStorage`, `ServerScriptService`, `StarterGui` and `StarterPlayer`, so
+`Workspace.Lobby` is safe from a sync deleting it, and equally is not versioned
+until the place file is saved and committed. Same as the arena greybox it sits
+beside.
 
 **4c — what the player sees.** HUD suppression per [[concepts/HudGate]]: a
 required policy argument on `HudLayoutManager:register` for the nine
