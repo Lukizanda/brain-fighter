@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-08-20
+updated: 2026-09-08
 ---
 
 # Build Plan
@@ -332,7 +332,35 @@ Hence the gate column: stages 1–5 are safe against the current trust model (Pv
 
 **Open:** mid-round leave/forfeit rules, duel disconnect handling, spectating. The progression board is deferred to Phase 5.5 — leave wall space.
 
+## Phase 7 — Structural refactor (from the 2026-09 audit)
+
+Added 2026-09-08 from [[design/system-audit-2026-09]]. Full tickable plan with owns / must-not-touch / done condition / risk / playtest / dependencies per chunk in [[design/refactor-plan-2026-09]] — sessions claim a chunk there, tick its items and record the commit. Nothing has started.
+
+**Why a phase and not a backlog:** two of the chunks are hard prerequisites for Phase 6 — a spell kill never fires `PlayerEliminated` (chunk 4), so stage 6 duels cannot credit a win, and `ScoreTracker`/spawn threat/boss targeting are still server-wide (chunks 8–9), so stage 5 cannot run a round in one arena without zeroing the other's. The rest is sequenced in front of them so the risky work lands on a harness that can catch a regression.
+
+| Chunk | Item | Risk | Playtest | Depends on | Phase 6 gate |
+|---|---|---|---|---|---|
+| 0 | Lights off — dead scripts/utilities/HUD builders, unread `GameConfig` keys, `DEV_COUNT_POP_VFX` off, stale comments | L | boot smoke | — | — |
+| 1 | Test harness — wire the 7 unwired `__tests`, delete the 3 dead Multiplayer suites, normalise return shapes, rewrite [[systems/Tests]] | L | one `all` run | 0 | — |
+| 2 | Constants — one `Core/Colors`, Skills defaults into `SkillConstants`, one `RESPAWN_TIME`, one auto-target range | L | boot smoke | 1 | — |
+| 3 | HUD ownership — DeathScreenGui stops writing the gated property (HudGate reveal), TopRight stacking, `_G` removal, Builder→Config extraction | M | yes | 0 | — |
+| 4 | **One damage path** — `applyDamage` becomes the only `Health` writer; cause id; PvP gate per session | H | yes | 1, 2 | **stage 6** |
+| 5 | One respawn owner — GameModeService only; `CharacterAutoLoads` off; stale `pendingRespawns` fixed | M | yes | 4 | — |
+| 6 | Economy — ledger resets on round start; tile cap; measured `ENFORCE` flip | M | yes | 1 | stage 6 (soft) |
+| 7 | One VFX lane — delete client-originated `BroadcastSpellVfx`; authoritative run broadcasts cast+impact; `SpellCastController` out of the HUD | H | two clients | 4 | — |
+| 8 | **Sessions own scores** — `SessionRegistry` module, per-session `ScoreTracker`, roster-scoped spawns, team plumbing out, round/PvP flags → mode config | H | two sessions | 5, 6 | **stage 5** |
+| 9 | **Arena-aware world** — `ArenaId` on blocks + `ConsumeBlock` check; one `Hittables` helper; boss/NPC per session | H | two arenas | 8 | **stage 5** |
+| 10 | Presentation dedupe — attribute watcher, mote path, telegraph, controllers gain `disable/destroy` | M | yes | 7 | — |
+| 11 | Boss ownership — `baseWalkSpeed`, `AlignOrientation` facing, AI primitives to `server/AI`, laser/melee leftovers | M | yes | 9 | — |
+| 12 | HUD ports — six hand-built ScreenGuis to Builder+Config; settings menu decision | L–M | yes | 3 | — |
+
+**Milestone:** `grep -rn "\.Health\s*=" src` hits `applyDamage` only; two sessions with disjoint rosters run rounds without touching each other's scores, spawns or targets; every `__tests.luau` is reachable from the autorunner; the boundary page lists no client-trusted gameplay remote.
+
+**Blocked on the user:** Q1–Q11 in [[design/system-audit-2026-09]] § Needs your input. Chunks 0, 2, 3, 5 need no answer; chunk 1 needs Q8; chunk 4 needs Q1/Q2; chunk 6 needs Q3; chunk 7 needs Q9; chunk 8 needs Q6/Q7; chunk 9 needs Q10; chunk 12 needs Q5.
+
 ## Plan changelog
+
+- **2026-09-08**: Phase 7 added — structural refactor from [[design/system-audit-2026-09]]. The audit re-verified the June, UI and boundary audits against `src/`: the Skills leak, BossAdapter, template stack, Skills tests and boundary stages 1–6 are closed; the split-brain damage path is not, and it has become the blocker for Phase 6 stage 6 (a spell kill fires no `PlayerEliminated`, so nothing credits a duel). Stage 5 is likewise blocked on the server-wide `ScoreTracker`/spawn threat/boss targeting that Phase 6 stages 1–4 consciously deferred — the audit's position is that these are prerequisites of stage 5, not part of it. Twelve one-session chunks, cheap de-risking work in front of the four authority/session chunks; eleven questions for the user, recorded on the audit page.
 
 - **2026-08-20** (follow-up): Phase 6 stage 1 shipped (`b38a99c`) and **the plan gained a stage**. Auditing the remaining `FireAllClients` sites after the refactor found seventeen (9 HUD / 8 VFX; first written up as "eleven / six" from a miscount, corrected same day), not the one `RoundManager` owned — so the broadcast audience was a *class* of bug the original stage table had mistaken for a detail. New stage 3 covers the six that matter; hub/PvE/duel/wiki renumbered 3–6 → 4–7 (stages 1 and 2 unmoved). The useful split turned out not to be by system but by **what the consumer does with the payload**: HUD remotes (`BossHealthChanged`/`BossPhaseChanged`/`ScoreUpdate`/`KillFeed`) are screen-space and genuinely break — a duellist would get the boss's health bar — while the VFX lane (`VfxBroadcast`, `SkillDelivery`, boss windup) is world-positioned, so a player in another arena never sees it and only pays to instantiate it. That half stays with [[systems/VisualEffects]]' existing `PERF` guardrails rather than gaining a roster lookup on the hottest path in the game. Stage 1 also diverged once: `task.cancel` was removed, not preserved — the old `stop()` never cleared `roundThread` on natural exit, so a second `stop()` would have thrown.
 

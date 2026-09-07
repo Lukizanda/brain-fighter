@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server-side letter-block populator — one instance per arena, maintaining that arena's target count of floating LetterBlocks with Scrabble-weighted letter distribution, configurable color weights, and a per-block respawn cooldown.
-updated: 2026-08-20
+updated: 2026-08-21
 ---
 
 # BlockSpawner

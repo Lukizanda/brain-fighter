@@ -1597,7 +1597,7 @@ Authored `Workspace.Lobby` via MCP under two `ChangeHistoryService` waypoints: a
 
 **The dummy cost no code**, as [[concepts/HudGate]] predicted: cloned from `ServerStorage.AIWorldData.Rigs.Patroller`, anchored at the root, tagged `Damageable`, and `DeathHandler` logged `Created template for 'TargetDummy'` on sight. `HealthService` overrides the authored 200 HP with its own 100 — correct, it owns that number. The `DamageableTemplates` copy in ServerStorage draws a second `Damageable initialized` line because `HealthService` scans the tag rather than the workspace; cosmetic, pre-dates this stage.
 
-**One layout bug, found by screenshot rather than by log.** The block volume was centred on the hub and swallowed the dummy, so blocks spawned in front of the one thing you are meant to cast at. Every server log was clean. Dummy moved north, volume z-extent pulled back — the same lesson as the VFX rule in [[CLAUDE.md]], reached from the other direction: a clean server log says nothing about what the player is looking at.
+**One layout bug, found by screenshot rather than by log.** The block volume was centred on the hub and swallowed the dummy, so blocks spawned in front of the one thing you are meant to cast at. Every server log was clean. Dummy moved north, volume z-extent pulled back — the same lesson as the VFX rule in `CLAUDE.md`, reached from the other direction: a clean server log says nothing about what the player is looking at.
 
 The geometry lives in `BrainFighter.rbxl`, not in git. Rojo maps only `ReplicatedStorage`, `ServerScriptService`, `StarterGui` and `StarterPlayer`, so `Workspace.Lobby` is safe from a sync deleting it — and is not versioned until the place file is saved and committed.
 
@@ -1620,3 +1620,38 @@ The server half refuses everything the client could lie about: the part must car
 Also: the return pad moved 17 → 52 studs from the arena spawn, because arriving in the arena inside the return prompt's range greeted the player with "Return to lobby".
 
 Pages touched: [[design/lobby]] (4c marked done; the deferred-signal finding and the LobbyOnly correction).
+
+## [2026-09-07] lint | full wiki audit — stage renumber left half-applied
+
+Swept all 57 pages for broken wikilinks, orphans, dead `src/` citations and
+`updated:` drift. **Clean:** no orphans, no broken page-to-page links. The dead
+`src/` paths on `Weapon`/`Loadout`/`Character`/`BossAdapter`/`LetterBlaster` are
+intentional — those pages are REMOVED records — and [[systems/VisualEffects]] +
+[[design/ui-architecture-review]] already flag their own stale sections in place.
+
+**The one real contradiction:** when `2d5579f` inserted broadcast audience as
+Phase 6 stage 3, it renumbered [[design/lobby]] but only the `##` headings in
+[[systems/GameMode]]. Four references kept the old numbering — the round/PvP
+flags (stage 5 → 6), the arena seam (stages 3–5 → 4–6), and the Modes table's
+PvE/PvP rows (4/5 → 5/6). Corrected.
+
+Also corrected the "NoOpMode is the only registered mode" claim, false since
+`dbc88c4` registered `Lobby`: frontmatter description, the Files list (now
+carrying `LobbyMode.luau` and `runsRounds = false`) and the [[index]] entry. The
+page *body* still describes the NoOp-only world — that rewrite is stage 7 work
+and is now labelled as such rather than reading as current. Bumped stale
+`updated:` on [[index]] (from 2026-08-20) and [[systems/BlockSpawner]]
+(→ 08-21), and demoted four `[[CLAUDE.md]]`/`[[NIM-4]]` pseudo-wikilinks to
+code spans — neither is a wiki page.
+
+Audit covered committed state only; stage 4b/4c was uncommitted and in flight.
+
+Pages touched: [[systems/GameMode]], [[index]], [[systems/BlockSpawner]], [[concepts/HudGate]], [[systems/ChargeCast]], [[systems/WordBuffer]].
+
+## [2026-09-08] ingest | System design audit 2026-09 — report and tickable refactor plan
+
+Whole-`src/` design audit against the June/UI/boundary audits as baseline; three read-only area sweeps, every finding hand-verified at `file:line`, no code changed, no playtest run. Report at [[design/system-audit-2026-09]] (45 findings, 12 wiki-vs-code drifts, 11 questions for the user); plan at [[design/refactor-plan-2026-09]] (12 one-session chunks with owns / must-not-touch / done condition / risk / playtest / depends-on, each with a `Status:` line and checkboxes so other sessions can claim and tick). Recorded as Phase 7 in [[design/build-plan]].
+
+**Closed since June:** Skills Humanoid leak, BossAdapter, template cut, Skills tests, effect stubs, `damageAmpMultiplier`, boundary stages 1–6. **Still open and now load-bearing:** the split-brain damage path — `SkillEffects` writes `Humanoid.Health` directly, so a spell kill never fires `PlayerEliminated` and Phase 6 stage 6 cannot credit a duel; the server-wide `ScoreTracker`, spawn threat scoring and boss/NPC targeting that stage 5 needs per-session; a three-way respawn ownership split with a stale `pendingRespawns` entry; the `HudGate` reveal on DeathScreenGui (owner writes the gated property); the client-originated `BroadcastSpellVfx` relay the boundary audit never listed; a server ledger that never resets while the client does. Seven of ten `__tests.luau` are not reachable from the autorunner, and three Multiplayer suites require deleted systems.
+
+Pages touched: [[design/system-audit-2026-09]] (new), [[design/refactor-plan-2026-09]] (new), [[design/build-plan]] (Phase 7 + changelog), [[index]].

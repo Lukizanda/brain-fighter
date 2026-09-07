@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-08-20
+updated: 2026-09-08
 ---
 
 # Wiki Index
@@ -14,7 +14,9 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[design/build-plan]] — phased build plan with parallel/sequential dependencies; one tracker per system
 - [[design/ArtDirection]] — lowpoly / chunky / oversized sci-fi proportions; greybox-first level building
 - [[design/ui-architecture-review]] — Phase 4.8 audit of `src/client/UI/` + `src/shared/Hud/` (re-audited 2026-06-05); R-1..R-4 cleanup landed + verified, no High open; 2 Medium / 3 Low deferred; Phase 5 gate = GO
-- [[design/system-audit-2026-06]] — whole-repo architecture/tech-debt audit (2026-06-05); ~half the repo is dormant template code; Tier 1 = Skills Humanoid leak + BossAdapter retirement + split-brain damage; key call = template keep-or-cut. Next-session pick-up point.
+- [[design/system-audit-2026-06]] — whole-repo architecture/tech-debt audit (2026-06-05); ~half the repo is dormant template code; Tier 1 = Skills Humanoid leak + BossAdapter retirement + split-brain damage; key call = template keep-or-cut. **Superseded by [[design/system-audit-2026-09]]** — kept as the baseline it was audited against.
+- [[design/system-audit-2026-09]] — whole-`src/` design audit (2026-09-07): June's leak/BossAdapter/template items closed; **the damage path is the blocker** — spells write `Humanoid.Health` directly so a spell kill fires no `PlayerEliminated` (no duel credit); `ScoreTracker`/spawn threat/boss targeting still server-wide; HudGate reveal on DeathScreenGui; client-trusted `BroadcastSpellVfx` relay; ledger never resets. 45 findings, 12 wiki-vs-code drifts, 11 questions waiting on the user
+- [[design/refactor-plan-2026-09]] — **tickable** 12-chunk refactor plan (Phase 7): each chunk has owns / must-not-touch / done condition / risk / playtest / depends-on and a `Status:` line — claim, tick, record the commit. Chunks 4 and 8–9 gate Phase 6 stages 6 and 5
 - [[design/client-server-boundary]] — audit of which systems run gameplay code on both VMs (2026-08-04); root cause of the four VFX replication bugs = the Skills chain is implicit client prediction with authoritative re-simulation. Recommends authority/prediction/presentation split; 6-stage plan = Phase 5.6
 - [[design/tap-to-pop]] — Phase 5.7 plan (2026-08-10): retire the Spelling Staff / LetterBlaster, click or tap blocks directly to pop them; a hover outline says whether a click will land (and greys out past reach), and a **collect stream** funnels block-coloured sparks onto whoever took it as the PvP attribution cue replacing the beam. Also closes the optimistic-append phantom-letter hole PvP exposes
 - [[design/lobby]] — Phase 6 plan (2026-08-20): welcome lobby + PvE/PvP mode selection. Mode choice is a **session-container** problem, not a menu — `RoundManager`/`GameModeService` are a server-wide singleton. Hub place with in-place arena zones, co-op queued PvE, 1v1 duels on a pad pool, diegetic portals. Records that `PLAYER_VS_PLAYER_ENABLED` does **not** gate spell damage
@@ -28,7 +30,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/NPC]] — Perception → StateMachine → Actions, Patroller archetype, WorldDataManager
 - [[systems/HUD]] — Builder + Config + LayoutManager pattern, attribute bars, Phase 4 gameplay widgets (WeaponRolodex + LoadoutDropClient removed in 6610291)
 - [[systems/Loadout]] — **REMOVED (commit 6610291)**; pedestal pickup / RespawnPedestalManager / drop remote all deleted
-- [[systems/GameMode]] — **sessions** (Phase 6 stage 1): `RoundManager.new(deps)` per arena with its own roster + per-roster broadcast, `GameModeService` as session manager; ScoreTracker/SpawnManager still singletons; FFA/TDM/TeamService deleted (6610291), NoOpMode only
+- [[systems/GameMode]] — **sessions** (Phase 6 stage 1): `RoundManager.new(deps)` per arena with its own roster + per-roster broadcast, `GameModeService` as session manager; ScoreTracker/SpawnManager still singletons; FFA/TDM/TeamService deleted (6610291). Registered modes: NoOp + Lobby (stage 4a) — page body still reads NoOp-only, rewritten in stage 7
 - [[systems/Tests]] — TestRunner + suites for NPC/Melee, MCP-driven harness
 - [[systems/EnergyEconomy]] — Phase 1 pure-Luau module: word → per-color mana (Scrabble values × length tiers, floor-reconciled color splits)
 - [[systems/EnergyReservoirs]] — Phase 1 pure-Luau state container: three per-color energy bars, cap 60, `.changed(color)` BindableEvent signal

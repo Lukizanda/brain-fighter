@@ -1,7 +1,7 @@
 ---
 type: system
-description: Game mode framework — GameModeService as a session manager, per-session RoundManager instances, ScoreTracker, per-arena SpawnManager over the shared Arena vocabulary, mode registry, and the BroadcastAudience seam that scopes screen-space remotes to a session roster. FFA/TDM modes + TeamService DELETED (2026-06-22, commit 6610291); NoOpMode is the only registered mode.
-updated: 2026-08-20
+description: Game mode framework — GameModeService as a session manager, per-session RoundManager instances, ScoreTracker, per-arena SpawnManager over the shared Arena vocabulary, mode registry, and the BroadcastAudience seam that scopes screen-space remotes to a session roster. FFA/TDM modes + TeamService DELETED (2026-06-22, commit 6610291). Registered modes are NoOp and Lobby; the body below still describes the NoOp-only world and is rewritten in Phase 6 stage 7.
+updated: 2026-09-07
 ---
 
 # GameMode System
@@ -28,7 +28,7 @@ session:disable()    -- reversible halt
 session:destroy()    -- disable + drop all state
 ```
 
-`GameModeService` is the **session manager**: it owns `sessions[arenaId]` and `playerSessions[player]`, creates exactly one session at boot (`Arena.DEFAULT_ID = "Default"`), and assigns every player to it. Behaviour is therefore identical to the singleton — the seam exists for Phase 6 stages 3–5 to hang real arenas off. Where the singleton asked `RoundManager.isActive()`, the service now asks `isPlayerRoundActive(player)`, a `playerSessions` lookup.
+`GameModeService` is the **session manager**: it owns `sessions[arenaId]` and `playerSessions[player]`, creates exactly one session at boot (`Arena.DEFAULT_ID = "Default"`), and assigns every player to it. Behaviour is therefore identical to the singleton — the seam exists for Phase 6 stages 4–6 to hang real arenas off. Where the singleton asked `RoundManager.isActive()`, the service now asks `isPlayerRoundActive(player)`, a `playerSessions` lookup.
 
 **Broadcast is per-roster, not `FireAllClients`.** `_broadcastState` iterates the session's roster and `FireClient`s each member. With one session this is unobservable, but with two live sessions a duellist would otherwise receive the boss arena's round state — that leak is the reason the refactor exists. The **payload shape is unchanged** (`roundState`, `timeRemaining`, `winnerId`, `winnerName`, `winnerTeamName`); `GameStateGui`, `RoundTimerGui` and `DeathScreenGui` consume it untouched. `_waitForPlayers` likewise gates on the roster count rather than `#Players:GetPlayers()`.
 
@@ -54,7 +54,7 @@ A session names an arena slot; stage 2 gave that name something to resolve again
 
 Two arenas can therefore share a tag name and still keep their pads apart — which is what stage 6's pad pool needs, since both duel pads are `PvPArenaSpawn`.
 
-`Arena.SpawnTags` declares `LobbySpawn` / `PvEArenaSpawn` / `PvPArenaSpawn` ahead of the geometry that will carry them (stages 4–6), so scene authoring and mode config cannot pick different spellings of the same idea. Nothing is tagged with them yet.
+`Arena.SpawnTags` declares `LobbySpawn` / `PvEArenaSpawn` / `PvPArenaSpawn` ahead of the geometry that will carry them (stages 4–6), so scene authoring and mode config cannot pick different spellings of the same idea. `LobbySpawn` is carried by the hub's five pads as of stage 4b; `PvEArenaSpawn` / `PvPArenaSpawn` are still unused — see [[design/lobby]] § Stage 4 detail.
 
 **The `SpawnLocation` fallback is deliberately *not* filtered by arena.** It is the misconfigured-scene path — nothing is tagged for this arena — and its job is to put the player somewhere rather than at origin; narrowing it by arena would make the empty case empty again. The shipped place reaches this path on every spawn: `NoOpMode`'s `spawnTag` is `FFASpawn` and nothing in the scene carries that tag, so every player lands on `Workspace.Arena.SpawnZone.SpawnLocation`. `filterSpawnsForPlayer` is unchanged — it was already tag/attribute-driven, and its `TEAMS_ENABLED` early-out still short-circuits the whole team path.
 
@@ -122,7 +122,7 @@ Brain Fighter is being repurposed as an educational shooter, so the inherited co
 - `ROUND_TIMER_ENABLED = false` — active rounds have no time limit; they end on score only. `RoundTimerGui` exits early (no "0:00" overlay). Flip true to restore the 5-minute cap + timer HUD.
 - `ROUND_COUNTDOWN_ENABLED = false` — `RoundManager:_countdown()` returns immediately; the round goes live the moment minimum players are met. Flip true to restore the 10-second pre-round delay.
 
-All three round/PvP flags are owned by **Phase 6 stage 5**, which is gated behind Phase 5.4 — do not flip them ad hoc.
+All three round/PvP flags are owned by **Phase 6 stage 6**, which is gated behind Phase 5.4 — do not flip them ad hoc.
 
 With both flags off the only registered mode is `NoOpMode` (`src/shared/GameMode/Modes/NoOpMode.luau`): a 24-hour idle round with `scoreLimit = math.huge`, no team logic, no win condition. The session enters `Active` once and stays there; GameStateGui's PostRound overlay never fires.
 
@@ -138,8 +138,9 @@ src/shared/GameMode/
   GameModeConstants.luau            — MIN_PLAYERS, durations, RoundState enum
   GameModeDefinition.luau           — the interface each mode implements
   GameModeTypes.luau                — type definitions
-  Modes/init.luau                   — mode registry (NoOp only; DEFAULT_MODE = "NoOp")
-  Modes/NoOpMode.luau               — the only registered mode
+  Modes/init.luau                   — mode registry (NoOp + Lobby; DEFAULT_MODE = "NoOp")
+  Modes/NoOpMode.luau               — the idle arena mode
+  Modes/LobbyMode.luau              — the hub (stage 4a); `runsRounds = false`, never resolved via ActiveGameMode
   BroadcastAudience.luau            — who receives a screen-space remote (resolver registered by GameModeService)
   Remotes/                          — GameStateChanged, ScoreUpdate, KillFeed (.model.json each)
 src/server/GameMode/
@@ -180,9 +181,9 @@ PostRound — winner overlay, auto-restart timer
 
 | Mode | Status | Notes |
 |---|---|---|
-| NoOp | Live | The only registered mode. 24-hour idle round, `scoreLimit = math.huge`; the session parks in `Active`. |
-| PvE Boss | Planned — Phase 6 stage 4 | Co-op, `minPlayers = 1`, objective win condition, boss arena slot. |
-| PvP Duel | Planned — Phase 6 stage 5, gated behind Phase 5.4 | Exactly 2 players, pad pool, timer + countdown back on. |
+| NoOp | Live | 24-hour idle round, `scoreLimit = math.huge`; the session parks in `Active`. |
+| PvE Boss | Planned — Phase 6 stage 5 | Co-op, `minPlayers = 1`, objective win condition, boss arena slot. |
+| PvP Duel | Planned — Phase 6 stage 6, gated behind Phase 5.4 | Exactly 2 players, pad pool, timer + countdown back on. |
 | FFA Deathmatch / Team Deathmatch | **Deleted** `6610291` | Not recoverable by a flag flip; the modules are gone. |
 
 ## Friendly fire

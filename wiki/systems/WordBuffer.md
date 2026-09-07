@@ -52,7 +52,7 @@ Capacity is **12 tiles** (`DEFAULT_CAP`), wide enough for any word a curated K-1
 
 ## Test
 
-`__tests.luau` exports a `runTests()` function that runs the smoke spec from [[NIM-4]] inline:
+`__tests.luau` exports a `runTests()` function that runs the smoke spec from `NIM-4` inline:
 
 ```luau
 local runTests = require(ReplicatedStorage.Shared.WordBuffer.__tests)

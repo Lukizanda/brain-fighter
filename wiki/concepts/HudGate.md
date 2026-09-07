@@ -32,7 +32,7 @@ with `KillFeedGui`. Region granularity is coarser than the decision.
 file in `src/client/UI/` is a top-level LocalScript that builds, registers,
 connects and ends; none constructs a lifecycle object. `PlayerSession.luau` is
 the only client file carrying the project's `disable`/`destroy` pair. The
-convention in [[CLAUDE.md]] does not reach the HUD.
+convention in `CLAUDE.md` does not reach the HUD.
 
 ## The HUD is split down the middle
 

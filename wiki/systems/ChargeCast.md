@@ -186,7 +186,7 @@ Everything below was run live in Studio (`start_stop_play`, session lock `charge
 | **Orb on another rig, from the Client datamodel** | server wrote `_chargeColor=blue/_chargeTier=3` on the Boss → client rendered 1 orb, size 2.86, tint `#80C0FF`, welded to `Boss.HumanoidRootPart`, 1 particle emitter + PointLight |
 | Leak check, 20 charge cycles (10 fire / 10 cancel) | orbs 0, motes 0, halo attachments 0, halo emitters 0 |
 
-The orb check is the one that matters and is why it was run from the **Client** datamodel against a rig the local player does not own: per [[CLAUDE.md]] § Player-Facing Output, server logs and Studio's server view do not verify a player-facing effect. Driving the Boss's attributes from the Server VM and counting instances on the Client VM exercises the exact server-write → replicate → controller-draw path a second player would, without a second client.
+The orb check is the one that matters and is why it was run from the **Client** datamodel against a rig the local player does not own: per `CLAUDE.md` § Player-Facing Output, server logs and Studio's server view do not verify a player-facing effect. Driving the Boss's attributes from the Server VM and counting instances on the Client VM exercises the exact server-write → replicate → controller-draw path a second player would, without a second client.
 
 ### Circular panels
 
