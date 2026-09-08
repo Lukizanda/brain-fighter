@@ -3,10 +3,20 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BlockSpawner = require(ReplicatedStorage.Shared.BlockSpawner)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
+local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
 
 local TEST_TARGET = 8
 local TEST_PARENT_NAME = "TestSpawnerContainer"
 local TEST_ARENA_ID = "TestFillsToTarget"
+
+-- BlockSpawner's actual color vocabulary: the three reservoir colors
+-- (Core/Colors' single source of truth) plus the wildcard tile color
+-- (Wildcard's single source of truth) — not a hardcoded fourth string.
+local VALID_TILE_COLORS: { [string]: boolean } = { [Wildcard.COLOR] = true }
+for _, color in Colors.SPELL_COLORS do
+	VALID_TILE_COLORS[color] = true
+end
 
 return {
 	name = "BlockSpawner fills to target count",
@@ -47,7 +57,7 @@ return {
 			if not letter or #letter ~= 1 then
 				return false, string.format("invalid letter attribute: %s", tostring(letter))
 			end
-			if color ~= "red" and color ~= "green" and color ~= "blue" then
+			if type(color) ~= "string" or not VALID_TILE_COLORS[color] then
 				return false, string.format("invalid color attribute: %s", tostring(color))
 			end
 		end

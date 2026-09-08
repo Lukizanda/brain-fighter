@@ -84,28 +84,34 @@ Must not touch: the modules under test.
 - [x] Run `all`; record pass/fail per suite in the log entry; clear `RunTests`.
 - [x] Rewrite [[systems/Tests]]: discovery rules, suite table with status, `__tests` wiring, fixture requirements.
 
-Done when: `RunTests = "all"` reports no `[AUTORUN WARN] Skipped` and no suite errors in `run`; every `__tests` module is reachable from a Suite. **Met** — 2026-09-08 run: 26/28 passed, 2 failed, zero `[AUTORUN WARN] Skipped`, zero setup/run pcall errors (both failures are `verify` returning false — real assertions, not harness crashes). See per-suite results and the two "Found:" bugs below.
+Done when: `RunTests = "all"` reports no `[AUTORUN WARN] Skipped` and no suite errors in `run`; every `__tests` module is reachable from a Suite. **Met** — 2026-09-08 second verification run: **28/28 passed, 0 failed**, zero `[AUTORUN WARN] Skipped`, zero setup/run pcall errors. First verification run (26/28) surfaced two failures that parent review determined were both test-side bugs inside this chunk's `Owns`, not real regressions or out-of-scope module bugs — see § Follow-up fixes below.
 
 **Divergence log:**
 - A bare `template:Clone()` of `AIWorldData.Rigs.Patroller` has a Humanoid but no state machine — `CurrentState` would never be set and the NPC would never react, since `NPCController.new` + a Heartbeat tick loop are what actually drive it (both currently private to `NPCService.server.luau`, a Script, not requireable). Added `src/shared/Tests/Helpers/ensurePatroller.luau`: reuses a boot-spawned `Patroller_1` if present (the common case — `created = false`, `teardown` no-ops); otherwise clones the rig, wires it to its own `NPCController` instance requiring `ServerScriptService.Server.NPC.Scripts.NPCController` directly, and ticks it on `Heartbeat` for the test's duration. All three NPC suites (`combat_engages`, `combat_disengages`, `npc_deals_damage`) now go through this helper.
 - `Hud/__tests.luau` requires `Players.LocalPlayer` and errors immediately on a server VM (see its own "Client only" header comment), and `TestAutoRunner.server.luau` only ever runs server-side — there is no client autorunner. Wiring it in as a plain `{run=...}` wrapper would make `RunTests=all` fail every time for a harness-shape reason, not a real regression. `Suites/Unit/hud_tests.luau` checks `RunService:IsServer()` and reports an explicit, visible pass-with-skip message (`"skipped — client-only ..."`) instead of a false fail; on an actual client VM it runs the real suite. Recorded here since it's a structural gap, not a "Found:" module bug — a client-side autorunner is out of this chunk's scope.
 
-**Found** (real issues surfaced by an honest harness now that it isn't silently skipping tests — left failing per this chunk's "must not touch the modules under test" rule):
-- `Suites/NPC/npc_deals_damage.luau` fails intermittently: "Player took no damage (still at 100 HP)". Root cause looks like cross-test interference from the preceding `combat_disengages` test — the player fell into `Workspace.Arena.DeathZone` and respawned (`HealthService: Initialized health for ZandaLuki: 100/100` fires twice during this test's `setup`), and the NPC flips back to `Patrol` right as the player's humanoid is re-snapshotted for `ctx.initialHealth`, so the `run()` window catches no damage. This predates chunk 1 — `ensurePatroller.ensure()` returned the existing boot-spawned `Patroller_1` (`created = false`) in this run, so the fixture change did not touch this path.
-- `Suites/Multiplayer/multiplayer_invariants.luau` fails: "ShotReplication LocalScript missing from StarterPlayerScripts (placement bug — see concepts/LocalScriptPlacement)". Unrelated to this chunk's edits (only the Weapon.Remotes/TDM/PlayerRespawned blocks were touched) — this is the exact placement regression the test was written to catch, currently caught.
+**Found in the first verification run, then resolved as test-side bugs (parent review, 2026-09-08):**
+- `Suites/Multiplayer/multiplayer_invariants.luau` failed: "ShotReplication LocalScript missing from StarterPlayerScripts". Initially misdiagnosed as a live placement regression. It is not: `src/client/ShotReplication.client.luau` was deleted on purpose in `6610291` (confirmed via `git show --stat 6610291`), along with the Weapon.Remotes files this chunk had already stopped asserting on. The check itself is what went stale, not the game. **Fix:** deleted the ShotReplication check (both the StarterPlayerScripts-presence half and the stray-in-ReplicatedStorage half) and the header comment bullet that motivated it; renumbered the remaining assertions. `wiki/concepts/LocalScriptPlacement.md` needed no change — it documents the historical incident, not current state, and was already accurate.
+- `Suites/NPC/npc_deals_damage.luau` failed intermittently: "Player took no damage (still at 100 HP)". Confirmed root cause: `combat_disengages` teleports the player 80 studs from the NPC as part of its own test (`FAR_OFFSET`), which can land them over open air and into `Workspace.Arena.DeathZone` → a `DeathZoneService`-driven trip through the Lobby and back. If `npc_deals_damage` starts its engage-poll loop while that's still resolving, it snapshots `ctx.initialHealth` moments before another respawn silently resets it, so real damage during `run()` reads as none. **Fix, test-side only, `NPCService`/`Perception`/`Actions`/`HealthService` untouched:** `combat_disengages`'s `teardown` now calls a restored `Helpers/restoreToSafeSpawn.luau` (the same helper chunk 1 had deleted as an orphan before this fixture need reappeared — recovered verbatim from `8d9cb83`'s parent) to put the player back on solid ground away from the DeathZone. `npc_deals_damage`'s `setup` now calls a new `waitForStableFullHealth` at the very start: polls (bounded to 8s) until the player's character/Humanoid exists and `Health >= MaxHealth` has held for a continuous 1s window, restarting the window on any Humanoid-identity change (a mid-wait respawn); fails `setup` with a clear reason if it never stabilises, rather than silently proceeding.
+- A third, previously-passing test failed once during re-verification for a reason unrelated to either fix above: `Suites/Phase3/blockspawner_fills_to_target.luau` failed "invalid color attribute: wild" — its `verify` hardcoded `color ~= "red" and color ~= "green" and color ~= "blue"`, predating the wildcard tile system, so a block randomly rolling the (valid, shipped) `"wild"` color intermittently failed it. **Fix, test file only:** the color-membership check now derives its accepted set from `Core/Colors.SPELL_COLORS` (the codebase's single source of truth for reservoir colors) plus `Wildcard.COLOR` (the single source of truth for the wildcard tile color), instead of a hardcoded fourth string.
 
-**Per-suite results (2026-09-08, `RunTests="all"`):**
+**Per-suite results:**
+
+First verification run (2026-09-08, before the fixes above) — 26/28 passed, 2 failed:
 
 | Suite | Result |
 |---|---|
-| NPC | 2/3 passed — "deals damage" failed (Found, above) |
-| Multiplayer | 0/1 passed — `multiplayer_invariants` failed (Found, above) |
+| NPC | 2/3 passed — "deals damage" failed |
+| Multiplayer | 0/1 passed — `multiplayer_invariants` failed |
 | Phase3 | 7/7 passed |
 | Skills | 5/5 passed |
 | Hardening | 3/3 passed |
 | Economy | 1/1 passed |
-| Unit | 8/8 passed (`hud_tests` passed via the explicit server-VM skip) |
-| **Total** | **26/28 passed, 2 failed** |
+| Unit | 8/8 passed |
+
+Second verification run (2026-09-08, after fixing `multiplayer_invariants` and `npc_deals_damage`) — 27/28 passed, 1 failed: NPC 3/3, Multiplayer 1/1, Phase3 6/7 (`blockspawner_fills_to_target` failed — the wildcard-color issue above, not yet fixed at this point), Skills 5/5, Hardening 3/3, Economy 1/1, Unit 8/8.
+
+Third verification run (2026-09-08, after fixing `blockspawner_fills_to_target`) — **28/28 passed, 0 failed**: NPC 3/3, Multiplayer 1/1, Phase3 7/7, Skills 5/5, Hardening 3/3, Economy 1/1, Unit 8/8 (`hud_tests` passed via the explicit server-VM skip).
 
 ---
 

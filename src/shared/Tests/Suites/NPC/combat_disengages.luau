@@ -5,6 +5,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ensurePatroller = require(ReplicatedStorage.Shared.Tests.Helpers.ensurePatroller)
+local restoreToSafeSpawn = require(ReplicatedStorage.Shared.Tests.Helpers.restoreToSafeSpawn)
 
 local NEAR_OFFSET = 25 -- inside engage range
 local FAR_OFFSET = 80 -- outside disengage range
@@ -49,6 +50,14 @@ return {
 	end,
 
 	teardown = function(ctx)
+		-- This test deliberately teleports the player far from the NPC
+		-- (FAR_OFFSET), which can land them over open air / off the arena
+		-- platform and into a DeathZone before the next test runs. Put them
+		-- back on solid ground so a following test's setup doesn't inherit
+		-- a mid-fall or mid-respawn character.
+		if ctx.player then
+			restoreToSafeSpawn.restoreToSafeSpawn(ctx.player)
+		end
 		ensurePatroller.teardown(ctx.npcFixture)
 	end,
 }

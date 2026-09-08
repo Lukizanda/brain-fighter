@@ -11,6 +11,55 @@ local ENGAGE_TIMEOUT_SECONDS = 5 -- max time to wait for NPC to enter Combat
 local ENGAGE_POLL_INTERVAL = 0.25 -- re-teleport player near NPC each tick (NPC may be patrolling)
 local DAMAGE_WAIT_SECONDS = 4 -- enough time for 2+ shots at 120 RPM
 
+-- A preceding test (e.g. combat_disengages) can leave the player mid-fall,
+-- mid-respawn, or mid-relocation (DeathZone -> lobby transfer). Starting
+-- this test's engage-poll loop while that's still settling snapshots an
+-- initial health right before another respawn silently resets it again,
+-- which reads as "no damage dealt" even though the NPC never got a fair
+-- shot. Wait for a genuinely settled character first.
+local HEALTH_STABLE_WINDOW_SECONDS = 1
+local HEALTH_STABLE_POLL_INTERVAL = 0.1
+local HEALTH_STABLE_TIMEOUT_SECONDS = 8
+
+local function waitForStableFullHealth(player: Player): (Humanoid?, string?)
+	local deadline = os.clock() + HEALTH_STABLE_TIMEOUT_SECONDS
+	local lastHumanoid: Humanoid? = nil
+	local stableSince: number? = nil
+
+	while os.clock() < deadline do
+		local character = player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+		if humanoid and humanoid.Parent then
+			if humanoid ~= lastHumanoid then
+				-- New character/Humanoid since we last looked (a respawn
+				-- happened mid-wait) — the stability window restarts.
+				lastHumanoid = humanoid
+				stableSince = nil
+			end
+
+			if humanoid.Health >= humanoid.MaxHealth then
+				stableSince = stableSince or os.clock()
+				if os.clock() - stableSince >= HEALTH_STABLE_WINDOW_SECONDS then
+					return humanoid, nil
+				end
+			else
+				stableSince = nil
+			end
+		else
+			lastHumanoid = nil
+			stableSince = nil
+		end
+
+		task.wait(HEALTH_STABLE_POLL_INTERVAL)
+	end
+
+	return nil, string.format(
+		"player character/health never stabilised at max health within %ds",
+		HEALTH_STABLE_TIMEOUT_SECONDS
+	)
+end
+
 return {
 	name = "NPC deals damage to player in Combat",
 
@@ -18,6 +67,9 @@ return {
 		local fixture = ensurePatroller.ensure()
 		assert(fixture, "Could not obtain a Patroller_1 NPC (no boot spawn and no AIWorldData.Rigs.Patroller template)")
 		assert(ctx.player, "No local player")
+
+		local settledHumanoid, stabiliseErr = waitForStableFullHealth(ctx.player)
+		assert(settledHumanoid, stabiliseErr)
 
 		ctx.npcFixture = fixture
 		local npc = fixture.npc
