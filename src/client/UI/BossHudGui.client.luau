@@ -91,7 +91,7 @@ phaseLabel.TextXAlignment  = Enum.TextXAlignment.Right
 phaseLabel.TextScaled      = true
 phaseLabel.Font            = Enum.Font.GothamBold
 phaseLabel.Text            = "Phase I"
-phaseLabel.Visible         = false   -- hidden by default; toggle with P
+phaseLabel.Visible         = false   -- hidden by default; toggle with ;
 phaseLabel.Parent          = topRow
 
 -- Health bar background

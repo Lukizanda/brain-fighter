@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------
 -- SettingsMenuGui (client entry point)
 ----------------------------------------------------------------------
--- Wires the Escape keybind to open/close the settings menu.
+-- Wires the P keybind to open/close the settings menu.
 -- Pauses mouse lock while the menu is open.
 -- Applies settings immediately via player attributes for persistence
 -- and direct runtime updates.

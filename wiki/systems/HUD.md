@@ -1,7 +1,7 @@
 ---
 type: system
 description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, reticle, settings menu, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu as circular hold-to-charge panels with concentric tier rings, MemorizeButton, MindFullIndicator), and the mobile DashButton. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291.)
-updated: 2026-08-12
+updated: 2026-09-08
 ---
 
 # HUD System
@@ -24,7 +24,7 @@ flowchart LR
     PS["PlayerSession.get()<br/>wordBuffer · energyReservoirs · mindFullManager"]:::state
     HUM["Character.Humanoid<br/>HealthChanged"]:::state
     REM["Server RemoteEvents<br/>KillFeed · ScoreUpdate"]:::state
-    CFG["GameConfig flags<br/>TEAMS_ENABLED · ROUND_TIMER_ENABLED · SHOW_WEAPON_ROLODEX"]:::state
+    CFG["GameConfig flags<br/>TEAMS_ENABLED · ROUND_TIMER_ENABLED"]:::state
   end
 
   subgraph LM["HudLayoutManager (singleton, src/shared/Hud/HudLayoutManager.luau)"]
@@ -45,7 +45,6 @@ flowchart LR
     MFI["MindFullIndicatorGui"]:::coord
     KFG["KillFeedGui"]:::coord
     BTG["BuffTrayGui (scaffold)"]:::coord
-    TSG["TeamScoreGui<br/>(gated TEAMS_ENABLED)"]:::coord
     RTG["RoundTimerGui<br/>(gated ROUND_TIMER_ENABLED)"]:::coord
     BHG["BossHudGui<br/>(own ScreenGui)"]:::modal
     SMGUI["SettingsMenuGui<br/>(modal overlay)"]:::modal
@@ -63,8 +62,6 @@ flowchart LR
     MFB["MindFullIndicatorBuilder"]:::builder
     DBB["DashButtonBuilder"]:::builder
     BTB["BuffTrayBuilder"]:::builder
-    RTB["ReticleBuilder"]:::builder
-    TCB["TouchControlBuilder"]:::builder
     STB["SettingsMenuBuilder<br/>(⚠ reads Players.LocalPlayer — NIM-19)"]:::builder
   end
 
@@ -82,7 +79,6 @@ flowchart LR
   MFI -- "register(TopCenter)" --> TC
   KFG -- "register(TopRight)" --> TR
   BTG -- "register(TopRight)" --> TR
-  TSG -- "register(TopCenter)" --> TC
   RTG -- "register(TopCenter)" --> TC
   DBG -- "register(BottomRight, touch)" --> BR
 
@@ -100,7 +96,7 @@ flowchart LR
   PS -- "mindFull / mindFreed" --> MFI
   HUM -- "HealthChanged" --> GHUD
   REM -- "OnClientEvent" --> KFG & TSG
-  CFG -. "GameConfig gate" .-> TSG & RTG
+  CFG -. "GameConfig gate" .-> RTG
 ```
 
 Legend: blue = Coordinator LocalScript, orange = pure-module Builder, green = game-state source, purple = modal/own-ScreenGui (bypasses HudLayoutManager), gray = layout region. Solid arrows = mount/register. Dashed arrows = own ScreenGui parented directly to `PlayerGui`.
@@ -113,9 +109,9 @@ Legend: blue = Coordinator LocalScript, orange = pure-module Builder, green = ga
 - Detailed findings: [[design/ui-architecture-review]].
 
 
-## Team-score gate (2026-05-13)
+## Team-score gate — REMOVED (2026-09-08, refactor chunk 0)
 
-`src/client/UI/TeamScoreGui.client.luau` is a top-of-script bail when `GameConfig.TEAMS_ENABLED` is false — the LocalScript still auto-runs on join but exits before building the container or hooking remotes. `KillFeedGui` is left on (NPC kills still display); its team-tinted name colours fall back to `NEUTRAL_NAME_COLOR` naturally because every player is team-less while the gate is off.
+`src/client/UI/TeamScoreGui.client.luau` used to be a top-of-script bail when `GameConfig.TEAMS_ENABLED` is false — the LocalScript still auto-ran on join but exited before building the container or hooking remotes. Deleted as dead code: `TEAMS_ENABLED` has read `false` since the Archon team/PvP template was cut in `6610291`, and `GameConfig`'s comment now says flipping it no longer restores anything (the mode files are gone). `KillFeedGui` still displays NPC kills unaffected; its team-tinted name colours fall back to `NEUTRAL_NAME_COLOR` since every player is team-less.
 
 ## Files
 
@@ -127,15 +123,11 @@ src/shared/Hud/
   AttributeBarConfig.luau
   BuffTrayBuilder.luau            — top-right buff icons (scaffold)
   BuffIconConfig.luau
-  TouchControlBuilder.luau        — mobile touch overlay
-  TouchControlConfig.luau
   SettingsMenuBuilder.luau
   SettingsMenuConfig.luau
   -- Phase 4 gameplay widgets:
   BufferDisplayBuilder.luau       — letter-tile row from WordBuffer.tiles()
   BufferDisplayConfig.luau
-  ReticleBuilder.luau             — crosshair
-  ReticleConfig.luau
   MemorizeButtonBuilder.luau      — Memorize action button (calls MemorizeAction.tryMemorize)
   MemorizeButtonConfig.luau
   SpellMenuBuilder.luau           — 3-color circular spell panels; mana fills outward from the centre,
@@ -183,9 +175,9 @@ The first four read state through `PlayerSession.get()` and subscribe to signals
 
 The weapon-cycling card widget (Builder + Config + `WeaponRolodexGui` coordinator) was removed with the TPS weapon stack. Brain Fighter then equipped a single Tool (the [[systems/LetterBlaster]] Spelling Staff), and since Phase 5.7 equips nothing at all — blocks are tapped directly — so there has never been anything to cycle. The former `SHOW_WEAPON_ROLODEX` gate and the `_ammo` / `WeaponIcon` / `_cooldownEnd` Tool-attribute reads no longer apply.
 
-## Reticle
+## Reticle / TouchControl — REMOVED (2026-09-08, refactor chunk 0)
 
-White `+` crosshair, red `X` hitmarker (CanvasGroup with a Rotation quirk — fade via `Visible = false` at completion, not transparency tween). Reactive spread: shot bumps spread, Heartbeat decays it back.
+`ReticleBuilder`/`ReticleConfig` (white `+` crosshair, red `X` hitmarker) and `TouchControlBuilder`/`TouchControlConfig` (mobile touch overlay) were dead code — grep found zero requires of any of the four modules anywhere in `src/`, and no coordinator LocalScript ever built or registered them. Deleted rather than kept as unused scaffolding. Aiming feedback is currently `DamageFeedbackGui`'s directional indicator only; there is no crosshair or mobile touch overlay in the HUD today.
 
 ## Cross-references
 

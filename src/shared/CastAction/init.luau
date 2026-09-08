@@ -15,11 +15,7 @@
 --                             both the casual fast path and "save big,
 --                             fire small". See wiki/systems/ChargeCast.md.
 --
--- `tapReservoir` (fire the highest affordable tier) is the gesture that
--- preceded it. It has no production caller since Phase 5.8 and is kept
--- for the __tests scenarios that pin the selection rule.
---
--- Both gestures resolve to the same pipeline:
+-- Resolves to the same pipeline every time:
 --   1. Look up the spec.       (SpellRegistry)
 --   2. Verify affordability.   (EnergyReservoirs:canAfford / get)
 --   3. Drain the cost.         (EnergyReservoirs:drain)
@@ -45,8 +41,6 @@ local SpellRegistry = require(ReplicatedStorage.Shared.SpellRegistry)
 local SpellExecutor = require(ReplicatedStorage.Shared.SpellExecutor)
 
 local log = Logger.new("CastAction")
-
-local NO_AFFORDABLE_TIER = "no affordable tier"
 
 export type Color = SpellRegistry.Color
 
@@ -113,8 +107,8 @@ local function success(spec: SpellRegistry.Spec): CastResult
 	}
 end
 
--- Validate → drain → execute pipeline. Used by both tapReservoir and
--- castSpecific once the caller has nailed down a concrete `spec`.
+-- Validate → drain → execute pipeline. Used by castSpecific once the
+-- caller has nailed down a concrete `spec`.
 --
 -- The order used to be drain → execute → refund if the executor refused.
 -- That worked only because the caster's client ran the whole spell itself
@@ -183,23 +177,6 @@ local function drainAndCast(
 	return fail(reason)
 end
 
--- Which spell would a tap on this reservoir fire right now? Returns nil
--- when the reservoir can't afford even T1.
---
--- Exposed because the caller has to know the spell *before* the cast in
--- order to prepare for it — the HUD needs it to decide whether to hunt
--- for an enemy target (see SpellRegistry.needsEnemyTarget). Keeping the
--- selection rule here means the HUD can't drift out of sync with what
--- tapReservoir actually picks.
-function CastAction.resolveTapSpec(
-	color: Color,
-	reservoirs: EnergyReservoirs.EnergyReservoirs
-): SpellRegistry.Spec?
-	local affordable = SpellRegistry.listAffordableSpells(color, reservoirs:get(color))
-	-- listAffordableSpells is sorted ascending; highest affordable is last.
-	return affordable[#affordable]
-end
-
 -- Which spell would releasing a `heldSec`-long charge on this reservoir
 -- fire? Pure — reads the reservoir, touches nothing.
 --
@@ -216,10 +193,9 @@ end
 -- Returns nil below T1, which is the "released too early / too poor"
 -- case the caller surfaces as a cancel rather than a failed cast.
 --
--- Lives here for the same reason `resolveTapSpec` does: the HUD has to
--- know the tier *before* the release in order to draw it, and a second
--- copy of the selection rule in the builder would drift from the one
--- `castSpecific` is actually handed.
+-- Exposed because the HUD has to know the tier *before* the release in
+-- order to draw it, and a second copy of the selection rule in the
+-- builder would drift from the one `castSpecific` is actually handed.
 function CastAction.resolveSpecAtCharge(
 	color: Color,
 	reservoirs: EnergyReservoirs.EnergyReservoirs,
@@ -235,25 +211,6 @@ function CastAction.resolveSpecAtCharge(
 		end
 	end
 	return reached
-end
-
--- Tap-cast: fire the highest currently-affordable tier of `color`.
--- Returns `{ ok = false, reason = "no affordable tier" }` when the
--- reservoir can't even afford T1 (cost 5) — the HUD can decide
--- whether to surface a fizzle animation.
-function CastAction.tapReservoir(
-	color: Color,
-	reservoirs: EnergyReservoirs.EnergyReservoirs,
-	caster: Humanoid | Model,
-	target: Humanoid | Model | Vector3 | nil
-): CastResult
-	local spec = CastAction.resolveTapSpec(color, reservoirs)
-	if not spec then
-		log:info(string.format("tap fizzle — %s reservoir below T1 (energy=%d)", color, reservoirs:get(color)))
-		return fail(NO_AFFORDABLE_TIER)
-	end
-
-	return drainAndCast(spec, reservoirs, caster, target)
 end
 
 -- Drag-cast: fire the explicitly-chosen `(color, tier)` spell. The

@@ -71,8 +71,6 @@ export type SkillSpec = {
 	minRange: number?,                  -- if set, skill is only selected when distanceToNearest <= minRange
 	windupVfx: string?,                 -- telegraph shown during AttackPrep: "aoe_indicator" | "charge_glow"
 	windupAnimId: string?,              -- animation asset ID played on the boss during AttackPrep
-	vfxName: string?,                   -- future hook; ignored until VfxController ships
-	sfxName: string?,                   -- future hook; ignored until SFX module ships
 }
 
 return {}  -- types-only module

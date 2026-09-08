@@ -23,12 +23,14 @@ local GameConfig = {
 	----------------------------------------------------------------------
 	-- Combat feature gates
 	----------------------------------------------------------------------
-	-- Brain Fighter is being repurposed as an educational shooter; the
-	-- inherited Archon team/PvP code is gated off rather than deleted so
-	-- a single flag flip restores it for testing or a future PvP mode.
-	-- Consumers across the damage, mode-registry, spawn, UI, and nametag
-	-- layers read these directly via require(...).TEAMS_ENABLED /
-	-- .PLAYER_VS_PLAYER_ENABLED.
+	-- Brain Fighter is being repurposed as an educational shooter. The
+	-- inherited Archon team/PvP template (TeamService, FFADeathmatch,
+	-- TeamDeathmatch, camera/locomotion/loadout stack) was deleted in
+	-- 6610291 — flipping these flags no longer restores anything; a
+	-- future PvP mode would need to be rebuilt, not un-gated. The flags
+	-- remain because consumers across the damage, mode-registry, spawn,
+	-- UI, and nametag layers still read them directly via
+	-- require(...).TEAMS_ENABLED / .PLAYER_VS_PLAYER_ENABLED.
 	----------------------------------------------------------------------
 	TEAMS_ENABLED = false,            -- Set true to restore Team Deathmatch mode + team UI + team-aware spawn/nametag/score logic.
 	PLAYER_VS_PLAYER_ENABLED = false, -- Set true to restore PvP damage. When false, players cannot damage other players; NPCs remain valid targets.
@@ -36,19 +38,10 @@ local GameConfig = {
 	ROUND_COUNTDOWN_ENABLED = false,  -- When false, the pre-round 10-s countdown is skipped; round starts immediately. Set true to restore.
 
 	----------------------------------------------------------------------
-	-- Gameplay feature flags
-	----------------------------------------------------------------------
-	TPS_CHARACTER_ENABLED = false,    -- Reserved; TPS camera/locomotion stack removed. No effect.
-	SHOW_WEAPON_ROLODEX = false,      -- Reserved; weapon rolodex removed. No effect.
-
-	----------------------------------------------------------------------
 	-- Dev-only helpers (leave off in shipped builds)
 	----------------------------------------------------------------------
-	DEV_AUTO_EQUIP_TOOL = "", -- name of a Tool in the player's Backpack to auto-equip on spawn; "" or nil to disable. Empty since Phase 5.7 removed the Spelling Staff — there is no StarterPack tree any more, so nothing populates the Backpack to equip.
 	DEV_SMOKE_KILLFEED = false, -- when true, loop-fires 3 synthetic KillFeed events (normal kill / self-elim / env kill) so the UI can be verified without real combat
-	DEV_BOT_COUNT = 0, -- number of stationary enemy-team bots to spawn for solo TDM tuning (0 disables); bots respawn via DeathHandler and credit kills via ScoreTracker.recordBotKill
-	DEV_SIMULATE_LOADOUT_CYCLING = false, -- when true, server-side script spawns 2 tools in the player's Backpack, cycles them via humanoid:EquipTool, and writes the result to workspace.LoadoutCycleSimResult — used to repro / regression-test the LoadoutService re-entry guard without relying on real pedestal pickups (which can't be MCP-driven)
-	DEV_COUNT_POP_VFX = true, -- ON for the 2026-08-10 two-client check; turn back off when done. When true, each client logs one line per block pop counting the burst and ribbon instances it actually built. Turns the "is the popper's burst drawn twice?" question into a number — a doubled burst reads only as slightly brighter and slightly louder, which is not something anyone should be asked to eyeball. Multi-client: every line is prefixed with the player name
+	DEV_COUNT_POP_VFX = false, -- when true, each client logs one line per block pop counting the burst and ribbon instances it actually built. Turns the "is the popper's burst drawn twice?" question into a number — a doubled burst reads only as slightly brighter and slightly louder, which is not something anyone should be asked to eyeball. Multi-client: every line is prefixed with the player name
 
 	----------------------------------------------------------------------
 	-- Block Spawner
@@ -78,19 +71,12 @@ local GameConfig = {
 	BLOCK_RESPAWN_DELAY = 3,          -- seconds between a block being consumed and its replacement spawning; 0 refills on the next frame. Each consumed block is replaced independently, so N rapid kills come back staggered the same way they went out. Raising this thins the arena under sustained fire — steady-state missing blocks ≈ delay × kills-per-second.
 
 	----------------------------------------------------------------------
-	-- Default camera behavior (applies when TPS_CHARACTER_ENABLED = false)
+	-- Default camera behavior
 	----------------------------------------------------------------------
 	-- When false: right-click toggles between mouse-locked and free-cursor
 	--   (Roblox CameraToggle mode). When true: right-click held to rotate only
-	--   (Classic mode). Has no effect when TPS_CHARACTER_ENABLED = true.
+	--   (Classic mode).
 	CAMERA_TOGGLE_DISABLED = true,
-
-	----------------------------------------------------------------------
-	-- Locomotion
-	----------------------------------------------------------------------
-	BACKWARD_SPEED_MULTIPLIER = 0.7,         -- 70% speed when walking backward
-	FIRING_SPEED_MULTIPLIER = 0.8,           -- 80% speed when firing
-	BACKWARD_FIRING_SPEED_MULTIPLIER = 0.5,  -- 50% speed when firing and walking backward
 
 	----------------------------------------------------------------------
 	-- Dash / Roll

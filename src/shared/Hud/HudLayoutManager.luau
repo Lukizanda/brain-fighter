@@ -66,10 +66,6 @@ function HudLayoutManager:_init()
 		self:_updateScale()
 	end)
 
-	InputCategorizer.lastInputCategoryChanged:Connect(function()
-		self:_onInputCategoryChanged()
-	end)
-
 	self:_updateScale()
 	log:info("Initialized with " .. tostring(#self:_getRegionNames()) .. " regions")
 end
@@ -84,9 +80,6 @@ function HudLayoutManager:_updateScale()
 		local scale = gui.AbsoluteSize.Y / HudConstants.REFERENCE_HEIGHT
 		self._uiScale.Scale = math.max(scale, HudConstants.MIN_SCALE)
 	end
-end
-
-function HudLayoutManager:_onInputCategoryChanged()
 end
 
 function HudLayoutManager:getRegion(regionName: string): Frame
@@ -113,17 +106,6 @@ function HudLayoutManager:register(regionName: string, element: GuiObject, polic
 	if region then
 		element.Parent = region
 		HudGate.bindElement(element, policy)
-	end
-end
-
-function HudLayoutManager:unregister(element: GuiObject)
-	element.Parent = nil
-end
-
-function HudLayoutManager:moveToRegion(element: GuiObject, newRegionName: string)
-	local region = self:getRegion(newRegionName)
-	if region then
-		element.Parent = region
 	end
 end
 

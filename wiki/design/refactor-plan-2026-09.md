@@ -43,21 +43,21 @@ Risk: **L** = deletions and renames with grep-verified zero consumers; **M** = b
 
 ## Chunk 0 — Turn the lights off (dead code, dead flags, stale comments)
 
-Status: open
+Status: done — 2026-09-08 — (this commit)
 Findings: F26, F35, F36, F37, F38 (comments only), F19 (`PlayerRespawned` only), F32 (delete half)
 Risk: L · Playtest: **boot smoke only** (clean console, HUD builds) · Depends on: nothing · Blocked on: nothing
 
 Owns: `src/utility/*` except `lerp`, `src/shared/Core/Cleanup.luau`, `src/server/Utility/TypeValidation/{validateCFrame,validateSimpleTable}.luau`, `src/shared/Hud/{ReticleBuilder,ReticleConfig,TouchControlBuilder,TouchControlConfig}.luau`, `src/client/UI/TeamScoreGui.client.luau`, `src/server/Dev/{SimulateLoadoutCycling,DevAutoEquipTool,BotSpawner}.server.luau`, `src/shared/Core/GameConfig.luau`, `src/shared/Skills/SkillTypes.luau` (two fields), `src/shared/CastAction/init.luau` + `__tests.luau` (two functions and their cases), `src/client/DevDebug.client.luau` (comments), `src/client/UI/BossHudGui.client.luau:94` (comment), `src/shared/Hud/HudLayoutManager.luau` (three dead methods), `src/shared/Hud/HudConstants.luau:66-71`.
 Must not touch: anything under `Skills/` beyond the two type fields; `ScoreTracker` (its `recordBotKill` goes in chunk 8); any Test suite (chunk 1).
 
-- [ ] `GameConfig`: flip `DEV_COUNT_POP_VFX = false`; delete `TPS_CHARACTER_ENABLED`, `SHOW_WEAPON_ROLODEX`, the three `*_SPEED_MULTIPLIER` keys, `DEV_AUTO_EQUIP_TOOL`, `DEV_SIMULATE_LOADOUT_CYCLING`, `DEV_BOT_COUNT`; rewrite the `:26-29` "single flag flip restores it" comment to say the template was deleted in `6610291`.
-- [ ] Delete `SimulateLoadoutCycling`, `DevAutoEquipTool`, `BotSpawner` (grep `BotSpawner`/`recordBotKill` first; leave `recordBotKill` itself for chunk 8).
-- [ ] Delete `src/utility/{adjustListIndexAfterRemoval,bindToInstanceDestroyed,disconnectAndClear,safePlayerAdded}`, `Core/Cleanup.luau`, `TypeValidation/{validateCFrame,validateSimpleTable}` (re-grep each name for zero consumers).
-- [ ] Delete `ReticleBuilder`/`ReticleConfig`/`TouchControlBuilder`/`TouchControlConfig`, `TeamScoreGui.client.luau`, and `HudConstants.luau:66-71` aliases; delete `HudLayoutManager:unregister`, `:moveToRegion`, `_onInputCategoryChanged`.
-- [ ] Delete `vfxName`/`sfxName` from `SkillTypes.SkillSpec` (`:74-75`); delete `CastAction.tapReservoir` + `resolveTapSpec` and their `__tests` cases (`castSpecific`/`resolveSpecAtCharge` cases stay).
-- [ ] Delete unread constants: `GameModeConstants.{ROUND_TIME_LIMIT,SCORE_LIMIT,SPAWN_MIN_ENEMY_DISTANCE}`, `HealthConstants.{TORSO_MULTIPLIER,INVINCIBILITY_DURATION,HEALTH_BAR_LAYOUT}`, `NPCConstants.COMBAT_RAY_RADIUS`; delete the `PlayerRespawned` BindableEvent fire + `.model.json` (no listener).
-- [ ] Fix comments: `SkillEffects.luau:40` (no longer client-authoritative), `DevDebug.client.luau:15,144` (`;` lives in BossHudGui), `BossHudGui.client.luau:94` (key is `;`, not P), `SettingsMenuGui.client.luau:4` (key is P).
-- [ ] Studio: after sync, check for stale duplicates of the deleted scripts (Rojo does not always clean up).
+- [x] `GameConfig`: flip `DEV_COUNT_POP_VFX = false`; delete `TPS_CHARACTER_ENABLED`, `SHOW_WEAPON_ROLODEX`, the three `*_SPEED_MULTIPLIER` keys, `DEV_AUTO_EQUIP_TOOL`, `DEV_SIMULATE_LOADOUT_CYCLING`, `DEV_BOT_COUNT`; rewrite the `:26-29` "single flag flip restores it" comment to say the template was deleted in `6610291`.
+- [x] Delete `SimulateLoadoutCycling`, `DevAutoEquipTool`, `BotSpawner` (grep `BotSpawner`/`recordBotKill` first; leave `recordBotKill` itself for chunk 8). Deleting `BotSpawner` removes the only listener that credits `Suites/Multiplayer/applydamage_credits_bot_kill.luau`'s synthetic kill — expected, since Chunk 1's Decision Q8(a) already deletes that exact test file next.
+- [x] Delete `src/utility/{adjustListIndexAfterRemoval,bindToInstanceDestroyed,disconnectAndClear,safePlayerAdded}`, `Core/Cleanup.luau`, `TypeValidation/{validateCFrame,validateSimpleTable}` (re-grep each name for zero consumers).
+- [x] Delete `ReticleBuilder`/`ReticleConfig`/`TouchControlBuilder`/`TouchControlConfig`, `TeamScoreGui.client.luau`, and `HudConstants.luau:66-71` aliases; delete `HudLayoutManager:unregister`, `:moveToRegion`, `_onInputCategoryChanged`.
+- [x] Delete `vfxName`/`sfxName` from `SkillTypes.SkillSpec` (`:74-75`); delete `CastAction.tapReservoir` + `resolveTapSpec` and their `__tests` cases (`castSpecific`/`resolveSpecAtCharge` cases stay).
+- [x] Delete unread constants: `GameModeConstants.{ROUND_TIME_LIMIT,SCORE_LIMIT,SPAWN_MIN_ENEMY_DISTANCE}`, `HealthConstants.{TORSO_MULTIPLIER,INVINCIBILITY_DURATION,HEALTH_BAR_LAYOUT}`, `NPCConstants.COMBAT_RAY_RADIUS`. **Deferred:** did NOT delete the `PlayerRespawned` BindableEvent fire / `.model.json` — `Suites/Multiplayer/multiplayer_invariants.luau` (a Test suite, must-not-touch) structurally asserts `ServerScriptService.Server.Health.Events.PlayerRespawned` exists; unlike `BotSpawner`, Chunk 1's stated trim list for that file ("drop the Weapon.Remotes and TDM blocks") doesn't name this check, so there's no pre-committed fix. Leave for Chunk 1 to either drop the check or for this line item to be picked up once Chunk 1 confirms.
+- [x] Fix comments: `SkillEffects.luau:40` (no longer client-authoritative — rewritten), `DevDebug.client.luau:15,144` (already correct, says `;`, no edit needed), `BossHudGui.client.luau:94` (was "toggle with P", fixed to `;`), `SettingsMenuGui.client.luau:4` (was "Escape keybind", fixed to "P keybind" — note: lines 105/108-110 in the same file repeat the stale "Escape" framing but weren't in the item's line list, left untouched per scope).
+- [x] Studio: after sync, check for stale duplicates of the deleted scripts (Rojo does not always clean up). First playtest found 9 stale duplicates (Reticle/TouchControl Builder+Config, `bindToInstanceDestroyed`, `Core.Cleanup`, two `TypeValidation` functions, `TeamScoreGui`) — pruned via a `ChangeHistoryService`-wrapped `execute_luau` pass. Second boot smoke (fresh Studio instance) confirmed none remained.
 
 Done when: `grep` for every deleted symbol returns nothing; boot playtest shows a clean console and the full HUD; `graphify update .` run.
 Wiki: [[systems/HUD]] (Reticle/TouchControl rows), [[systems/Tests]] no change yet, [[concepts/DevDebugHotkeys]] (`;` note).
@@ -88,7 +88,7 @@ Done when: `RunTests = "all"` reports no `[AUTORUN WARN] Skipped` and no suite e
 
 ## Chunk 2 — One name per number
 
-Status: open
+Status: claimed — chunk2-constants — 2026-09-08
 Findings: F27, F31, F38, F21 (constant half), F19 note
 Risk: L · Playtest: **boot smoke** (unit suites carry the rest) · Depends on: chunk 1 · Blocked on: nothing
 
@@ -108,7 +108,7 @@ Wiki: [[systems/SpellRegistry]] (range constant), [[systems/SpellCastService]] �
 
 ## Chunk 3 — HUD ownership
 
-Status: open
+Status: claimed — chunk3-hud-ownership — 2026-09-08
 Findings: F4, F20, F22, F23, drift 7
 Risk: M · Playtest: **yes** — die in the lobby, walk into the arena, confirm no death overlay; then die in the arena and confirm the overlay · Depends on: chunk 0 · Blocked on: nothing
 

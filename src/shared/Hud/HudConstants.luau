@@ -44,11 +44,19 @@ local HudConstants = {
 			ZIndex = 1,
 		},
 		TopRight = {
+			-- Two occupants with different lifetimes: the kill feed (grows
+			-- downward as entries arrive) and the buff tray. Without a stack
+			-- they both sat at the region's top-right corner and drew on top
+			-- of each other. KillFeedGui leaves LayoutOrder at 0 so the feed
+			-- keeps the position it has always had; the tray declares
+			-- BuffIconConfig.LAYOUT_ORDER and sits underneath it.
 			Position = UDim2.new(1, -20, 0, 20),
 			AnchorPoint = Vector2.new(1, 0),
 			Size = UDim2.new(0, 400, 0, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
 			ZIndex = 1,
+			stackVertical = true,
+			stackPadding = 8,
 		},
 		Center = {
 			Position = UDim2.new(0.5, 0, 0.5, 0),
@@ -63,12 +71,6 @@ local HudConstants = {
 	REFERENCE_HEIGHT = 1080,
 	MIN_SCALE = 0.35,
 	HUD_DISPLAY_ORDER = 10,
-	OVERLAY_DISPLAY_ORDER = 20,
-	HEALTH_REGION = "BottomLeft",
-	WEAPON_PANEL_REGION = "BottomRight",
-	RETICLE_REGION = "Center",
-	TOUCH_CONTROLS_REGION = "BottomRight",
-	WEAPON_PANEL_TOUCH_REGION = "BottomCenter",
 }
 
 return HudConstants

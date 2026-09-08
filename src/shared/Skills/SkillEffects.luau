@@ -37,7 +37,9 @@ export type Result = { ok: boolean, reason: string? }
 local log = Logger.new("SkillEffects")
 
 -- Server-only; nil on client. Boss attacks use applyDamage.process;
--- player spells use direct Health writes (client-authoritative).
+-- player spells use direct Health writes on both the client's predicted
+-- run and the server's authoritative run via SpellCastService — no
+-- longer client-authoritative.
 local _applyDamage: { process: (any) -> any? }? = nil
 if RunService:IsServer() then
 	local ss = game:GetService("ServerScriptService")
@@ -188,7 +190,7 @@ SkillEffects.handlers = {
 	freeze = function(spec: EffectSpec, target: any, _source: any): Result
 		local h = resolveHumanoid(target)
 		if not h then return { ok = false, reason = "freeze requires Humanoid target" } end
-		local duration: number = spec.durationSec or 1.0
+		local duration: number = spec.durationSec or SkillConstants.DEFAULT_FREEZE_DURATION_SEC
 		local now = os.clock()
 		local state = _freezeState[h]
 		if state then
@@ -306,7 +308,7 @@ SkillEffects.handlers = {
 	knockup = function(spec: EffectSpec, target: any, _source: any): Result
 		local h = resolveHumanoid(target)
 		if not h then return { ok = false, reason = "knockup requires Humanoid target" } end
-		local force: number = spec.force or 50
+		local force: number = spec.force or SkillConstants.DEFAULT_KNOCKUP_FORCE
 		local char = h.Parent
 		local hrp = char and (char :: Model):FindFirstChild("HumanoidRootPart") :: BasePart?
 		if not hrp then return { ok = false, reason = "no HumanoidRootPart" } end

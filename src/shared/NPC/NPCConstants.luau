@@ -38,7 +38,7 @@ local NPCConstants = {
 	COMBAT_DAMAGE = 8,                -- damage per hit (lower than player weapons — NPCs are beatable)
 	COMBAT_SPREAD_DEGREES = 4,        -- accuracy cone half-angle; higher = less accurate
 	COMBAT_RANGE = 80,                -- max shot distance
-	COMBAT_RAY_RADIUS = 0.25,         -- spherecast radius for more forgiving hitboxes
+	EYE_HEIGHT = 1.5,                 -- studs above HumanoidRootPart used for line-of-sight and aim origin
 
 	-- ============================================================
 	-- State names (string constants — avoid magic strings)

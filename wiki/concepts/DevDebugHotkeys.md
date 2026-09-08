@@ -1,7 +1,7 @@
 ---
 type: concept
 description: Keyboard hotkeys available in DevDebug.client.luau for playtesting word buffer, energy reservoirs, and mobile-input simulation.
-updated: 2026-06-05
+updated: 2026-09-08
 ---
 
 # Dev Debug Hotkeys
@@ -28,3 +28,4 @@ updated: 2026-06-05
 - Mana tier keys 1–4 were added in commit `b3fbb6c` to speed up spell-casting tests without grinding word buffer fills.
 - `M` is the primary way to develop and verify mobile-only HUD widgets (e.g. DASH button, vertical spell column) without a physical device.
 - **Remove before shipping** — none of these bindings should reach production.
+- `;` is listed here for discoverability, but the `Enum.KeyCode.Semicolon` binding and the phase-label toggle it drives both live in `src/client/UI/BossHudGui.client.luau`, not in `DevDebug.client.luau` — this file only prints it in the ready-log hint. A stale in-code comment in `BossHudGui.client.luau` said "toggle with P"; fixed to `;` in refactor chunk 0 (2026-09-08).

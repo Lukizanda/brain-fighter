@@ -71,92 +71,7 @@ end
 function M.run()
 	print("[CastAction.__tests] starting")
 
-	-- 1. tapReservoir red=0 → "no affordable tier".
-	do
-		local model, humanoid = makeDummy()
-		local r = EnergyReservoirs.new()
-		local res = CastAction.tapReservoir("red", r, humanoid, humanoid)
-		assert(res.ok == false, "tap red=0: ok should be false")
-		assert(
-			res.reason == "no affordable tier",
-			`tap red=0: reason should be "no affordable tier", got "{tostring(res.reason)}"`
-		)
-		assert(res.cast == nil, "tap red=0: cast should be nil on failure")
-		assert(res.drained == nil, "tap red=0: drained should be nil on failure")
-		assert(r:get("red") == 0, "tap red=0: reservoir should remain 0")
-		assert(nearly(humanoid.Health, TEST_MAX_HEALTH), "tap red=0: Health should be untouched")
-		model:Destroy()
-		r:destroy()
-	end
-
-	-- 2. tapReservoir red=15 → Fireball (T2, cost 10); red=5.
-	-- Fireball is projectile delivery — cast accepted, but the dummy
-	-- isn't a Player or tagged, so no on-hit damage applies. We assert
-	-- the cast pipeline, not damage.
-	do
-		local model, humanoid = makeDummy()
-		local r = EnergyReservoirs.new()
-		r:add("red", 15)
-		local res = CastAction.tapReservoir("red", r, humanoid, humanoid)
-		assert(res.ok == true, `tap red=15: ok should be true, got reason "{tostring(res.reason)}"`)
-		assert(res.cast ~= nil, "tap red=15: cast should be present")
-		local cast = res.cast :: { color: string, tier: number, name: string }
-		assert(cast.name == "Fireball", `tap red=15: name should be "Fireball", got "{tostring(cast.name)}"`)
-		assert(cast.tier == 2, `tap red=15: tier should be 2, got {tostring(cast.tier)}`)
-		assert(cast.color == "red", `tap red=15: color should be "red", got "{tostring(cast.color)}"`)
-		assert(res.drained == 10, `tap red=15: drained should be 10, got {tostring(res.drained)}`)
-		assert(r:get("red") == 5, `tap red=15: reservoir.red should be 5, got {r:get("red")}`)
-		model:Destroy()
-		r:destroy()
-	end
-
-	-- 3. tapReservoir red=30 → Inferno (T3, cost 20); red=10.
-	--
-	-- Health is deliberately NOT asserted to drop. CastAction is the
-	-- predicted run (Phase 5.6 Stage 3), and a predicted run no longer
-	-- applies effects — damage is the authoritative run's job, and it
-	-- arrives via SpellCastService. What CastAction owes the caller is the
-	-- tier selection, the drain and the summary, and those are what this
-	-- asserts. Damage itself is covered by the SpellExecutor suite, which
-	-- casts authoritatively.
-	do
-		local model, humanoid = makeDummy()
-		local r = EnergyReservoirs.new()
-		r:add("red", 30)
-		local res = CastAction.tapReservoir("red", r, humanoid, humanoid)
-		assert(res.ok == true, `tap red=30: ok should be true, got reason "{tostring(res.reason)}"`)
-		local cast = res.cast :: { color: string, tier: number, name: string }
-		assert(cast.name == "Inferno", `tap red=30: name should be "Inferno", got "{tostring(cast.name)}"`)
-		assert(cast.tier == 3, `tap red=30: tier should be 3, got {tostring(cast.tier)}`)
-		assert(res.drained == 20, `tap red=30: drained should be 20, got {tostring(res.drained)}`)
-		assert(r:get("red") == 10, `tap red=30: reservoir.red should be 10, got {r:get("red")}`)
-		assert(
-			nearly(humanoid.Health, TEST_MAX_HEALTH),
-			`tap red=30: predicted run must not damage; Health should still be {TEST_MAX_HEALTH}, got {humanoid.Health}`
-		)
-		model:Destroy()
-		r:destroy()
-	end
-
-	-- 4. tapReservoir red=160 (caps at CAP_PER_COLOR=60) → Volley
-	-- (T4, cost 40); red ends 20 (60 − 40).
-	-- Volley is projectile delivery — cast accepted, no damage observable.
-	do
-		local model, humanoid = makeDummy()
-		local r = EnergyReservoirs.new()
-		r:add("red", 160)
-		local res = CastAction.tapReservoir("red", r, humanoid, humanoid)
-		assert(res.ok == true, `tap red=160: ok should be true, got reason "{tostring(res.reason)}"`)
-		local cast = res.cast :: { color: string, tier: number, name: string }
-		assert(cast.name == "Volley", `tap red=160: name should be "Volley", got "{tostring(cast.name)}"`)
-		assert(cast.tier == 4, `tap red=160: tier should be 4, got {tostring(cast.tier)}`)
-		assert(res.drained == 40, `tap red=160: drained should be 40, got {tostring(res.drained)}`)
-		assert(r:get("red") == 20, `tap red=160: reservoir.red should be 20 (60 cap − 40), got {r:get("red")}`)
-		model:Destroy()
-		r:destroy()
-	end
-
-	-- 5. castSpecific(red, 1) with red=80 (caps at 60) → Firebolt
+	-- 1. castSpecific(red, 1) with red=80 (caps at 60) → Firebolt
 	-- (T1, cost 5); red ends 55. Firebolt is projectile — assert cast,
 	-- not damage.
 	do
@@ -174,7 +89,7 @@ function M.run()
 		r:destroy()
 	end
 
-	-- 6. castSpecific(red, 3) with red=15 → "cannot afford Inferno"
+	-- 2. castSpecific(red, 3) with red=15 → "cannot afford Inferno"
 	-- (Inferno costs 20); red unchanged at 15.
 	do
 		local model, humanoid = makeDummy()
@@ -198,7 +113,7 @@ function M.run()
 		r:destroy()
 	end
 
-	-- 7. castSpecific("yellow", 1) → fizzle "invalid color/tier: …".
+	-- 3. castSpecific("yellow", 1) → fizzle "invalid color/tier: …".
 	-- SpellRegistry.getSpell raises on unknown color; CastAction
 	-- pcalls and surfaces a uniform {ok=false, reason=…} return.
 	do
@@ -223,46 +138,17 @@ function M.run()
 		r:destroy()
 	end
 
-	-- 8. tapReservoir red=15 target=nil → Fireball is projectile; with
-	-- target=nil there's no resolvable target position, so `canCast`
-	-- refuses ({ok=false, reason="projectile requires a target …"}) BEFORE
-	-- the drain and red is never touched.
-	--
-	-- Phase 5.6 Stage 5 inverted this: it used to drain, run the spell,
-	-- and refund on the executor's refusal. The player-visible outcome is
-	-- identical, which is why the assertions below are unchanged — see
-	-- Suites/Skills/cast_rejected_before_drain for the one that actually
-	-- distinguishes the two.
-	do
-		local model, humanoid = makeDummy()
-		local r = EnergyReservoirs.new()
-		r:add("red", 15)
-		local res = CastAction.tapReservoir("red", r, humanoid, nil)
-		assert(res.ok == false, "refused cast: ok should be false")
-		assert(res.reason ~= nil, "refused cast: reason should be present")
-		local reason = res.reason :: string
-		assert(
-			string.find(reason, "target", 1, true) ~= nil,
-			`refused cast: reason should mention "target", got "{reason}"`
-		)
-		assert(r:get("red") == 15, `refused cast: reservoir.red should still be 15, got {r:get("red")}`)
-		assert(nearly(humanoid.Health, TEST_MAX_HEALTH), "refused cast: Health untouched")
-		model:Destroy()
-		r:destroy()
-	end
-
-	-- 9. castSpecific(green, 1) target=nil → Mend (T1 heal, cost 5).
+	-- 4. castSpecific(green, 1) target=nil → Mend (T1 heal, cost 5).
 	--
 	-- The point of this case is that a target-less heal is ACCEPTED: `heal`
-	-- falls back to the caster, so unlike Frost Nip in case 8 the cast
-	-- resolves and the mana is spent. That distinction lives in
+	-- falls back to the caster. That distinction lives in
 	-- SkillEffects.canApply and is what CastAction now gates on.
 	--
 	-- The heal landing is again not asserted here — predicted runs don't
 	-- apply effects (Stage 3). Health starts at 50 anyway so that a
 	-- regression putting the heal back would be visible as 65.
-	-- (Why castSpecific instead of tapReservoir: green=15 affords both
-	-- Mend T1 and Stone Wall T2; tap would pick T2 which has no heal.)
+	-- (Why castSpecific instead of the highest-affordable tier: green=15
+	-- affords both Mend T1 and Stone Wall T2, which has no heal.)
 	do
 		local model, humanoid = makeDummy(50)
 		local r = EnergyReservoirs.new()
@@ -300,7 +186,7 @@ function M.run()
 		return (chargeTime(lowTier) + chargeTime(highTier)) / 2
 	end
 
-	-- 10. A hold on an empty reservoir never reaches T1, no matter how
+	-- 5. A hold on an empty reservoir never reaches T1, no matter how
 	-- long. nil is the "cancel, cost nothing" signal — not a fizzled cast.
 	do
 		local r = EnergyReservoirs.new()
@@ -309,9 +195,9 @@ function M.run()
 		r:destroy()
 	end
 
-	-- 11. A tap (zero hold) with plenty of mana fires T1, NOT the highest
-	-- affordable tier. This is the behaviour change from tapReservoir: the
-	-- player climbs to a big spell deliberately instead of being given one.
+	-- 6. A tap (zero hold) with plenty of mana fires T1, NOT the highest
+	-- affordable tier — the player climbs to a big spell deliberately
+	-- instead of being given one.
 	do
 		local r = EnergyReservoirs.new()
 		r:add("red", 60)
@@ -324,7 +210,7 @@ function M.run()
 		r:destroy()
 	end
 
-	-- 12. The charge stops dead at the affordability ceiling. red=12 affords
+	-- 7. The charge stops dead at the affordability ceiling. red=12 affords
 	-- T1 (5) and T2 (10) but not T3 (20), so an arbitrarily long hold tops
 	-- out at Fireball. This is the case the HUD's ceiling pulse marks.
 	do
@@ -338,7 +224,7 @@ function M.run()
 		r:destroy()
 	end
 
-	-- 13. A hold sitting exactly ON a threshold resolves to the higher
+	-- 8. A hold sitting exactly ON a threshold resolves to the higher
 	-- tier — the comparison is `chargeTimeFor(tier) <= heldSec`. Held one
 	-- notch below it must still be the lower tier, which is what makes this
 	-- an assertion about the boundary rather than about rounding luck.
@@ -363,7 +249,7 @@ function M.run()
 		r:destroy()
 	end
 
-	-- 14. Green and blue have no T4. Holding past red's T4 charge time with
+	-- 9. Green and blue have no T4. Holding past red's T4 charge time with
 	-- a full reservoir must still land on T3, because the roster ceiling
 	-- binds before the clock does.
 	do
@@ -378,7 +264,7 @@ function M.run()
 		end
 	end
 
-	-- 15. chargeTimeFor is the contract the HUD and the resolver share, so
+	-- 10. chargeTimeFor is the contract the HUD and the resolver share, so
 	-- pin its shape: T1 is free (a tap), and the times climb strictly with
 	-- tier. A regression that made T1 cost time would make every tap fizzle.
 	do
