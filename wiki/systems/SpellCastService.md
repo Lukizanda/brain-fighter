@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server relay for client-initiated spell casts. Applies effects server-side because client Humanoid.Health writes don't replicate for server-owned rigs. Hardened in 5.4 — except affordability, which is blocked on client-side energy state.
-updated: 2026-08-12
+updated: 2026-09-08
 ---
 
 # SpellCastService
@@ -50,9 +50,9 @@ The `ChargeState` remote itself lives in `server/SpellCast/ChargeStateService.se
 
 ### Tuning
 
-`MAX_TARGET_DISTANCE_STUDS` = 150 + 50. The 150 mirrors `AUTO_TARGET_RANGE_STUDS` in `client/UI/SpellMenuGui` — the range the client's auto-targeter will lock within. The 50 absorbs drift: both caster and target keep moving during the client→server hop, so a target locked at exactly the client's limit can be measurably further away by the time the server reads it.
-
-> **Duplicated constant.** The 150 is copied, not shared — a server Script cannot require a LocalScript, so the two must be changed together. Hoisting it into [[systems/SpellRegistry]] so both sides read one number is the right fix; it was left out of 5.4 because that phase ran parallel to a session that owned the client UI files.
+`MAX_TARGET_DISTANCE_STUDS` = `SpellRegistry.AUTO_TARGET_RANGE_STUDS` (150) + `TARGET_DRIFT_ALLOWANCE_STUDS` (50). The 150 is the range the client's auto-targeter (`SpellMenuGui.findAutoTarget`) will lock within — both sides now read it from [[systems/SpellRegistry]] instead of keeping independent copies. The 50 absorbs drift: both caster and target keep moving during the client→server hop, so a target locked at exactly the client's limit can be measurably further away by the time the server reads it.
+>
+> **Resolved 2026-09-08 (refactor chunk 2).** The 150 used to be copied — `client/UI/SpellMenuGui` and `SpellCastConstants` each declared their own — with a comment noting a server Script can't require a LocalScript. Since `SpellRegistry` is a *shared* module, both sides can require it directly; there was never a cross-VM barrier here; only `SpellMenuGui`'s inline copy needed removing.
 
 ### Blocked: server-side affordability
 

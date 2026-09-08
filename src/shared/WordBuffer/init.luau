@@ -18,6 +18,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 
 local DEFAULT_CAP = 12
 local FIRST_INDEX = 1
@@ -33,8 +34,8 @@ local VALID_COLORS: { [string]: boolean } = {
 	[Wildcard.COLOR] = true,
 }
 
-export type Color = "red" | "green" | "blue" | "wild"
-export type Tile = { letter: string, color: Color }
+export type Color = Colors.TileColor
+export type Tile = Colors.Tile
 
 local WordBuffer = {}
 WordBuffer.__index = WordBuffer

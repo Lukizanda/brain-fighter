@@ -11,6 +11,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local EnergyReservoirs = require(ReplicatedStorage.Shared.EnergyReservoirs)
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 
 local SpellMenuConfig = {
 	-- Matches DashButtonConfig.SIZE, which is the circle sitting directly
@@ -32,7 +33,7 @@ local SpellMenuConfig = {
 		red   = { bg = Color3.fromRGB(180, 55, 55),  label = ""   },
 		green = { bg = Color3.fromRGB(50, 155, 65),  label = "" },
 		blue  = { bg = Color3.fromRGB(55, 105, 195), label = ""  },
-	},
+	} :: { [Colors.SpellColor]: { bg: Color3, label: string } },
 
 	-- Fill: dim base layer (always-visible "empty" disc) and the animated
 	-- disc that grows out of the centre.
@@ -84,10 +85,15 @@ local SpellMenuConfig = {
 	-- sphere rather than a flat coin.
 	FILL_GRADIENT_BOTTOM_TINT = Color3.fromRGB(150, 150, 150),
 	FILL_GRADIENT_TOP_TINT    = Color3.fromRGB(255, 255, 255),
+	-- 270 puts keypoint 0 at the bottom (darkened) and keypoint 1 at the
+	-- top (untouched), which is the direction the tints above assume.
+	FILL_GRADIENT_ROTATION    = 270,
 
 	-- Text
-	LABEL_FONT  = Enum.Font.GothamBold,
-	LABEL_SIZE  = 26,
+	LABEL_FONT   = Enum.Font.GothamBold,
+	LABEL_SIZE   = 26,
+	LABEL_HEIGHT = 18,
+	LABEL_TOP_OFFSET = 6, -- gap between the panel's top edge and the label
 	TEXT_COLOR  = Color3.fromRGB(255, 255, 255),
 	TEXT_STROKE = 0.5,
 
@@ -114,6 +120,7 @@ local SpellMenuConfig = {
 	-- CHARGE_RESERVE_COLOR so the number and the band read as one thing.
 	NUMERAL_RESERVED_COLOR = Color3.fromRGB(255, 236, 150),
 	NUMERAL_STROKE = 0.15,
+	NUMERAL_FORMAT = "%d/%d", -- spendable over FILL_MAX
 
 	-- ── Tier rings ────────────────────────────────────────────────────
 	-- Concentric rings at each TIER_COSTS threshold, drawn as a UIStroke on
@@ -270,7 +277,11 @@ local SpellMenuConfig = {
 	AFFORD_BOUNCE_TWEEN = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 	AFFORD_BOUNCE_SCALE = 1.08,
 	FIRED_FLASH_TWEEN   = TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	FIRED_FLASH_COLOR   = Color3.fromRGB(255, 255, 255),
 	FIRED_DIM_TWEEN     = TweenInfo.new(0.40, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	-- How far the fill dips on release before recovering to the state's
+	-- own transparency. A dip, not a fade — the panel must stay readable.
+	FIRED_DIM_TRANSPARENCY = 0.05,
 }
 
 return SpellMenuConfig

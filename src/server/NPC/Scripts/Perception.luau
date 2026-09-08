@@ -48,7 +48,7 @@ end
 -- Cast a ray from the NPC's head position to the target's HRP position.
 -- Returns true if nothing blocks the line between them, false otherwise.
 local function hasLineOfSight(bb: Blackboard, targetRootPart: BasePart): boolean
-	local origin = bb.humanoidRootPart.Position + Vector3.new(0, 1.5, 0) -- eye height
+	local origin = bb.humanoidRootPart.Position + Vector3.new(0, NPCConstants.EYE_HEIGHT, 0)
 	local targetPos = targetRootPart.Position
 	local direction = targetPos - origin
 

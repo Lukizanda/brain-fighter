@@ -36,6 +36,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+-- Only for CAP_PER_COLOR (line ~282) — the color list itself now comes
+-- from Core.Colors, not this require.
 local EnergyReservoirs = require(ReplicatedStorage.Shared.EnergyReservoirs)
 local MemorizeAction = require(ReplicatedStorage.Shared.MemorizeAction)
 local WordBuffer = require(ReplicatedStorage.Shared.WordBuffer)

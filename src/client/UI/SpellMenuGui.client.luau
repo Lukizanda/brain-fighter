@@ -39,11 +39,9 @@ local chargeStateRemote = ReplicatedStorage.Shared.SpellCast.Remotes.ChargeState
 
 local log = Logger.new("SpellMenuGui")
 
--- Max range for auto-targeting. Spells won't lock onto anything farther than this.
-local AUTO_TARGET_RANGE_STUDS = 150
-
 -- Returns the nearest living enemy Model (NPC or the Boss-system boss) within
--- AUTO_TARGET_RANGE_STUDS of the character. Returns nil if nothing is in range.
+-- SpellRegistry.AUTO_TARGET_RANGE_STUDS of the character. Returns nil if
+-- nothing is in range.
 local function findAutoTarget(character: Model): Model?
 	local hrp = character:FindFirstChild("HumanoidRootPart")
 	if not hrp or not hrp:IsA("BasePart") then
@@ -52,7 +50,7 @@ local function findAutoTarget(character: Model): Model?
 	local origin = (hrp :: BasePart).Position
 
 	local nearest: Model? = nil
-	local nearestDist = AUTO_TARGET_RANGE_STUDS
+	local nearestDist = SpellRegistry.AUTO_TARGET_RANGE_STUDS
 
 	local function consider(model: Instance)
 		if not model:IsA("Model") or model == character then
@@ -82,14 +80,10 @@ local function findAutoTarget(character: Model): Model?
 	return nearest
 end
 
--- Pitched well below the cast swoosh it shares an asset with, so a
--- refused cast is audibly a dud rather than a quieter success.
-local FIZZLE_PLAYBACK_SPEED = 0.55
-
 local fizzleSound = Instance.new("Sound")
 fizzleSound.SoundId       = VfxConfig.SFX.fizzle
 fizzleSound.Volume        = 1
-fizzleSound.PlaybackSpeed = FIZZLE_PLAYBACK_SPEED
+fizzleSound.PlaybackSpeed = VfxConfig.SFX.FIZZLE_PLAYBACK_SPEED
 fizzleSound.Parent        = SoundService
 
 local player = Players.LocalPlayer
@@ -247,8 +241,5 @@ player.CharacterRemoving:Connect(function(character: Model)
 	end
 	ChargeOrbVfx.stop(character)
 end)
-
-_G.PlayerHud = _G.PlayerHud or {}
-_G.PlayerHud.SpellMenu = menu
 
 log:info("Initialized")

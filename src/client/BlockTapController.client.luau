@@ -44,12 +44,10 @@ local session     = PlayerSession.get()
 -- The staff's FizzleSound was a .model.json on the Handle carrying a
 -- duplicate of this id; with no Handle to hang it off, the client-local
 -- Sound the rest of the HUD already uses is the whole answer.
-local FIZZLE_PLAYBACK_SPEED = 0.55
-
 local fizzleSound = Instance.new("Sound")
 fizzleSound.SoundId       = VfxConfig.SFX.fizzle
 fizzleSound.Volume        = 1
-fizzleSound.PlaybackSpeed = FIZZLE_PLAYBACK_SPEED
+fizzleSound.PlaybackSpeed = VfxConfig.SFX.FIZZLE_PLAYBACK_SPEED
 fizzleSound.Parent        = SoundService
 
 local lastPopped: number = -math.huge

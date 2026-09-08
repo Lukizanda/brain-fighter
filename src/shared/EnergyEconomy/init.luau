@@ -34,6 +34,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 
 local log = Logger.new("EnergyEconomy")
 
@@ -110,15 +111,8 @@ local LENGTH_MULTIPLIER_EPIC = 3
 -- itself is design-arbitrary; "RGB" matches every visualization in
 -- the codebase (mockups, HUD docs).
 
-local COLOR_RED = "red"
-local COLOR_GREEN = "green"
-local COLOR_BLUE = "blue"
-
-local CANONICAL_COLOR_ORDER: { string } = {
-	COLOR_RED,
-	COLOR_GREEN,
-	COLOR_BLUE,
-}
+local CANONICAL_COLOR_ORDER: { Colors.SpellColor } = Colors.SPELL_COLORS
+local COLOR_RED, COLOR_GREEN, COLOR_BLUE = CANONICAL_COLOR_ORDER[1], CANONICAL_COLOR_ORDER[2], CANONICAL_COLOR_ORDER[3]
 
 -- Wild tiles carry no reservoir color of their own; their energy is
 -- divided evenly across the three below. Derived from the canonical
@@ -131,12 +125,9 @@ local RESERVOIR_COLOR_COUNT = #CANONICAL_COLOR_ORDER
 
 -- "wild" is a tile color but NOT a reservoir color: it never appears as
 -- a key in ColorEnergy. See splitByColor.
-export type Color = "red" | "green" | "blue" | "wild"
+export type Color = Colors.TileColor
 
-export type Tile = {
-	letter: string,
-	color: Color,
-}
+export type Tile = Colors.Tile
 
 export type ColorEnergy = { [string]: number }
 

@@ -14,7 +14,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
-local HealthConstants = require(ReplicatedStorage.Shared.Health.HealthConstants)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
 local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 
@@ -28,8 +27,14 @@ local requestRespawnRemote = healthRemotes.RequestRespawn
 local gameStateChangedRemote = gameModeRemotes:WaitForChild("GameStateChanged")
 
 local currentRoundState = GameModeConstants.RoundState.WaitingForPlayers
+-- Server-reported respawn delay for the player's current session (see
+-- RoundManager._broadcastState). Defaults to the active-round value so a
+-- death that lands before the first GameState broadcast still counts down
+-- sanely.
+local currentRespawnTime: number = GameModeConstants.RESPAWN_TIME
 gameStateChangedRemote.OnClientEvent:Connect(function(state)
 	currentRoundState = state.roundState
+	currentRespawnTime = state.respawnTime or currentRespawnTime
 end)
 
 local screenGui = Instance.new("ScreenGui")
@@ -37,10 +42,16 @@ screenGui.Name = "DeathScreenGui"
 screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 30 -- above damage flash
 screenGui.IgnoreGuiInset = true
-screenGui.Enabled = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 -- Round and competition chrome: no meaning in the hub.
+--
+-- `screenGui.Enabled` belongs to the gate from here on: this script shows
+-- and hides `overlay.Visible` instead, the same split GameStateGui and
+-- ScoreboardGui use. An owner that also writes the gated property loses a
+-- true -> false transition whenever the gate has already forced it false —
+-- no changed signal fires, so the gate keeps `ownerWants = true` and
+-- reveals the overlay to a living player on the next arena entry.
 HudGate.bindScreenGui(screenGui, HudGate.Policy.ArenaOnly)
 
 local overlay = Instance.new("Frame")
@@ -48,6 +59,7 @@ overlay.Size = UDim2.new(1, 0, 1, 0)
 overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 overlay.BackgroundTransparency = 0.4
 overlay.BorderSizePixel = 0
+overlay.Visible = false
 overlay.Parent = screenGui
 
 local countdown = Instance.new("TextLabel")
@@ -83,7 +95,7 @@ local deathTime: number? = nil
 local countdownTask: thread? = nil
 
 local function hide()
-	screenGui.Enabled = false
+	overlay.Visible = false
 	respawnButton.Visible = false
 	deathTime = nil
 	if countdownTask then
@@ -93,23 +105,21 @@ local function hide()
 end
 
 local function show()
-	screenGui.Enabled = true
+	overlay.Visible = true
 	respawnButton.Visible = false
 	deathTime = os.clock()
 
 	local isActiveRound = currentRoundState == GameModeConstants.RoundState.Active
-	local respawnTime = if isActiveRound
-		then GameModeConstants.RESPAWN_TIME
-		else HealthConstants.RESPAWN_TIME
+	local respawnTime = currentRespawnTime
 
 	countdownTask = task.spawn(function()
 		local remaining = respawnTime
-		while remaining > 0 and screenGui.Enabled do
+		while remaining > 0 and overlay.Visible do
 			countdown.Text = string.format("Respawning in %d...", math.ceil(remaining))
 			task.wait(0.1)
 			remaining = respawnTime - (os.clock() - (deathTime :: number))
 		end
-		if screenGui.Enabled then
+		if overlay.Visible then
 			if isActiveRound then
 				countdown.Text = "Respawning..."
 			else

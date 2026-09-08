@@ -26,12 +26,14 @@ local PlayerSession     = require(script.Parent.PlayerSession)
 local EconomyReport     = require(script.Parent.EconomyReport)
 local Dictionary        = require(ReplicatedStorage.Shared.Dictionary)
 local InputCategorizer  = require(ReplicatedStorage.Shared.Core.InputCategorizer)
+local Colors            = require(ReplicatedStorage.Shared.Core.Colors)
+local SpellRegistry     = require(ReplicatedStorage.Shared.SpellRegistry)
 
 local log = Logger.new("DevDebug")
 
 local TEST_WORD = "CATALOG"
-local TEST_COLORS = { "red", "green", "blue" }
-local TIER_ENERGY = { 5, 10, 20, 40 }
+local TEST_COLORS = Colors.SPELL_COLORS
+local TIER_ENERGY = SpellRegistry.TIER_COSTS
 local letterIdx = 1
 
 local session = PlayerSession.get()

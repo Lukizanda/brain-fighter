@@ -88,18 +88,18 @@ Done when: `RunTests = "all"` reports no `[AUTORUN WARN] Skipped` and no suite e
 
 ## Chunk 2 — One name per number
 
-Status: claimed — chunk2-constants — 2026-09-08
+Status: done — 2026-09-08 — (this commit)
 Findings: F27, F31, F38, F21 (constant half), F19 note
 Risk: L · Playtest: **boot smoke** (unit suites carry the rest) · Depends on: chunk 1 · Blocked on: nothing
 
 Owns: new `src/shared/Core/Colors.luau`; `WordBuffer`, `EnergyEconomy`, `EnergyReservoirs`, `SpellRegistry`, `CastAction` (type imports only), `BlockSpawner:68`, `VfxConfig:144,1644`, `SpellMenuConfig:31`, `DevDebug:33-34`; `SkillConstants` + `SkillDelivery:333-341,376,844-846` + `SkillEffects:191,309` (defaults); `HealthConstants:3` / `GameModeConstants:14` / `DeathScreenGui:101-103`; `BlockTapController:47` / `GameplayHudGui:39` / `SpellMenuGui:87` → `VfxConfig.SFX`; `EconomyConstants:41`; `SpellCastConstants:22` + `SpellMenuGui:43` → `SpellRegistry.AUTO_TARGET_RANGE_STUDS`; `NPCConstants` + `Perception:51` / `Actions:269,303` (eye height).
 Must not touch: handler logic in `SkillDelivery`/`SkillEffects` (only the fallback literals move).
 
-- [ ] `Core/Colors.luau`: `SpellColor`, `TileColor`, `Tile`, `SPELL_COLORS`, `isSpellColor`; every duplicate type/list imports it; server modules stop requiring `EnergyReservoirs` for `COLORS` (`ChargeStateService:39`, `EnergyLedger:39` — keep the require only if `CAP_PER_COLOR` still needs it, and say so).
-- [ ] Skills fallback defaults → `SkillConstants.DEFAULT_*`.
-- [ ] One `RESPAWN_TIME`; `DeathScreenGui` reads `respawnTime` from the GameState payload (add the field in `RoundManager`'s payload — additive only).
-- [ ] `VfxConfig.SFX.FIZZLE_PLAYBACK_SPEED`; `REJECTION_LOG_THROTTLE_SEC` unified; `AUTO_TARGET_RANGE_STUDS` on `SpellRegistry`; `NPCConstants.EYE_HEIGHT`; `DevDebug.TIER_ENERGY = SpellRegistry.TIER_COSTS`.
-- [ ] Run `Unit`, `Skills`, `Hardening`, `Economy` suites.
+- [x] `Core/Colors.luau`: `SpellColor`, `TileColor`, `Tile`, `SPELL_COLORS`, `isSpellColor`; every duplicate type/list imports it; server modules stop requiring `EnergyReservoirs` for `COLORS` (`ChargeStateService:39`, `EnergyLedger:39` — keep the require only if `CAP_PER_COLOR` still needs it, and say so).
+- [x] Skills fallback defaults → `SkillConstants.DEFAULT_*`.
+- [x] One `RESPAWN_TIME`; `DeathScreenGui` reads `respawnTime` from the GameState payload (add the field in `RoundManager`'s payload — additive only).
+- [x] `VfxConfig.SFX.FIZZLE_PLAYBACK_SPEED`; `REJECTION_LOG_THROTTLE_SEC` unified; `AUTO_TARGET_RANGE_STUDS` on `SpellRegistry`; `NPCConstants.EYE_HEIGHT`; `DevDebug.TIER_ENERGY = SpellRegistry.TIER_COSTS`.
+- [x] Run `Unit`, `Skills`, `Hardening`, `Economy` suites. (`Unit` suite doesn't exist until chunk 1 wires it — ran the seven pure-module `__tests` directly instead; see § Divergence log.)
 
 Done when: `grep -rn '"red" | "green"'` finds one declaration; the suites above are green; boot smoke clean.
 Wiki: [[systems/SpellRegistry]] (range constant), [[systems/SpellCastService]] § Tuning (duplicate-constant note resolved).
@@ -327,4 +327,4 @@ Chunks 8 and 9 are the prerequisites for Phase 6 stage 5; chunk 4 is the prerequ
 
 Append here when a chunk lands differently from the plan (what changed, why, which finding it affects).
 
-- (none yet)
+- **Chunk 2** ran before chunk 1 (its stated `Depends on`); chunk 1 had not landed. Unit tests (`WordBuffer`, `EnergyEconomy`, `EnergyReservoirs`, `SpellRegistry`, `MemorizeAction`, `MindFullManager`, `CastAction`) were invoked directly via `execute_luau` (each module's own `.run()` / `.runAll()` shape) rather than through the (not-yet-wired) autorunner Unit suite. `MemorizeAction.__tests` failed a pre-existing, chunk-2-unrelated assertion (see `wiki/log.md` 2026-09-08 ingest) — flagged, not fixed, since it is outside chunk 2's `Owns`.

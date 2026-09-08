@@ -266,7 +266,7 @@ local function getShotOrigin(bb: Blackboard): Vector3
 		end
 	end
 	-- Fallback: NPC eye level
-	return bb.humanoidRootPart.Position + Vector3.new(0, 1.5, 0)
+	return bb.humanoidRootPart.Position + Vector3.new(0, NPCConstants.EYE_HEIGHT, 0)
 end
 
 function Actions.Shoot(bb: Blackboard): ActionResult
@@ -300,7 +300,7 @@ function Actions.Shoot(bb: Blackboard): ActionResult
 	end
 
 	-- Aim direction uses eye-level for accuracy (avoids weapon mesh jitter affecting aim)
-	local aimOrigin = bb.humanoidRootPart.Position + Vector3.new(0, 1.5, 0)
+	local aimOrigin = bb.humanoidRootPart.Position + Vector3.new(0, NPCConstants.EYE_HEIGHT, 0)
 	local targetPos = targetRootPart.Position
 	local direction = (targetPos - aimOrigin).Unit
 	direction = applySpread(direction, NPCConstants.COMBAT_SPREAD_DEGREES)

@@ -10,16 +10,14 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BlockTapConfig = require(ReplicatedStorage.Shared.BlockShoot.BlockTapConfig)
+local SpellRegistry = require(ReplicatedStorage.Shared.SpellRegistry)
 
 local SpellCastConstants = {}
 
--- Mirrors AUTO_TARGET_RANGE_STUDS in client/UI/SpellMenuGui — the range
--- the client's auto-targeter will lock within. It has to be duplicated
--- because a server script cannot require a LocalScript; the two must be
--- changed together. (Hoisting it into SpellRegistry so both sides read
--- one number is the right fix and is filed as follow-up — see
--- wiki/systems/SpellCastService.md § Trust model.)
-local CLIENT_AUTO_TARGET_RANGE_STUDS = 150
+-- The range the client's auto-targeter (SpellMenuGui) will lock within,
+-- read from SpellRegistry so both sides share one number instead of two
+-- independently-declared 150s.
+local CLIENT_AUTO_TARGET_RANGE_STUDS = SpellRegistry.AUTO_TARGET_RANGE_STUDS
 
 -- Both caster and target keep moving during the client→server hop, so
 -- a target locked at exactly the client's limit can be measurably

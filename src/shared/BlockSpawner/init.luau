@@ -49,6 +49,7 @@ local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 
 local log = Logger.new("BlockSpawner")
 
@@ -65,7 +66,7 @@ local DEFAULT_BOX_MAX = Vector3.new(20, 16, 20)
 -- Color weights default to uniform (33/33/33 per gameplay-loop).
 -- Per-level designers may override to bias a color scarce.
 local DEFAULT_COLOR_WEIGHT = 1
-local COLORS = { "red", "green", "blue" }
+local COLORS = Colors.SPELL_COLORS
 
 -- Scrabble letter frequencies (standard English bag of 98 tiles).
 -- These are the SOFT-HEURISTIC weights — English vowels and common

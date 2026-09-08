@@ -330,15 +330,15 @@ SkillDelivery.handlers = {
 		end
 
 		local params = skill.deliveryParams
-		local count:          number  = params.count          or 1
-		local speed:          number  = params.speed          or 30
-		local spreadDegrees:  number  = params.spreadDegrees  or 0
-		local lifetimeSec:    number  = params.lifetimeSec    or 3
-		local proximityRadius:number  = params.proximityRadius or 3
-		local staggerSec:     number  = params.staggerSec     or 0
-		local trackTarget:    boolean = params.trackTarget     or false
-		local impactRadius:   number  = params.impactRadius    or 0
-		local color:          Color3  = params.color          or Color3.fromRGB(255, 120, 0)
+		local count:          number  = params.count          or SkillConstants.DEFAULT_PROJECTILE_COUNT
+		local speed:          number  = params.speed          or SkillConstants.DEFAULT_PROJECTILE_SPEED
+		local spreadDegrees:  number  = params.spreadDegrees  or SkillConstants.DEFAULT_PROJECTILE_SPREAD_DEGREES
+		local lifetimeSec:    number  = params.lifetimeSec    or SkillConstants.DEFAULT_PROJECTILE_LIFETIME_SEC
+		local proximityRadius:number  = params.proximityRadius or SkillConstants.DEFAULT_PROJECTILE_PROXIMITY_RADIUS
+		local staggerSec:     number  = params.staggerSec     or SkillConstants.DEFAULT_PROJECTILE_STAGGER_SEC
+		local trackTarget:    boolean = params.trackTarget     or SkillConstants.DEFAULT_PROJECTILE_TRACK_TARGET
+		local impactRadius:   number  = params.impactRadius    or SkillConstants.DEFAULT_PROJECTILE_IMPACT_RADIUS
+		local color:          Color3  = params.color          or SkillConstants.DEFAULT_PROJECTILE_COLOR
 		local cosmeticEffectId: string? = params.cosmeticEffectId
 		local impactEffectId:   string? = params.impactEffectId
 		local impactColor:      Color3? = params.impactColor
@@ -373,7 +373,7 @@ SkillDelivery.handlers = {
 		local destroyEffectId: string? = if impactRadius > 0
 			then nil
 			else (params.destroyEffectId or DEFAULT_DESTROY_EFFECT_ID)
-		local sizeRaw                 = params.size            or 1.5
+		local sizeRaw                 = params.size            or SkillConstants.DEFAULT_PROJECTILE_SIZE
 		local sizeVec: Vector3        = typeof(sizeRaw) == "Vector3"
 			and (sizeRaw :: Vector3)
 			or Vector3.new(sizeRaw, sizeRaw, sizeRaw)
@@ -841,9 +841,9 @@ SkillDelivery.handlers = {
 		end
 
 		local params       = skill.deliveryParams
-		local radius:       number = params.radius      or 12
-		local windupSec:    number = params.windupSec   or 0.5
-		local completeSec:  number = params.completeSec or 1.0
+		local radius:       number = params.radius      or SkillConstants.DEFAULT_AOE_RADIUS
+		local windupSec:    number = params.windupSec   or SkillConstants.DEFAULT_AOE_WINDUP_SEC
+		local completeSec:  number = params.completeSec or SkillConstants.DEFAULT_AOE_COMPLETE_SEC
 		local cosmeticEffectId: string? = params.cosmeticEffectId
 
 		local center = ctx.aoeCenter or ctx.origin.Position

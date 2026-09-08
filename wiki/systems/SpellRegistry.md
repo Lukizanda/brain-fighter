@@ -1,7 +1,7 @@
 ---
 type: system
 description: Pure-Luau config layer for the spell roster (R/G/B × T1–T4) — name, color, tier, cost, targeting mode, skill:SkillSpec. Single source of truth consumed by SpellExecutor and the cast-menu HUD.
-updated: 2026-08-08
+updated: 2026-09-08
 ---
 
 # SpellRegistry
@@ -33,7 +33,7 @@ local options = SpellRegistry.listAffordableSpells("red", 35)
 ## Spec shape
 
 ```lua
-export type Color = "red" | "green" | "blue"
+export type Color = Colors.SpellColor -- alias of Core.Colors.SpellColor ("red"|"green"|"blue")
 export type TargetingMode = "auto" | "placement"
 
 export type Spec = {
@@ -65,6 +65,10 @@ It exists because the cast UI used to infer this from **colour** ("green means s
 | T4 | 40 |
 
 Declared as `TIER_COSTS = { 5, 10, 20, 40 }` in `init.luau`. Cost and drain are equal by design — see [[design/gameplay-loop]] § "Spell economy".
+
+## Auto-target range
+
+`SpellRegistry.AUTO_TARGET_RANGE_STUDS = 150` is the single source for how far the client's auto-targeter (`SpellMenuGui.findAutoTarget`) will lock onto an enemy. It used to be two independently-declared `150`s — one in `SpellMenuGui` and one as `SpellCastConstants.CLIENT_AUTO_TARGET_RANGE_STUDS` (server-side trust check) — that a future tuning pass could have silently pulled apart. `SpellCastConstants.MAX_TARGET_DISTANCE_STUDS` now reads this value and adds its own drift allowance on top; see [[systems/SpellCastService]] § Tuning.
 
 ## The 10-spell roster
 

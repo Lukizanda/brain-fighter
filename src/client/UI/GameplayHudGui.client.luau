@@ -34,14 +34,10 @@ local HEALTH_COLOR    = Color3.fromRGB(80,  200,  80)
 local HEALTH_WARNING  = Color3.fromRGB(220, 180,  40)
 local HEALTH_CRITICAL = Color3.fromRGB(210,  60,  60)
 
--- Matches SpellMenuGui's fizzle: same asset, same pitch drop, so a
--- refused cast sounds identical wherever it was triggered from.
-local FIZZLE_PLAYBACK_SPEED = 0.55
-
 local fizzleSound = Instance.new("Sound")
 fizzleSound.SoundId       = VfxConfig.SFX.fizzle
 fizzleSound.Volume        = 1
-fizzleSound.PlaybackSpeed = FIZZLE_PLAYBACK_SPEED
+fizzleSound.PlaybackSpeed = VfxConfig.SFX.FIZZLE_PLAYBACK_SPEED
 fizzleSound.Parent        = SoundService
 
 local session = PlayerSession.get()
@@ -119,10 +115,5 @@ btn.activated:Connect(function()
 		log:info("Memorize fizzle:", result.reason)
 	end
 end)
-
-_G.PlayerHud = _G.PlayerHud or {}
-_G.PlayerHud.BufferDisplay  = display
-_G.PlayerHud.MemorizeButton = btn
-_G.PlayerHud.AttributeStack = healthBar.gui
 
 log:info("Initialized")

@@ -34,6 +34,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 local log = Logger.new("EnergyReservoirs")
 
 -- Cap per color. 3× the T3 cost (20) — holds enough headroom to stockpile a
@@ -42,11 +43,10 @@ local log = Logger.new("EnergyReservoirs")
 local CAP_PER_COLOR = 60
 
 -- Canonical color list. Used for `:snapshot()` order, validation, and
--- per-color state initialization. If a new color is ever added, this is the
--- single point of truth.
-local COLORS = { "red", "green", "blue" }
+-- per-color state initialization.
+local COLORS = Colors.SPELL_COLORS
 
-export type Color = "red" | "green" | "blue"
+export type Color = Colors.SpellColor
 
 export type Snapshot = {
 	red: number,

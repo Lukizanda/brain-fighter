@@ -155,6 +155,9 @@ function RoundManager:_broadcastState(winnerId: number?, winnerName: string?, wi
 		winnerId = winnerId,
 		winnerName = winnerName,
 		winnerTeamName = winnerTeamName,
+		-- Additive: DeathScreenGui reads this instead of keeping its own
+		-- copy of the mode's respawn delay (see chunk 2 — one RESPAWN_TIME).
+		respawnTime = self._refs.modeDefinition.getConfig().respawnTime,
 	}
 
 	-- Per-roster `FireClient`, not `FireAllClients`: with more than one

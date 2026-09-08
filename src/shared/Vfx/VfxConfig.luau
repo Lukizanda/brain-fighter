@@ -8,6 +8,9 @@
 --   Phase C — EFFECTS entries (cast/impact per tier and kind)
 ----------------------------------------------------------------------
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
+
 export type ColorPalette = {
 	primary: Color3,
 	glow: Color3,
@@ -145,7 +148,7 @@ VfxConfig.COLORS = {
 	red   = { primary = Color3.fromHex("#FF3030"), glow = Color3.fromHex("#FF8080"), accent = Color3.fromHex("#FFB060") },
 	green = { primary = Color3.fromHex("#30FF60"), glow = Color3.fromHex("#80FFB0"), accent = Color3.fromHex("#FFFFFF") },
 	blue  = { primary = Color3.fromHex("#3080FF"), glow = Color3.fromHex("#80C0FF"), accent = Color3.fromHex("#80FFFF") },
-}
+} :: { [Colors.SpellColor]: ColorPalette }
 
 local C = VfxConfig.COLORS
 
@@ -401,6 +404,12 @@ VfxConfig.SFX = {
 	-- one-line swap here rather than an edit inside the EFFECTS table.
 	stoneCrack = "rbxassetid://88987851128257",
 }
+
+-- Shared pitch for the fizzle cue — played pitched-down from `fizzle`'s
+-- native speed so a refused cast reads as "deflated" rather than a second
+-- copy of the cast swoosh. Was independently redeclared in BlockTapController,
+-- GameplayHudGui and SpellMenuGui; same drift risk as the SFX ids above.
+VfxConfig.SFX.FIZZLE_PLAYBACK_SPEED = 0.55
 
 local SFX = VfxConfig.SFX
 
@@ -1641,7 +1650,7 @@ end
 function VfxConfig.resolveBlockPopId(color: string?): string
 	local id = "block_pop_" .. tostring(color)
 	if VfxConfig.EFFECTS[id] then return id end
-	if color ~= nil and color ~= "red" and color ~= "green" and color ~= "blue" then
+	if color ~= nil and not Colors.isSpellColor(color) then
 		return "block_pop_wild"
 	end
 	return "block_pop_red"

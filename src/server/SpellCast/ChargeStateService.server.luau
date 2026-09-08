@@ -36,7 +36,7 @@ local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger           = require(ReplicatedStorage.Shared.Core.Logger)
-local EnergyReservoirs = require(ReplicatedStorage.Shared.EnergyReservoirs)
+local Colors           = require(ReplicatedStorage.Shared.Core.Colors)
 local SkillConstants   = require(ReplicatedStorage.Shared.Skills.SkillConstants)
 local SpellRegistry    = require(ReplicatedStorage.Shared.SpellRegistry)
 
@@ -49,11 +49,6 @@ local chargeRemote = ReplicatedStorage.Shared.SpellCast.Remotes.ChargeState :: R
 
 local COLOR_ATTR = SkillConstants.CHARGE_COLOR_ATTR
 local TIER_ATTR  = SkillConstants.CHARGE_TIER_ATTR
-
-local VALID_COLORS: { [string]: true } = {}
-for _, color in EnergyReservoirs.COLORS do
-	VALID_COLORS[color] = true
-end
 
 local VALID_PHASES: { [string]: true } = { start = true, tier = true, ["end"] = true }
 
@@ -119,7 +114,7 @@ chargeRemote.OnServerEvent:Connect(function(player: Player, phase: any, color: a
 		return
 	end
 
-	if typeof(color) ~= "string" or not VALID_COLORS[color :: string] then
+	if typeof(color) ~= "string" or not Colors.isSpellColor(color :: string) then
 		reject(player, "invalid color")
 		return
 	end

@@ -22,12 +22,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillTypes = require(ReplicatedStorage.Shared.Skills.SkillTypes)
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 
 local log = Logger.new("SpellRegistry")
 
 local SpellRegistry = {}
 
-export type Color = "red" | "green" | "blue"
+export type Color = Colors.SpellColor
 export type TargetingMode = "auto" | "placement"
 
 export type Spec = {
@@ -50,6 +51,13 @@ export type Spec = {
 -- Cast cost equals the threshold (drain == threshold by design).
 local TIER_COSTS: { number } = { 5, 10, 20, 40 }
 local NUM_TIERS = #TIER_COSTS
+
+-- Max range for auto-targeting. Spells won't lock onto anything farther
+-- than this. Shared by the client targeter (SpellMenuGui) and the
+-- server's trust check (SpellCastConstants.MAX_TARGET_DISTANCE_STUDS,
+-- which adds its own drift allowance on top) so the two can't drift
+-- apart the way they used to as two independently-declared 150s.
+local AUTO_TARGET_RANGE_STUDS = 150
 
 -- How fast a held cast charges, in mana-equivalent per second.
 --
@@ -376,6 +384,7 @@ end
 SpellRegistry.TIER_COSTS = TIER_COSTS
 SpellRegistry.NUM_TIERS = NUM_TIERS
 SpellRegistry.MANA_FLOW_PER_SEC = MANA_FLOW_PER_SEC
+SpellRegistry.AUTO_TARGET_RANGE_STUDS = AUTO_TARGET_RANGE_STUDS
 
 -- How long a colour panel must be held before `tier` is reachable.
 --

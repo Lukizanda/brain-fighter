@@ -37,8 +37,10 @@ EconomyConstants.HELD_BANKING_LOG_THRESHOLD = WordBuffer.DEFAULT_CAP * 2
 
 -- Seconds between repeats of the same player+reason rejection log, so a
 -- looping client cannot bury everyone else's output. Matches the
--- throttle both hardened remotes already use.
-EconomyConstants.REJECTION_LOG_THROTTLE_SEC = 5
+-- throttle both hardened remotes already use (BlockShootConstants,
+-- SpellCastConstants) — this was drifted to 5 despite the comment
+-- claiming the match; restored to 10.
+EconomyConstants.REJECTION_LOG_THROTTLE_SEC = 10
 
 -- Memorize report flood guard. Every letter in a memorized word costs
 -- one block, and blocks are already rate-limited, so honest memorizes
