@@ -217,7 +217,7 @@ Wiki: [[systems/Health]] § Respawn, [[systems/GameMode]] § Respawn.
 
 ## Chunk 6 — Economy that can be switched on
 
-Status: done — 2026-09-08 — <commit>
+Status: done — 2026-09-08 — 37a170b
 Findings: F8, F9, F19 (`RoundStarted`), A28 tile cap
 Risk: M · Playtest: **yes** — memorize, cast, round restart, confirm `[EconomyService]` reset line and zero would-reject lines across a full honest round · Depends on: chunk 1 · Blocked on: nothing (Q3 answered)
 Decision: Q3(a) — reset hook and tile cap land first; one measured honest playtest; flip `ENFORCE = true` in the same session only if the shadow log shows zero honest rejections. Q4(a) — charge-tier trust stays accepted; add the note to [[design/lobby]] when this chunk touches the wiki.
