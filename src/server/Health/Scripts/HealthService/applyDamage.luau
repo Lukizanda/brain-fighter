@@ -19,7 +19,6 @@ local refs: {
 	damageConfirmRemote: RemoteEvent,
 	playerDamagedEvent: BindableEvent,
 	playerEliminatedEvent: BindableEvent,
-	pendingRespawns: { [Player]: number },
 	-- May other players damage this one? Answered by the mode the victim
 	-- is playing under, resolved through the victim's session by
 	-- GameModeService. Injected so this module never reaches into the
@@ -136,12 +135,11 @@ function applyDamage.process(request: DamageRequest): DamageResult?
 		})
 	end
 
+	-- Announce the kill; do not schedule the respawn. GameModeService owns
+	-- that, off the Humanoid's own `Died`, so a death this module never saw
+	-- (a fall, a DeathHandler rig) respawns the same way as one it did.
 	if wasLethal then
 		refs.playerEliminatedEvent:Fire(request.sourcePlayer, targetHumanoid, result)
-
-		if targetPlayer then
-			refs.pendingRespawns[targetPlayer] = os.clock()
-		end
 	end
 
 	return result

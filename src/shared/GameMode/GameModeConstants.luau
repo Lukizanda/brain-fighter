@@ -13,10 +13,22 @@ local GameModeConstants = {
 	-- felt Halo-slow on this map). Every mode config's `respawnTime` reads
 	-- this, and RoundManager broadcasts that value in GameStateChanged —
 	-- DeathScreenGui reads it from there rather than this constant directly,
-	-- so client and server agree on one number. See HealthConstants.RESPAWN_TIME
-	-- for the unrelated Damageable/manual-respawn-gate constant.
+	-- so client and server agree on one number. See
+	-- HealthConstants.NPC_RESPAWN_TIME for the unrelated non-player-rig
+	-- respawn default.
 	RESPAWN_TIME = 4,
 	SPAWN_PROTECTION_DURATION = 3, -- invincibility after spawn
+
+	----------------------------------------------------------------------
+	-- Spawn placement (SpawnManager)
+	----------------------------------------------------------------------
+	-- Lift above the chosen pad so the rig drops onto it instead of
+	-- spawning half-inside it.
+	SPAWN_VERTICAL_OFFSET = 3,
+	-- Where a player goes when their arena has no usable pad at all. High
+	-- enough over the world origin that they fall to the ground rather than
+	-- into whatever is built there.
+	SPAWN_FALLBACK_CFRAME = CFrame.new(0, 10, 0),
 
 	----------------------------------------------------------------------
 	-- Round States

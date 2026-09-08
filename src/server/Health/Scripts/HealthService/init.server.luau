@@ -14,7 +14,6 @@ local log = Logger.new("HealthService")
 local healthRemotes = ReplicatedStorage.Shared.Health.Remotes
 local damageFeedbackRemote = healthRemotes.DamageFeedback
 local damageConfirmRemote = healthRemotes.DamageConfirm
-local requestRespawnRemote = healthRemotes.RequestRespawn
 
 local healthEvents = ServerScriptService.Server.Health.Events
 local playerDamagedEvent = healthEvents.PlayerDamaged
@@ -25,8 +24,6 @@ local playerEliminatedEvent = healthEvents.PlayerEliminated
 -- live in a Script, not a module. GameModeService binds OnInvoke at file
 -- scope, before anything yields, so an Invoke can never hang waiting.
 local allowsPvPFunction = ServerScriptService.Server.GameMode.Events.AllowsPvP
-
-local pendingRespawns: { [Player]: number } = {}
 
 local function initializeCharacterHealth(character: Model)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -49,24 +46,6 @@ local function onPlayerAdded(player: Player)
 	end)
 end
 
-local function onRequestRespawn(player: Player)
-	local deathTime = pendingRespawns[player]
-	if not deathTime then
-		log:warn(string.format(" %s requested respawn but is not dead", player.Name))
-		return
-	end
-
-	local elapsed = os.clock() - deathTime
-	if elapsed < HealthConstants.RESPAWN_TIME - 0.5 then
-		log:warn(string.format(" %s requested respawn too early (%.1fs elapsed)", player.Name, elapsed))
-		return
-	end
-
-	pendingRespawns[player] = nil
-	player:LoadCharacter()
-	log:info(string.format(" %s respawned", player.Name))
-end
-
 local function initializeDamageable(model: Instance)
 	if not model:IsA("Model") then
 		log:warn(string.format(" Damageable tag on non-Model: %s (%s)", model.Name, model.ClassName))
@@ -76,7 +55,7 @@ local function initializeDamageable(model: Instance)
 	local maxHealth = model:GetAttribute(HealthConstants.MAX_HEALTH_ATTRIBUTE) or HealthConstants.DEFAULT_MAX_HEALTH
 	local respawnTime = model:GetAttribute(HealthConstants.RESPAWN_TIME_ATTRIBUTE)
 	if respawnTime == nil then
-		model:SetAttribute(HealthConstants.RESPAWN_TIME_ATTRIBUTE, HealthConstants.RESPAWN_TIME)
+		model:SetAttribute(HealthConstants.RESPAWN_TIME_ATTRIBUTE, HealthConstants.NPC_RESPAWN_TIME)
 	end
 
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
@@ -102,7 +81,6 @@ local function initialize()
 		damageConfirmRemote = damageConfirmRemote,
 		playerDamagedEvent = playerDamagedEvent,
 		playerEliminatedEvent = playerEliminatedEvent,
-		pendingRespawns = pendingRespawns,
 		allowsPvPFor = function(victim: Player): boolean
 			return allowsPvPFunction:Invoke(victim) == true
 		end,
@@ -119,11 +97,10 @@ local function initialize()
 	end
 	Players.PlayerAdded:Connect(onPlayerAdded)
 
-	Players.PlayerRemoving:Connect(function(player)
-		pendingRespawns[player] = nil
-	end)
-
-	requestRespawnRemote.OnServerEvent:Connect(onRequestRespawn)
+	-- No respawn path here. Player respawn has exactly one owner,
+	-- GameModeService — it is the only thing that knows which session (and
+	-- so which pads and which respawn delay) a dead player belongs to. See
+	-- `wiki/systems/Health.md` § Respawn.
 
 	-- Initialize Damageable tagged objects
 	for _, instance in CollectionService:GetTagged(HealthConstants.DAMAGEABLE_TAG) do

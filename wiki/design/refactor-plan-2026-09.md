@@ -187,21 +187,30 @@ Wiki: [[systems/Health]] (callers list, cause id), [[systems/SkillPipeline]] (da
 
 ## Chunk 5 — One respawn owner
 
-Status: open
+Status: done — 2026-09-08 — <commit>
 Findings: F3, F13 (offsets), F17
 Risk: M · Playtest: **yes** — die in arena: exactly one `CharacterAdded`; `RequestRespawn` after respawn is refused · Depends on: chunk 4 · Blocked on: nothing
 
 Owns: `GameModeService/init.server.luau:319-372` (Died handler), `HealthService/init.server.luau:16,46-62,113` (RequestRespawn), `applyDamage.luau:135`, `DeathScreenGui.client.luau:79` (respawn button), `SpawnManager.luau:208,223`, `ScoreTracker.luau:37,87-125` (`recentDamage` expiry).
 Must not touch: `DeathHandler` (non-player rigs — correct as is); session tables.
 
-- [ ] `Players.CharacterAutoLoads = false` in GameModeService `initialize`; GameModeService is the only `LoadCharacter` caller for players.
-- [ ] `RequestRespawn` becomes a request the session answers (early respawn allowed only while dead, checked against the live Humanoid, not `pendingRespawns`) or is deleted with the button — pick the one the death screen UX wants and record it in the divergence log.
-- [ ] `pendingRespawns` cleared on `CharacterAdded` (or removed if the remote goes).
-- [ ] `recentDamage` entries expire on insert; key dropped on `Died`/`Destroying`.
-- [ ] Name the two SpawnManager offsets.
-- [ ] `HealthConstants.RESPAWN_TIME` (5) survives chunk 2 only because `HealthService/init.server.luau:54` and the Damageable-NPC timer read it; once the `RequestRespawn` gate is gone, keep it solely as the NPC respawn default and rename it `NPC_RESPAWN_TIME` so it can no longer be mistaken for the player value.
+- [x] `Players.CharacterAutoLoads = false` in GameModeService `initialize`; GameModeService is the only `LoadCharacter` caller for players.
+- [x] `RequestRespawn` becomes a request the session answers (early respawn allowed only while dead, checked against the live Humanoid, not `pendingRespawns`) or is deleted with the button — pick the one the death screen UX wants and record it in the divergence log.
+- [x] `pendingRespawns` cleared on `CharacterAdded` (or removed if the remote goes).
+- [x] `recentDamage` entries expire on insert; key dropped on `Died`/`Destroying`.
+- [x] Name the two SpawnManager offsets.
+- [x] `HealthConstants.RESPAWN_TIME` (5) survives chunk 2 only because `HealthService/init.server.luau:54` and the Damageable-NPC timer read it; once the `RequestRespawn` gate is gone, keep it solely as the NPC respawn default and rename it `NPC_RESPAWN_TIME` so it can no longer be mistaken for the player value.
 
 Done when: the playtest above; `grep LoadCharacter src/server` hits GameModeService only.
+
+Divergences (2026-09-08):
+- **`RequestRespawn` deleted (option b), not kept as a session request.** The death-screen button was already decorative: it only became visible after the client counted down the *same* `respawnTime` the server counts, and by then `GameModeService`'s `Died` handler had already respawned the player, whose `CharacterAdded` hides the overlay. The button had no window in which it could do anything, so "a request the session answers" would have been a remote with no caller. Deleted: the `TextButton` + `UICorner` + click handler, the `RequestRespawn` RemoteEvent and its `Remotes/RequestRespawn.meta.json`, `onRequestRespawn`, and `pendingRespawns` from both `HealthService` and `applyDamage`'s refs. The overlay's post-countdown text is now unconditionally "Respawning..." — the old `else` branch printed "Eliminated" beside the button and would otherwise have been a dead-end screen.
+- The stale `RequestRespawn` RemoteEvent had to be destroyed in Studio by hand: `Shared/Health/Remotes/init.meta.json` carries `ignoreUnknownInstances: true`, so deleting the file does not make Rojo remove the instance. Done under a `ChangeHistoryService` waypoint; the folder now holds `DamageFeedback` and `DamageConfirm` only. **The .rbxl needs saving to persist that.**
+- Touched one line outside `Owns:` — `DeathHandler.server.luau:105` reads `HealthConstants.RESPAWN_TIME` for its non-player rigs, so the rename to `NPC_RESPAWN_TIME` had to follow it there or the attribute default would have gone `nil`. Symbol rename only; DeathHandler's own `pendingRespawns` and respawn cycle are untouched.
+- `CharacterAutoLoads = false` needs a first spawn from somewhere: `onPlayerAdded` now calls `player:LoadCharacter()` when the player has no character. Deliberately a bare call rather than `SpawnManager.getBestSpawn` — the engine's SpawnLocation pick is what auto-load did, and the join lands in the lobby, which has no threat scoring to do.
+- F13's other half (`getLivingEnemyPositions` iterating all of `Players` rather than the session roster) is **not** done here — only "name the offsets" was in this chunk's item list. That half is already chunk 8 (`F13 (roster)`, `SpawnManager.luau:50`) — nothing new to file.
+- `ScoreTracker` also needed a `forgetDamage` helper so `resetAll` disconnects the per-Humanoid `Died`/`Destroying` connections instead of dropping the table and leaking them.
+- Playtest (2 iterations, session `chunk-5-respawn`): a hub death and an arena death each produced exactly **one** `CharacterAdded` (counter installed on the Server datamodel before the kill), ~4.4 s after death, matching the mode's `respawnTime = 4`. The death overlay was observed on the Client datamodel going visible → "Respawning..." → hidden on respawn, with no `TextButton` in the tree and no `RequestRespawn` under `Shared.Health.Remotes`. Harness `all`: **28/28 passed, 0 failed** (`npc_deals_damage` green); `RunTests` cleared in both VMs.
 Wiki: [[systems/Health]] § Respawn, [[systems/GameMode]] § Respawn.
 
 ---

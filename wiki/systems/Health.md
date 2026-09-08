@@ -68,7 +68,39 @@ Implemented in `applyDamage.process` — when source and target are on the same 
 1. `applyDamage.process` reduces Humanoid health to ≤ 0 and fires `PlayerEliminated(sourcePlayer, humanoid, result)`.
 2. `GameModeService.onPlayerEliminated` (player victims) credits `result.cause` to the kill feed via `ScoreTracker.recordKill`; `DeathHandler.handleDeath` (Damageable rigs) runs the explode-and-respawn cycle.
 3. Roblox fires `Humanoid.Died`; the Skills registries purge their per-Humanoid state.
-4. `RoundManager` (via [[systems/GameMode]]) handles the actual player respawn.
+4. `GameModeService` handles the actual player respawn — see § Respawn.
+
+## Respawn (2026-09-08)
+
+**This system does not respawn players.** Chunk 5 of the 2026-09 refactor
+([[design/refactor-plan-2026-09]]) collapsed three player-respawn paths into one:
+
+| Path | Was | Now |
+|---|---|---|
+| `Players.CharacterAutoLoads` | never set (engine spawned on join) | `false`, set first thing in `GameModeService.initialize` |
+| `HealthService` `RequestRespawn` remote | client could ask for a `LoadCharacter` | **deleted**, remote and `.meta.json` with it |
+| `GameModeService` `Humanoid.Died` handler | one of three | the only one |
+
+`grep -rn LoadCharacter src/server` hits `GameModeService/init.server.luau` and
+nothing else. The reason it is the owner rather than this system: respawn needs
+the player's session, because the session picks both the delay (the mode's
+`respawnTime`) and the pad (`SpawnManager.getBestSpawn` in that session's arena).
+`HealthService` knows about Humanoids, not sessions.
+
+Consequences worth knowing:
+
+- `pendingRespawns` is gone from `HealthService` and from `applyDamage`'s refs.
+  It was written on lethal damage and cleared only inside the remote handler, so
+  after an auto-respawn a later `RequestRespawn` reloaded a *living* character.
+  `applyDamage` now announces the kill and schedules nothing.
+- The `pendingRespawns` in `DeathHandler.server.luau` is a different table for
+  non-player rigs and is untouched.
+- `HealthConstants.RESPAWN_TIME` was renamed **`NPC_RESPAWN_TIME`** (still 5). It
+  is the default `respawnTime` attribute for a Damageable rig and is read only by
+  `HealthService.initializeDamageable` and `DeathHandler`. The player number is
+  `GameModeConstants.RESPAWN_TIME` (4), broadcast in `GameStateChanged`.
+- `DeathScreenGui` is display-only: countdown, then "Respawning...". The manual
+  respawn button went with the remote.
 
 ## Cross-references
 

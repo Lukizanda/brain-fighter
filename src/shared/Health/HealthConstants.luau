@@ -1,11 +1,12 @@
 local HealthConstants = {
 	DEFAULT_MAX_HEALTH = 100,
-	-- Generic Damageable respawn timer (DeathHandler, non-player rigs) and
-	-- the RequestRespawn server-side gate fallback (HealthService). NOT the
-	-- player active-round auto-respawn delay — that's
-	-- GameModeConstants.RESPAWN_TIME, which DeathScreenGui now reads via
-	-- the GameState broadcast instead of guessing between the two.
-	RESPAWN_TIME = 5,
+	-- Default respawn timer for a Damageable **non-player rig** — the
+	-- `respawnTime` attribute HealthService stamps on a tagged Model and
+	-- DeathHandler counts down. Players never read this: their delay is the
+	-- mode's `respawnTime` (GameModeConstants.RESPAWN_TIME), owned by
+	-- GameModeService and broadcast to DeathScreenGui in GameStateChanged.
+	-- Named NPC_ so the two can no longer be confused (chunk 5).
+	NPC_RESPAWN_TIME = 5,
 
 	HEADSHOT_MULTIPLIER = 2.0,
 	LIMB_MULTIPLIER = 0.75,

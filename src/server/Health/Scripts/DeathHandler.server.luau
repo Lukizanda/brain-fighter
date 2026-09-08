@@ -102,7 +102,7 @@ local function handleDeath(sourcePlayer: Player?, targetHumanoid: Humanoid, dama
 
 	local targetName = character.Name
 	local sourceName = sourcePlayer and sourcePlayer.Name or "Environment"
-	local respawnTime = character:GetAttribute(HealthConstants.RESPAWN_TIME_ATTRIBUTE) or HealthConstants.RESPAWN_TIME
+	local respawnTime = character:GetAttribute(HealthConstants.RESPAWN_TIME_ATTRIBUTE) or HealthConstants.NPC_RESPAWN_TIME
 
 	-- Use name-based key since the model instance will be destroyed
 	local spawnKey = targetName .. "_" .. tostring(character:GetPivot())

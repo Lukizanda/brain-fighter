@@ -29,6 +29,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
 local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
+local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
 local log = Logger.new("SpawnManager")
@@ -205,7 +206,7 @@ function SpawnManager.getBestSpawn(player: Player, arenaId: string?, teamFilter:
 
 	if #spawns == 0 then
 		log:warn(string.format("[%s] No spawn points found, using origin", resolvedArenaId))
-		return CFrame.new(0, 10, 0)
+		return GameModeConstants.SPAWN_FALLBACK_CFRAME
 	end
 
 	local enemyPositions = getLivingEnemyPositions(player, teamFilter)
@@ -223,7 +224,7 @@ function SpawnManager.getBestSpawn(player: Player, arenaId: string?, teamFilter:
 	end
 
 	-- Spawn slightly above the spawn point to avoid clipping
-	local spawnCFrame = bestSpawn.CFrame + Vector3.new(0, 3, 0)
+	local spawnCFrame = bestSpawn.CFrame + Vector3.new(0, GameModeConstants.SPAWN_VERTICAL_OFFSET, 0)
 
 	log:info(string.format(
 		"[%s] Best spawn for %s: %s (dist to nearest enemy: %s)",

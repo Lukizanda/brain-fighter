@@ -1,13 +1,14 @@
 ----------------------------------------------------------------------
 -- DeathScreenGui
 ----------------------------------------------------------------------
--- Full-screen overlay + respawn flow when the local player dies.
+-- Full-screen overlay + respawn countdown when the local player dies.
 -- Hides automatically on CharacterAdded (new character = respawned).
 --
--- Respawn behavior depends on round state:
---   • Active round      → server auto-respawns after GameMode's timer,
---                         we only display the countdown
---   • Otherwise         → manual respawn button appears after the timer
+-- Display only. GameModeService respawns every player who belongs to a
+-- session — in the hub as well as mid-round — after that session's
+-- `respawnTime`, so there is nothing for the player to ask for and no
+-- request remote to ask on (chunk 5). All this does is count the same
+-- delay the server broadcast down to zero.
 ----------------------------------------------------------------------
 
 local Players = game:GetService("Players")
@@ -20,20 +21,16 @@ local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 local log = Logger.new("DeathScreen")
 
 local player = Players.LocalPlayer
-local healthRemotes = ReplicatedStorage.Shared.Health.Remotes
 local gameModeRemotes = ReplicatedStorage.Shared.GameMode.Remotes
 
-local requestRespawnRemote = healthRemotes.RequestRespawn
 local gameStateChangedRemote = gameModeRemotes:WaitForChild("GameStateChanged")
 
-local currentRoundState = GameModeConstants.RoundState.WaitingForPlayers
 -- Server-reported respawn delay for the player's current session (see
 -- RoundManager._broadcastState). Defaults to the active-round value so a
 -- death that lands before the first GameState broadcast still counts down
 -- sanely.
 local currentRespawnTime: number = GameModeConstants.RESPAWN_TIME
 gameStateChangedRemote.OnClientEvent:Connect(function(state)
-	currentRoundState = state.roundState
 	currentRespawnTime = state.respawnTime or currentRespawnTime
 end)
 
@@ -72,31 +69,11 @@ countdown.TextSize = 24
 countdown.Text = "Eliminated"
 countdown.Parent = overlay
 
-local respawnButton = Instance.new("TextButton")
-respawnButton.Size = UDim2.new(0, 200, 0, 50)
-respawnButton.Position = UDim2.new(0.5, -100, 0.55, 0)
-respawnButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-respawnButton.TextColor3 = Color3.fromRGB(200, 200, 200)
-respawnButton.Font = Enum.Font.GothamBold
-respawnButton.TextSize = 18
-respawnButton.Text = "Respawn"
-respawnButton.Visible = false
-respawnButton.Parent = overlay
-
-local buttonCorner = Instance.new("UICorner")
-buttonCorner.CornerRadius = UDim.new(0, 6)
-buttonCorner.Parent = respawnButton
-
-respawnButton.MouseButton1Click:Connect(function()
-	requestRespawnRemote:FireServer()
-end)
-
 local deathTime: number? = nil
 local countdownTask: thread? = nil
 
 local function hide()
 	overlay.Visible = false
-	respawnButton.Visible = false
 	deathTime = nil
 	if countdownTask then
 		task.cancel(countdownTask)
@@ -106,10 +83,8 @@ end
 
 local function show()
 	overlay.Visible = true
-	respawnButton.Visible = false
 	deathTime = os.clock()
 
-	local isActiveRound = currentRoundState == GameModeConstants.RoundState.Active
 	local respawnTime = currentRespawnTime
 
 	countdownTask = task.spawn(function()
@@ -120,12 +95,7 @@ local function show()
 			remaining = respawnTime - (os.clock() - (deathTime :: number))
 		end
 		if overlay.Visible then
-			if isActiveRound then
-				countdown.Text = "Respawning..."
-			else
-				countdown.Text = "Eliminated"
-				respawnButton.Visible = true
-			end
+			countdown.Text = "Respawning..."
 		end
 	end)
 end

@@ -135,7 +135,7 @@ With both flags off the only registered mode is `NoOpMode` (`src/shared/GameMode
 ```
 src/shared/GameMode/
   Arena.luau                        — arena slot vocabulary: ArenaId attribute, Default id, SpawnTags, idOf()
-  GameModeConstants.luau            — MIN_PLAYERS, durations, RoundState enum
+  GameModeConstants.luau            — MIN_PLAYERS, durations, RESPAWN_TIME (the player one), spawn offsets, RoundState enum
   GameModeDefinition.luau           — the interface each mode implements
   GameModeTypes.luau                — type definitions
   Modes/init.luau                   — mode registry (NoOp + Lobby; DEFAULT_MODE = "NoOp")
@@ -149,7 +149,8 @@ src/server/GameMode/
     init.server.luau                — session manager + player/kill wiring
     RoundManager.luau               — per-session state machine: Waiting → Countdown → Active → PostRound
     ScoreTracker.luau               — per-player kills/deaths/assists (scores still server-wide; audience scoped stage 3)
-    SpawnManager.luau               — picks a spawn per arena; SpawnLocation fallback when nothing is tagged
+    SpawnManager.luau               — picks a spawn per arena; SpawnLocation fallback when nothing is tagged.
+                                      Offsets are GameModeConstants.SPAWN_VERTICAL_OFFSET / SPAWN_FALLBACK_CFRAME
   Scripts/NametagService.server.luau — nametags above heads
 src/server/Arena/
   DeathZoneService.server.luau      — fall-kill volume (CollectionService tag "DeathZone")
@@ -190,11 +191,39 @@ PostRound — winner overlay, auto-restart timer
 
 The friendly-fire block lives in `HealthService.applyDamage.process` (not in the deleted `TeamService`) — that way it applies to any damage path uniformly. See [[systems/Health]]. Dormant while `TEAMS_ENABLED = false`.
 
-## Respawn handler ordering
+## Respawn (2026-09-08)
 
-In `onPlayerAdded`, `setupCharacter` (which connects `humanoid.Died` → respawn loop and adds the spawn-protection `ForceField`) is defined as a local function and **connected to `CharacterAdded` BEFORE** any `LoadCharacter()` call. Otherwise the very-first character (when team mode triggers an explicit `LoadCharacter` because `CharacterAutoLoads = false`) gets no Died handler and players appear stuck on the respawn screen after their first death. After connecting, `setupCharacter` is also applied to any already-loaded `player.Character` so non-team modes (Roblox auto-loaded) get the handler too. Fixed `dcd312d`.
+**GameModeService is the only thing that gives a player a character.** Chunk 5 of
+[[design/refactor-plan-2026-09]] made that literal:
 
-Both the ForceField and the respawn use `isPlayerRoundActive(player)` — the player's own session — rather than a global round state.
+- `Players.CharacterAutoLoads = false` is set as the first statement of
+  `initialize()`, before anything yields, so the engine never spawns anyone.
+- `onPlayerAdded` connects `setupCharacter` to `CharacterAdded` and then calls
+  `player:LoadCharacter()` (or adopts an already-loaded character, for a player
+  who was in the server before this Script initialized). That first spawn is a
+  bare `LoadCharacter` with no pad pick — the engine's SpawnLocation choice, i.e.
+  exactly what auto-load used to do, and it lands in the lobby, which has no
+  threat scoring to do.
+- Every later character comes from the `humanoid.Died` handler inside
+  `setupCharacter`: wait the player's session's `respawnTime`, then
+  `SpawnManager.getBestSpawn` in that session's arena, `LoadCharacter`, `PivotTo`.
+- The `RequestRespawn` remote in [[systems/Health]] is deleted. There is no way
+  for a client to ask for a respawn, and no second `LoadCharacter` to race.
+
+Measured: one `CharacterAdded` per death, in the hub and in the arena
+(`CharacterAdded` counter installed on the Server datamodel before the kill).
+
+### Respawn handler ordering
+
+`setupCharacter` is **connected to `CharacterAdded` BEFORE** the `LoadCharacter()`
+call below it. Otherwise the very-first character gets no Died handler and the
+player appears stuck on the respawn screen after their first death. Fixed
+`dcd312d`; still load-bearing, and more so now that `CharacterAutoLoads` is off
+and that `LoadCharacter` is the only first spawn.
+
+Both the ForceField and the respawn use `isPlayerRoundActive(player)` /
+`playerSessions[player]` — the player's own session — rather than a global round
+state.
 
 ## Cross-references
 

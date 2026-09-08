@@ -34,7 +34,14 @@ local ASSIST_TIME_WINDOW = 10 -- seconds: damage within this window earns an ass
 
 -- Internal state
 local scores: { [Player]: { kills: number, deaths: number, assists: number } } = {}
+-- Assist bookkeeping, keyed by the *victim's* Humanoid. Bounded two ways
+-- (chunk 5, F17): entries older than the assist window are dropped on every
+-- insert, and the whole key goes when the Humanoid dies or is destroyed.
+-- Without both, a boss or NPC humanoid in a session that never ends a round
+-- (Lobby, NoOp) accrues an entry per hit for the lifetime of the server.
 local recentDamage: { [Humanoid]: { { player: Player, timestamp: number } } } = {}
+-- One Died/Destroying pair per tracked Humanoid, disconnected with the key.
+local recentDamageCleanup: { [Humanoid]: { RBXScriptConnection } } = {}
 local leaderstatsFolders: { [Player]: Folder } = {}
 
 -- Dependencies (injected via initialize)
@@ -84,18 +91,52 @@ end
 ----------------------------------------------------------------------
 -- Damage tracking (for assists)
 ----------------------------------------------------------------------
+local function forgetDamage(targetHumanoid: Humanoid)
+	recentDamage[targetHumanoid] = nil
+
+	local connections = recentDamageCleanup[targetHumanoid]
+	if connections then
+		for _, connection in connections do
+			connection:Disconnect()
+		end
+		recentDamageCleanup[targetHumanoid] = nil
+	end
+end
+
 local function recordDamage(sourcePlayer: Player?, targetHumanoid: Humanoid)
 	if not sourcePlayer then
 		return
 	end
 
-	if not recentDamage[targetHumanoid] then
-		recentDamage[targetHumanoid] = {}
+	local entries = recentDamage[targetHumanoid]
+	if not entries then
+		entries = {}
+		recentDamage[targetHumanoid] = entries
+		-- The victim's own signals are the only reliable end of its
+		-- history: a Humanoid we never see win or lose a round still dies
+		-- or gets destroyed.
+		recentDamageCleanup[targetHumanoid] = {
+			targetHumanoid.Died:Connect(function()
+				forgetDamage(targetHumanoid)
+			end),
+			targetHumanoid.Destroying:Connect(function()
+				forgetDamage(targetHumanoid)
+			end),
+		}
 	end
 
-	table.insert(recentDamage[targetHumanoid], {
+	-- Expire on insert: anything past the window can never earn an assist,
+	-- so it is dead weight from here on.
+	local now = os.clock()
+	for index = #entries, 1, -1 do
+		if (now - entries[index].timestamp) > ASSIST_TIME_WINDOW then
+			table.remove(entries, index)
+		end
+	end
+
+	table.insert(entries, {
 		player = sourcePlayer,
-		timestamp = os.clock(),
+		timestamp = now,
 	})
 end
 
@@ -122,7 +163,7 @@ local function getAssistants(killer: Player?, targetHumanoid: Humanoid): { Playe
 	end
 
 	-- Clean up damage history for this target
-	recentDamage[targetHumanoid] = nil
+	forgetDamage(targetHumanoid)
 
 	return assistants
 end
@@ -320,7 +361,9 @@ function ScoreTracker.resetAll(audience: { Player }?)
 		score.assists = 0
 		updateLeaderstats(player)
 	end
-	recentDamage = {}
+	for humanoid in recentDamage do
+		forgetDamage(humanoid)
+	end
 	broadcastScores(audience or Players:GetPlayers())
 	log:info("All scores reset")
 end

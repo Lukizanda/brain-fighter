@@ -336,9 +336,8 @@ local function onPlayerAdded(player: Player)
 
 	-- Per-character setup: spawn protection + Died → respawn loop.
 	-- Defined as a local so we can both Connect it for future spawns
-	-- AND apply it to the very-first character (which may or may not
-	-- exist yet depending on CharacterAutoLoads / our explicit
-	-- LoadCharacter below).
+	-- AND apply it to the very-first character (a player already in the
+	-- server when this Script initialized).
 	local function setupCharacter(character: Model)
 		local humanoid = character:WaitForChild("Humanoid")
 
@@ -383,13 +382,20 @@ local function onPlayerAdded(player: Player)
 		end)
 	end
 
-	-- Connect FIRST so the next character (whether triggered by us via
-	-- LoadCharacter below, or by Roblox auto-load in non-team modes) gets
-	-- its Died handler. Then handle any character that's already loaded
-	-- (e.g. a player joining mid-round in a non-team mode).
+	-- Connect FIRST so the character we load below gets its Died handler.
+	-- Then either adopt a character that already exists (a player who was
+	-- in the server before this Script initialized) or spawn the first one.
+	--
+	-- `CharacterAutoLoads` is false (see `initialize`), so this is the only
+	-- thing that gives a joining player a body. Deliberately a bare
+	-- `LoadCharacter` rather than a pad pick: the engine's SpawnLocation
+	-- choice is what auto-load used to do, and the first spawn is into the
+	-- lobby, which has no threat scoring to do.
 	player.CharacterAdded:Connect(setupCharacter)
 	if player.Character then
 		setupCharacter(player.Character)
+	else
+		player:LoadCharacter()
 	end
 
 	log:info("Player added:", player.Name)
@@ -440,6 +446,15 @@ end
 local function initialize()
 	log:info(string.format("Initializing with mode: %s (key=%s, requested=%s)",
 		activeMode.name, resolvedModeKey, tostring(requestedModeKey)))
+
+	-- One respawn owner (chunk 5). The engine's auto-load was a third
+	-- respawn path alongside this Script's `Died` handler and the old
+	-- `RequestRespawn` remote, and it spawns a player wherever a
+	-- SpawnLocation happens to be with no idea which session they are in.
+	-- Turned off here, first thing, so that `onPlayerAdded` below is the
+	-- only thing that ever hands a player their first character and the
+	-- `Died` handler is the only thing that ever hands them a later one.
+	Players.CharacterAutoLoads = false
 
 	-- First, so nothing broadcasts before an audience can be resolved. The
 	-- resolver reads the session tables lazily, so it is safe to register
