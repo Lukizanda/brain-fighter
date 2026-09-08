@@ -25,8 +25,9 @@
 --
 -- That means this module no longer branches on RunService:IsServer() at
 -- all. It runs on the server, or it does nothing. Anything a player has to
--- see is described to the clients via VfxBroadcast / ProjectileVfxEvent
--- and drawn there — see wiki/design/client-server-boundary.md.
+-- see is described to the clients via SkillVisuals / VfxBroadcast — the
+-- one server→client lane — and drawn there. See
+-- wiki/design/client-server-boundary.md.
 --
 -- ctx.onComplete is called when the delivery fully resolves. Async
 -- handlers (projectile, aoe) use task.delay to call it after the
@@ -47,6 +48,7 @@ local SkillEffects   = require(ReplicatedStorage.Shared.Skills.SkillEffects)
 local SkillInterrupt = require(ReplicatedStorage.Shared.Skills.SkillInterrupt)
 local SkillTypes     = require(ReplicatedStorage.Shared.Skills.SkillTypes)
 local SkillVisuals   = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
+local VfxBroadcast   = require(ReplicatedStorage.Shared.Vfx.VfxBroadcast)
 local VfxConfig      = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 
 type SkillSpec   = SkillTypes.SkillSpec
@@ -121,21 +123,6 @@ local SHIELD_BLOCK_EFFECT_ID = "shield_block"
 -- every spec.
 local DEFAULT_DESTROY_EFFECT_ID = "projectile_destroy"
 
--- Tells every client to draw its own copy of a shot. Resolved lazily:
--- SkillDelivery is required during server boot (BossService), and a
--- module-scope WaitForChild would stall that indefinitely if the remote
--- were ever missing rather than failing one cast.
-local _projectileVfxEvent: RemoteEvent? = nil
-local function projectileVfxRemote(): RemoteEvent?
-	if _projectileVfxEvent then return _projectileVfxEvent end
-	local remotes = ReplicatedStorage.Shared.Vfx:FindFirstChild("Remotes")
-	local found = remotes and remotes:FindFirstChild("ProjectileVfxEvent")
-	if found and found:IsA("RemoteEvent") then
-		_projectileVfxEvent = found :: RemoteEvent
-	end
-	return _projectileVfxEvent
-end
-
 -- CollectionService tags whose tagged Models carry a Humanoid+HRP and
 -- should be hittable by projectile collision / splash. The project tags
 -- spawned NPCs ("NPC"), the active boss ("Boss"), and dev-mode rigs
@@ -153,13 +140,21 @@ type Hittable = { hum: Humanoid, hrp: BasePart }
 -- concurrent in-flight projectiles. Boss Volley fires 30 at once — without
 -- this every projectile would re-query CollectionService each tick.
 -- Deduped by humanoid so a model carrying multiple tags doesn't double-hit.
+--
+-- The Heartbeat that invalidates it connects on first use, not at module
+-- scope. Only the authoritative branches of `projectile` and `aoe` call
+-- collectHittables, so a VM that only ever runs predicted casts — every
+-- client — never pays a per-frame callback for a cache it never fills.
 local _hittablesCache: { Hittable }? = nil
-RunService.Heartbeat:Connect(function()
-	_hittablesCache = nil
-end)
+local _hittablesInvalidator: RBXScriptConnection? = nil
 
 local function collectHittables(): { Hittable }
 	if _hittablesCache then return _hittablesCache end
+	if not _hittablesInvalidator then
+		_hittablesInvalidator = RunService.Heartbeat:Connect(function()
+			_hittablesCache = nil
+		end)
+	end
 	local results: { Hittable } = {}
 	local seen: { [Humanoid]: true } = {}
 
@@ -208,6 +203,24 @@ local function hittableFromPart(part: BasePart, hittables: { Hittable }): Hittab
 	return nil
 end
 
+-- The Part an impact cue hangs on for any Instance target: a Humanoid's
+-- or Model's HumanoidRootPart, or the BasePart itself. nil for anything
+-- else, including a Vector3 — see spawnEffectAtPoint for those.
+local function resolveTargetRoot(target: any): BasePart?
+	if typeof(target) ~= "Instance" then return nil end
+	local inst = target :: Instance
+	if inst:IsA("BasePart") then return inst :: BasePart end
+	local model: Instance? = nil
+	if inst:IsA("Humanoid") then
+		model = (inst :: Humanoid).Parent
+	elseif inst:IsA("Model") then
+		model = inst
+	end
+	if not model then return nil end
+	local hrp = model:FindFirstChild("HumanoidRootPart")
+	return if hrp and hrp:IsA("BasePart") then hrp :: BasePart else nil
+end
+
 -- Resolve a position from any target value (BasePart, Humanoid, Model, Vector3).
 local function resolveTargetPosition(target: any): Vector3?
 	if typeof(target) == "Vector3" then return target :: Vector3 end
@@ -239,6 +252,20 @@ SkillDelivery.handlers = {
 	-- (Firebolt and Fireball are projectile delivery — see below.)
 	instant = function(skill: SkillSpec, ctx: DeliveryCtx): Result
 		local result = applyImpactEffects(skill, ctx.target, ctx.source, ctx.mode)
+
+		-- The impact cue, from the authoritative run only. The caster's
+		-- predicted run draws its cast cue and nothing at the target — an
+		-- impact is a claim about what happened, and this is the run that
+		-- knows. One RTT on the cue is the accepted price (Q9(a)). A
+		-- target-less cast (Mend, Shield) landed on the caster, so the
+		-- cue does too.
+		if ctx.mode == "authoritative" and result.ok then
+			local root = resolveTargetRoot(ctx.target) or resolveTargetRoot(ctx.source)
+			if root then
+				SkillVisuals.spawnImpactCues(skill.onImpact, root, ctx.tier)
+			end
+		end
+
 		if ctx.onComplete then ctx.onComplete() end
 		return result
 	end,
@@ -402,9 +429,8 @@ SkillDelivery.handlers = {
 		-- invisible shot — the exact class of bug this pipeline has shipped
 		-- four times.
 		--
-		-- Stage 6 reintroduces the exclusion for precisely the cues its
-		-- prediction layer draws (the muzzle flash and cast SFX), and for
-		-- nothing else.
+		-- The one cue the prediction layer does draw — the cast burst — is
+		-- raised with the exclusion by SpellExecutor, before delivery.
 		--
 		-- Captured for the detonation closures below, which outlive this
 		-- call by whole seconds and must not reach back through ctx.
@@ -615,36 +641,32 @@ SkillDelivery.handlers = {
 				-- cosmetic locally on each client puts the visible shot where
 				-- that client sees the block happen.
 				--
-				-- `predictedBy` is not sent. Nothing is drawn by prediction
-				-- any more, so every client — the caster included — needs this
-				-- payload. Stage 6 will send it again once its prediction
-				-- layer starts drawing the muzzle cue locally.
+				-- No `drawnLocallyBy`. The prediction layer draws the cast
+				-- cue only, so every client — the caster included — needs
+				-- this shot.
 				do
 					projectile.Transparency = 1
-					local remote = projectileVfxRemote()
-					if remote then
-						remote:FireAllClients({
-							origin           = muzzlePos,
-							direction        = dir,
-							speed            = speed,
-							size             = sizeVec,
-							color            = color,
-							lifetimeSec      = lifetimeSec,
-							cosmeticEffectId = cosmeticEffectId,
-							launchEffectId   = launchEffectId,
-							proximityRadius  = proximityRadius,
-							consumeOnHit     = consumeOnHit,
-							-- nil for splash shots, which already announce
-							-- every death server-side via the shockwave.
-							destroyEffectId  = destroyEffectId,
-							-- Not for playback — it tells the cosmetic whether
-							-- a *direct rig hit* is already covered by the
-							-- server's impact burst, so it can stay quiet for
-							-- that one cause and still thud on walls.
-							hasImpactCue     = impactEffectId ~= nil,
-							source           = source,
-						})
-					end
+					VfxBroadcast.projectile({
+						origin           = muzzlePos,
+						direction        = dir,
+						speed            = speed,
+						size             = sizeVec,
+						color            = color,
+						lifetimeSec      = lifetimeSec,
+						cosmeticEffectId = cosmeticEffectId,
+						launchEffectId   = launchEffectId,
+						proximityRadius  = proximityRadius,
+						consumeOnHit     = consumeOnHit,
+						-- nil for splash shots, which already announce
+						-- every death server-side via the shockwave.
+						destroyEffectId  = destroyEffectId,
+						-- Not for playback — it tells the cosmetic whether
+						-- a *direct rig hit* is already covered by the
+						-- server's impact burst, so it can stay quiet for
+						-- that one cause and still thud on walls.
+						hasImpactCue     = impactEffectId ~= nil,
+						source           = source,
+					})
 				end
 
 				local startTime = os.clock()

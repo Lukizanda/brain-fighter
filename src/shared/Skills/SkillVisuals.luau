@@ -26,11 +26,12 @@
 -- `drawnLocallyBy` is the UserId of a client that has already drawn this
 -- effect itself, so the broadcast can skip it and avoid showing them two.
 --
--- **No caller passes it today** (Phase 5.6 Stage 4). Delivery is
--- authoritative-only and draws nothing on any client, so every effect
--- belongs to every client. It stays on the signature for Stage 6, whose
--- prediction layer will draw the caster's muzzle cue locally and will need
--- exactly this to stop the broadcast duplicating that one cue.
+-- Exactly one cue carries it: the cast cue (`spawnCastCue`), which the
+-- caster's VfxController draws from `SpellResolved` on the frame they
+-- cast and the authoritative run then broadcasts to everyone else with
+-- `drawnLocallyBy = ctx.predictedBy`. Delivery draws nothing on the
+-- predicted run, so every impact cue belongs to every client, the caster
+-- included, and takes no exclusion (refactor chunk 7, Q9(a)).
 --
 -- The `RunService:IsServer()` branch below is NOT a leftover of the old
 -- dual-VM delivery, and does not go away with it. This module has two
@@ -53,6 +54,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
 
 local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
+local SkillTypes     = require(ReplicatedStorage.Shared.Skills.SkillTypes)
 local VfxBroadcast   = require(ReplicatedStorage.Shared.Vfx.VfxBroadcast)
 local VfxConfig      = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 local spawnEffect    = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
@@ -241,6 +243,47 @@ function SkillVisuals.spawnEffectOn(
 	local effect = VfxConfig.EFFECTS[effectId]
 	if not effect then return end
 	spawnEffect(effect, target)
+end
+
+-- The caster's cast burst — the one cue the prediction layer draws.
+--
+-- The effect id is resolved here, once, so the predicted draw on the
+-- caster's client and the authoritative broadcast from the server cannot
+-- pick different entries. Server callers pass `drawnLocallyBy` = the
+-- caster's UserId; the caster's own client passes nothing and draws.
+function SkillVisuals.spawnCastCue(
+	color: string,
+	tier: number,
+	casterRoot: BasePart | Attachment,
+	drawnLocallyBy: number?
+)
+	local effectId = VfxConfig.resolveCastId(color, tier)
+	if not VfxConfig.EFFECTS[effectId] then return end
+	SkillVisuals.spawnEffectOn(effectId, casterRoot, drawnLocallyBy)
+end
+
+-- One burst per unique effect kind in a skill's `onImpact`, on the struck
+-- rig. Deduped by kind so a "damage + damage" entry can't double-emit;
+-- kinds with no authored EFFECTS entry are dropped silently.
+--
+-- Takes no `drawnLocallyBy` on purpose: nothing predicts an impact, so
+-- every client — the caster included — gets it from the server.
+function SkillVisuals.spawnImpactCues(
+	onImpact: { SkillTypes.EffectSpec },
+	targetRoot: BasePart | Attachment,
+	tier: number?
+)
+	local seen: { [string]: true } = {}
+	for _, entry in onImpact do
+		local kind = entry.kind
+		if kind and not seen[kind] then
+			seen[kind] = true
+			local effectId = VfxConfig.resolveImpactId(kind, tier)
+			if VfxConfig.EFFECTS[effectId] then
+				SkillVisuals.spawnEffectOn(effectId, targetRoot)
+			end
+		end
+	end
 end
 
 -- Returns the ring Part on a client, and nil on the server — the server

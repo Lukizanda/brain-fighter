@@ -252,7 +252,7 @@ Wiki: [[systems/SpellCastService]] (affordability + validated memorize + Q4 note
 
 ## Chunk 7 — One VFX broadcast lane
 
-Status: open
+Status: claimed — chunk-7-fable — 2026-09-08 — code + wiki landed (commit in the note below); two-client playtest outstanding
 Findings: F6, F7, F29 (`spellResolved` bindable + lazy cache), F21 (SpellCastController)
 Risk: **H** · Playtest: **yes, two clients** — caster sees cast cue instantly and impact on confirm; the second client sees both once; a rate-limited cast draws nothing on the second client · Depends on: chunk 4 · Blocked on: nothing (Q9 answered)
 Decision: Q9(a) — impact cues arrive on server confirmation; prediction draws the cast cue only; the client-originated relay is deleted outright.
@@ -260,15 +260,21 @@ Decision: Q9(a) — impact cues arrive on server confirmation; prediction draws 
 Owns: `src/server/Vfx/VfxBroadcastService.server.luau` (delete), `src/shared/Vfx/Remotes/{BroadcastSpellVfx,SpellVfxEvent}.model.json` (delete), `src/client/Vfx/VfxController.client.luau`, `src/shared/Skills/SkillVisuals.luau`, `src/shared/Skills/SkillDelivery.luau:129-134,157,611-630` (ProjectileVfxEvent → VfxBroadcast; lazy cache), `src/shared/Vfx/VfxBroadcast.luau` (new `projectile` kind), `src/shared/CastAction/init.luau:69-100` (`spellResolved` exposure), new `src/client/SpellCastController.client.luau`, `src/client/UI/SpellMenuGui.client.luau` (cast/target code moves out).
 Must not touch: `VfxConfig` entries; status-visual controllers (chunk 10).
 
-- [ ] Authoritative run raises cast cue + impact cues via `SkillVisuals` with `drawnLocallyBy = ctx.predictedBy` for the cast cue only.
-- [ ] `VfxController` draws the cast cue from `spellResolved` and nothing at the target; delete the `BroadcastSpellVfx` fire.
-- [ ] `ProjectileVfxEvent` becomes a `VfxBroadcast` kind; `VfxBroadcastService` deleted.
-- [ ] `spellResolved` exposed without requiring the executor; `SkillDelivery`'s Heartbeat cache connects lazily and server-only.
-- [ ] `SpellCastController` owns target resolution + `castSpecific` + relay; `SpellMenuGui` forwards `menu.cast`.
-- [ ] `client-server-boundary` gains a row for the removed relay; `VisualEffects` frontmatter status corrected (drift 8, 10).
+- [x] Authoritative run raises cast cue + impact cues via `SkillVisuals` with `drawnLocallyBy = ctx.predictedBy` for the cast cue only.
+- [x] `VfxController` draws the cast cue from `spellResolved` and nothing at the target; delete the `BroadcastSpellVfx` fire.
+- [x] `ProjectileVfxEvent` becomes a `VfxBroadcast` kind; `VfxBroadcastService` deleted.
+- [x] `spellResolved` exposed without requiring the executor; `SkillDelivery`'s Heartbeat cache connects lazily and server-only.
+- [x] `SpellCastController` owns target resolution + `castSpecific` + relay; `SpellMenuGui` forwards `menu.cast`.
+- [x] `client-server-boundary` gains a row for the removed relay; `VisualEffects` frontmatter status corrected (drift 8, 10).
 
 Done when: `grep -rn "FireServer" src/client/Vfx` is empty; two-client playtest as above; `predicted_run_writes_nothing` green.
 Wiki: [[design/client-server-boundary]], [[systems/VisualEffects]], [[systems/HUD]] (SpellMenuGui responsibilities).
+
+> **2026-09-08 note (chunk-7-fable).** Every item above landed; the chunk stays `claimed` only because the two-client check could not be counted. **Verified, single client** (MCP playtest, lock `chunk-7-vfx`, energy earned honestly — five blocks consumed, `ALOHA` memorized, ledger enforcing): a T1 Mend tapped on the menu drew `cast_green_t1` on the caster's HRP at t+0.000 (predicted, `VfxController`) and `impact_heal` on the same HRP at t+0.063 from the server — exactly one of each, no duplicate cast cue, so `drawnLocallyBy = predictedBy` skipped the caster correctly. A second Mend the ledger refused (`green cast costs 5, ledger has 2`) drew the cast cue only and nothing else. Boss `FireballVolley` shots rendered through the new `projectile` world-lane kind (160 `CosmeticProjectile` Parts counted). Harness `all` in its own playtest: **30/30**, `predicted_run_writes_nothing` green, `RunTests` cleared. `grep -rn FireServer src/client/Vfx` is empty; the five relay instances are gone from disk and from Studio.
+>
+> **Outstanding:** the two-client playtest. Studio's Test-tab local server opens client windows the MCP proxy does not register (only the Edit window is listed), and the user chose to commit without a manual run. `nimbalyst-local/chunk7-client-counter.lua` is a paste-in counter for each client's command bar; expected on the second client: one `RECEIVED attached cast_*` payload with `drawnLocallyBy = caster` (drawn once), one `impact_*` with none, and nothing for a rejected cast.
+>
+> **Divergences from `Owns`:** (1) the cast cue is raised in `SpellExecutor.cast` (not listed) — it is the one authoritative entry that sees `spec.color`/`spec.tier` — and `SkillTypes.DeliveryCtx` gained `tier: number?` so the `instant` handler can pick Inferno's tiered impact entry; (2) `ProjectileVfxController` was folded into `WorldVfxController` as the `projectile` handler and deleted, rather than re-pointed at the world lane; (3) `SpellCastController` is `src/client/SpellCastController/init.client.luau` + `RequestCast.model.json` (a BindableFunction) so `SpellMenuGui` reads the cast result synchronously for its fired-flash/fizzle; (4) the `SkillDelivery` Heartbeat cache connects on the first `collectHittables` call, which is server-only by construction (only authoritative branches call it) rather than by an `IsServer()` guard, keeping that module free of VM checks.
 
 ---
 

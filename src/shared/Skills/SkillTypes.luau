@@ -58,6 +58,8 @@ export type DeliveryCtx = {
 	source: Instance?,      -- the caster (Humanoid parent Model or Boss Model)
 	mode: DeliveryMode,     -- authoritative run, or the caster's predicted one
 	predictedBy: number?,   -- UserId that already drew this locally; see RunContext
+	tier: number?,          -- the spell tier, for tier-keyed impact cues (Inferno's T3
+	                        -- eruption); nil for boss/NPC skills, which have none
 	onComplete: (() -> ())?, -- called when the delivery fully resolves (async attacks)
 }
 

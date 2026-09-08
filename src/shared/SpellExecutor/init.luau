@@ -23,8 +23,9 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local SkillDelivery = require(ReplicatedStorage.Shared.Skills.SkillDelivery)
+local SkillDelivery    = require(ReplicatedStorage.Shared.Skills.SkillDelivery)
 local SkillTypes       = require(ReplicatedStorage.Shared.Skills.SkillTypes)
+local SkillVisuals     = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 local SpellRegistry    = require(ReplicatedStorage.Shared.SpellRegistry)
 
 export type CastResult = SkillDelivery.Result
@@ -77,6 +78,15 @@ local function resolveSource(caster: Humanoid | Model): Instance?
 	return if inst:IsA("Humanoid") then (inst :: Humanoid).Parent :: Instance? else inst
 end
 
+-- The caster's HumanoidRootPart — where the cast cue hangs. Long-lived
+-- and already replicated, which is what makes it safe to name in a
+-- broadcast (see VfxBroadcast.playOn).
+local function resolveCasterRoot(source: Instance?): BasePart?
+	if not source or not source:IsA("Model") then return nil end
+	local hrp = (source :: Model):FindFirstChild("HumanoidRootPart")
+	return if hrp and hrp:IsA("BasePart") then hrp :: BasePart else nil
+end
+
 -- "Would this cast be refused?", without casting it.
 --
 -- Lets CastAction decide before it drains rather than after. Pure — no
@@ -112,7 +122,21 @@ function SpellExecutor.cast(
 		source = source,
 		mode = run.mode,
 		predictedBy = run.predictedBy,
+		tier = spec.tier,
 	}
+
+	-- The cast cue, raised once by the authoritative run for every client.
+	-- `predictedBy` names the one client that already drew it — its
+	-- VfxController fired off `SpellResolved` on the frame it cast — so
+	-- the broadcast skips them and they see it exactly once. It is the
+	-- only cue that carries the exclusion: the prediction layer draws
+	-- nothing at the target, so impact cues go to everyone (Q9(a)).
+	if run.mode == "authoritative" then
+		local root = resolveCasterRoot(source)
+		if root then
+			SkillVisuals.spawnCastCue(spec.color, spec.tier, root, run.predictedBy)
+		end
+	end
 
 	return SkillDelivery.deliver(spec.skill, ctx)
 end

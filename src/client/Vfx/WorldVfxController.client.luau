@@ -10,15 +10,22 @@
 -- turned into the same SkillVisuals / spawnEffect call the server used
 -- to make directly, except now it happens on a VM that has a renderer.
 --
--- Skips a payload carrying `drawnLocallyBy == LocalPlayer.UserId`: the
--- dual-VM delivery handlers run on the predicting player's client too and
--- already drew it on the frame it fired. Same skip the VfxController and
--- ProjectileVfxController do with `senderUserId` / `predictedBy`.
+-- Skips a payload carrying `drawnLocallyBy == LocalPlayer.UserId`: that
+-- client's prediction layer (VfxController, off `SpellResolved`) already
+-- drew it on the frame it fired. Today only the cast cue carries the
+-- exclusion; every impact, shockwave and projectile goes to everyone.
+--
+-- `projectile` payloads draw this client's own copy of every shot the
+-- server fires. The authoritative projectile is invisible and
+-- server-simulated, so without this nothing would be visible for boss and
+-- NPC fire at all — see wiki/systems/SkillPipeline.md § "Projectile
+-- visuals are client-local" for why the seen shot is client-local.
 ----------------------------------------------------------------------
 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CosmeticProjectile = require(ReplicatedStorage.Shared.Vfx.CosmeticProjectile)
 local Logger          = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillVisuals    = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 local VfxConfig       = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
@@ -52,6 +59,19 @@ local function playNamedSound(parent: any, name: any)
 	if sound and sound:IsA("Sound") then
 		sound:Play()
 	end
+end
+
+-- A projectile payload drives a per-frame distance test inside a
+-- Heartbeat loop, so every numeric field is checked before launch: a
+-- malformed entry drops one cosmetic rather than erroring every frame.
+local function isLaunchable(payload: any): boolean
+	return typeof(payload.origin) == "Vector3"
+		and typeof(payload.direction) == "Vector3"
+		and typeof(payload.speed) == "number"
+		and typeof(payload.size) == "Vector3"
+		and typeof(payload.color) == "Color3"
+		and typeof(payload.lifetimeSec) == "number"
+		and payload.direction.Magnitude > 0
 end
 
 -- Only the server fires this, so the payload isn't a trust boundary — but
@@ -106,6 +126,39 @@ local handlers: { [string]: (payload: any) -> () } = {
 			lifetimeSec      = if typeof(payload.lifetimeSec) == "number" then payload.lifetimeSec else nil,
 			cosmeticEffectId = if typeof(payload.cosmeticEffectId) == "string" then payload.cosmeticEffectId else nil,
 			yOffset          = if typeof(payload.yOffset) == "number" then payload.yOffset else nil,
+		})
+	end,
+
+	projectile = function(payload: any)
+		if not isLaunchable(payload) then
+			log:warnThrottled("bad_projectile", 5, "dropped malformed projectile payload")
+			return
+		end
+		CosmeticProjectile.launch({
+			origin           = payload.origin,
+			direction        = payload.direction,
+			speed            = payload.speed,
+			size             = payload.size,
+			color            = payload.color,
+			lifetimeSec      = payload.lifetimeSec,
+			cosmeticEffectId = payload.cosmeticEffectId,
+			launchEffectId   = if typeof(payload.launchEffectId) == "string"
+				then payload.launchEffectId
+				else nil,
+			proximityRadius  = if typeof(payload.proximityRadius) == "number"
+				then payload.proximityRadius
+				else nil,
+			-- Defaults to consuming, matching SkillDelivery: only an explicit
+			-- `false` over the wire makes the drawn shot pierce.
+			consumeOnHit     = payload.consumeOnHit ~= false,
+			-- Both optional and both only ever read as "is it set" / "is it
+			-- true", so a malformed value degrades to a missing death cue
+			-- rather than anything that can error mid-Heartbeat.
+			destroyEffectId  = if typeof(payload.destroyEffectId) == "string"
+				then payload.destroyEffectId
+				else nil,
+			hasImpactCue     = payload.hasImpactCue == true,
+			source           = payload.source,
 		})
 	end,
 }

@@ -1,7 +1,7 @@
 ---
 type: design
 description: Audit of which systems run gameplay code on both VMs, and the staged plan to replace the accidental client-side prediction in the Skills pipeline with an explicit authority / prediction / presentation split.
-updated: 2026-08-04
+updated: 2026-09-08
 ---
 
 # Client/Server Boundary
@@ -53,6 +53,7 @@ Evidence is from `require` graph traversal plus per-file guard inspection, not f
 | `Health` / `applyDamage` / `DeathHandler` | ❌ | ✅ only | ✅ yes | `ServerScriptService` |
 | `Boss` | ❌ | ✅ only | ✅ yes | `server/Boss/*` |
 | `Vfx` (`VfxConfig`, `spawnEffect`, `StatusVisuals`) | ✅ draws | refuses | ✅ yes | `spawnEffect` refuses server-side by design |
+| `VfxBroadcastService` + `BroadcastSpellVfx` → `SpellVfxEvent` | fired by caster | relayed | ❌ **deleted 2026-09-08** | The client-trusted cosmetic relay the 2026-09 audit found (F6): the caster's client chose the impact target and effect ids, and it fired even when the server rejected the cast. Refactor chunk 7 (Q9(a)) deleted it outright. The authoritative run now raises the cast cue **and** the impact cues through `SkillVisuals` → `VfxBroadcast`, the cast cue with `drawnLocallyBy = ctx.predictedBy`; the caster's prediction layer draws the cast cue only and nothing at the target. `ProjectileVfxEvent` folded into `VfxBroadcast` as the `projectile` kind at the same time, so `WorldVfxEvent` is the one server→client lane. |
 
 **Verdict: the duplication is confined to one chain — `CastAction → SpellExecutor → SkillDelivery → SkillEffects/SkillBuffs/SkillVisuals`.** Everything else the audit touched is either correctly server-only, correctly client-only, or a genuinely pure shared module. The suspected offenders (BlockShoot, the block-tap input path, BlockSpawner) all came back clean — BlockShoot in particular is the model the Skills chain should be measured against: shared code that reads and never writes.
 
@@ -209,7 +210,9 @@ So Stage 6 is not "build one". It is:
 2. **Pin the rule it must obey** — a predicted listener may draw, play sound and update the caster's own HUD; it may not write another entity's state, resolve a victim, or emit a damage number.
 3. **Give it a predicted endpoint.** `spellResolved` currently carries `(spec, caster, target)`. A hitscan skill needs "where would this have hit?" to draw a tracer, and that is a client-side raycast producing a `Vector3` **for drawing only**. Adding it now is what stops hitscan needing a redesign later.
 
-✅ **Done 2026-08-04.** (1) and (2) landed as documentation on `CastAction.spellResolved` and `VfxController`'s header, plus a new suite. (3) is **deliberately not built**: adding an endpoint argument no skill consumes would be dead API, and the contract for it is pinned above, which is what "plan for hitscan" actually requires.
+✅ **Done 2026-08-04.** (1) and (2) landed as documentation on `CastAction.spellResolved` and `VfxController`'s header, plus a new suite.
+
+> **2026-09-08 — refactor chunk 7 (Q9(a)).** The layer named above was also drawing impact bursts at the *target* for non-projectile spells before the server had accepted the cast (audit F7), and relaying them to everyone else through the client-trusted `BroadcastSpellVfx` path (F6). Both are gone. `VfxController` now listens on the Rojo-versioned `CastAction/Remotes/SpellResolved` BindableEvent (no `CastAction` require, so no executor chain on a presentation script) and draws **the cast cue only**, via `SkillVisuals.spawnCastCue`. The authoritative run raises the same cast cue for everyone else with `drawnLocallyBy = ctx.predictedBy` (`SpellExecutor.cast`), and the `instant` handler raises the impact cues for every client — the caster included — one round trip later (`SkillVisuals.spawnImpactCues`). Measured on the caster's client: cast cue drawn locally, `impact_heal` from the server 63 ms later, exactly one of each; a server-rejected cast drew the cast cue and nothing else. (3) is **deliberately not built**: adding an endpoint argument no skill consumes would be dead API, and the contract for it is pinned above, which is what "plan for hitscan" actually requires.
 
 The substantive part turned out to be a fourth item nobody listed: **nothing automated pinned the invariant.** Stages 3 and 4 rested on ad-hoc checks run by hand. `Suites/Skills/predicted_run_writes_nothing` now casts four spells (instant damage, freeze, shield, projectile) twice against fresh rigs — once predicted, once authoritative — and asserts in both directions:
 

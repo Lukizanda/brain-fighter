@@ -1,8 +1,8 @@
 ---
 type: system
-description: Visual effects — particle effects for spell casts/impacts (shipped via VfxController + spawnEffect + cross-client broadcast), projectile bodies and trails, persistent status visuals (shield / freeze / burn / charge orb), UI feedback animations, and per-color theming. World cast/impact/projectile VFX are implemented; PERF guardrails and some lanes remain planned.
-status: implemented (core); planned (PERF guardrails, collect-pop)
-updated: 2026-08-12
+description: Visual effects — particle effects for spell casts/impacts (the caster's client predicts the cast cue off SpellResolved; the authoritative run broadcasts cast + impact cues over the one VfxBroadcast → WorldVfxEvent lane), projectile bodies and trails, persistent status visuals (shield / freeze / burn / charge orb), UI feedback animations, and per-color theming. Core, PERF guardrails and the block-pop collect stream are all shipped.
+status: implemented
+updated: 2026-09-08
 ---
 
 # Visual Effects
@@ -12,11 +12,10 @@ updated: 2026-08-12
 > **What exists on disk:**
 > - `src/shared/Vfx/VfxConfig.luau` — `COLORS`, `SFX` (sound asset ids), `EFFECTS` (cast t1–t4 red, t1–t3 blue, **t1–t3 green**, `impact_damage/heal/freeze/shield/knockup/wall/buff`, **`shield_block`**, **`shield_break`**, **`impact_damage_t2`/`impact_damage_t3`**, `projectile_red_t1/t2/t4`, **`projectile_boss_fireball`**, **`projectile_boss_bolt`/`projectile_boss_arcane_bolt`**, **`aoe_boss_groundslam`**, **`projectile_destroy`**, **`wall_rise_rumble`/`wall_rise_dust`** — 2026-08-04: every `EFFECTS` entry now carries an audible placeholder `sound`, none left `UNSET`), and a `PERF` table.
 > - `src/shared/Vfx/spawnEffect.luau` — **the shared spawn engine** (cast/impact/projectile), used by *both* the client `VfxController` and `SkillDelivery`. The plan's inline `VfxController.spawnCast/spawnImpact` methods were never built that way.
-> - `src/client/Vfx/VfxController.client.luau` — plays cast VFX locally on `CastAction.spellResolved`, relays to server.
-> - `src/server/Vfx/VfxBroadcastService.server.luau` — validates + `SpellVfxEvent:FireAllClients`.
-> - `src/shared/Vfx/VfxBroadcast.luau` + `src/client/Vfx/WorldVfxController.client.luau` — **the server's only legal way to make a player see or hear something** (2026-08-04). See § "Nothing player-facing runs on the server" below.
-> - `src/shared/Vfx/Remotes/*.model.json` — `BroadcastSpellVfx` / `SpellVfxEvent` / `ProjectileVfxEvent` / `WorldVfxEvent`.
-> - `src/shared/Vfx/CosmeticProjectile.luau` + `src/client/Vfx/ProjectileVfxController.client.luau` — the *seen* projectile. The authoritative shot is server-simulated and invisible; each client replays the broadcast launch parameters locally so a blocked shot dies on the shield bubble rather than ~12 studs short of it. See [[systems/SkillPipeline]] § "Projectile visuals are client-local". Since 2026-08-10 it also builds the shot's *body* (sphere or stretched comet head, Trail, light) from **`VfxConfig.PROJECTILE_BODIES`** — see § "Projectiles" below.
+> - `src/client/Vfx/VfxController.client.luau` — **the prediction layer**: listens on the `CastAction/Remotes/SpellResolved` BindableEvent (no `CastAction` require) and draws the caster's cast cue on the frame they cast, via `SkillVisuals.spawnCastCue`. Nothing at the target. (Refactor chunk 7, 2026-09-08; it used to also predict impact bursts and relay both through a client-trusted remote — see § Architecture below.)
+> - `src/shared/Vfx/VfxBroadcast.luau` + `src/client/Vfx/WorldVfxController.client.luau` — **the server's only legal way to make a player see or hear something** (2026-08-04), and since chunk 7 the *only* cross-client VFX lane. Kinds: `point`, `attached`, `beam`, `collect`, `shockwave`, `projectile`. See § "Nothing player-facing runs on the server" below.
+> - `src/shared/Vfx/Remotes/WorldVfxEvent.model.json` — the one remote. `BroadcastSpellVfx`, `SpellVfxEvent`, `ProjectileVfxEvent` and `server/Vfx/VfxBroadcastService` were deleted 2026-09-08.
+> - `src/shared/Vfx/CosmeticProjectile.luau` — the *seen* projectile, launched by `WorldVfxController`'s `projectile` handler (the former `ProjectileVfxController` was folded in). The authoritative shot is server-simulated and invisible; each client replays the broadcast launch parameters locally so a blocked shot dies on the shield bubble rather than ~12 studs short of it. See [[systems/SkillPipeline]] § "Projectile visuals are client-local". Since 2026-08-10 it also builds the shot's *body* (sphere or stretched comet head, Trail, light) from **`VfxConfig.PROJECTILE_BODIES`** — see § "Projectiles" below.
 > - `src/shared/Vfx/StatusVisuals/FreezeVfx.luau` — the freeze ice-shard status visual (see [[systems/SkillPipeline]] § VFX Layers).
 > - `src/shared/Vfx/StatusVisuals/InfernoVfx.luau` + `src/client/Vfx/InfernoVfxController.client.luau` — the burning-rig flames (2026-08-08). Attribute-driven off `_burning`, like ShieldVfx. Parents `ParticleEmitter`s straight onto every limb over `MIN_PART_VOLUME` rather than welding Parts, which is what makes the fire *engulf* the rig instead of being a bonfire it stands in — a ParticleEmitter parented to a BasePart inherits that part's volume for its Sphere/Surface emission shape.
 > - `src/shared/Vfx/ScreenImpact.luau` — the screen-space lane (2026-08-08): warm `ColorCorrectionEffect` + `BlurEffect` in `Lighting`, plus a camera shake via `Humanoid.CameraOffset`. Deliberately **not** `Camera.CFrame` — the default Roblox camera scripts own that and rewrite it every frame.
@@ -131,7 +130,7 @@ A server-spawned effect therefore gives you the anchor, the ring and the audio b
    - `VfxBroadcast.shockwave(center, radius, opts)` — ground ring + burst
 3. **The VM branch lives in `SkillVisuals`, not at call sites.** `spawnEffectAtPoint` / `spawnEffectOn` / `spawnShockwave` broadcast on the server and draw on a client. Handlers say *what* should happen; the routing is one decision in one module rather than a guard to remember twelve times.
 
-**The one thing a caller still decides: `drawnLocallyBy`.** Delivery handlers that run on **both** VMs (`projectile`, `aoe`) pass the casting player's UserId — that player's client runs the same code and already drew the effect frame-perfectly, so the broadcast must skip them or they see two. Server-only paths (`world_spawn`, boss fire) pass nothing, so everyone receives it. Same skip `VfxController` does with `senderUserId` and `ProjectileVfxController` with `casterUserId`.
+**The one thing a caller still decides: `drawnLocallyBy`.** Delivery handlers that run on **both** VMs (`projectile`, `aoe`) pass the casting player's UserId — that player's client runs the same code and already drew the effect frame-perfectly, so the broadcast must skip them or they see two. Server-only paths (`world_spawn`, boss fire) pass nothing, so everyone receives it. Since chunk 7 the only cue that carries it is the cast cue (`SkillVisuals.spawnCastCue`, raised by `SpellExecutor.cast` with `drawnLocallyBy = ctx.predictedBy`), because the caster's `VfxController` already drew that one from `SpellResolved`.
 
 **Gameplay objects are the exception, and they split rather than move.** A Stone Wall slab is collidable — it must be one server-owned object or it blocks the boss on one machine and not another. So `spawnBarrier` creates the Part server-side as before and broadcasts only its cosmetic overlay.
 
@@ -179,25 +178,30 @@ Final palette goes into `VfxConfig.COLORS` so both `VfxController` (world) and t
 
 ## Architecture Overview
 
+> **Rewritten 2026-09-08 (refactor chunk 7).** The "R2 two-event flow" this section used to describe — caster client draws cast + impact, then `BroadcastSpellVfx:FireServer` → `VfxBroadcastService` → `SpellVfxEvent:FireAllClients` — was a client-trusted relay (audit F6) that also drew impact bursts before the server had accepted the cast (F7). It is deleted. One lane remains.
+
 ```
-┌─── Caster Client ────────────────────────────────────────────────────────────┐
-│  CastAction.spellResolved (BindableEvent, client-local only)                 │
-│       │                                                                      │
-│       ├──▶ VfxController — plays cast VFX locally (frame-perfect, no RTT)   │
-│       │    (clones emitters from ReplicatedStorage.VfxTemplates)             │
-│       │                                                                      │
-│       └──▶ BroadcastSpellVfx:FireServer(payload)                             │
+┌─── Caster Client ── prediction ─────────────────────────────────────────────┐
+│  SpellCastController → CastAction.castSpecific (predicted run)               │
+│       │  fires CastAction/Remotes/SpellResolved (BindableEvent)              │
+│       ├──▶ VfxController — SkillVisuals.spawnCastCue on the caster's HRP,    │
+│       │    this frame, nothing at the target                                 │
+│       └──▶ SpellCastServer:FireServer(color, tier, target)                   │
 └──────────────────────────────────────────────────────────────────────────────┘
                               │
-┌─── Server ──────────────────────────────────────────────────────────────────┐
-│  VfxBroadcastService — validates + SpellVfxEvent:FireAllClients(payload)     │
-│   (rate ≤ 4/s, effectId ∈ VfxConfig, impactTarget ∈ Workspace)              │
+┌─── Server ── authority ─────────────────────────────────────────────────────┐
+│  SpellCastService validates (spell, caster, ledger, target, rate)            │
+│  SpellExecutor.cast(authoritative, predictedBy = caster)                     │
+│     ├── SkillVisuals.spawnCastCue(…, drawnLocallyBy = predictedBy)           │
+│     └── SkillDelivery: instant → spawnImpactCues on the struck rig;          │
+│         projectile → VfxBroadcast.projectile + impact on hit;                │
+│         aoe → shockwave; world_spawn → barrier overlay   (no exclusion)      │
+│  every cue = VfxBroadcast.* → WorldVfxEvent:FireAllClients(payload)          │
 └──────────────────────────────────────────────────────────────────────────────┘
                               │
-┌─── Other Clients ────────────────────────────────────────────────────────────┐
-│  VfxController — receives SpellVfxEvent                                      │
-│   skip if senderUserId == LocalPlayer.UserId (already played locally)        │
-│   spawns cast + impact VFX from VfxTemplates                                 │
+┌─── Every Client ── presentation ────────────────────────────────────────────┐
+│  WorldVfxController — skips payload.drawnLocallyBy == LocalPlayer.UserId,    │
+│  then SkillVisuals / spawnEffect / CosmeticProjectile.launch                 │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌─── All Clients ──────────────────────────────────────────────────────────────┐
@@ -205,13 +209,14 @@ Final palette goes into `VfxConfig.COLORS` so both `VfxController` (world) and t
 │  (NOT a standalone UiVfxController module); no RemoteEvent needed            │
 └──────────────────────────────────────────────────────────────────────────────┘
 
-spawnEffect.luau (shared) ── the spawn engine VfxController AND SkillDelivery both call
+spawnEffect.luau (shared) ── the spawn engine, client-only (refuses on the server)
 VfxConfig (shared)  ── effect specs keyed by effectId
 VfxTemplates folder (ReplicatedStorage) ── ParticleEmitter / Beam / Attachment templates (Studio/MCP-managed, not Rojo)
 ```
 
-- **World VFX (R2 two-event flow)**: After a successful cast, the caster's client fires `CastAction.spellResolved` (client-local BindableEvent). `VfxController` hears it and plays cast/impact VFX immediately (frame-perfect, no network round-trip). `VfxController` also fires `BroadcastSpellVfx:FireServer(payload)`. `VfxBroadcastService.server.luau` validates and relays to all clients via `SpellVfxEvent:FireAllClients`. Each receiving client skips the event if `senderUserId == LocalPlayer.UserId` (already played). Server creates NO Parts/Emitters.
-- **Client-side spawn**: `VfxController` (LocalScript) looks up `VfxConfig[effectId]`, clones the template, parents to a runtime Attachment, schedules destruction.
+- **Prediction draws the cast cue only.** The caster sees their cast burst ~0.4 ms after the tap and the impact one round trip later, like everyone else (Q9(a) in [[design/refactor-plan-2026-09]]). A cast the server rejects (rate limit, ledger, dead target) draws the cast cue on the caster and nothing anywhere else — measured 2026-09-08: caster `cast_green_t1` local, `impact_heal` +63 ms from the server, one of each; rejected cast → cast cue only.
+- **`drawnLocallyBy` is carried by exactly one cue** — the cast cue — because it is the one thing the prediction layer draws. Passing it on an impact would leave the caster the one player who sees nothing.
+- **Client-side spawn**: every client looks up `VfxConfig.EFFECTS[effectId]`, clones the template, parents to a runtime Attachment, schedules destruction. The server never creates an emitter.
 - **UI VFX**: pure client. Lives next to / inside existing HUD builders — uses TweenService on the same instance handles, no remote events. Triggered off the same signals the HUD already binds (`wordBuffer.changed`, `energyReservoirs.changed`, `result.ok`).
 - **No magic numbers**: every duration, easing, count, lifetime, color lives in `VfxConfig` or an existing `*Config.luau`. The controller code reads it; never declares a literal in logic.
 
@@ -579,63 +584,33 @@ Every new method that creates Instances or Tweens must:
 
 ## 4. RemoteEvent Contract
 
-Two new RemoteEvents (R2 two-event design). Everything else stays client-local.
+> **Rewritten 2026-09-08 (refactor chunk 7).** `BroadcastSpellVfx` (client → server) and `SpellVfxEvent` (server → all) are deleted along with `VfxBroadcastService`; the old contract, its 4/s hand-rolled rate limiter and its `SpellVfxPayload` are gone. `ProjectileVfxEvent` is deleted too — its payload is now a `WorldVfxEvent` kind.
 
-### `BroadcastSpellVfx` (RemoteEvent, client → server)
+### `WorldVfxEvent` (RemoteEvent, server → all clients) — the only lane
 
-- **Location**: `ReplicatedStorage.Shared.Vfx.Remotes.BroadcastSpellVfx`
-- **Created via**: `src/shared/Vfx/Remotes/BroadcastSpellVfx.model.json` — Rojo-versioned.
-- **Fired by**: the casting client's `VfxController`, immediately after `CastAction.spellResolved` fires.
-- **Received by**: `VfxBroadcastService.server.luau`.
-- **Validation** (server-side, in VfxBroadcastService):
-  - Rate ≤ 4 casts/sec/player (sliding 1-second window per UserId).
-  - `castEffectId` ∈ `VfxConfig.EFFECTS` (skip while EFFECTS is empty during Phase A).
-  - `color` ∈ `{red, green, blue}`.
-  - `tier` ∈ `{1, 2, 3}`.
-  - `impactTarget` (if present) is a `Workspace` descendant.
-- **Payload shape**: same as `SpellVfxPayload` below, without `senderUserId`.
+- **Location**: `ReplicatedStorage.Shared.Vfx.Remotes.WorldVfxEvent` (`src/shared/Vfx/Remotes/WorldVfxEvent.model.json`).
+- **Fired by**: `VfxBroadcast.*` only, and `VfxBroadcast` refuses (loudly) on a client. Callers are `SkillVisuals` (cast cue, impact cues, shockwave, barrier overlay), `SkillDelivery` (`projectile`), `BlockShootService` (`collect`).
+- **Listened by**: every client's `WorldVfxController`, which drops the payload when `drawnLocallyBy == LocalPlayer.UserId` and otherwise dispatches on `kind`:
 
-### `SpellVfxEvent` (RemoteEvent, server → all clients)
+| `kind` | Built by | Drawn as |
+|---|---|---|
+| `point` | `VfxBroadcast.playAt` | `SkillVisuals.spawnEffectAtPoint` — throwaway anchor at a Vector3 |
+| `attached` | `VfxBroadcast.playOn` | `spawnEffect` on an already-replicated Part/Attachment (a rig's HRP) |
+| `beam` | `VfxBroadcast.beam` | `laserBeamEffect` + a named Sound on a replicated parent (uncalled today) |
+| `collect` | `VfxBroadcast.collect` | `collectStream.play` onto a UserId (block-pop mana stream) |
+| `shockwave` | `VfxBroadcast.shockwave` | `SkillVisuals.spawnShockwave` ground ring + optional burst |
+| `projectile` | `VfxBroadcast.projectile` | `CosmeticProjectile.launch` — the seen copy of the invisible server shot |
 
-- **Location**: `ReplicatedStorage.Shared.Vfx.Remotes.SpellVfxEvent`
-- **Created via**: `src/shared/Vfx/Remotes/SpellVfxEvent.model.json` — Rojo-versioned.
-- **Fired by**: `VfxBroadcastService.server.luau` after validation passes — `FireAllClients(payload)`.
-- **Listened by**: every client's `VfxController`. The casting client skips the event when `senderUserId == LocalPlayer.UserId` (it already played VFX locally from `spellResolved`, without waiting for the network round-trip).
-- **Payload shape**:
+- **Trust model**: only the server fires it, so the payload is a wire boundary rather than a trust boundary — each handler type-checks its fields and drops one cosmetic on a malformed entry rather than throwing.
 
-```lua
-type SpellVfxPayload = {
-    senderUserId: number,              -- Player.UserId; receiving client resolves to Character
-    castEffectId: string,              -- VfxConfig.resolveCastId(color, tier)
-    impactEffectId: string?,           -- VfxConfig.resolveImpactId(kind); nil if no impact
-    impactAnchor: ("worldPosition"     -- discriminator for how to read impactTarget
-                 | "targetHumanoidRootPart"
-                 | "targetHead"
-                 | "targetRoot")?,
-    impactTarget: Instance?,           -- Model | BasePart; client validates IsDescendantOf(workspace)
-    impactPosition: Vector3?,          -- used when impactAnchor == "worldPosition"
-    color: "red" | "green" | "blue",   -- for runtime emitter color patches
-    tier: number,                      -- 1/2/3, for tier-scoped overrides
-    durationSec: number?,              -- forwarded from spec for durationFromSpec effects
-    serverNow: number,                 -- workspace:GetServerTimeNow() for late-join lag estimate
-}
-```
+### `SpellResolved` (BindableEvent, client-local)
 
-- Client trust model: payload is rendering-only. Worst case of a malicious client (bypassing `BroadcastSpellVfx`) is wrong visuals; no gameplay state changes. Receiving clients also validate `castEffectId` ∈ `VfxConfig.EFFECTS` and `impactTarget` IsDescendantOf(workspace) before spawning.
+- **Location**: `ReplicatedStorage.Shared.CastAction.Remotes.SpellResolved` (`src/shared/CastAction/Remotes/SpellResolved.model.json`), fired by `CastAction.drainAndCast` with `(spec, caster, target)` after every accepted predicted cast. `CastAction.spellResolved` is still the same `.Event`.
+- **Listened by**: `VfxController` on the casting client, which draws the cast cue and nothing else. The contract for a listener is on the signal in `CastAction/init.luau`. Being an Instance rather than a module field is what lets a presentation script listen without requiring the executor chain (audit F29).
 
-### Why the casting client plays locally (not from SpellVfxEvent)
+### Why the casting client plays the cast cue locally
 
-`spellResolved` fires synchronously at the end of `CastAction.drainAndCast` — the VFX plays in the same frame as the cast. If we waited for the server round-trip, the player would see a 100–300 ms stutter between pressing cast and seeing the burst. The `senderUserId` filter on `SpellVfxEvent` prevents the double-play.
-
-### Why not a RemoteFunction
-
-No round-trip needed. Client doesn't return anything to the server about VFX.
-
-### Why not split per-color or per-effect
-
-One channel keeps the contract small. Every payload is < 200 bytes; we expect < 4 casts/sec/player worst case → bandwidth is negligible.
-
----
+`SpellResolved` fires synchronously at the end of `CastAction.drainAndCast` — the cast burst lands in the same frame as the tap. The server's copy of that cue carries `drawnLocallyBy = predictedBy` so the caster is not shown it twice. The impact cue is *not* predicted: it is a claim about what happened, and one round trip (~60 ms in Studio) is the accepted cost of only ever showing impacts that did.
 
 ## 5. Performance Guardrails
 

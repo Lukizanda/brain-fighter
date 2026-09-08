@@ -59,8 +59,12 @@ export type CastResult = {
 
 local CastAction = {}
 
--- Fires on the casting client's VM after every successful cast.
--- Server VM creates the same BindableEvent but no listener connects there.
+-- Fires on the casting client's VM after every successful cast. The
+-- BindableEvent is a Rojo-versioned Instance under `CastAction/Remotes`
+-- rather than one built here, so the client's VfxController can listen
+-- on it without requiring this module — and the executor chain behind it
+-- — into a presentation script. The server VM sees the same Instance;
+-- nothing connects there.
 --
 -- THIS SIGNAL IS THE PREDICTION LAYER.
 --
@@ -88,7 +92,7 @@ local CastAction = {}
 -- raycast that yields a Vector3 for drawing and nothing else. The contract
 -- for that is pinned in the design doc under "Zero-travel skills"; the
 -- endpoint argument is deliberately NOT added until a skill needs it.
-local _spellResolvedBindable = Instance.new("BindableEvent")
+local _spellResolvedBindable = script:WaitForChild("Remotes"):WaitForChild("SpellResolved") :: BindableEvent
 CastAction.spellResolved = _spellResolvedBindable.Event :: RBXScriptSignal
 
 local function fail(reason: string): CastResult

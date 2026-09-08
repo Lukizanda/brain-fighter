@@ -1,179 +1,67 @@
 --!strict
 
 ----------------------------------------------------------------------
--- VfxController (Phase C — local + broadcast)
+-- VfxController — the prediction layer
 ----------------------------------------------------------------------
--- Listens to CastAction.spellResolved and spawns ParticleEmitter
--- bursts on the caster (cast VFX) and on the target's
--- HumanoidRootPart (impact VFX).
+-- Draws the caster's cast cue on the frame they cast, and nothing else.
 --
--- Also broadcasts via BroadcastSpellVfx so other clients see the
--- effect, and receives SpellVfxEvent to play effects cast by others.
+-- This is the only thing in the game that reacts to a cast before the
+-- server has confirmed it, and it is why a spell feels instant: the burst
+-- lands ~0.4ms after the tap, with no round trip. Everything else about a
+-- cast — damage, status, the projectile, and the impact cue at the target
+-- — happens on the authoritative run and comes back over the one
+-- server→client lane (VfxBroadcast → WorldVfxController), one RTT later.
 --
--- **This is the prediction layer** (Phase 5.6 Stage 6). It is the only
--- thing in the game that reacts to a cast before the server has confirmed
--- it, and it is why a spell feels instant: the burst lands ~0.4ms after
--- the tap while damage and status arrive replicated a round trip later.
+-- Nothing is drawn at the target from here. An impact is a claim about
+-- what happened, and this signal fires before anything has; a mispredicted
+-- cosmetic on the caster expires unnoticed, a mispredicted hit marker tells
+-- the player they hit something they didn't. The full contract for a
+-- `SpellResolved` listener is on the signal itself in CastAction.
 --
--- Everything here must stay cosmetic and local. The full contract — what a
--- `spellResolved` listener may and may not do, and why a mispredicted hit
--- marker is a different kind of wrong from a mispredicted spark — is on
--- the signal itself in CastAction. Read it before adding a listener.
+-- The server raises the same cast cue for everyone else with
+-- `drawnLocallyBy` = this client, so the caster sees it exactly once. That
+-- exclusion only holds because the draw here is unconditional for every
+-- cast the client relays — keep it that way.
 --
--- Note the deliberate gap at the impact burst below: projectile spells are
--- skipped, because their impact is raised by SkillDelivery at the real hit
--- position on the server. Predicting an impact *location* is a claim this
--- layer is not entitled to make; predicting that the caster themselves
--- flashed is not.
+-- Listens on the `SpellResolved` BindableEvent instance rather than
+-- requiring CastAction, so this presentation script never pulls the
+-- executor chain (SpellExecutor → SkillDelivery → SkillEffects) into a
+-- VM that has no use for it.
 ----------------------------------------------------------------------
 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Logger      = require(ReplicatedStorage.Shared.Core.Logger)
-local VfxConfig   = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
-local CastAction  = require(ReplicatedStorage.Shared.CastAction)
-local spawnEffect = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
+local Logger       = require(ReplicatedStorage.Shared.Core.Logger)
+local SkillVisuals = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 
 local log         = Logger.new("VfxController")
 local LocalPlayer = Players.LocalPlayer
 
-local Remotes           = ReplicatedStorage.Shared.Vfx.Remotes
-local BroadcastSpellVfx = Remotes:WaitForChild("BroadcastSpellVfx") :: RemoteEvent
-local SpellVfxEvent     = Remotes:WaitForChild("SpellVfxEvent")     :: RemoteEvent
+local spellResolved = ReplicatedStorage.Shared.CastAction
+	:WaitForChild("Remotes")
+	:WaitForChild("SpellResolved") :: BindableEvent
 
-----------------------------------------------------------------------
--- Helpers
-----------------------------------------------------------------------
-
--- Where a cast burst is drawn from.
---
--- This used to walk character → equipped Tool → Handle → `Tip` attachment,
--- with the HumanoidRootPart only as a fallback. Phase 5.7 deleted the
--- Spelling Staff, so the Tool branch could never succeed again and every
--- cast already resolved to the fallback — the walk was three FindFirstChild
--- calls per cast that were guaranteed to miss.
---
--- Casts therefore originate at the caster's chest rather than a staff tip.
--- That is the intended look while hands are empty; if the deferred cosmetic
--- prop lands, give it an attachment and re-add the lookup here.
-local function resolveCastAnchor(character: Model): BasePart | Attachment
-	return (character:FindFirstChild("HumanoidRootPart") :: BasePart)
-end
-
--- Resolve the HumanoidRootPart for whatever `target` CastAction passed.
--- target may be a Humanoid (its .Parent is the character) or a Model.
-local function resolveTargetRoot(target: any): BasePart?
-	if typeof(target) ~= "Instance" then return nil end
-	local model: Model?
-	if target:IsA("Humanoid") then
-		model = target.Parent :: Model
-	elseif target:IsA("Model") then
-		model = target
-	end
-	if not model then return nil end
-	local hrp = model:FindFirstChild("HumanoidRootPart")
+-- Where the cast burst is drawn from. Casts originate at the caster's
+-- chest while hands are empty (Phase 5.7 deleted the Spelling Staff); if
+-- a cosmetic prop lands, give it an attachment and resolve it here.
+local function resolveCastAnchor(character: Model): BasePart?
+	local hrp = character:FindFirstChild("HumanoidRootPart")
 	return if hrp and hrp:IsA("BasePart") then hrp :: BasePart else nil
 end
 
--- Resolve every renderable impact effect id for a skill (one per unique
--- effect kind in `skill.onImpact`). Dedupes by kind so a hypothetical
--- "damage + damage" entry doesn't double-emit. Returns ids that have a
--- matching `VfxConfig.EFFECTS` entry; missing ones are silently dropped.
-local function resolveImpactEffectIds(skill: any, tier: number?): { string }
-	local ids: { string } = {}
-	if not (skill and skill.onImpact) then return ids end
-	local seen: { [string]: true } = {}
-	for _, entry in skill.onImpact do
-		local kind = entry.kind
-		if kind and not seen[kind] then
-			seen[kind] = true
-			local id = VfxConfig.resolveImpactId(kind, tier)
-			if VfxConfig.EFFECTS[id] then
-				table.insert(ids, id)
-			end
-		end
-	end
-	return ids
-end
-
-----------------------------------------------------------------------
--- Main signal connection
-----------------------------------------------------------------------
-
-CastAction.spellResolved:Connect(function(
-	spec   : any,  -- SpellRegistry.Spec (typed loosely to avoid circular dep)
+spellResolved.Event:Connect(function(
+	spec   : any,  -- SpellRegistry.Spec (typed loosely to avoid the require)
 	_caster: any,
-	target : any
+	_target: any
 )
 	local character = LocalPlayer.Character
 	if not character then return end
+	local anchor = resolveCastAnchor(character)
+	if not anchor then return end
 
-	-- Cast VFX on the caster
-	local castEffectId = VfxConfig.resolveCastId(spec.color, spec.tier)
-	local castEffect   = VfxConfig.EFFECTS[castEffectId]
-	if castEffect then
-		local anchor = resolveCastAnchor(character)
-		spawnEffect(castEffect, anchor)
-		log:infoThrottled("cast_vfx", 2, string.format("cast vfx: %s @ %s", castEffectId, anchor.Name))
-	end
-
-	-- Impact VFX at target — one burst per unique effect kind on the skill.
-	-- Projectile spells own their own impact burst (fired by SkillDelivery
-	-- at the actual hit position); suppress the immediate burst-at-target
-	-- so it doesn't double-up or fire at cast time on the wrong location.
-	local impactTargetRoot: BasePart? = if target
-		then resolveTargetRoot(target)
-		else (character:FindFirstChild("HumanoidRootPart") :: BasePart?)
-	local isProjectile = spec.skill and spec.skill.delivery == "projectile"
-	local impactEffectIds: { string } = if isProjectile
-		then {}
-		else resolveImpactEffectIds(spec.skill, spec.tier)
-	if impactTargetRoot then
-		for _, id in impactEffectIds do
-			spawnEffect(VfxConfig.EFFECTS[id], impactTargetRoot)
-			log:infoThrottled("impact_vfx_" .. id, 2, string.format("impact vfx: %s @ %s", id, impactTargetRoot.Name))
-		end
-	end
-
-	-- Broadcast to other clients
-	BroadcastSpellVfx:FireServer({
-		color           = spec.color,
-		tier            = spec.tier,
-		castEffectId    = if VfxConfig.EFFECTS[castEffectId] then castEffectId else nil,
-		impactEffectIds = impactEffectIds,
-		impactTarget    = impactTargetRoot,
-	})
-end)
-
-SpellVfxEvent.OnClientEvent:Connect(function(payload: any)
-	if payload.senderUserId == LocalPlayer.UserId then return end
-
-	-- Cast burst on the sender
-	if payload.castEffectId then
-		local castEffect = VfxConfig.EFFECTS[payload.castEffectId]
-		local senderPlayer = if typeof(payload.senderUserId) == "number"
-			then Players:GetPlayerByUserId(payload.senderUserId)
-			else nil
-		local senderChar = senderPlayer and senderPlayer.Character
-		if castEffect and senderChar then
-			local anchor = resolveCastAnchor(senderChar)
-			spawnEffect(castEffect, anchor)
-		end
-	end
-
-	-- Impact bursts — one spawn per unique effect kind from the sender.
-	local impactTarget = payload.impactTarget
-	if impactTarget and typeof(impactTarget) == "Instance" and impactTarget:IsA("BasePart")
-		and typeof(payload.impactEffectIds) == "table"
-	then
-		for _, id in payload.impactEffectIds do
-			local impactEffect = VfxConfig.EFFECTS[id]
-			if impactEffect then
-				spawnEffect(impactEffect, impactTarget)
-			end
-		end
-	end
+	SkillVisuals.spawnCastCue(spec.color, spec.tier, anchor)
+	log:infoThrottled("cast_vfx", 2, string.format("cast cue: %s t%d @ %s", tostring(spec.color), spec.tier, anchor.Name))
 end)
 
 log:info("ready")

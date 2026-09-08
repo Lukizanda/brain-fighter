@@ -1,7 +1,7 @@
 ---
 type: system
 description: Phase 2 action — the cast pipeline. castSpecific fires an explicitly-picked tier (the production path since 5.8's hold-to-charge); resolveSpecAtCharge picks that tier from a hold duration; tapReservoir is the retired highest-affordable rule, kept for its tests. Drains the reservoir on cast and fires the client-local `spellResolved` signal on success.
-updated: 2026-08-12
+updated: 2026-09-08
 ---
 
 # CastAction
@@ -88,7 +88,7 @@ Both gestures resolve into the same internal pipeline:
 
 ## Signal
 
-`CastAction.spellResolved` (`init.luau:66`) is a `BindableEvent.Event` fired with `(spec, caster, target)` after every **successful** cast (`init.luau:115`). It is the seam the VFX layer hooks: on the casting client's VM, `VfxController` connects to it to play cast VFX locally with zero RTT, then relays a payload to the server for cross-client broadcast (see [[systems/VisualEffects]]). The server VM constructs the same BindableEvent but nothing connects there. The signal does **not** fire on fizzle or refund — a `spellResolved` fire reliably means a spell actually went off.
+`CastAction.spellResolved` is the `.Event` of the Rojo-versioned BindableEvent at `CastAction/Remotes/SpellResolved` (since refactor chunk 7, so `VfxController` can listen on the Instance without requiring this module and the executor chain behind it), fired with `(spec, caster, target)` after every **successful** cast (`init.luau:115`). It is the seam the VFX layer hooks: on the casting client's VM, `VfxController` connects to it to draw the cast cue locally with zero RTT — and nothing at the target; every other client, and the caster's impact cue, come from the authoritative run over `VfxBroadcast` (see [[systems/VisualEffects]]). The server VM constructs the same BindableEvent but nothing connects there. The signal does **not** fire on fizzle or refund — a `spellResolved` fire reliably means a spell actually went off.
 
 ## Refund on SpellExecutor failure
 
@@ -123,7 +123,7 @@ No throttling — casts are rare-per-frame.
 ## Consumers
 
 - **HUD: SpellMenu** (shipped — [[systems/HUD]], [[systems/ChargeCast]]) — `SpellMenuBuilder` owns the press-hold-release gesture and hands `SpellMenuGui` a `castRequested(color, tier)`; the coordinator resolves the enemy lock **at release** (a 1.75 s T4 charge is long enough for the world to move) and calls `castSpecific`. Reads `CastResult.cast` to relay the cast to [[systems/SpellCastService]] and to flash the panel; placement-target hand-off for `targetingMode == "placement"` still pending.
-- **VFX: VfxController** — connects to `CastAction.spellResolved` to play cast VFX locally and relay to the server (see [Signal](#signal)).
+- **VFX: VfxController** — listens on `Remotes/SpellResolved` and draws the caster's **cast cue only** (see [Signal](#signal)). Impact cues and the copy other players see come from the authoritative run over `VfxBroadcast`; the client-originated relay was deleted 2026-09-08 ([[design/client-server-boundary]]).
 - **Tutorial / scripted first cast** — may call either entry point directly to drive a scripted cast in an intro level.
 
 Beyond its three dependencies and the `spellResolved` BindableEvent it owns, this module does not touch the HUD or write to attributes — the HUD reads `CastResult` from the caller. Per [[concepts/SingleOwnership]], only CastAction writes via `:drain` on the reservoirs (and only it refunds via `:add` in the failure path); MemorizeAction is the only other writer (via `:add` on Memorize success).

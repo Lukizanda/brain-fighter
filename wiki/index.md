@@ -53,7 +53,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/LetterBlaster]] — **REMOVED (Phase 5.7, commit 14881d9)**; historical record of the Spelling Staff Tool and its controller, which owned block input from 4.6 until tap-to-pop replaced it
 - [[systems/AudioSFX]] — Sound effect inventory, two-backend overview (Sound vs AudioPlayer), wiring patterns, placeholder locations, gap priority list
 - [[systems/Tutorial]] — Phase 5 guided first-play sequence: shoot → buffer → memorize → cast → boss hit; step machine, overlay builder, skip flag (planning)
-- [[systems/VisualEffects]] — world spell cast/impact particles + cross-client broadcast (VfxController + spawnEffect + VfxBroadcastService); per-color (R/G/B) theming. Core shipped; PERF guardrails + green casts still planned
+- [[systems/VisualEffects]] — world spell cast/impact particles; the caster's client predicts the cast cue (VfxController ← SpellResolved), the authoritative run broadcasts cast + impact cues over the one VfxBroadcast → WorldVfxEvent lane (client relay deleted 2026-09-08); per-color (R/G/B) theming; PERF guardrails shipped
 
 ## Concepts (recurring patterns)
 

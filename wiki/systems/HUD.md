@@ -190,9 +190,12 @@ src/client/UI/
   DamageFeedbackGui.client.luau   — directional damage indicators
   DeathScreenGui.client.luau      — death overlay
   SettingsMenuGui.client.luau     — settings menu mount
-  SpellMenuGui.client.luau        — BottomRight; consumes the builder's charge signals, resolves the
-                                    target at release, casts via castSpecific, drives the local charge
-                                    orb + the ChargeState relay; fill via energyReservoirs.changed
+  SpellMenuGui.client.luau        — BottomRight; consumes the builder's charge signals, drives the local
+                                    charge orb + the ChargeState relay, forwards castRequested to
+                                    client/SpellCastController (RequestCast BindableFunction) and plays
+                                    the fired flash / fizzle from its result; fill via
+                                    energyReservoirs.changed. Target resolution + castSpecific + the
+                                    SpellCastServer relay left the HUD in refactor chunk 7 (audit F21)
   DashButtonGui.client.luau       — BottomRight vertical column (touch-only); tap → DashApi.requestDash()
   MindFullIndicatorGui.client.luau — TopCenter; shows/hides on mindFull/mindFreed
   BossHudGui.client.luau          — own ScreenGui (IgnoreGuiInset=true, y=8); boss health bar + phase label; hidden until a boss spawns

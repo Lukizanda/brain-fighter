@@ -22,6 +22,8 @@
 --   VfxBroadcast.beam(origin, endPoint)            — laser from A to B
 --   VfxBroadcast.collect(origin, userId)           — stream from a point
 --                                                    onto a moving player
+--   VfxBroadcast.projectile(payload)               — the seen copy of a
+--                                                    server-simulated shot
 --
 -- Each takes an optional `drawnLocallyBy: number?` (a UserId): don't send
 -- this to that player, they already have it. Exactly one situation earns
@@ -60,6 +62,29 @@ export type CollectPayloadOpts = {
 	drawnLocallyBy: number?,
 }
 
+-- Launch parameters for a shot every client replays locally. The
+-- authoritative projectile is invisible and server-simulated; clients
+-- render server-owned parts a beat behind, so a shot drawn from its own
+-- launch parameters dies on the shield bubble where that client sees the
+-- block happen, not ~12 studs short of it. See
+-- wiki/systems/SkillPipeline.md § "Projectile visuals are client-local".
+export type ProjectilePayload = {
+	origin: Vector3,
+	direction: Vector3,
+	speed: number,
+	size: Vector3,
+	color: Color3,
+	lifetimeSec: number,
+	cosmeticEffectId: string?,
+	launchEffectId: string?,
+	proximityRadius: number?,
+	consumeOnHit: boolean?,
+	destroyEffectId: string?,
+	hasImpactCue: boolean?,
+	source: Instance?,
+	drawnLocallyBy: number?,
+}
+
 export type ShockwavePayloadOpts = {
 	color: Color3?,
 	transparency: number?,
@@ -72,8 +97,7 @@ export type ShockwavePayloadOpts = {
 -- Resolved lazily rather than at module scope. This module is required
 -- during server boot (SkillDelivery ← BossService), and a module-scope
 -- WaitForChild would stall that boot indefinitely if the remote were ever
--- missing, instead of failing one effect. Same pattern as
--- SkillDelivery.projectileVfxRemote.
+-- missing, instead of failing one effect.
 local _remote: RemoteEvent? = nil
 local function remote(): RemoteEvent?
 	if _remote then return _remote end
@@ -227,6 +251,36 @@ function VfxBroadcast.shockwave(center: Vector3, radius: number, opts: Shockwave
 		cosmeticEffectId = o.cosmeticEffectId,
 		yOffset          = o.yOffset,
 		drawnLocallyBy   = o.drawnLocallyBy,
+	})
+end
+
+-- The seen copy of a shot the server just fired. Carried on the same lane
+-- as every other world cosmetic (it used to have a remote of its own,
+-- `ProjectileVfxEvent`, folded in by refactor chunk 7).
+--
+-- `drawnLocallyBy` is nil for every caller today: the prediction layer
+-- draws the cast cue only, so the caster needs this shot as much as
+-- anyone. It stays on the payload for the same reason it is on the
+-- others — the day a client predicts its own shot, this is the switch.
+function VfxBroadcast.projectile(payload: ProjectilePayload)
+	local r = outbound("projectile")
+	if not r then return end
+	r:FireAllClients({
+		kind             = "projectile",
+		origin           = payload.origin,
+		direction        = payload.direction,
+		speed            = payload.speed,
+		size             = payload.size,
+		color            = payload.color,
+		lifetimeSec      = payload.lifetimeSec,
+		cosmeticEffectId = payload.cosmeticEffectId,
+		launchEffectId   = payload.launchEffectId,
+		proximityRadius  = payload.proximityRadius,
+		consumeOnHit     = payload.consumeOnHit,
+		destroyEffectId  = payload.destroyEffectId,
+		hasImpactCue     = payload.hasImpactCue,
+		source           = payload.source,
+		drawnLocallyBy   = payload.drawnLocallyBy,
 	})
 end
 
