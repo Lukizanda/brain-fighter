@@ -156,7 +156,7 @@ Done when: the lobby-death → arena-entry playtest shows no overlay; `grep _G.P
 
 ## Chunk 4 — One damage path
 
-Status: done — 2026-09-08 — COMMIT_PLACEHOLDER
+Status: done — 2026-09-08 — a0dfc73
 Findings: F1, F2, drift 1, 2 · plus cause id for F34's kill-feed "Unknown"
 Risk: **H** · Playtest: **yes** — spell kill on the dummy credits the kill feed; boss damage unchanged; shield absorbs a spell hit once (not twice) · Depends on: chunk 1, chunk 2 · Blocked on: nothing (Q1, Q2 answered)
 Decision: Q1(a) + Q2(a) — every spell damage/heal goes through `applyDamage.process` via an injected sink; PvP gate is `allowsPvP` on the mode config resolved through the victim's session; `GameConfig.PLAYER_VS_PLAYER_ENABLED` is deleted here (chunk 8 moves the other flags).
