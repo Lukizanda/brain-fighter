@@ -187,7 +187,7 @@ Wiki: [[systems/Health]] (callers list, cause id), [[systems/SkillPipeline]] (da
 
 ## Chunk 5 — One respawn owner
 
-Status: done — 2026-09-08 — <commit>
+Status: done — 2026-09-08 — c63488e
 Findings: F3, F13 (offsets), F17
 Risk: M · Playtest: **yes** — die in arena: exactly one `CharacterAdded`; `RequestRespawn` after respawn is refused · Depends on: chunk 4 · Blocked on: nothing
 
