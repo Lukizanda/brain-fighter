@@ -43,7 +43,7 @@ Risk: **L** = deletions and renames with grep-verified zero consumers; **M** = b
 
 ## Chunk 0 — Turn the lights off (dead code, dead flags, stale comments)
 
-Status: done — 2026-09-08 — (this commit)
+Status: done — 2026-09-08 — `ba9891d`
 Findings: F26, F35, F36, F37, F38 (comments only), F19 (`PlayerRespawned` only), F32 (delete half)
 Risk: L · Playtest: **boot smoke only** (clean console, HUD builds) · Depends on: nothing · Blocked on: nothing
 
@@ -90,7 +90,7 @@ Done when: `RunTests = "all"` reports no `[AUTORUN WARN] Skipped` and no suite e
 
 ## Chunk 2 — One name per number
 
-Status: done — 2026-09-08 — (this commit)
+Status: done — 2026-09-08 — `a49d5a3`
 Findings: F27, F31, F38, F21 (constant half), F19 note
 Risk: L · Playtest: **boot smoke** (unit suites carry the rest) · Depends on: chunk 1 · Blocked on: nothing
 
@@ -110,7 +110,7 @@ Wiki: [[systems/SpellRegistry]] (range constant), [[systems/SpellCastService]] �
 
 ## Chunk 3 — HUD ownership
 
-Status: done — 2026-09-08 — (this commit)
+Status: done — 2026-09-08 — `974a5d4`
 Findings: F4, F20, F22, F23, drift 7
 Risk: M · Playtest: **yes** — die in the lobby, walk into the arena, confirm no death overlay; then die in the arena and confirm the overlay · Depends on: chunk 0 · Blocked on: nothing
 
