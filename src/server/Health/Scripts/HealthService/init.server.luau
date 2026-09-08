@@ -6,6 +6,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local HealthConstants = require(ReplicatedStorage.Shared.Health.HealthConstants)
 local DamageTypes = require(ReplicatedStorage.Shared.Health.DamageTypes)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local SkillEffects = require(ReplicatedStorage.Shared.Skills.SkillEffects)
 local applyDamage = require(script.applyDamage)
 
 local log = Logger.new("HealthService")
@@ -18,6 +19,12 @@ local requestRespawnRemote = healthRemotes.RequestRespawn
 local healthEvents = ServerScriptService.Server.Health.Events
 local playerDamagedEvent = healthEvents.PlayerDamaged
 local playerEliminatedEvent = healthEvents.PlayerEliminated
+
+-- "May other players damage this one?" — answered by GameModeService from
+-- the victim's session. A BindableFunction because the session tables
+-- live in a Script, not a module. GameModeService binds OnInvoke at file
+-- scope, before anything yields, so an Invoke can never hang waiting.
+local allowsPvPFunction = ServerScriptService.Server.GameMode.Events.AllowsPvP
 
 local pendingRespawns: { [Player]: number } = {}
 
@@ -96,7 +103,15 @@ local function initialize()
 		playerDamagedEvent = playerDamagedEvent,
 		playerEliminatedEvent = playerEliminatedEvent,
 		pendingRespawns = pendingRespawns,
+		allowsPvPFor = function(victim: Player): boolean
+			return allowsPvPFunction:Invoke(victim) == true
+		end,
 	})
+
+	-- Every spell's damage and heal lands here. Injected downward rather
+	-- than required upward from SkillEffects, so ReplicatedStorage never
+	-- reaches into ServerScriptService and the client build has no sink.
+	SkillEffects.setDamageSink(applyDamage)
 
 	-- Initialize players
 	for _, player in Players:GetPlayers() do

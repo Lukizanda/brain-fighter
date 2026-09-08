@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phase 6 plan (2026-08-20) — a welcome lobby and PvE/PvP mode selection. The finding is that mode choice is a session-container problem, not a menu problem; GameModeService and RoundManager are server-wide singletons. Decision = hub place with in-place arena zones, co-op queued PvE, 1v1 queued duels on a pad pool. Records what PvP needs that the lobby does not provide.
-updated: 2026-09-07
+updated: 2026-09-08
 ---
 
 # Lobby & Mode Selection
@@ -143,7 +143,7 @@ be mistaken for shipping PvP.
 
 | Blocker | State |
 |---|---|
-| **Spell damage does not respect the PvP gate** | `GameConfig.PLAYER_VS_PLAYER_ENABLED` gates `applyDamage.process`. Spells do not go through it — they write `Humanoid.Health` directly. Documented as deferred in Phase 5.1 ("unify when 5.4 hardening moves casting server-side"). Flipping the flag changes nothing for the actual damage path. See [[systems/SkillPipeline]] § Damage paths. |
+| ~~**Spell damage does not respect the PvP gate**~~ | **Closed 2026-09-08** (refactor chunk 4). Every spell now goes through `applyDamage.process`, and the gate is `allowsPvP` on the mode config, resolved through the victim's session — see § PvP gate below. |
 | **Client-trusted affordability** | A client can cast a spell it never earned energy for. Phase 5.4's validated memorize. The build plan already reversed its judgement on this on 2026-08-10 *for exactly this reason*. In a 1v1 it is the most visible cheat there is. |
 | **Round timer / countdown off** | `ROUND_TIMER_ENABLED` and `ROUND_COUNTDOWN_ENABLED` are both `false`. A duel with no clock does not end. |
 | **Contested blocks** | Closed by Phase 5.7 stage 4 — noted here because it was PvP-only and unreachable in solo play, which is the class of bug this phase will keep finding. |
@@ -151,6 +151,16 @@ be mistaken for shipping PvP.
 **Sequencing consequence:** Phase 6 stages 1–5 (container + arenas + broadcast +
 hub + PvE) are safe to build against the current trust model, because PvE co-op
 cheating is self-cheating. Stage 6 (duels) should land **after** Phase 5.4.
+
+## PvP gate (2026-09-08)
+
+Decided as Q2 of the [[design/system-audit-2026-09]] and landed in refactor chunk 4. Whether player A may damage player B is **a property of the mode B is playing under**, so that a duel and the lobby can coexist on one server:
+
+- `GameModeDefinition.getConfig().allowsPvP: boolean?` — absent means false. `LobbyMode` and `NoOpMode` say false; `PvPDuel` (stage 6) says true.
+- `GameModeService` answers the `Server.GameMode.Events.AllowsPvP` BindableFunction from the **victim's** session (`modeForPlayer(victim)`) — the victim is by definition in the arena the hit happened in. Bound at file scope so an early hit can never yield on an unbound function.
+- `HealthService` injects that answer into `applyDamage` as `allowsPvPFor(victim)`; `applyDamage.process` drops player-on-player damage when it is false. Self-damage, NPC-on-player and player-on-NPC are never gated.
+
+`GameConfig.PLAYER_VS_PLAYER_ENABLED` is deleted. The round timer/countdown flags follow it onto the mode config in chunk 8 (Q7).
 
 ## Interface note
 
@@ -192,7 +202,7 @@ leave it.
 | 3 | ✅ **Done 2026-08-20.** All nine HUD sites route through a new `shared/GameMode/BroadcastAudience.luau` — a late-binding pointer at `GameModeService`'s session tables, resolved per fire. `ScoreTracker` and `BossService` both needed it because neither *holds* a roster the way `RoundManager` does. **The boss judgement call:** rather than thread a session through `BossService` (a refactor stage 5 immediately redoes), it resolves `Arena.idOf(BossPoint)` — one attribute read per boss cycle, roster resolved per fire. Fallback on an unresolved lookup is *everyone* (pre-stage-3 behaviour) plus a throttled warn, never an empty audience. **Deliberately incomplete:** ScoreTracker's scores are still server-wide, so another arena's names still appear on the scoreboard — only the audience moved, since the payload shape is frozen for `ScoreboardGui`/`KillFeedGui`. VFX lane untouched as planned. **Not fully verified:** the two-session disjoint-roster test did not run (MCP `start_stop_play` wedged); single-session boot is clean. | Before stage 6 |
 | 4 | **Hub greybox + player state.** Lobby arena slot with its own session, `transferPlayer`, hub greybox, two portals, practice blocks, `InLobby/Queued/InArena` and the HUD suppression table above. Lands as 4a/4b/4c — see § Stage 4 detail. | — |
 | 5 | **PvE mode.** `Modes/PvEBoss.luau` — co-op, `minPlayers = 1`, objective win condition, boss arena slot. Queue → round → back to lobby. | — |
-| 6 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `PLAYER_VS_PLAYER_ENABLED = true`, timer + countdown back on. | **After Phase 5.4** |
+| 6 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `allowsPvP = true` on its config, timer + countdown back on. | **After Phase 5.4** |
 | 7 | **Wiki + tests.** `wiki/systems/Lobby.md`, `GameMode` page rewritten off its NoOp-only record, session lifecycle tests. | — |
 
 *Stage numbering changed 2026-08-20: broadcast audience inserted as the new stage

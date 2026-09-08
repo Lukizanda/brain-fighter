@@ -103,7 +103,7 @@ local function applyImpactEffects(
 
 	local firstFailure: SkillEffects.Result? = nil
 	for _, effectSpec in skill.onImpact do
-		local result = SkillEffects.apply(effectSpec, hitTarget, source)
+		local result = SkillEffects.apply(effectSpec, hitTarget, source, skill.name)
 		if not result.ok and firstFailure == nil then
 			firstFailure = result
 		end

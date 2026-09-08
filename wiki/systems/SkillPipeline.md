@@ -1,7 +1,7 @@
 ---
 type: system
 description: Unified data + dispatch pipeline shared by player spells and boss attacks. SkillSpec (data) + SkillEffects (effects) + SkillDelivery (deliveries), with caller-resolved origin so any caster (player, boss, future NPC) plugs in the same way.
-updated: 2026-08-10
+updated: 2026-09-08
 ---
 
 # Skill Pipeline
@@ -191,7 +191,7 @@ The three Phase 5.1 stubs resolved into **two** real effects and one deletion. W
 
 ### Shield — ownership splits across two systems
 
-The absorb pool lives in the character Model's `_shield` attribute, **not** in a Skills-local table, because [[systems/Health]]'s `DamageModifierRegistry.shieldModifier` already reads and drains that attribute inside `applyDamage.process` — the exact path boss attacks take. Storing it anywhere else would mean reimplementing absorption on a path that already has it.
+The absorb pool lives in the character Model's `_shield` attribute, **not** in a Skills-local table, because [[systems/Health]]'s `DamageModifierRegistry.shieldModifier` already reads and drains that attribute inside `applyDamage.process` — the path every attack takes. Storing it anywhere else would mean reimplementing absorption on a path that already has it.
 
 So ownership splits deliberately, and this is the one place it's allowed to:
 
@@ -200,7 +200,7 @@ So ownership splits deliberately, and this is the one place it's allowed to:
 - **Skills also drains** it (`SkillBuffs.consumeShield`) at a flat cost per projectile the shell deflects — see [Shell](#shield--the-shell-blocks-projectiles) below.
 - Nothing else writes the attribute.
 
-Two drain sites rather than one is deliberate, and player spells are what make it load-bearing: they write `Humanoid.Health` directly and never enter `applyDamage`, so a projectile blocked at the shell has no route to `shieldModifier` at all. A projectile stopped before impact also never runs an effect handler, so there is nothing downstream to charge the pool.
+The two drain sites never both fire for one hit. A projectile stopped at the shell is destroyed there and never runs an effect handler, so `consumeShield` is its only charge; anything that reaches the body is charged once, in `shieldModifier`. (Until 2026-09-08 the split was load-bearing for a worse reason — player spells wrote `Humanoid.Health` directly and never entered `applyDamage`; see § Damage paths.) `Skills/__tests` scenario 8 pins the once-only drain.
 
 The pool has **no expiry** (design call 2026-08-03): it lasts until damage eats it or the holder dies. That makes death cleanup the only thing standing between it and an indefinite leak, so `SkillBuffs` installs the same `Died` / `HealthChanged<=0` / `Destroying` hooks the other registries use. Give it a duration in `SpellRegistry` if playtest says it overstays.
 
@@ -403,9 +403,13 @@ The rule now lives in the registry:
 
 `SpellCastService` accepts `target = nil` and validates it against `needsEnemyTarget` — a targeted spell arriving with no target is rejected as malformed. This is still client-trusted overall (the client picks the spell and the server takes its word on affordability); Phase 5.4 is where that gets validated.
 
-### Damage paths — decision (2026-07-27)
+### Damage paths — unified (2026-09-08)
 
-`SkillEffects` writes `Humanoid.Health` directly for player spells while boss attacks route through `applyDamage.process`. This split stays for now: **hit zones/damage modifiers are out of scope for spells**. `applyDamage` lives in `ServerScriptService` (server-only) while player spells execute client-side, so real unification means moving casting server-side — which is exactly what Phase 5.4's server-trust hardening does. Unify then, not before.
+There is one. `SkillEffects.handlers.damage` and `.heal` build a request and hand it to the `DamageSink` that `HealthService` injects at server start (`SkillEffects.setDamageSink(applyDamage)`); nothing in Skills writes `Humanoid.Health`. On the client there is no sink, so the handlers refuse — which is the Phase 5.6 "predicted run writes nothing" invariant stated in code rather than guarded by `IsServer()`.
+
+The request carries what `applyDamage` needs to do its whole job: `sourcePlayer` (the caster's Player when the delivery `source` is a player character, nil for boss/NPC fire — drives the PvP gate, the hitmarker and kill credit), `baseDamage` with `SkillBuffs.damageAmp` already folded in, and `cause` — the skill name, which `SkillDelivery.applyImpactEffects` passes as the fourth argument of `SkillEffects.apply(spec, target, source, cause)`. The kill feed prints it. `EffectSpec.useApplyDamage` is gone; every spec takes the same path. Details, the PvP gate and the caller table are on [[systems/Health]] § One damage path.
+
+The 2026-07-27 decision this replaces ("hit zones/damage modifiers are out of scope for spells; unify when 5.4 moves casting server-side") came due with [[design/refactor-plan-2026-09]] chunk 4. Spells now default to `DamageType.Spell` and `HitZone.Torso`, so the headshot modifier is neutral for them and boss numbers are unchanged (`BossConfig` amounts land as-is).
 
 ## Testing
 
@@ -433,7 +437,7 @@ graph LR
 | Path | Role | Owns |
 |---|---|---|
 | `src/shared/Skills/SkillTypes.luau` | Pure types | `SkillSpec`, `EffectSpec`, `DeliveryCtx` |
-| `src/shared/Skills/SkillEffects.luau` | Effect handlers | `apply(spec, target, source)`, `isFrozen(target)`, `handlers.{damage, heal, freeze, knockup, shield, buff}`, freeze death-cleanup |
+| `src/shared/Skills/SkillEffects.luau` | Effect handlers | `apply(spec, target, source, cause?)`, `setDamageSink(sink)`, `isFrozen(target)`, `handlers.{damage, heal, freeze, knockup, shield, buff}`, freeze death-cleanup |
 | `src/shared/Skills/SkillBuffs.luau` | Per-Humanoid status registry | `applyBuff`, `damageAmp`, `hasBuff`, `grantShield`, `getShield`, `purge`; owns the `_shield` grant side and buff death-cleanup |
 | `src/shared/Skills/SkillDelivery.luau` | Delivery handlers | `deliver(skill, ctx)`, `handlers.{instant, projectile, aoe, world_spawn}` |
 | `src/shared/Skills/SkillVisuals.luau` | Shared visual primitives | `spawnShockwave` (cosmetic), `spawnBarrier` (the Stone Wall body — the only collidable primitive here) |
@@ -447,18 +451,6 @@ graph LR
 | `src/server/Boss/BossService.server.luau` | Boss lifecycle | Resolves type from `BossPoint:GetAttribute("BossType")` |
 | `src/server/Boss/Scripts/BossController.luau` | Per-boss controller | Owns blackboard, threads typeSpec |
 | `src/server/Boss/Scripts/BossStates.luau` | Boss FSM + cast dispatch | Resolves HRP origin, calls `SkillDelivery.deliver` |
-
-## Reserved Hooks (not yet implemented)
-
-The schema includes fields handlers currently ignore. They will activate when their backing systems land:
-
-- `SkillSpec.vfxName: string?` — fires named VFX on cast/impact (blocked on [[systems/VisualEffects]] Phase C: VfxController)
-- `SkillSpec.sfxName: string?` — plays named SFX on cast/impact (blocked on SFX module — no system exists yet, see [[systems/AudioSFX]])
-- `DeliveryCtx.target: Vector3` for `world_spawn` — the handler honours an explicit placement point, but no cast UI supplies one yet (blocked on the placement reticle, Phase 5.3)
-
-Retired from this list in 5.2: `shield` and `buff` are real handlers; `wall` was deleted outright (nothing consumed it — Stone Wall is a delivery, not an effect).
-
-Adding these later requires **only** wiring the handlers — no schema changes, no caller changes.
 
 ## VFX Layers
 
@@ -484,7 +476,6 @@ Cross-client replication: burst VFX replicate explicitly (via `BroadcastSpellVfx
 The rule and the full rationale live on [[systems/VisualEffects]] § "Nothing player-facing runs on the server". What matters when writing a delivery handler:
 
 - **Don't reach for `spawnEffect` directly.** It refuses on the server now (`ParticleEmitter:Emit()` doesn't replicate, so a server-side burst renders for nobody) and warns with a traceback. Use the `SkillVisuals` primitives — `spawnEffectAtPoint`, `spawnEffectOn`, `spawnShockwave` — which broadcast on the server and draw on a client. You don't branch on the VM; they do.
-- **Pass `drawnLocallyBy` from any handler that runs on both VMs.** `projectile` and `aoe` do, so the casting player's client already drew the effect and must be skipped or they see two. `casterUserIdFrom(source)` returns the right value — nil for boss/NPC fire, which is exactly when every client should receive it. `world_spawn` is server-only and passes nothing.
 - **Collidable objects stay server-owned.** `spawnBarrier` still builds the Stone Wall slab on the server (it has to be one solid object for everyone) and broadcasts only its cosmetic overlay — by position, because an Instance reference created on the same frame arrives `nil` on clients that haven't replicated it yet.
 
 Six sites were fixed when this landed, the loudest being the shield-block spark: boss fire is server-only, so that burst had been emitted where no player could see it and the bubble looked inert while it was in fact blocking every shot.

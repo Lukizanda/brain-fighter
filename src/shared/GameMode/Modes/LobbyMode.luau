@@ -47,6 +47,7 @@ function LobbyMode.getConfig()
 		teamBased = false,
 		spawnTag = Arena.SpawnTags.Lobby,
 		runsRounds = false,
+		allowsPvP = false,
 	}
 end
 

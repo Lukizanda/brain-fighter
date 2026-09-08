@@ -10,6 +10,12 @@ local HealthConstants = {
 	HEADSHOT_MULTIPLIER = 2.0,
 	LIMB_MULTIPLIER = 0.75,
 
+	-- Lethal through any armor or shield in one request. For callers that
+	-- mean "dead now" (the DeathZone) but still go through the one damage
+	-- path rather than writing Health — so a big number, not a special case
+	-- in applyDamage.
+	INSTANT_KILL_DAMAGE = 1e9,
+
 	ARMOR_ATTRIBUTE = "_armor",
 	SHIELD_ATTRIBUTE = "_shield",
 

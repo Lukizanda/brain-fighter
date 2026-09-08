@@ -35,6 +35,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
+local DamageTypes = require(ReplicatedStorage.Shared.Health.DamageTypes)
 local BroadcastAudience = require(ReplicatedStorage.Shared.GameMode.BroadcastAudience)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
@@ -79,6 +80,11 @@ local transferPlayerFunction = gameModeEvents.TransferPlayer
 -- standing in the lobby like everybody else — so it is pushed in rather
 -- than read out. This file stays the only writer of the attribute.
 local setPlayerQueuedFunction = gameModeEvents.SetPlayerQueued
+
+-- HealthService's PvP gate: may other players damage this one? Answered
+-- from the victim's session (see `modeForPlayer`), so a duellist and a
+-- lobby player on the same server get different answers.
+local allowsPvPFunction = gameModeEvents.AllowsPvP
 
 -- Health system events (listen only — no modification)
 local healthEvents = ServerScriptService.Server.Health.Events
@@ -139,6 +145,18 @@ end
 local function modeForPlayer(player: Player): any
 	local session = playerSessions[player]
 	return session and session:getMode() or activeMode
+end
+
+-- Bound here, at file scope, rather than in initialize(): a BindableFunction
+-- with no OnInvoke makes its caller yield forever, and HealthService may
+-- process a hit before initialize() has finished building sessions. A
+-- player with no session yet falls back to the boot mode, as everywhere.
+allowsPvPFunction.OnInvoke = function(victim: Player): boolean
+	if typeof(victim) ~= "Instance" or not victim:IsA("Player") then
+		log:warn("AllowsPvP invoked with bad arguments")
+		return false
+	end
+	return modeForPlayer(victim).getConfig().allowsPvP == true
 end
 
 -- Which arena to spawn a player into. Falls back to the default arena for a
@@ -387,7 +405,7 @@ end
 -- Kill tracking (hooks into Health system)
 ----------------------------------------------------------------------
 
-local function onPlayerEliminated(sourcePlayer: Player?, targetHumanoid: Humanoid, _result)
+local function onPlayerEliminated(sourcePlayer: Player?, targetHumanoid: Humanoid, result: DamageTypes.DamageResult?)
 	local targetCharacter = targetHumanoid:FindFirstAncestorOfClass("Model")
 	if not targetCharacter then
 		return
@@ -398,14 +416,12 @@ local function onPlayerEliminated(sourcePlayer: Player?, targetHumanoid: Humanoi
 		return -- NPC/dummy kill, not tracked by game mode
 	end
 
-	-- Determine weapon name from the source player's equipped tool
-	local weaponName = "Unknown"
-	if sourcePlayer and sourcePlayer.Character then
-		local tool = sourcePlayer.Character:FindFirstChildOfClass("Tool")
-		if tool then
-			weaponName = tool.Name
-		end
-	end
+	-- What the kill feed credits. The cause is stamped by whoever built
+	-- the damage request — a skill name, a Cause id, a weapon name — which
+	-- is the only party that knows. Reading the attacker's equipped Tool
+	-- never worked here: the Spelling Staff casts every spell, so every
+	-- entry read "Unknown".
+	local weaponName = result and result.cause or DamageTypes.Cause.Unknown
 
 	-- Let the game mode definition process the kill (e.g., Gun Game weapon
 	-- switch). Resolved from the *victim's* session: the victim is by

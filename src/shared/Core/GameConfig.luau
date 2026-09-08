@@ -28,12 +28,13 @@ local GameConfig = {
 	-- TeamDeathmatch, camera/locomotion/loadout stack) was deleted in
 	-- 6610291 — flipping these flags no longer restores anything; a
 	-- future PvP mode would need to be rebuilt, not un-gated. The flags
-	-- remain because consumers across the damage, mode-registry, spawn,
-	-- UI, and nametag layers still read them directly via
-	-- require(...).TEAMS_ENABLED / .PLAYER_VS_PLAYER_ENABLED.
+	-- remain because consumers across the mode-registry, spawn, UI, and
+	-- nametag layers still read them directly via
+	-- require(...).TEAMS_ENABLED. Player-vs-player damage is no longer a
+	-- global flag: it is `allowsPvP` on each mode's config (see
+	-- GameModeDefinition), resolved per victim by HealthService.
 	----------------------------------------------------------------------
 	TEAMS_ENABLED = false,            -- Set true to restore Team Deathmatch mode + team UI + team-aware spawn/nametag/score logic.
-	PLAYER_VS_PLAYER_ENABLED = false, -- Set true to restore PvP damage. When false, players cannot damage other players; NPCs remain valid targets.
 	ROUND_TIMER_ENABLED = false,      -- When false, rounds have no time limit; win by score only. Set true to re-enable the 5-minute cap.
 	ROUND_COUNTDOWN_ENABLED = false,  -- When false, the pre-round 10-s countdown is skipped; round starts immediately. Set true to restore.
 

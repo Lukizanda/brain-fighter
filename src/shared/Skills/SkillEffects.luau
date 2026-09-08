@@ -11,17 +11,20 @@
 -- BossStates). Registries receive only the EffectSpec and an opaque
 -- target/source.
 --
--- Damage paths:
---   useApplyDamage = true  → applyDamage.process (server-only, boss attacks)
---   fractionOfMaxHP        → direct MaxHealth fraction (client spells)
---   amount (default)       → direct flat damage write
+-- Damage path — there is one. Every `damage` and `heal` effect goes to
+-- the DamageSink injected by HealthService (`setDamageSink`), which is
+-- `applyDamage` on the server. Nothing here writes `Humanoid.Health`.
+-- With no sink — the client's predicted run, or a VM without
+-- HealthService — the handlers refuse rather than write, which is the
+-- Phase 5.6 invariant stated in code: a predicted run has nowhere to
+-- put damage.
 --
--- applyDamage is conditionally loaded (nil on client); the useApplyDamage
--- branch is silently skipped when nil (client uses direct Health write).
+-- `cause` is the skill name SkillDelivery passes through so the kill
+-- feed can credit a spell kill (see wiki/systems/Health.md).
 ----------------------------------------------------------------------
 
+local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService        = game:GetService("RunService")
 
 local DamageTypes    = require(ReplicatedStorage.Shared.Health.DamageTypes)
 local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
@@ -36,19 +39,19 @@ export type Result = { ok: boolean, reason: string? }
 
 local log = Logger.new("SkillEffects")
 
--- Server-only; nil on client. Boss attacks use applyDamage.process;
--- player spells use direct Health writes on both the client's predicted
--- run and the server's authoritative run via SpellCastService — no
--- longer client-authoritative.
-local _applyDamage: { process: (any) -> any? }? = nil
-if RunService:IsServer() then
-	local ss = game:GetService("ServerScriptService")
-	local ok, mod = pcall(require, ss.Server.Health.Scripts.HealthService.applyDamage)
-	if ok then
-		_applyDamage = mod
-	else
-		log:warn("applyDamage not found on server — useApplyDamage path disabled")
-	end
+-- The only writer of Humanoid.Health. Injected by HealthService at server
+-- start; nil on the client and before injection. See DamageTypes.DamageSink.
+local _sink: DamageTypes.DamageSink? = nil
+
+-- The Player behind a caster, when there is one. `source` is the caster
+-- Model (or its Humanoid): a player character, a boss, an NPC. Only a
+-- player character resolves to a Player, and that is what the sink uses
+-- for the PvP gate, the hitmarker and kill credit.
+local function sourcePlayerFrom(source: any): Player?
+	if typeof(source) ~= "Instance" then return nil end
+	local inst = source :: Instance
+	local model = (if inst:IsA("Model") then inst else inst:FindFirstAncestorOfClass("Model")) :: Model?
+	return if model then Players:GetPlayerFromCharacter(model) else nil
 end
 
 -- Per-Humanoid freeze bookkeeping. Re-freezes extend the expiry
@@ -151,39 +154,53 @@ end
 
 local SkillEffects = {}
 
+-- Called once by HealthService at server start. Passing nil detaches
+-- (tests). Not a require: ReplicatedStorage must never reach into
+-- ServerScriptService, and the client build must have no sink at all.
+function SkillEffects.setDamageSink(sink: DamageTypes.DamageSink?)
+	_sink = sink
+end
+
 SkillEffects.handlers = {
 
-	damage = function(spec: EffectSpec, target: any, source: any): Result
+	damage = function(spec: EffectSpec, target: any, source: any, cause: string?): Result
 		local h = resolveHumanoid(target)
 		if not h then return { ok = false, reason = "damage requires Humanoid target" } end
-		-- Stasis-style debuffs multiply damage dealt TO this target. Applied
-		-- here rather than in each branch's arithmetic so every damage path
-		-- (applyDamage, MaxHP fraction, flat) honours it identically.
+		local sink = _sink
+		if not sink then return { ok = false, reason = "no damage sink on this VM" } end
+		-- Stasis-style debuffs multiply damage dealt TO this target, whatever
+		-- the spec's shape, so it is folded in before the request is built.
 		local amp = SkillBuffs.damageAmp(h)
-		if spec.useApplyDamage and _applyDamage then
-			_applyDamage.process({
-				sourcePlayer   = nil,
-				targetHumanoid = h,
-				baseDamage     = (spec.amount or 0) * amp,
-				damageType     = spec.damageType or DamageTypes.DamageType.Bullet,
-				hitZone        = spec.hitZone or DamageTypes.HitZone.Torso,
-				timestamp      = os.clock(),
-			})
-		elseif spec.fractionOfMaxHP then
-			local fraction: number = spec.fractionOfMaxHP
-			h.Health = math.max(0, h.Health - fraction * h.MaxHealth * amp)
-		else
-			h.Health = math.max(0, h.Health - (spec.amount or 0) * amp)
-		end
+		local base: number = if spec.fractionOfMaxHP
+			then (spec.fractionOfMaxHP :: number) * h.MaxHealth
+			else (spec.amount or 0)
+		-- The sink decides what happens (PvP gate, modifiers, already dead);
+		-- a nil result is its refusal, not a failed effect.
+		sink.process({
+			sourcePlayer   = sourcePlayerFrom(source),
+			targetHumanoid = h,
+			baseDamage     = base * amp,
+			damageType     = spec.damageType or DamageTypes.DamageType.Spell,
+			hitZone        = spec.hitZone or DamageTypes.HitZone.Torso,
+			timestamp      = os.clock(),
+			cause          = cause,
+		})
 		return { ok = true }
 	end,
 
-	heal = function(spec: EffectSpec, target: any, source: any): Result
+	heal = function(spec: EffectSpec, target: any, source: any, cause: string?): Result
 		-- Heals the target if present, else falls back to the source (self-heal).
 		local h = resolveHumanoid(target) or resolveHumanoid(source)
 		if not h then return { ok = false, reason = "heal requires a Humanoid" } end
+		local sink = _sink
+		if not sink then return { ok = false, reason = "no damage sink on this VM" } end
 		local fraction: number = spec.fractionOfMaxHP or 0
-		h.Health = math.min(h.MaxHealth, h.Health + fraction * h.MaxHealth)
+		sink.heal({
+			sourcePlayer   = sourcePlayerFrom(source),
+			targetHumanoid = h,
+			amount         = fraction * h.MaxHealth,
+			cause          = cause,
+		})
 		return { ok = true }
 	end,
 
@@ -459,13 +476,16 @@ function SkillEffects.canApply(spec: EffectSpec, target: any, source: any?): Res
 	return check(spec, target, source)
 end
 
-function SkillEffects.apply(spec: EffectSpec, target: any, source: any?): Result
+-- `cause` names what is applying the effect — the skill name, from
+-- SkillDelivery — and rides the damage request to the kill feed. Only the
+-- damage and heal handlers read it.
+function SkillEffects.apply(spec: EffectSpec, target: any, source: any?, cause: string?): Result
 	local handler = SkillEffects.handlers[spec.kind]
 	if not handler then
 		log:warn(("unknown effect kind: %s"):format(tostring(spec.kind)))
 		return { ok = false, reason = "unknown effect kind: " .. tostring(spec.kind) }
 	end
-	return handler(spec, target, source)
+	return handler(spec, target, source, cause)
 end
 
 return SkillEffects

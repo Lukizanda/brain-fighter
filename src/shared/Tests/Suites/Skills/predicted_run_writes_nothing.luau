@@ -30,9 +30,17 @@
 -- Covers: instant damage and its `_burning` render flag (Inferno), freeze
 -- + its `_frozen` render flag (Frost Nip), the shield pool (Shield), and
 -- projectile Part creation (Fireball).
+--
+-- Since the 2026-09 refactor (chunk 4) spell damage no longer writes
+-- Health itself; it goes through the sink HealthService injects, which
+-- is `applyDamage.process`. So the authoritative trial also listens on
+-- the `PlayerDamaged` event and asserts that Inferno's hit arrived as a
+-- DamageResult carrying the skill name as its `cause` — the field the
+-- kill feed credits — and that the predicted trial produced no event.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
 local SpellExecutor  = require(ReplicatedStorage.Shared.SpellExecutor)
@@ -61,6 +69,9 @@ type Snapshot = {
 	burning: boolean,
 	shield: number,
 	projectiles: number,
+	-- `cause` of every DamageResult the sink produced against this trial's
+	-- target, in order.
+	causes: { string },
 }
 
 type Ctx = {
@@ -115,6 +126,14 @@ local function runTrial(mode: string, ctx: Ctx): Snapshot
 	local run = { mode = mode :: any }
 	local projectilesBefore = countProjectiles()
 
+	local causes: { string } = {}
+	local damagedEvent = ServerScriptService.Server.Health.Events.PlayerDamaged :: BindableEvent
+	local conn = damagedEvent.Event:Connect(function(_source: Player?, hum: Humanoid, result: any)
+		if hum == targetHum then
+			table.insert(causes, tostring(result and result.cause))
+		end
+	end)
+
 	-- Inferno (red T3): instant, fraction-of-MaxHP damage + the `_burning`
 	-- render flag. The flag clears itself after INFERNO_BURN_SEC (3 s),
 	-- which is far longer than SETTLE_SEC, so it is still up when the
@@ -128,6 +147,7 @@ local function runTrial(mode: string, ctx: Ctx): Snapshot
 	SpellExecutor.cast(SpellRegistry.getSpell("red", 2), casterHum, targetHum, run)
 
 	task.wait(SETTLE_SEC)
+	conn:Disconnect()
 
 	local shield = casterModel:GetAttribute("_shield")
 	return {
@@ -137,6 +157,7 @@ local function runTrial(mode: string, ctx: Ctx): Snapshot
 		burning     = targetModel:GetAttribute(SkillConstants.BURNING_ATTRIBUTE) == true,
 		shield      = if typeof(shield) == "number" then shield :: number else 0,
 		projectiles = countProjectiles() - projectilesBefore,
+		causes      = causes,
 	}
 end
 
@@ -172,6 +193,9 @@ return {
 		if p.projectiles ~= 0 then
 			return false, ("predicted run spawned %d projectile Part(s) into the world"):format(p.projectiles)
 		end
+		if #p.causes ~= 0 then
+			return false, ("predicted run reached the damage sink (%s)"):format(table.concat(p.causes, ","))
+		end
 
 		-- 2. Positive control: the same casts authoritatively must move all
 		--    of it, or clause 1 proved nothing.
@@ -194,8 +218,16 @@ return {
 			return false, "authoritative run spawned no projectile — projectile assertion above is vacuous"
 		end
 
-		return true, ("predicted wrote nothing; authoritative wrote health=%d walkSpeed=%d frozen=%s burning=%s shield=%d projectiles=%d")
-			:format(a.health, a.walkSpeed, tostring(a.frozen), tostring(a.burning), a.shield, a.projectiles)
+		-- 3. The damage went through the sink and carries the skill name as
+		--    its cause — what the kill feed credits instead of "Unknown".
+		local infernoName = SpellRegistry.getSpell("red", 3).skill.name
+		if not table.find(a.causes, infernoName) then
+			return false, ("authoritative Inferno hit did not reach the sink with cause=%q (got: %s)")
+				:format(infernoName, #a.causes > 0 and table.concat(a.causes, ",") or "none")
+		end
+
+		return true, ("predicted wrote nothing; authoritative wrote health=%d walkSpeed=%d frozen=%s burning=%s shield=%d projectiles=%d causes=%s")
+			:format(a.health, a.walkSpeed, tostring(a.frozen), tostring(a.burning), a.shield, a.projectiles, table.concat(a.causes, ","))
 	end,
 
 	teardown = function(ctx: Ctx)

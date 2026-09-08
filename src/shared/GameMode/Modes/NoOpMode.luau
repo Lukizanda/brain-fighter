@@ -1,9 +1,8 @@
 ----------------------------------------------------------------------
 -- NoOpMode
 ----------------------------------------------------------------------
--- Fallback mode for when the competitive modes (FFADeathmatch,
--- TeamDeathmatch) are gated out by GameConfig.TEAMS_ENABLED /
--- PLAYER_VS_PLAYER_ENABLED. Brain Fighter is being repurposed as an
+-- Fallback mode now that the competitive modes (FFADeathmatch,
+-- TeamDeathmatch) are gone (deleted in 6610291). Brain Fighter is being repurposed as an
 -- educational shooter and the inherited round system has no useful
 -- meaning in that context — but GameModeService and RoundManager
 -- assume an active mode exists, so this stub keeps them runnable in
@@ -45,6 +44,7 @@ function NoOpMode.getConfig()
 		-- stays there, which is what gives spawn protection and the respawn
 		-- loop something to key on.
 		runsRounds = true,
+		allowsPvP = false,
 	}
 end
 

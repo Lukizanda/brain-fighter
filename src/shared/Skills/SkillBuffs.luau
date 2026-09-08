@@ -232,15 +232,14 @@ end
 -- Drain up to `amount` from the pool; returns how much was actually
 -- absorbed (0 when unshielded).
 --
--- This is the second of exactly two drain sites. The other is
--- `DamageModifierRegistry.shieldModifier`, which handles damage that
--- reaches the body through `applyDamage`. This one handles damage that
--- never gets there because the shell stopped it — a projectile eaten at
--- the bubble never runs an effect handler at all, so it has no other way
--- to charge the pool. Player spells make the split load-bearing rather
--- than cosmetic: they write Humanoid.Health directly and never touch
--- `applyDamage`, so without this a blocked player projectile would drain
--- nothing. Still nothing else writes the attribute.
+-- Shell deflection only. A projectile eaten at the bubble never reaches
+-- an effect handler, so nothing else could charge the pool for it; this
+-- is that charge. Damage that lands on the body drains the pool in
+-- exactly one place, `DamageModifierRegistry.shieldModifier`, on its way
+-- through `applyDamage` — and since every spell goes that way too
+-- (2026-09 refactor, chunk 4), a hit is never charged twice: the shell
+-- charge happens only when the shot was destroyed short of the body.
+-- Nothing else writes the attribute.
 function SkillBuffs.consumeShield(target: any, amount: number): number
 	if amount <= 0 then return 0 end
 	local h = resolveHumanoid(target)

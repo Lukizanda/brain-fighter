@@ -315,12 +315,12 @@ Added 2026-08-20. Full plan in [[design/lobby]]. Prompted by the decision to add
 | 3 | **Broadcast audience** *(added 2026-08-20)*. Nine HUD sites: `ScoreTracker`'s `ScoreUpdate` ×1 + `KillFeed` ×2, `BossService`'s `BossPhaseChanged` ×3 + `BossHealthChanged` ×3. Copy stage 1's roster pattern. VFX lane (8 sites) out of scope — see [[design/lobby]] § Broadcast audience. | Before stage 6 |
 | 4 | **Hub greybox + player state.** Lobby zone, two portals, practice blocks, `InLobby/Queued/InArena` and the HUD suppression table. Still `NoOp` behind the portals. | — |
 | 5 | **PvE mode.** `Modes/PvEBoss.luau` — co-op, objective win condition, boss arena slot. | — |
-| 6 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `PLAYER_VS_PLAYER_ENABLED = true`, timer + countdown back on. | **After 5.4** |
+| 6 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `allowsPvP = true` on its config, timer + countdown back on. | **After 5.4** |
 | 7 | **Wiki + tests.** `wiki/systems/Lobby.md`, rewrite the NoOp-only [[systems/GameMode]] record, session lifecycle tests. | — |
 
 **The lobby does not unblock PvP, and shipping it must not be mistaken for shipping PvP.** Three live blockers, recorded in full in [[design/lobby]] § What this does *not* unblock:
 
-- **`PLAYER_VS_PLAYER_ENABLED` does not gate the damage path players actually use.** It gates `applyDamage.process`; spells write `Humanoid.Health` directly. Flipping it changes nothing for spells. Deferred in 5.1 as "unify when 5.4 hardening moves casting server-side" — that debt comes due here.
+- ~~**`PLAYER_VS_PLAYER_ENABLED` does not gate the damage path players actually use.**~~ Closed 2026-09-08 by refactor chunk 4: every spell goes through `applyDamage.process`, and the gate is `allowsPvP` on the mode config, resolved through the victim's session ([[design/lobby]] § PvP gate).
 - **Client-trusted affordability** (5.4 validated memorize). Already re-judged on 2026-08-10 for exactly this reason; in a 1v1 it is the most visible cheat there is.
 - **`ROUND_TIMER_ENABLED` / `ROUND_COUNTDOWN_ENABLED` are both `false`.** A duel with no clock does not end.
 

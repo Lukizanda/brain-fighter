@@ -15,8 +15,12 @@
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
+local DamageTypes = require(ReplicatedStorage.Shared.Health.DamageTypes)
+local HealthConstants = require(ReplicatedStorage.Shared.Health.HealthConstants)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local applyDamage = require(ServerScriptService.Server.Health.Scripts.HealthService.applyDamage)
 
 local log = Logger.new("DeathZoneService")
 
@@ -31,10 +35,17 @@ local function onTouched(zone: BasePart, hit: BasePart)
 	if not humanoid or humanoid.Health <= 0 then
 		return
 	end
-	-- Apply lethal damage rather than setting Health = 0 so the existing
-	-- HealthService / DeathHandler pipeline (kill credit, score, respawn,
-	-- death-screen) still fires correctly.
-	humanoid:TakeDamage(humanoid.MaxHealth + 1)
+	-- Through applyDamage rather than a Health write or TakeDamage, so the
+	-- one damage path (PlayerEliminated, kill feed, respawn bookkeeping)
+	-- sees the fall. No source: the world did it.
+	applyDamage.process({
+		sourcePlayer   = nil,
+		targetHumanoid = humanoid,
+		baseDamage     = HealthConstants.INSTANT_KILL_DAMAGE,
+		damageType     = DamageTypes.DamageType.Environmental,
+		timestamp      = os.clock(),
+		cause          = DamageTypes.Cause.DeathZone,
+	})
 	log:info(string.format("%s fell into %s", character.Name, zone:GetFullName()))
 end
 

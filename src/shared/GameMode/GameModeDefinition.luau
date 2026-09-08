@@ -34,6 +34,13 @@ export type GameModeDefinition = {
 		--
 		-- Optional; absent means true, so existing modes are unaffected.
 		runsRounds: boolean?,
+
+		-- Whether players in this mode may damage each other. HealthService
+		-- asks through the *victim's* session, so a duellist is damageable
+		-- by their opponent while a lobby player on the same server is not.
+		-- This replaced the global PvP flag in GameConfig in the
+		-- 2026-09 refactor (chunk 4). Optional; absent means false.
+		allowsPvP: boolean?,
 	},
 
 	-- Called when a player joins the game. Modes apply team assignment

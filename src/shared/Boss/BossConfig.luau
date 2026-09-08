@@ -61,7 +61,7 @@ local bossTypes: { [string]: BossTypeSpec } = {
 					impactEffectId   = "impact_damage",
 				},
 				onImpact = {
-					{ kind = "damage", amount = 5, useApplyDamage = true },
+					{ kind = "damage", amount = 5 },
 				},
 			},
 			GroundSlam = {
@@ -76,7 +76,7 @@ local bossTypes: { [string]: BossTypeSpec } = {
 					cosmeticEffectId = "aoe_boss_groundslam",
 				},
 				onImpact = {
-					{ kind = "damage", amount = 25, useApplyDamage = true },
+					{ kind = "damage", amount = 25 },
 					{ kind = "knockup", force = 60 },
 				},
 			},
@@ -127,7 +127,7 @@ local bossTypes: { [string]: BossTypeSpec } = {
 					impactEffectId   = "impact_damage",
 				},
 				onImpact = {
-					{ kind = "damage", amount = 10, useApplyDamage = true },
+					{ kind = "damage", amount = 10 },
 					{ kind = "freeze", durationSec = 1.5 },
 				},
 			},

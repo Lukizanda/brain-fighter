@@ -1,7 +1,7 @@
 ---
 type: system
 description: Game mode framework — GameModeService as a session manager, per-session RoundManager instances, ScoreTracker, per-arena SpawnManager over the shared Arena vocabulary, mode registry, and the BroadcastAudience seam that scopes screen-space remotes to a session roster. FFA/TDM modes + TeamService DELETED (2026-06-22, commit 6610291). Registered modes are NoOp and Lobby; the body below still describes the NoOp-only world and is rewritten in Phase 6 stage 7.
-updated: 2026-09-07
+updated: 2026-09-08
 ---
 
 # GameMode System
@@ -118,7 +118,7 @@ renders them — only pays to instantiate them, which is a throughput question
 Brain Fighter is being repurposed as an educational shooter, so the inherited competitive modes are gated off via `GameConfig.luau`:
 
 - `TEAMS_ENABLED = false` — `TeamDeathmatch` not registered, `TeamService` is a no-op, team UI/nametag colours fall back to neutral.
-- `PLAYER_VS_PLAYER_ENABLED = false` — `FFADeathmatch` not registered, player-on-player damage rejected in `applyDamage` and `canPlayerDamageHumanoid`, aim assist ignores other players. **Note:** this flag does *not* gate the damage path spells actually use — they write `Humanoid.Health` directly. See [[design/lobby]] § What this does not unblock.
+- ~~`PLAYER_VS_PLAYER_ENABLED`~~ — deleted 2026-09-08 (refactor chunk 4). Player-on-player damage is now `allowsPvP` on each mode's `getConfig()`, resolved through the victim's session; `LobbyMode` and `NoOpMode` set it false. Every spell goes through `applyDamage`, so the gate finally gates the path players use. See [[systems/Health]] § PvP gate.
 - `ROUND_TIMER_ENABLED = false` — active rounds have no time limit; they end on score only. `RoundTimerGui` exits early (no "0:00" overlay). Flip true to restore the 5-minute cap + timer HUD.
 - `ROUND_COUNTDOWN_ENABLED = false` — `RoundManager:_countdown()` returns immediately; the round goes live the moment minimum players are met. Flip true to restore the 10-second pre-round delay.
 

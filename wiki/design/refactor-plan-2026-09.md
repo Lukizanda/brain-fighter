@@ -156,7 +156,7 @@ Done when: the lobby-death → arena-entry playtest shows no overlay; `grep _G.P
 
 ## Chunk 4 — One damage path
 
-Status: open
+Status: done — 2026-09-08 — COMMIT_PLACEHOLDER
 Findings: F1, F2, drift 1, 2 · plus cause id for F34's kill-feed "Unknown"
 Risk: **H** · Playtest: **yes** — spell kill on the dummy credits the kill feed; boss damage unchanged; shield absorbs a spell hit once (not twice) · Depends on: chunk 1, chunk 2 · Blocked on: nothing (Q1, Q2 answered)
 Decision: Q1(a) + Q2(a) — every spell damage/heal goes through `applyDamage.process` via an injected sink; PvP gate is `allowsPvP` on the mode config resolved through the victim's session; `GameConfig.PLAYER_VS_PLAYER_ENABLED` is deleted here (chunk 8 moves the other flags).
@@ -164,15 +164,23 @@ Decision: Q1(a) + Q2(a) — every spell damage/heal goes through `applyDamage.pr
 Owns: `src/shared/Skills/SkillEffects.luau` (damage/heal handlers + the sink injection), `src/server/Health/Scripts/HealthService/{init.server,applyDamage}.luau`, `src/shared/Health/DamageTypes.luau` (cause id), `src/server/Arena/DeathZoneService.server.luau`, `src/shared/Skills/SkillBuffs.luau:230-262` (second drain site), `src/shared/Skills/SkillTypes.luau` (DeliveryCtx source), `GameModeService/init.server.luau:390-420` (`onPlayerEliminated` weapon name), `Suites/Skills/*`.
 Must not touch: `SkillDelivery` handlers beyond passing `ctx.source` through; `ScoreTracker` internals; respawn code (chunk 5).
 
-- [ ] `SkillEffects.setDamageSink(fn)` called from `HealthService/init.server.luau`; remove the `pcall(require)` at `:44`.
-- [ ] `damage`/`heal` handlers call the sink with `sourcePlayer` (from `ctx.source` when it is a player character) and `cause` (skill id); delete the direct `Health` writes at `:172,174,184`. `useApplyDamage` field becomes redundant — remove from `BossConfig`.
-- [ ] `applyDamage` request gains `cause: string?`; `DamageResult` carries it; `onPlayerEliminated` uses it for the kill feed instead of an equipped Tool.
-- [ ] PvP gate per Q2 (`allowsPvP` on mode config, resolved through the victim's session) replaces `GameConfig.PLAYER_VS_PLAYER_ENABLED` at `applyDamage.luau:41`.
-- [ ] DeathZone through `applyDamage` with `sourcePlayer = nil`, `cause = "death_zone"`.
-- [ ] `SkillBuffs.consumeShield` stays for shell deflection only; document that the body-hit drain is `DamageModifierRegistry`.
-- [ ] Update `predicted_run_writes_nothing` and `Skills/__tests` shield case for the new path.
+- [x] `SkillEffects.setDamageSink(fn)` called from `HealthService/init.server.luau`; remove the `pcall(require)` at `:44`.
+- [x] `damage`/`heal` handlers call the sink with `sourcePlayer` (from `ctx.source` when it is a player character) and `cause` (skill id); delete the direct `Health` writes at `:172,174,184`. `useApplyDamage` field becomes redundant — remove from `BossConfig`.
+- [x] `applyDamage` request gains `cause: string?`; `DamageResult` carries it; `onPlayerEliminated` uses it for the kill feed instead of an equipped Tool.
+- [x] PvP gate per Q2 (`allowsPvP` on mode config, resolved through the victim's session) replaces `GameConfig.PLAYER_VS_PLAYER_ENABLED` at `applyDamage.luau:41`.
+- [x] DeathZone through `applyDamage` with `sourcePlayer = nil`, `cause = "death_zone"`.
+- [x] `SkillBuffs.consumeShield` stays for shell deflection only; document that the body-hit drain is `DamageModifierRegistry`.
+- [x] Update `predicted_run_writes_nothing` and `Skills/__tests` shield case for the new path.
 
 Done when: `grep -rn "\.Health\s*=" src` hits only `applyDamage.luau` and the two HealthService init writes; a spell kill appears in the kill feed with the spell name; suites green.
+
+Divergences (2026-09-08):
+- The sink is the `applyDamage` module itself (`DamageTypes.DamageSink = { process, heal }`), not a bare function — heals must not run the modifier chain (a shield would "absorb" them), so `applyDamage.heal` is a second entry point on the one writer.
+- "Resolved through the victim's session" needed three files outside `Owns:`: `GameModeDefinition.getConfig().allowsPvP: boolean?` (absent = false), `allowsPvP = false` on `LobbyMode`/`NoOpMode`, and a new `Server/GameMode/Events/AllowsPvP.model.json` BindableFunction that `GameModeService` answers from `modeForPlayer(victim)` — bound at file scope, because an unbound BindableFunction makes `Invoke` yield forever.
+- `DeathZone` needs `HealthConstants.INSTANT_KILL_DAMAGE` (1e9): `MaxHealth + 1` through the modifier chain would let a shielded player survive the fall.
+- Spells default to `DamageType.Spell` (was `Bullet`), which is what `DamageFeedbackGui` now prints for boss and player spell hits. Hit zone stays `Torso`, so boss numbers are unchanged (GroundSlam 25, Brain volley 5/shot, both observed).
+- Kill feed only lists **player** victims (`onPlayerEliminated` returns early for NPC/dummy victims — pre-existing, `ScoreTracker` territory, untouched). Verified instead with the player as victim, read from the Client datamodel: `[death_zone] ZandaLuki` and `[FireballVolley] ZandaLuki`; a player-sourced spell kill on another player needs the two-client check that chunk 9/stage 6 will run.
+- Found, not fixed (chunk 9): NPC melee (`MeleeHitDetector`) sends no `cause`, so an NPC kill still reads "Unknown" in the feed.
 Wiki: [[systems/Health]] (callers list, cause id), [[systems/SkillPipeline]] (damage section; delete the stale `drawnLocallyBy`/`casterUserIdFrom` paragraph and the Reserved Hooks section), [[design/lobby]] (PvP gate mechanism).
 
 ---
@@ -279,6 +287,8 @@ Must not touch: mode files; `LobbyService`.
 
 Done when: the playtest above; `grep "Players:GetPlayers()" src/shared/Skills src/server/NPC` empty.
 Wiki: [[systems/Boss]], [[systems/NPC]], [[systems/BlockShoot]], [[systems/BlockSpawner]].
+
+- Note (chunk 4, 2026-09-08): `MeleeHitDetector` builds its `DamageRequest` without a `cause`, so an NPC kill still shows "Unknown" in the kill feed. Pass the archetype name (or a `DamageTypes.Cause` id) when this chunk touches the NPC damage call.
 
 ---
 

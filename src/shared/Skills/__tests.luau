@@ -21,8 +21,6 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local DamageModifierRegistry = require(ReplicatedStorage.Shared.Health.DamageModifierRegistry)
-local DamageTypes            = require(ReplicatedStorage.Shared.Health.DamageTypes)
 local SkillBuffs             = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
 local SkillEffects           = require(ReplicatedStorage.Shared.Skills.SkillEffects)
 local SkillInterrupt         = require(ReplicatedStorage.Shared.Skills.SkillInterrupt)
@@ -192,13 +190,18 @@ function M.run()
 	end
 	print("[Skills.__tests] freeze-despawn-race ok")
 
-	-- 8. Shield grants an absorb pool that DamageModifierRegistry actually
-	-- drains. This is the whole point of storing it as the `_shield`
-	-- attribute rather than in a Skills-local table — if these two ever
-	-- stop agreeing on where the pool lives, the shield silently stops
-	-- working and nothing else notices.
+	-- 8. Shield grants an absorb pool that a spell's damage actually drains
+	-- — once. The drain lives in Health's DamageModifierRegistry, reached
+	-- through the sink HealthService injects; this is the whole point of
+	-- storing the pool as the `_shield` attribute rather than in a
+	-- Skills-local table. If Skills and Health ever stop agreeing on where
+	-- the pool lives, or a second drain site creeps back in, this is what
+	-- notices: 25 into a 40 pool must leave Health untouched and exactly
+	-- 15 in the pool.
 	do
 		local model, humanoid = makeDummy()
+		humanoid.MaxHealth = 100
+		humanoid.Health = 100
 		local granted = SkillEffects.apply({ kind = "shield", amount = 40 } :: any, humanoid)
 		if not granted.ok then
 			fail("shield-absorb", "shield apply should succeed: " .. tostring(granted.reason))
@@ -207,19 +210,15 @@ function M.run()
 			fail("shield-absorb", "pool should read 40, got " .. tostring(SkillBuffs.getShield(humanoid)))
 		end
 
-		local finalDamage = DamageModifierRegistry.resolve({
-			sourcePlayer   = nil,
-			targetHumanoid = humanoid,
-			baseDamage     = 25,
-			damageType     = DamageTypes.DamageType.Bullet,
-			hitZone        = DamageTypes.HitZone.Torso,
-			timestamp      = os.clock(),
-		} :: any)
-		if finalDamage ~= 0 then
-			fail("shield-absorb", "25 damage into a 40 pool should reach Health as 0, got " .. tostring(finalDamage))
+		local hit = SkillEffects.apply({ kind = "damage", amount = 25 } :: any, humanoid)
+		if not hit.ok then
+			fail("shield-absorb", "damage apply should reach the sink: " .. tostring(hit.reason))
+		end
+		if humanoid.Health ~= 100 then
+			fail("shield-absorb", "25 damage into a 40 pool should reach Health as 0, got " .. tostring(100 - humanoid.Health))
 		end
 		if SkillBuffs.getShield(humanoid) ~= 15 then
-			fail("shield-absorb", "pool should be 15 after absorbing 25, got " .. tostring(SkillBuffs.getShield(humanoid)))
+			fail("shield-absorb", "pool should be 15 after absorbing 25 exactly once, got " .. tostring(SkillBuffs.getShield(humanoid)))
 		end
 		model:Destroy()
 	end
