@@ -144,7 +144,7 @@ be mistaken for shipping PvP.
 | Blocker | State |
 |---|---|
 | ~~**Spell damage does not respect the PvP gate**~~ | **Closed 2026-09-08** (refactor chunk 4). Every spell now goes through `applyDamage.process`, and the gate is `allowsPvP` on the mode config, resolved through the victim's session — see § PvP gate below. |
-| **Client-trusted affordability** | A client can cast a spell it never earned energy for. Phase 5.4's validated memorize. The build plan already reversed its judgement on this on 2026-08-10 *for exactly this reason*. In a 1v1 it is the most visible cheat there is. |
+| ~~**Client-trusted affordability**~~ | **Closed 2026-09-08** (refactor chunk 6). `EnergyLedger.checkCast` prices every cast from validated memorizes, the ledger resets per round, and `EconomyConstants.ENFORCE = true` refuses casts a player provably never earned — see [[systems/SpellCastService]] § Validated memorize. |
 | **Round timer / countdown off** | `ROUND_TIMER_ENABLED` and `ROUND_COUNTDOWN_ENABLED` are both `false`. A duel with no clock does not end. |
 | **Contested blocks** | Closed by Phase 5.7 stage 4 — noted here because it was PvP-only and unreachable in solo play, which is the class of bug this phase will keep finding. |
 
@@ -161,6 +161,8 @@ Decided as Q2 of the [[design/system-audit-2026-09]] and landed in refactor chun
 - `HealthService` injects that answer into `applyDamage` as `allowsPvPFor(victim)`; `applyDamage.process` drops player-on-player damage when it is false. Self-damage, NPC-on-player and player-on-NPC are never gated.
 
 `GameConfig.PLAYER_VS_PLAYER_ENABLED` is deleted. The round timer/countdown flags follow it onto the mode config in chunk 8 (Q7).
+
+**Charge tier stays client-trusted (Q4(a), 2026-09-08).** `SpellCastService` takes the client's `tier` and does not check the hold duration against `chargeTimeFor(tier)`; a client that lies about charging buys itself *speed*, not mana, because it still pays `spec.cost` out of a ledger it had to earn. Accepted as a known tell-skip for now and to be revisited once duels are actually playable — see [[systems/SpellCastService]] § "Not checked: hold duration".
 
 ## Interface note
 

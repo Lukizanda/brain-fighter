@@ -227,7 +227,11 @@ function RoundManager:_activeRound(generation: number): (number?, string?)
 	-- not. See `wiki/design/lobby.md` § Broadcast audience.
 	self._refs.scoreTracker.resetAll(self:getPlayers())
 	self._refs.modeDefinition.onRoundStart()
-	self._refs.roundStartedEvent:Fire()
+	-- The roster rides along for the same reason the score reset takes it:
+	-- a round belongs to this arena session, not to the server. EconomyService
+	-- zeroes each member's energy ledger off this, mirroring the client's
+	-- own reset on the transition into Active.
+	self._refs.roundStartedEvent:Fire(self:getPlayers())
 
 	log:info(string.format("[%s] Round started! Timer: %s Score limit: %s",
 		self.arenaId,

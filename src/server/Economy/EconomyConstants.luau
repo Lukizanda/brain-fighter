@@ -13,16 +13,23 @@ local WordBuffer = require(ReplicatedStorage.Shared.WordBuffer)
 
 local EconomyConstants = {}
 
--- Shadow mode. While false the ledger computes every verdict and logs
--- the failures but refuses nothing, so a bug here cannot cost a real
+-- Enforcing. While false the ledger computed every verdict and logged
+-- the failures but refused nothing, so a bug there could not cost a real
 -- player a cast they earned.
 --
--- Flip to true only once a playtest has shown zero rejections against
--- honest play — the point of shipping this dark first is to turn "is
--- the coverage check generous enough?" into a measurement rather than
--- the judgement call that left the cast rate limit standing in for a
--- price check in the first place.
-EconomyConstants.ENFORCE = false
+-- The flip criterion was a measurement, not a judgement call: zero
+-- rejections against honest play. Measured 2026-09-08 (chunk 6) once the
+-- round-reset hook below it existed — before that the ceiling carried
+-- across rounds and the check could never have refused anything, so the
+-- reading would have been worthless. Four memorized words and three
+-- casts driven through the real client modules and the real remotes
+-- produced zero "would reject" lines, and three round starts each logged
+-- their reset. See wiki/design/refactor-plan-2026-09.md § Chunk 6 for
+-- the sample's limits — one player, no discards, no wildcards.
+--
+-- Back to false is the correct first response to a player reporting a
+-- cast they earned being refused; the log line says which check fired.
+EconomyConstants.ENFORCE = true
 
 -- A player's held letters are the ones consumed since their last
 -- memorize, so in honest play the count tracks the word buffer and
@@ -34,6 +41,14 @@ EconomyConstants.ENFORCE = false
 -- and rejecting real play is the one thing this design may not do.
 -- Log the outliers, tune against what they say.
 EconomyConstants.HELD_BANKING_LOG_THRESHOLD = WordBuffer.DEFAULT_CAP * 2
+
+-- The hard ceiling on a single memorize payload, as opposed to the
+-- reporting threshold above. The client's buffer physically cannot hold
+-- more than its cap, so a report naming more tiles than that did not
+-- come from a buffer — it is the one memorize shape that is impossible
+-- rather than merely suspicious, which is why it is refused in shadow
+-- mode too. Reads the buffer's own cap so the two cannot drift.
+EconomyConstants.MEMORIZE_TILE_CAP = WordBuffer.DEFAULT_CAP
 
 -- Seconds between repeats of the same player+reason rejection log, so a
 -- looping client cannot bury everyone else's output. Matches the

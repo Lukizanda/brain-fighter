@@ -1,6 +1,6 @@
 ---
 type: system
-description: Server relay for client-initiated spell casts. Applies effects server-side because client Humanoid.Health writes don't replicate for server-owned rigs. Hardened in 5.4 — except affordability, which is blocked on client-side energy state.
+description: Server relay for client-initiated spell casts. Applies effects server-side because client Humanoid.Health writes don't replicate for server-owned rigs. Hardened in 5.4; affordability is checked and, since 2026-09-08, enforced by the validated-memorize ledger.
 updated: 2026-09-08
 ---
 
@@ -42,7 +42,7 @@ Check 2 closes a latent crash as well as an exploit. `SpellRegistry.getSpell` ac
 
 [[systems/ChargeCast]] made the tier a function of how long the player held a colour panel. **The server does not and cannot verify that hold.** There is no server-side clock on the gesture; the `ChargeState` remote it does receive is a cosmetic broadcast (see below) that carries no timing guarantee, and adding one would mean timestamping a client-owned input across the wire.
 
-This is stated rather than fixed because it is not a hole. Hold-to-charge changed **which** tier the client picks, not **whether** the server prices it: the cast relay is byte-identical to before, check 2 still resolves the spec, and the ledger still debits `spec.cost`. A client that claims to have charged instantly buys itself *speed*, not mana — it still pays 40 for a T4 Volley, and if it never earned that 40 the affordability check refuses it exactly as it would a tapped one.
+**Re-affirmed 2026-09-08 (audit Q4(a)):** charge-tier trust stays accepted, to be revisited once duels are playable — see [[design/lobby]] § PvP. This is stated rather than fixed because it is not a hole. Hold-to-charge changed **which** tier the client picks, not **whether** the server prices it: the cast relay is byte-identical to before, check 2 still resolves the spec, and the ledger still debits `spec.cost`. A client that claims to have charged instantly buys itself *speed*, not mana — it still pays 40 for a T4 Volley, and if it never earned that 40 the affordability check refuses it exactly as it would a tapped one.
 
 What a lying client does gain is the ability to skip the windup — 7 s for a T4 at the current `MANA_FLOW_PER_SEC`, and the longer that gets the more there is to gain — which is a PvP *tell* rather than a cost — an opponent watching for the charge orb would not see it coming. Closing that needs the same thing everything else here needs: a server that owns the gesture, not just the outcome. Filed with the authoritative-economy work below rather than as its own item.
 
@@ -54,7 +54,9 @@ The `ChargeState` remote itself lives in `server/SpellCast/ChargeStateService.se
 >
 > **Resolved 2026-09-08 (refactor chunk 2).** The 150 used to be copied — `client/UI/SpellMenuGui` and `SpellCastConstants` each declared their own — with a comment noting a server Script can't require a LocalScript. Since `SpellRegistry` is a *shared* module, both sides can require it directly; there was never a cross-VM barrier here; only `SpellMenuGui`'s inline copy needed removing.
 
-### Blocked: server-side affordability
+### Server-side affordability
+
+> **Resolved 2026-09-08 (refactor chunk 6). The server-side affordability check exists and is ENFORCED.** `EnergyLedger.checkCast` prices every cast at `SpellCastService.server.luau:122` from blocks the server watched that player take and words it validated them spelling, and `EconomyConstants.ENFORCE = true` makes an unaffordable cast return rather than merely log. What follows is the record of how it got there; it is written in the present tense of 2026-08-10, when the server genuinely could not price a cast.
 
 **The server still takes the client's word that the caster could afford the spell.** This is the one item of the 5.4 brief that was not delivered, and it is an architecture decision rather than an oversight.
 
@@ -84,7 +86,7 @@ So it catches a client that casts *without* shooting — a cast-spam bot, which 
 
 The reframe that produced option 3: the useful question is not *how do we bound energy*, but **does the server ever learn that a word was spelled?** The ledger's answer is no, and everything weak about it follows from that.
 
-### Validated memorize (built 2026-08-10, shadow mode)
+### Validated memorize (built 2026-08-10 in shadow mode, enforcing since 2026-09-08)
 
 Landed as `server/Economy/` — `EnergyLedger` (state + verdicts, keyed by UserId so the suite can drive it without a `Players` entry), `EconomyConstants` (the `ENFORCE` flag), `EconomyService` (the `ReportMemorize` remote + lifecycle). Credit hooks the accepting branch of `BlockShootService`; the price check and debit sit in `SpellCastService` before the target checks. Client side, every memorize goes through `client/EconomyReport` so the wire format lives in one place and a new call site cannot silently skip the report.
 
@@ -111,6 +113,12 @@ Two problems from the ledger design disappear rather than getting solved. `MAX_L
 The residue is narrow: if the reply is lost or arrives after `PENDING_TTL_SEC`, the pending entry is swept without a rollback and the divergence returns for that one letter. Narrow enough to measure rather than design around — which is what shadow mode is for.
 
 **Rollout: shadow mode first.** Compute the verdict, log it, reject nothing. Confirm the false-positive count is actually zero across the friends playtest, then flip to enforce. That makes "is the coverage check generous enough" a measurement rather than a judgement call — the same mistake the rate limiter's generous floor was standing in for.
+
+**Flipped to enforce 2026-09-08 (refactor chunk 6).** The measurement the rollout asked for could not have been taken before that session, because nothing reset the server ledger between rounds (F9): the ceiling carried across rounds and lobby banking, so the server was permanently richer than the client and the check could never have refused anything. Zero rejections against a ledger that cannot reject is not evidence. Chunk 6 landed the reset hook (`EconomyService` listens to `RoundStarted` and clears each roster member's account), then measured: four words memorized and three casts fired through the real client modules and the real remotes, **zero `would reject` lines**, and a `[EconomyService] round start — reset N of M roster accounts` line on every round start. `ENFORCE = true` went in on that reading.
+
+The sample's limits are worth knowing before trusting it: one player, four words, no discards, no wildcards drawn from real blocks, and no second client. The narrow false-reject residue described above — a `ConsumeBlock` rejection whose reply is lost or arrives after `PENDING_TTL_SEC` — is now a refused cast rather than a log line. `EconomyConstants.ENFORCE = false` is the correct first response to a player reporting a cast they earned being refused; the log line names the check that fired.
+
+**The two round resets are a pair.** The server clears its ceiling on `RoundStarted`; the client clears its reservoirs on the transition into `Active` (`client/EnergyRoundReset`). Under enforcement they must both fire or the halves diverge — a client that kept pre-round energy while the server zeroed would have its next casts refused. Anything that fires one without the other (including poking the `RoundStarted` Bindable by hand, which chunk 6 did while measuring) breaks that pairing.
 
 **Why this and not the ledger, in one line:** it is roughly twice the work, it closes the cheat the ledger misses, and none of it is throwaway if the project later goes to option 2 — the memorize remote and the server-side `Dictionary` / `EnergyEconomy` wiring are exactly what a full authoritative economy needs. It also hands [[design/persistence-progression]] the word itself, which two of Phase 5.5's headline stats (longest word, highest-value word) require and which the ledger could never have provided.
 

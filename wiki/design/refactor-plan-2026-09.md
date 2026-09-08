@@ -217,7 +217,7 @@ Wiki: [[systems/Health]] § Respawn, [[systems/GameMode]] § Respawn.
 
 ## Chunk 6 — Economy that can be switched on
 
-Status: open
+Status: done — 2026-09-08 — <commit>
 Findings: F8, F9, F19 (`RoundStarted`), A28 tile cap
 Risk: M · Playtest: **yes** — memorize, cast, round restart, confirm `[EconomyService]` reset line and zero would-reject lines across a full honest round · Depends on: chunk 1 · Blocked on: nothing (Q3 answered)
 Decision: Q3(a) — reset hook and tile cap land first; one measured honest playtest; flip `ENFORCE = true` in the same session only if the shadow log shows zero honest rejections. Q4(a) — charge-tier trust stays accepted; add the note to [[design/lobby]] when this chunk touches the wiki.
@@ -225,13 +225,28 @@ Decision: Q3(a) — reset hook and tile cap land first; one measured honest play
 Owns: `src/server/Economy/*`, `RoundManager.luau` (`roundStartedEvent` payload only), `Suites/Economy/*`, `wiki/systems/SpellCastService.md` (affordability section + frontmatter), `wiki/index.md` (SpellCastService line).
 Must not touch: `SpellCastService` handler order; client reservoirs.
 
-- [ ] `EconomyService` listens to `RoundStarted` (or a `SessionRegistry` hook once chunk 8 lands — do not wait for it) and resets each roster member's ledger account.
-- [ ] `EnergyLedger.reportMemorize` rejects `#tiles > WordBuffer.DEFAULT_CAP` outright.
-- [ ] Suite: round reset clears the ceiling; over-cap payload refused.
-- [ ] Measured playtest per Q3(a); flip `ENFORCE` in the same session only if zero honest rejections.
-- [ ] Fix drift 4: one sentence on the SpellCastService page and index line that says the check exists, and whether it is enforced.
+- [x] `EconomyService` listens to `RoundStarted` (or a `SessionRegistry` hook once chunk 8 lands — do not wait for it) and resets each roster member's ledger account.
+- [x] `EnergyLedger.reportMemorize` rejects `#tiles > WordBuffer.DEFAULT_CAP` outright.
+- [x] Suite: round reset clears the ceiling; over-cap payload refused.
+- [x] Measured playtest per Q3(a); flip `ENFORCE` in the same session only if zero honest rejections.
+- [x] Fix drift 4: one sentence on the SpellCastService page and index line that says the check exists, and whether it is enforced.
 
 Done when: the reset line appears on round start; `ENFORCE` state matches the wiki; suites green.
+
+**Outcome: `ENFORCE = true`.** The measured playtest showed **zero** would-reject lines.
+
+- The reset hook is `RoundManager.luau:234` firing `roundStartedEvent:Fire(self:getPlayers())` — the roster is the only RoundManager change — and `EconomyService` mapping it to `EnergyLedger.resetRound(userIds)`. Observed in production code: `[RoundManager] [Default] Round started!` immediately followed by `[EconomyService] round start — reset 0 of 1 roster accounts` on a real transfer into the arena, and `reset 1 of 1` when the account had earned state.
+- The cap check is `EconomyConstants.MEMORIZE_TILE_CAP = WordBuffer.DEFAULT_CAP` (12), refused ahead of `accountFor` and ahead of the per-tile walk so an oversized payload can neither conjure an account nor make the ledger walk an unbounded list, with its own verdict reason in both modes.
+- Harness `all`: **30/30 passed, 0 failed** — 28 baseline plus `ledger_resets_on_round_start` and `ledger_refuses_over_cap_memorize`. Re-run after the flip, still 30/30 with `[EconomyService] ready — validated memorize active (ENFORCING)`. `RunTests` cleared in both VMs.
+
+Diverged / worth knowing:
+
+- **The honest sample is narrow.** Four words (DRAGON, PIANO, CLUE, MOON) and three casts (Mend, Mend, Shield), one player, driven through the real client modules (`PlayerSession`, `EconomyReport`, `CastAction`) and the real remotes, but not through mouse input. It did **not** exercise discards, the `ConsumeBlock` rejection rollback, wildcards drawn from real blocks, or a second client. `ENFORCE = false` is the right first response to a player reporting a refused cast they earned.
+- **No natural second round start exists in this build.** The `Default` arena runs No-Op mode (`scoreLimit = math.huge`) with `ROUND_TIMER_ENABLED = false`, so `_activeRound` never returns and `RoundStarted` fires exactly once per session — on the transition out of `_waitForPlayers`. Transferring the roster out and back does not halt a round in progress. The reset over a *non-empty* ledger was therefore observed by firing the same Bindable by hand with the real roster, plus the suite test; the RoundManager→listener half is proven by the transfer above. Noted under chunk 8.
+- **The two round resets are a pair.** Server clears on `RoundStarted`, client clears on the `Active` broadcast (`client/EnergyRoundReset`). Under enforcement, firing one without the other diverges the halves — recorded on [[systems/SpellCastService]].
+- `RoundEnded` (F19's other half) is still fired with no listener. Left alone: chunk 6 owns the `roundStartedEvent` payload only.
+
+Wiki: [[systems/SpellCastService]] (affordability + validated memorize + Q4 note), [[index]] (SpellCastService line), [[design/lobby]] (affordability blocker closed, Q4(a) charge-tier sentence).
 
 ---
 
@@ -275,6 +290,8 @@ Must not touch: boss/NPC spawning (chunk 9); `BlockShootService`.
 - [ ] Suite: two sessions with disjoint rosters; score reset isolation; transfer moves roster + attributes.
 
 Done when: the two-session playtest and suite above; `grep BindableFunction src/server/GameMode` empty; `grep TEAMS_ENABLED src` empty.
+
+> Noted by chunk 6: with `ROUND_TIMER_ENABLED = false` and No-Op's `scoreLimit = math.huge`, the `Default` session's round never ends, so `RoundStarted`/`RoundEnded` fire once per session and nothing downstream of them can be exercised twice in a playtest. Q7 moves `timeLimit` onto the mode config here — give No-Op a finite one, or this chunk's two-session round-start test has the same problem.
 Wiki: [[systems/GameMode]] (the stage-7 rewrite — do it here), [[design/lobby]] (stage rows), [[systems/Health]] (FF section removed).
 
 ---

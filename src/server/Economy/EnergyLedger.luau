@@ -193,6 +193,24 @@ function EnergyLedger.reportMemorize(
 		return { ok = false, reason = "payload is not a table" }
 	end
 
+	-- Refused before the account is even looked up, so an oversized
+	-- payload cannot conjure an account or clear an existing one. This is
+	-- the one memorize shape the client is physically incapable of
+	-- producing — the buffer drops letters past its cap rather than
+	-- growing — so unlike every other check here it refuses in shadow
+	-- mode too, and it runs ahead of the per-tile normalization so a
+	-- looping client cannot make the ledger walk an unbounded list.
+	local reported = #(tiles :: { any })
+	if reported > EconomyConstants.MEMORIZE_TILE_CAP then
+		return {
+			ok = false,
+			reason = string.format(
+				"reported %d tiles, buffer holds at most %d",
+				reported, EconomyConstants.MEMORIZE_TILE_CAP
+			),
+		}
+	end
+
 	local account = accountFor(userId)
 
 	local normalized: { WordBuffer.Tile } = {}
@@ -313,6 +331,26 @@ end
 
 function EnergyLedger.forget(userId: number)
 	accounts[userId] = nil
+end
+
+-- Clear the accounts of everyone who is starting a round, and report how
+-- many of them actually had state to clear.
+--
+-- The client zeroes its reservoirs on the same transition, so without
+-- this the server's ceiling accumulates across rounds and lobby banking
+-- while the client's does not — leaving the ledger permanently richer
+-- than the thing it is meant to price, which is a check that can never
+-- refuse anything. Reset rather than forget, because a player mid-round
+-- is not leaving: the entry is theirs again the moment they shoot.
+function EnergyLedger.resetRound(userIds: { number }): number
+	local cleared = EMPTY
+	for _, userId in userIds do
+		if accounts[userId] then
+			cleared += 1
+		end
+		accounts[userId] = newAccount()
+	end
+	return cleared
 end
 
 -- Test seam: the ledger is a per-server singleton because there is one

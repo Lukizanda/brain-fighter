@@ -14,8 +14,8 @@
 -- See wiki/systems/SpellCastService.md § Validated memorize.
 ----------------------------------------------------------------------
 
-local Players           = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players             = game:GetService("Players")
+local ReplicatedStorage   = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
@@ -26,6 +26,10 @@ local RateLimiter      = require(script.Parent.Parent.Utility.RateLimiter)
 local log = Logger.new("EconomyService")
 
 local reportRemote = ReplicatedStorage.Shared.MemorizeAction.Remotes.ReportMemorize :: RemoteEvent
+
+-- Server-side round signal. A sibling folder under Server, so it is in
+-- the tree by the time this Script runs, same as the Utility require.
+local roundStartedEvent = script.Parent.Parent.GameMode.Events.RoundStarted :: BindableEvent
 
 local reportLimiter = RateLimiter.new(
 	EconomyConstants.REPORT_BURST_CAPACITY,
@@ -64,6 +68,33 @@ reportRemote.OnServerEvent:Connect(function(player: Player, tiles: any)
 	end
 
 	log:info(string.format("%s memorized %s", player.Name, verdict.word or "?"))
+end)
+
+-- The ledger's ceiling has to zero where the client's reservoirs zero,
+-- and the client zeroes them on the transition into Active
+-- (client/EnergyRoundReset). Without this the server accumulates across
+-- rounds and lobby banking while the client does not, ending up
+-- permanently richer than the thing it is pricing — an affordability
+-- check that can never refuse anything.
+--
+-- The roster comes in on the event rather than being looked up here,
+-- because a round belongs to one arena session and not to the server.
+-- Until SessionRegistry exists (chunk 8) a missing payload means an
+-- older caller, and every player on the server is the honest guess.
+roundStartedEvent.Event:Connect(function(roster: { Player }?)
+	local members = roster or Players:GetPlayers()
+
+	local userIds: { number } = {}
+	for _, player in members do
+		table.insert(userIds, player.UserId)
+	end
+
+	local cleared = EnergyLedger.resetRound(userIds)
+	log:info(string.format(
+		"round start — reset %d of %d roster accounts%s",
+		cleared, #userIds,
+		if roster then "" else " (no roster on the event, fell back to all players)"
+	))
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)
