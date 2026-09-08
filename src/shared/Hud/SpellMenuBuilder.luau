@@ -291,13 +291,13 @@ function SpellMenuBuilder.build(): Handle
 		fillDisc.Size = UDim2.fromScale(0, 0)
 		fillDisc.BackgroundColor3 = litColor:Lerp(Defaults.DESATURATED_GREY, Defaults.DESATURATED_BLEND)
 
-		-- Rotation=270: key 0 = bottom (darkened), key 1 = top (untouched).
-		-- Neutral tints only — a UIGradient multiplies its parent's
+		-- FILL_GRADIENT_ROTATION puts key 0 at the bottom (darkened) and
+		-- key 1 at the top (untouched). Neutral tints only — a UIGradient multiplies its parent's
 		-- BackgroundColor3, so leaving hue out of it here is what lets the
 		-- desaturation below be one tween. On a disc the top-lit ramp is
 		-- also what stops it reading as a flat coin.
 		local gradient = Instance.new("UIGradient")
-		gradient.Rotation = 270
+		gradient.Rotation = Defaults.FILL_GRADIENT_ROTATION
 		gradient.Color = ColorSequence.new({
 			ColorSequenceKeypoint.new(0, Defaults.FILL_GRADIENT_BOTTOM_TINT),
 			ColorSequenceKeypoint.new(1, Defaults.FILL_GRADIENT_TOP_TINT),
@@ -445,8 +445,8 @@ function SpellMenuBuilder.build(): Handle
 		-- Color label: "RED" / "GREEN" / "BLUE"
 		local colorLabel = Instance.new("TextLabel")
 		colorLabel.Name = "ColorLabel"
-		colorLabel.Size = UDim2.new(1, 0, 0, 18)
-		colorLabel.Position = UDim2.new(0, 0, 0, 6)
+		colorLabel.Size = UDim2.new(1, 0, 0, Defaults.LABEL_HEIGHT)
+		colorLabel.Position = UDim2.new(0, 0, 0, Defaults.LABEL_TOP_OFFSET)
 		colorLabel.BackgroundTransparency = 1
 		colorLabel.Font = Defaults.LABEL_FONT
 		colorLabel.TextSize = Defaults.LABEL_SIZE
@@ -471,7 +471,7 @@ function SpellMenuBuilder.build(): Handle
 		numeral.TextColor3 = Defaults.NUMERAL_DIM_COLOR
 		numeral.TextStrokeTransparency = Defaults.NUMERAL_STROKE
 		numeral.TextXAlignment = Enum.TextXAlignment.Center
-		numeral.Text = string.format("0/%d", Defaults.FILL_MAX)
+		numeral.Text = string.format(Defaults.NUMERAL_FORMAT, 0, Defaults.FILL_MAX)
 		numeral.ZIndex = Z_TEXT
 		numeral.Parent = panel
 
@@ -526,7 +526,7 @@ function SpellMenuBuilder.build(): Handle
 		local energy = currentEnergy[color] or 0
 		local remaining = math.max(energy - pendingCost, 0)
 		local numeral = numerals[color]
-		numeral.Text = string.format("%d/%d", remaining, Defaults.FILL_MAX)
+		numeral.Text = string.format(Defaults.NUMERAL_FORMAT, remaining, Defaults.FILL_MAX)
 		numeral.TextColor3 = if pendingCost > 0
 			then Defaults.NUMERAL_RESERVED_COLOR
 			elseif wasAffordable[color] then Defaults.NUMERAL_COLOR
@@ -955,7 +955,7 @@ function SpellMenuBuilder.build(): Handle
 		-- White flash disc
 		local overlay = makeCircle("FiredFlash", Z_BUTTON - 1, panel)
 		overlay.Size = UDim2.fromScale(1, 1)
-		overlay.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		overlay.BackgroundColor3 = Defaults.FIRED_FLASH_COLOR
 		overlay.BackgroundTransparency = 0
 		local flashTween = TweenService:Create(overlay, Defaults.FIRED_FLASH_TWEEN, { BackgroundTransparency = 1 })
 		flashTween:Play()
@@ -965,7 +965,9 @@ function SpellMenuBuilder.build(): Handle
 		end)
 
 		-- Dim the FillBase briefly then recover
-		local dimTween = TweenService:Create(base, Defaults.FIRED_DIM_TWEEN, { BackgroundTransparency = 0.05 })
+		local dimTween = TweenService:Create(base, Defaults.FIRED_DIM_TWEEN, {
+			BackgroundTransparency = Defaults.FIRED_DIM_TRANSPARENCY,
+		})
 		dimTween:Play()
 		table.insert(vfxTweens, dimTween)
 		-- Same Enum.PlaybackState note as playAffordBounce above.

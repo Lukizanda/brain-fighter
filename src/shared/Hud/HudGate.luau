@@ -39,6 +39,14 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
+local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+
+local log = Logger.new("HudGate")
+
+-- One warning per instance per this long. An owner that writes its gated
+-- property tends to do it on a repeating event (death, respawn), and the
+-- point is to be noticed once, not to bury the console.
+local OWNER_WRITE_WARN_INTERVAL = 30
 
 export type Policy = "Always" | "ArenaOnly" | "LobbyOnly"
 
@@ -139,11 +147,28 @@ local function bind(instance: Instance, property: string, policy: Policy)
 	--     preserve the owner's intent, which is the case that broke.
 	--     If it really was the owner, the next write with the gate open
 	--     corrects it.
+	--
+	-- **Owners must never write the gated property.** The `true` branch
+	-- below is a rule violation, not a supported path — it is only a
+	-- best-effort catch. The owner's matching `false` write lands on an
+	-- already-false property, fires no signal, and is lost, so `ownerWants`
+	-- stays true and the next open reveals an element its owner believes is
+	-- hidden. That shipped as F4 (the death overlay on arena entry). Nothing
+	-- here can repair it — the write the gate would need to see is one
+	-- Roblox never reports — so it warns instead and the owner is expected
+	-- to drive a child's `Visible`. See `src/shared/Hud/__tests.luau`.
 	instance:GetPropertyChangedSignal(property):Connect(function()
 		local value = (instance :: any)[property]
 		if policyAllows(entry.policy) then
 			entry.ownerWants = value
 		elseif value then
+			log:warnThrottled(
+				instance:GetFullName(),
+				OWNER_WRITE_WARN_INTERVAL,
+				`{instance:GetFullName()}.{property} was written by its owner while the gate is closed. `
+					.. `Owners must never write a gated property — toggle a child's Visible instead `
+					.. `(wiki/concepts/HudGate.md § Owners never write the gated property).`
+			)
 			entry.ownerWants = true
 			apply(entry)
 		end

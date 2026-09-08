@@ -125,7 +125,9 @@ function MemorizeButtonBuilder.build(): Handle
 				stroke.Thickness = Defaults.VALID_STROKE_THICKNESS
 				stroke.Parent = container
 			end
-			validStrokeTween = TweenService:Create(stroke, Defaults.VALID_STROKE_PULSE_TWEEN, { Transparency = 0.5 })
+			validStrokeTween = TweenService:Create(stroke, Defaults.VALID_STROKE_PULSE_TWEEN, {
+				Transparency = Defaults.VALID_STROKE_PULSE_TRANSPARENCY,
+			})
 			validStrokeTween:Play()
 		else
 			if existingScale then existingScale:Destroy() end

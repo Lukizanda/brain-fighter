@@ -7,9 +7,16 @@
 ----------------------------------------------------------------------
 
 local BuffIconConfig = {
+	-- Position in the TopRight stack: below the kill feed, which stays at
+	-- the default 0. See HudConstants.REGIONS.TopRight.
+	LAYOUT_ORDER = 1,
+
 	ICON_SIZE = 36, -- px square
 	ICON_SPACING = 4, -- horizontal gap between icons
 	CORNER_RADIUS = 4,
+	-- The buff art is inset on every side so the background frame reads as
+	-- a border around it; the image is ICON_SIZE - 2 * ICON_IMAGE_INSET.
+	ICON_IMAGE_INSET = 2,
 
 	-- Background frame behind each icon (shows through when icon is
 	-- semi-transparent, gives the tray a cohesive look)
@@ -28,11 +35,16 @@ local BuffIconConfig = {
 	COUNTDOWN_BAR_COLOR = Color3.fromRGB(255, 255, 255),
 	COUNTDOWN_BAR_TRANSPARENCY = 0.2,
 
-	-- Stack count text
+	-- Stack count text, tucked into the bottom-right corner above the
+	-- countdown bar.
 	STACK_FONT = Enum.Font.GothamBold,
 	STACK_TEXT_SIZE = 12,
 	STACK_TEXT_COLOR = Color3.fromRGB(255, 255, 255),
 	STACK_STROKE_TRANSPARENCY = 0.2,
+	STACK_INSET = 2,
+	STACK_WIDTH = 16,
+	STACK_HEIGHT = 14,
+	STACK_MIN_TO_SHOW = 1, -- a lone stack is implied by the icon itself
 }
 
 return BuffIconConfig

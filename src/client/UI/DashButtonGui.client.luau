@@ -5,7 +5,7 @@
 -- Mounts the mobile dash button in the BottomRight vertical column,
 -- directly above the native Roblox jump button (LayoutOrder = 1,
 -- SpellMenu = 2). Visible only on touch input.
--- Tap → _G.BrainFighter.requestDash() → DashController:trigger().
+-- Tap → DashApi.requestDash() → DashController:trigger().
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,7 +15,8 @@ local HudLayoutManager  = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
 local DashButtonBuilder = require(ReplicatedStorage.Shared.Hud.DashButtonBuilder)
 local DashButtonConfig  = require(ReplicatedStorage.Shared.Hud.DashButtonConfig)
 local InputCategorizer  = require(ReplicatedStorage.Shared.Core.InputCategorizer)
-local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
+local HudGate           = require(ReplicatedStorage.Shared.Hud.HudGate)
+local DashApi           = require(script.Parent.Parent.DashApi)
 
 local log = Logger.new("DashButtonGui")
 
@@ -36,15 +37,9 @@ updateVisible()
 InputCategorizer.lastInputCategoryChanged:Connect(updateVisible)
 
 dashButton.activated:Connect(function()
-	local api = _G.BrainFighter
-	if api and api.requestDash then
-		api.requestDash()
-	else
-		log:warn("dash tapped but _G.BrainFighter.requestDash unavailable")
+	if not DashApi.requestDash() then
+		log:warn("dash tapped but no dash provider is registered")
 	end
 end)
-
-_G.PlayerHud = _G.PlayerHud or {}
-_G.PlayerHud.DashButton = dashButton
 
 log:info("Initialized")

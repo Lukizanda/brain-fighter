@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local DashController = require(ReplicatedStorage.Shared.Character.DashController)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local DashApi = require(script.Parent.DashApi)
 
 local log = Logger.new("DashManager")
 local player = Players.LocalPlayer
@@ -32,10 +33,10 @@ end
 
 -- Cross-script dispatcher so the mobile dash button (and any other
 -- client-side UI) can trigger a dash without reaching into private state.
--- Mirrors the `_G.PlayerHud.SpellMenu` pattern in SpellMenuGui.client.luau.
-_G.BrainFighter = _G.BrainFighter or {}
-_G.BrainFighter.requestDash = function()
+-- The controller is rebuilt on every respawn, so the provider closes over
+-- the variable rather than the instance.
+DashApi.setProvider(function()
 	if activeController then
 		activeController:trigger()
 	end
-end
+end)

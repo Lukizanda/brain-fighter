@@ -40,9 +40,18 @@ local PortalPanelConfig = {
 
 	PRIMARY_COLOR       = Color3.fromRGB(216, 128, 52),
 	PRIMARY_TEXT        = Color3.fromRGB(255, 255, 255),
+	PRIMARY_LABEL       = "Enter", -- replaced per-portal via setPrimaryText
 	CANCEL_COLOR        = Color3.fromRGB(52, 56, 66),
 	CANCEL_TEXT         = Color3.fromRGB(214, 218, 228),
 	CANCEL_LABEL        = "Not now",
+
+	-- Top-to-bottom order inside the panel's UIListLayout.
+	ORDER = {
+		TITLE   = 1,
+		STATUS  = 2,
+		PRIMARY = 3,
+		CANCEL  = 4,
+	},
 
 	-- Fade in/out when the player steps on and off the pad. Short enough
 	-- not to feel like a menu, long enough not to pop.
@@ -56,6 +65,15 @@ local PortalPanelConfig = {
 	SIGN_COUNT_SIZE     = 28,
 	SIGN_LABEL_COLOR    = Color3.fromRGB(255, 255, 255),
 	SIGN_COUNT_COLOR    = Color3.fromRGB(198, 204, 218),
+	-- The two rows split the sign's height; the name gets the larger share.
+	SIGN_LABEL_HEIGHT_FRACTION      = 0.6,
+	SIGN_COUNT_HEIGHT_FRACTION      = 0.4,
+	SIGN_LABEL_STROKE_TRANSPARENCY  = 0.4,
+	SIGN_COUNT_STROKE_TRANSPARENCY  = 0.6,
+	SIGN_ORDER = {
+		LABEL  = 1,
+		COUNTS = 2,
+	},
 	-- A sign visible from across the hub but not from the next arena.
 	SIGN_MAX_DISTANCE   = 220,
 }

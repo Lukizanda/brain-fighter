@@ -35,5 +35,3 @@ session.mindFullManager.mindFreed:Connect(function()
 	indicator:setActive(false)
 end)
 
-_G.PlayerHud = _G.PlayerHud or {}
-_G.PlayerHud.MindFullIndicator = indicator

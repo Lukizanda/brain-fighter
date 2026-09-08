@@ -37,6 +37,9 @@ local MemorizeButtonConfig = {
 	VALID_STROKE_COLOR       = Color3.fromRGB(255, 215, 0),
 	VALID_STROKE_THICKNESS   = 2,
 	VALID_STROKE_PULSE_TWEEN = TweenInfo.new(0.60, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+	-- The pulse tweens the stroke to half-faded and back; it never fully
+	-- disappears, so the outline stays legible at the dim end of the cycle.
+	VALID_STROKE_PULSE_TRANSPARENCY = 0.5,
 }
 
 return MemorizeButtonConfig

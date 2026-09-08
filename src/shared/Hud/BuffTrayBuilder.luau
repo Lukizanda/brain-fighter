@@ -52,6 +52,15 @@ local function borderColorFor(polarity: Polarity?): Color3
 	return Config.BUFF_BORDER_COLOR
 end
 
+-- Blank until a buff actually stacks: a "1" on every icon is noise.
+local function stackLabelFor(info: BuffInfo): string
+	local stacks = info.stacks
+	if stacks and stacks > Config.STACK_MIN_TO_SHOW then
+		return tostring(stacks)
+	end
+	return ""
+end
+
 -- Build a single icon frame. Returned table holds refs for updateBuff.
 type IconWidgets = {
 	frame: Frame,
@@ -79,8 +88,8 @@ local function buildIcon(info: BuffInfo): IconWidgets
 	stroke.Parent = frame
 
 	local iconImage = Instance.new("ImageLabel")
-	iconImage.Size = UDim2.new(1, -4, 1, -4)
-	iconImage.Position = UDim2.new(0, 2, 0, 2)
+	iconImage.Size = UDim2.new(1, -Config.ICON_IMAGE_INSET * 2, 1, -Config.ICON_IMAGE_INSET * 2)
+	iconImage.Position = UDim2.new(0, Config.ICON_IMAGE_INSET, 0, Config.ICON_IMAGE_INSET)
 	iconImage.BackgroundTransparency = 1
 	iconImage.Image = info.icon or ""
 	iconImage.ScaleType = Enum.ScaleType.Fit
@@ -98,8 +107,8 @@ local function buildIcon(info: BuffInfo): IconWidgets
 
 	local stackText = Instance.new("TextLabel")
 	stackText.AnchorPoint = Vector2.new(1, 1)
-	stackText.Position = UDim2.new(1, -2, 1, -Config.COUNTDOWN_BAR_HEIGHT - 2)
-	stackText.Size = UDim2.new(0, 16, 0, 14)
+	stackText.Position = UDim2.new(1, -Config.STACK_INSET, 1, -Config.COUNTDOWN_BAR_HEIGHT - Config.STACK_INSET)
+	stackText.Size = UDim2.new(0, Config.STACK_WIDTH, 0, Config.STACK_HEIGHT)
 	stackText.BackgroundTransparency = 1
 	stackText.Font = Config.STACK_FONT
 	stackText.TextSize = Config.STACK_TEXT_SIZE
@@ -107,7 +116,7 @@ local function buildIcon(info: BuffInfo): IconWidgets
 	stackText.TextStrokeTransparency = Config.STACK_STROKE_TRANSPARENCY
 	stackText.TextXAlignment = Enum.TextXAlignment.Right
 	stackText.TextYAlignment = Enum.TextYAlignment.Bottom
-	stackText.Text = if info.stacks and info.stacks > 1 then tostring(info.stacks) else ""
+	stackText.Text = stackLabelFor(info)
 	stackText.Parent = frame
 
 	return {
@@ -123,8 +132,12 @@ end
 function BuffTrayBuilder.build(): Handle
 	local container = Instance.new("Frame")
 	container.Name = "BuffTray"
-	container.Size = UDim2.new(0, 0, 0, Config.ICON_SIZE)
-	container.AutomaticSize = Enum.AutomaticSize.X
+	-- Sized entirely by its icons. AutomaticSize treats the authored Size
+	-- as a *minimum*, so pinning the height to ICON_SIZE would reserve a
+	-- row in the TopRight stack even with no buffs active and push the kill
+	-- feed down. An empty tray must occupy nothing.
+	container.Size = UDim2.new(0, 0, 0, 0)
+	container.AutomaticSize = Enum.AutomaticSize.XY
 	container.BackgroundTransparency = 1
 	container.BorderSizePixel = 0
 
@@ -191,7 +204,7 @@ function BuffTrayBuilder.build(): Handle
 		widgets.stroke.Color = borderColorFor(info.polarity)
 		widgets.iconImage.Image = info.icon or ""
 		widgets.countdownFill.Visible = info.duration ~= nil
-		widgets.stackText.Text = if info.stacks and info.stacks > 1 then tostring(info.stacks) else ""
+		widgets.stackText.Text = stackLabelFor(info)
 	end
 
 	function handle:removeBuff(id: string)

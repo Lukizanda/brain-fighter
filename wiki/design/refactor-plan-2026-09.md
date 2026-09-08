@@ -77,6 +77,8 @@ Must not touch: the modules under test.
 - [ ] Delete `Suites/Multiplayer/{drop_request_zone_gated,respawnzone_tracks_hrp_presence,applydamage_credits_bot_kill}.luau` and `Helpers/restoreToSafeSpawn.luau`; trim `multiplayer_invariants.luau` to remotes that exist (drop the Weapon.Remotes and TDM blocks).
 - [ ] Delete `Suites/Melee/*` (Q8: the melee chain is dead; chunk 11 removes the modules).
 - [ ] Normalise all ten `__tests.luau` to `return { run = function() ... end }` — `EnergyEconomy` and `Dictionary` must stop executing on require.
+- [ ] `MemorizeAction/__tests.luau` scenario 2 asserts an invalid word preserves the buffer; `tryMemorize` has cleared it on the invalid path since `9ae3719`, and [[systems/MemorizeAction]] documents the clear as intended. Fix the assertion to the documented behaviour (found by chunk 2's direct run, 2026-09-08).
+- [ ] `multiplayer_invariants.luau` also asserts `Health.Events.PlayerRespawned` exists — drop that check, then delete the `PlayerRespawned` fire + `.model.json` that chunk 0 deferred (F19).
 - [ ] Add `Suites/Unit/` with one wrapper per unwired module (WordBuffer, EnergyEconomy, EnergyReservoirs, Dictionary, SpellRegistry, MemorizeAction, MindFullManager), same shape as `Suites/Skills/castaction_tests.luau`.
 - [ ] NPC suites: `setup` clones `ServerStorage.AIWorldData.Rigs.Patroller` if `Patroller_1` is absent (Q8: fixtures are built, not assumed). **[UNVERIFIED]** in the audit whether the place still has one — the run will settle it.
 - [ ] Run `all`; record pass/fail per suite in the log entry; clear `RunTests`.
@@ -108,18 +110,18 @@ Wiki: [[systems/SpellRegistry]] (range constant), [[systems/SpellCastService]] �
 
 ## Chunk 3 — HUD ownership
 
-Status: claimed — chunk3-hud-ownership — 2026-09-08
+Status: done — 2026-09-08 — (this commit)
 Findings: F4, F20, F22, F23, drift 7
 Risk: M · Playtest: **yes** — die in the lobby, walk into the arena, confirm no death overlay; then die in the arena and confirm the overlay · Depends on: chunk 0 · Blocked on: nothing
 
 Owns: `src/client/UI/DeathScreenGui.client.luau`, `src/shared/Hud/HudGate.luau` (+ new `__tests`), `HudConstants.luau` (TopRight), the five `_G.PlayerHud` writers, `DashManager.client.luau` + `DashButtonGui.client.luau` (dash bridge), the six Builder/Config pairs named in F23, `wiki/concepts/HudGate.md`.
 Must not touch: `SpellMenuGui` cast logic (chunk 7), any hand-built ScreenGui port (chunk 12).
 
-- [ ] DeathScreenGui toggles a child overlay's `Visible`; `screenGui.Enabled` is written only by the gate. Add a `HudGate` unit test for the closed-gate `true`→`false` sequence (F4).
-- [ ] [[concepts/HudGate]]: add the rule "owners never write the gated property".
-- [ ] TopRight `stackVertical` (or BuffTray to its own region).
-- [ ] Delete the `_G.PlayerHud` writes; replace `_G.BrainFighter.requestDash` with a `client/DashApi` ModuleScript.
-- [ ] Config extraction for SpellMenu, AttributeBar, BuffTray, PortalPanel, MemorizeButton (SettingsMenu is deleted in chunk 12 per Q5 — do not extract it).
+- [x] DeathScreenGui toggles a child overlay's `Visible`; `screenGui.Enabled` is written only by the gate. Add a `HudGate` unit test for the closed-gate `true`→`false` sequence (F4).
+- [x] [[concepts/HudGate]]: add the rule "owners never write the gated property".
+- [x] TopRight `stackVertical` (or BuffTray to its own region).
+- [x] Delete the `_G.PlayerHud` writes; replace `_G.BrainFighter.requestDash` with a `client/DashApi` ModuleScript.
+- [x] Config extraction for SpellMenu, AttributeBar, BuffTray, PortalPanel, MemorizeButton (SettingsMenu is deleted in chunk 12 per Q5 — do not extract it).
 
 Done when: the lobby-death → arena-entry playtest shows no overlay; `grep _G.PlayerHud` is empty; the six Builders contain no inline geometry/colour literals outside a Config read.
 
@@ -162,6 +164,7 @@ Must not touch: `DeathHandler` (non-player rigs — correct as is); session tabl
 - [ ] `pendingRespawns` cleared on `CharacterAdded` (or removed if the remote goes).
 - [ ] `recentDamage` entries expire on insert; key dropped on `Died`/`Destroying`.
 - [ ] Name the two SpawnManager offsets.
+- [ ] `HealthConstants.RESPAWN_TIME` (5) survives chunk 2 only because `HealthService/init.server.luau:54` and the Damageable-NPC timer read it; once the `RequestRespawn` gate is gone, keep it solely as the NPC respawn default and rename it `NPC_RESPAWN_TIME` so it can no longer be mistaken for the player value.
 
 Done when: the playtest above; `grep LoadCharacter src/server` hits GameModeService only.
 Wiki: [[systems/Health]] § Respawn, [[systems/GameMode]] § Respawn.
@@ -327,4 +330,5 @@ Chunks 8 and 9 are the prerequisites for Phase 6 stage 5; chunk 4 is the prerequ
 
 Append here when a chunk lands differently from the plan (what changed, why, which finding it affects).
 
+- **Chunk 3** ran before chunk 1, so the new `HudGate` suite (`src/shared/Hud/__tests.luau`, `M.run()`) was invoked directly via `execute_luau` rather than through the not-yet-wired `Suites/Unit` autorunner. It is **client-only** — `HudGate` resolves `Players.LocalPlayer` at require time, so it errors on the Server datamodel; whoever wires chunk 1 needs to put it in a client-side suite, not the shared Unit list. Scenario 1 of that suite asserts the *broken* F4 outcome for a non-compliant owner on purpose (it is the only way to pin why the rule exists); the assertion message says to delete the scenario rather than weaken it if the gate ever learns to see the missing write. The `TopRight` item took `stackVertical` rather than the "BuffTray to its own region" alternative; the tray's container additionally moved to `AutomaticSize.XY` with a zero authored size, because `AutomaticSize` treats the authored `Size` as a minimum and the old `ICON_SIZE`-tall frame would otherwise have reserved a row in the new stack and pushed the kill feed down with no buffs active. Part of this chunk's diff (`DeathScreenGui`, `HudConstants`, `SpellMenuConfig`, `SpellMenuGui`, `GameplayHudGui`) was swept into chunks 0 and 2's commits by whole-file staging in a shared checkout — the changes are correct and verified, they just do not all sit in chunk 3's commit.
 - **Chunk 2** ran before chunk 1 (its stated `Depends on`); chunk 1 had not landed. Unit tests (`WordBuffer`, `EnergyEconomy`, `EnergyReservoirs`, `SpellRegistry`, `MemorizeAction`, `MindFullManager`, `CastAction`) were invoked directly via `execute_luau` (each module's own `.run()` / `.runAll()` shape) rather than through the (not-yet-wired) autorunner Unit suite. `MemorizeAction.__tests` failed a pre-existing, chunk-2-unrelated assertion (see `wiki/log.md` 2026-09-08 ingest) — flagged, not fixed, since it is outside chunk 2's `Owns`.

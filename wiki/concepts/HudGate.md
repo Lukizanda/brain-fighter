@@ -1,7 +1,7 @@
 ---
 type: concept
 description: How HUD elements are suppressed by player state (lobby vs arena). A declared policy per element, enforced by a required argument on register — because the failure mode is silent leakage, not an error.
-updated: 2026-09-07
+updated: 2026-09-08
 ---
 
 # HudGate
@@ -117,6 +117,53 @@ write:
   preserve the owner's intent. If it really was the owner, their next write
   with the gate open corrects it.
 
+## Owners never write the gated property
+
+The rule the gate could not enforce, learned the expensive way. Added
+2026-09-08 as F4 of the [[design/system-audit-2026-09]].
+
+`DeathScreenGui` bound `screenGui.Enabled` to `ArenaOnly` **and** wrote that
+same property in its own `show()` / `hide()`. In the hub, with the gate closed:
+
+1. the player dies, `show()` writes `Enabled = true`
+2. the gate sees a `true` while closed, correctly reads it as owner intent,
+   records `ownerWants = true` and re-suppresses to `false`
+3. the player respawns, `hide()` writes `Enabled = false` — onto a property
+   that **is already false**
+
+Step 3 fires no changed signal, because Roblox does not signal a write that
+does not change the value. The retraction is not late, it does not exist: the
+gate is never told. `ownerWants` stays `true`, and the next time the player
+walks through a portal the gate faithfully restores a full-screen death
+overlay over a living player with full health.
+
+Note which half is at fault. The gate's three-branch rule above is right, and
+step 2 is the branch that stops leaks. There is no fix on the gate's side —
+the information it would need is a signal Roblox will never send, and every
+"detect our own writes" scheme (a flag, a last-written cache) fails on the
+same missing event. The one workable rule is the one at the top of this
+section, so it is a rule about call sites:
+
+> **An element that is gated does not write its own gated property.** It
+> leaves `Enabled` / `Visible` to the gate and drives a **child** instead.
+
+`GameStateGui` and `ScoreboardGui` already worked this way — they leave the
+ScreenGui enabled and toggle an overlay or a panel — which is why neither ever
+showed the bug. `DeathScreenGui` now matches them: `overlay.Visible` carries
+"am I dead", `screenGui.Enabled` carries "does this HUD exist here", and the
+two compose without either knowing about the other. `PortalPanelBuilder`
+states the same split in a comment: proximity is the owner's half, policy is
+the gate's.
+
+The gate warns (throttled, via `Logger`) when it catches a closed-gate `true`
+write, which is the only moment a violation is visible. A warning is not a
+repair — the element is already wrong by then — but it names the file instead
+of leaving a cosmetic bug for someone to notice in a playtest six weeks later.
+
+`src/shared/Hud/__tests.luau` pins all of this: scenario 1 reproduces the F4
+sequence and asserts the leak, scenario 2 asserts the fixed DeathScreenGui
+shape, scenario 3 asserts `ownerWants` ends false for a compliant owner.
+
 ## Nil means visible
 
 Before the server sets the attribute it is `nil`, and `nil` degrades to
@@ -149,7 +196,7 @@ registers **three** elements and they do not agree.
 | `MindFullIndicatorGui` | `Always` | part of the memorize loop |
 | `DashButtonGui` | `Always` | movement is not mode-specific |
 | `SettingsMenuGui` | `Always` | per [[design/lobby]] |
-| `BuffTrayGui` | `Always` | self-buff spells are castable in the lobby. Moot today — the tray is unwired, exposed on `_G.PlayerHud.BuffTray` awaiting a BuffAdapter |
+| `BuffTrayGui` | `Always` | self-buff spells are castable in the lobby. Moot today — the tray is unwired and awaiting a BuffAdapter (the `_G.PlayerHud.BuffTray` handle it used to publish was deleted in refactor chunk 3; nothing had ever read it) |
 | `BossHudGui` | `ArenaOnly` | own ScreenGui, gated via `.Enabled` |
 | `DamageFeedbackGui` | `ArenaOnly` | fires on damage *taken*; nothing in the lobby damages you |
 | `KillFeedGui`, `ScoreboardGui`, `RoundTimerGui`, `GameStateGui`, `DeathScreenGui`, `TeamScoreGui` | `ArenaOnly` | round and competition surfaces with no lobby meaning |

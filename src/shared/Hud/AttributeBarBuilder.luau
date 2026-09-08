@@ -60,7 +60,7 @@ function AttributeBarBuilder.build(config: Config): Handle
 
 	-- Container: bar + overlaid label/numeric. We size the container to include
 	-- a small strip above the bar for text, so the bar stays `height` tall.
-	local textStripHeight = if showLabel then 16 else 0
+	local textStripHeight = if showLabel then Defaults.TEXT_STRIP_HEIGHT else 0
 	local container = Instance.new("Frame")
 	container.Name = "AttributeBar_" .. config.name
 	container.Size = UDim2.new(0, width, 0, height + textStripHeight)
@@ -114,8 +114,8 @@ function AttributeBarBuilder.build(config: Config): Handle
 		labelText = Instance.new("TextLabel")
 		labelText.Name = "Label"
 		labelText.AnchorPoint = Vector2.new(0, 1)
-		labelText.Position = UDim2.new(0, 2, 1, -height - 2)
-		labelText.Size = UDim2.new(0.5, 0, 0, 14)
+		labelText.Position = UDim2.new(0, Defaults.LABEL_INSET, 1, -height - Defaults.LABEL_INSET)
+		labelText.Size = UDim2.new(Defaults.LABEL_WIDTH_FRACTION, 0, 0, Defaults.LABEL_HEIGHT)
 		labelText.BackgroundTransparency = 1
 		labelText.Font = Defaults.LABEL_FONT
 		labelText.TextSize = Defaults.LABEL_SIZE
@@ -131,8 +131,8 @@ function AttributeBarBuilder.build(config: Config): Handle
 		numericText = Instance.new("TextLabel")
 		numericText.Name = "Numeric"
 		numericText.AnchorPoint = Vector2.new(1, 0.5)
-		numericText.Position = UDim2.new(1, -6, 0.5, 0)
-		numericText.Size = UDim2.new(0.5, 0, 1, 0)
+		numericText.Position = UDim2.new(1, -Defaults.NUMERIC_RIGHT_INSET, 0.5, 0)
+		numericText.Size = UDim2.new(Defaults.NUMERIC_WIDTH_FRACTION, 0, 1, 0)
 		numericText.BackgroundTransparency = 1
 		numericText.Font = Defaults.TEXT_FONT
 		numericText.TextSize = Defaults.TEXT_SIZE
@@ -141,7 +141,7 @@ function AttributeBarBuilder.build(config: Config): Handle
 		numericText.TextXAlignment = Enum.TextXAlignment.Right
 		numericText.TextYAlignment = Enum.TextYAlignment.Center
 		numericText.ZIndex = fill.ZIndex + 1
-		numericText.Text = "0"
+		numericText.Text = Defaults.NUMERIC_PLACEHOLDER
 		numericText.Parent = track
 	end
 
@@ -184,7 +184,7 @@ function AttributeBarBuilder.build(config: Config): Handle
 		end)
 
 		if numericText then
-			numericText.Text = string.format("%d", math.ceil(current))
+			numericText.Text = string.format(Defaults.NUMERIC_FORMAT, math.ceil(current))
 		end
 	end
 
@@ -196,10 +196,10 @@ function AttributeBarBuilder.build(config: Config): Handle
 	function handle:playGainSweep()
 		local overlay = Instance.new("Frame")
 		overlay.Name = "GainSweepOverlay"
-		overlay.Size = UDim2.new(0, 2, 1, 0)
+		overlay.Size = UDim2.new(0, Defaults.GAIN_SWEEP_START_WIDTH, 1, 0)
 		overlay.Position = UDim2.new(0, 0, 0, 0)
-		overlay.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		overlay.BackgroundTransparency = 0.5
+		overlay.BackgroundColor3 = Defaults.GAIN_SWEEP_COLOR
+		overlay.BackgroundTransparency = Defaults.GAIN_SWEEP_TRANSPARENCY
 		overlay.BorderSizePixel = 0
 		overlay.ZIndex = fill.ZIndex + 1
 		overlay.Parent = track
@@ -227,18 +227,18 @@ function AttributeBarBuilder.build(config: Config): Handle
 				if not fill.Parent then return end
 				local ring = Instance.new("Frame")
 				ring.Name = "DrainRipple"
-				ring.Size = UDim2.new(0, 8, 0, 8)
+				ring.Size = UDim2.new(0, Defaults.DRAIN_RIPPLE_START_SIZE, 0, Defaults.DRAIN_RIPPLE_START_SIZE)
 				ring.AnchorPoint = Vector2.new(0.5, 0.5)
 				ring.Position = UDim2.new(lastFraction, 0, 0.5, 0)
-				ring.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-				ring.BackgroundTransparency = 0.3
+				ring.BackgroundColor3 = Defaults.DRAIN_RIPPLE_COLOR
+				ring.BackgroundTransparency = Defaults.DRAIN_RIPPLE_TRANSPARENCY
 				ring.BorderSizePixel = 0
 				local corner = Instance.new("UICorner")
-				corner.CornerRadius = UDim.new(0.5, 0)
+				corner.CornerRadius = UDim.new(Defaults.DRAIN_RIPPLE_CORNER_SCALE, 0)
 				corner.Parent = ring
 				ring.Parent = track
 				local rippleTween = TweenService:Create(ring, Defaults.DRAIN_RIPPLE_TWEEN, {
-					Size = UDim2.new(0, 24, 0, 24),
+					Size = UDim2.new(0, Defaults.DRAIN_RIPPLE_END_SIZE, 0, Defaults.DRAIN_RIPPLE_END_SIZE),
 					BackgroundTransparency = 1,
 				})
 				rippleTween:Play()

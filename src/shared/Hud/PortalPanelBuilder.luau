@@ -100,7 +100,7 @@ function PortalPanelBuilder.build(): PortalPanel
 	title.TextSize = PortalPanelConfig.TITLE_TEXT_SIZE
 	title.TextColor3 = PortalPanelConfig.TITLE_COLOR
 	title.Text = ""
-	title.LayoutOrder = 1
+	title.LayoutOrder = PortalPanelConfig.ORDER.TITLE
 	title.Parent = container
 
 	local status = Instance.new("TextLabel")
@@ -111,15 +111,15 @@ function PortalPanelBuilder.build(): PortalPanel
 	status.TextSize = PortalPanelConfig.STATUS_TEXT_SIZE
 	status.TextColor3 = PortalPanelConfig.STATUS_COLOR
 	status.Text = ""
-	status.LayoutOrder = 2
+	status.LayoutOrder = PortalPanelConfig.ORDER.STATUS
 	status.Parent = container
 
 	local primary = makeButton("Primary", PortalPanelConfig.PRIMARY_COLOR,
-		PortalPanelConfig.PRIMARY_TEXT, "Enter", 3)
+		PortalPanelConfig.PRIMARY_TEXT, PortalPanelConfig.PRIMARY_LABEL, PortalPanelConfig.ORDER.PRIMARY)
 	primary.Parent = container
 
 	local cancel = makeButton("Cancel", PortalPanelConfig.CANCEL_COLOR,
-		PortalPanelConfig.CANCEL_TEXT, PortalPanelConfig.CANCEL_LABEL, 4)
+		PortalPanelConfig.CANCEL_TEXT, PortalPanelConfig.CANCEL_LABEL, PortalPanelConfig.ORDER.CANCEL)
 	cancel.Parent = container
 
 	local panel = {} :: PortalPanel
@@ -205,26 +205,26 @@ function PortalPanelBuilder.buildSign(adornee: BasePart, heightStuds: number): P
 
 	local label = Instance.new("TextLabel")
 	label.Name = "Label"
-	label.Size = UDim2.new(1, 0, 0.6, 0)
+	label.Size = UDim2.new(1, 0, PortalPanelConfig.SIGN_LABEL_HEIGHT_FRACTION, 0)
 	label.BackgroundTransparency = 1
 	label.Font = PortalPanelConfig.TITLE_FONT
 	label.TextScaled = true
 	label.TextColor3 = PortalPanelConfig.SIGN_LABEL_COLOR
-	label.TextStrokeTransparency = 0.4
+	label.TextStrokeTransparency = PortalPanelConfig.SIGN_LABEL_STROKE_TRANSPARENCY
 	label.Text = ""
-	label.LayoutOrder = 1
+	label.LayoutOrder = PortalPanelConfig.SIGN_ORDER.LABEL
 	label.Parent = billboard
 
 	local counts = Instance.new("TextLabel")
 	counts.Name = "Counts"
-	counts.Size = UDim2.new(1, 0, 0.4, 0)
+	counts.Size = UDim2.new(1, 0, PortalPanelConfig.SIGN_COUNT_HEIGHT_FRACTION, 0)
 	counts.BackgroundTransparency = 1
 	counts.Font = PortalPanelConfig.STATUS_FONT
 	counts.TextScaled = true
 	counts.TextColor3 = PortalPanelConfig.SIGN_COUNT_COLOR
-	counts.TextStrokeTransparency = 0.6
+	counts.TextStrokeTransparency = PortalPanelConfig.SIGN_COUNT_STROKE_TRANSPARENCY
 	counts.Text = ""
-	counts.LayoutOrder = 2
+	counts.LayoutOrder = PortalPanelConfig.SIGN_ORDER.COUNTS
 	counts.Parent = billboard
 
 	local sign = {} :: PortalSign

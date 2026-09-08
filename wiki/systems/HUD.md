@@ -107,7 +107,51 @@ Legend: blue = Coordinator LocalScript, orange = pure-module Builder, green = ga
 - Every Builder in `src/shared/Hud/` exposes `:destroy()` (12/12). Health adapter connections are tracked inline in `GameplayHudGui` (`healthConnections` table, cleared on respawn).
 - All Builders are pure modules except `SettingsMenuBuilder` (reads `Players.LocalPlayer` — tracked in NIM-19).
 - Detailed findings: [[design/ui-architecture-review]].
+- **A gated element never writes its own gated property** — see
+  [[concepts/HudGate]] § Owners never write the gated property. Added as
+  refactor chunk 3 after F4; the gate warns when it catches a violation.
 
+## The dash bridge — `client/DashApi` (2026-09-08, refactor chunk 3)
+
+`DashManager` owns a `DashController` that is destroyed and rebuilt on every
+respawn; `DashButtonGui` needs to trigger a dash without holding a reference to
+whichever controller is current. That indirection used to be a `_G` slot
+(`_G.BrainFighter.requestDash`), which nothing typed and nothing could find.
+
+It is now `src/client/DashApi.luau`, a ModuleScript under
+`StarterPlayerScripts.Client` that both LocalScripts require:
+
+```
+DashManager.client.luau  → DashApi.setProvider(fn)   -- closes over activeController
+DashButtonGui.client.luau → DashApi.requestDash()    -- returns false if unregistered
+```
+
+Registration order does not matter: the provider is resolved at request time,
+not at require time, so a UI script that loads first still works on the first
+tap. `requestDash` returning `false` is what lets `DashButtonGui` log a real
+warning instead of failing silently the way the `_G` lookup did.
+
+The other five `_G.PlayerHud.*` writes (`BuffTray`, `DashButton`,
+`BufferDisplay`, `MemorizeButton`, `AttributeStack`, `MindFullIndicator`,
+`SpellMenu`) were **deleted rather than ported** — a grep of `src/` found no
+readers for any of them. A future BuffAdapter should get a named seam like
+`DashApi`, not a global.
+
+## TopRight stacks (2026-09-08, refactor chunk 3)
+
+`TopRight` had two occupants — `KillFeedGui`'s container and `BuffTrayGui`'s
+tray — and no layout, so both sat at the region's top-right corner and drew
+over each other. The region now carries `stackVertical = true` with
+`stackPadding = 8` in `HudConstants`.
+
+Order is by `LayoutOrder`: `KillFeedGui` leaves it at the default `0` so the
+feed keeps exactly the position it always had, and the tray declares
+`BuffIconConfig.LAYOUT_ORDER = 1` to sit underneath it. The tray's container
+was also switched to `AutomaticSize.XY` with a zero authored size —
+`AutomaticSize` treats the authored `Size` as a *minimum*, so the old
+`ICON_SIZE`-tall frame would have reserved a row in the new stack and pushed
+the kill feed down even with no buffs active. An empty tray now measures
+0 × 0 and the feed does not move.
 
 ## Team-score gate — REMOVED (2026-09-08, refactor chunk 0)
 
@@ -149,7 +193,7 @@ src/client/UI/
   SpellMenuGui.client.luau        — BottomRight; consumes the builder's charge signals, resolves the
                                     target at release, casts via castSpecific, drives the local charge
                                     orb + the ChargeState relay; fill via energyReservoirs.changed
-  DashButtonGui.client.luau       — BottomRight vertical column (touch-only); tap → _G.BrainFighter.requestDash()
+  DashButtonGui.client.luau       — BottomRight vertical column (touch-only); tap → DashApi.requestDash()
   MindFullIndicatorGui.client.luau — TopCenter; shows/hides on mindFull/mindFreed
   BossHudGui.client.luau          — own ScreenGui (IgnoreGuiInset=true, y=8); boss health bar + phase label; hidden until a boss spawns
   RoundTimerGui.client.luau       — TopCenter; round state + formatted timer; gated behind GameConfig.ROUND_TIMER_ENABLED (currently false)
@@ -165,7 +209,7 @@ The first four read state through `PlayerSession.get()` and subscribe to signals
 | MemorizeButton | BottomCenter | `wordBuffer.changed` | `MemorizeAction.tryMemorize` |
 | SpellMenu | BottomRight | `energyReservoirs.changed` | circular panels — centre-out fill + concentric tier rings + centred numeral + a ready halo and orbiting motes while castable; press-hold-release → `CastAction.castSpecific` at the charged tier ([[systems/ChargeCast]]) |
 | MindFullIndicator | TopCenter | `mindFull` / `mindFreed` | show/hide warning |
-| DashButton | BottomRight | `InputCategorizer` (touch toggle) | tap → `_G.BrainFighter.requestDash()` (mobile-only, hidden on KBM) |
+| DashButton | BottomRight | `InputCategorizer` (touch toggle) | tap → `DashApi.requestDash()` (mobile-only, hidden on KBM) |
 
 ## Health bar wiring
 
