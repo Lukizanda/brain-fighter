@@ -18,7 +18,6 @@ local requestRespawnRemote = healthRemotes.RequestRespawn
 local healthEvents = ServerScriptService.Server.Health.Events
 local playerDamagedEvent = healthEvents.PlayerDamaged
 local playerEliminatedEvent = healthEvents.PlayerEliminated
-local playerRespawnedEvent = healthEvents.PlayerRespawned
 
 local pendingRespawns: { [Player]: number } = {}
 
@@ -58,7 +57,6 @@ local function onRequestRespawn(player: Player)
 
 	pendingRespawns[player] = nil
 	player:LoadCharacter()
-	playerRespawnedEvent:Fire(player)
 	log:info(string.format(" %s respawned", player.Name))
 end
 

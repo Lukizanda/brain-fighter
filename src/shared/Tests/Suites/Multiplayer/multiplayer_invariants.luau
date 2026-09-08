@@ -22,7 +22,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local StarterPlayer = game:GetService("StarterPlayer")
-local Teams = game:GetService("Teams")
 
 local function findDescendantByName(root: Instance, name: string): Instance?
 	for _, descendant in root:GetDescendants() do
@@ -34,7 +33,7 @@ local function findDescendantByName(root: Instance, name: string): Instance?
 end
 
 return {
-	name = "Multiplayer system invariants — script placement, remotes, teams",
+	name = "Multiplayer system invariants — script placement, remotes",
 
 	verify = function(_ctx)
 		local failures: { string } = {}
@@ -58,9 +57,6 @@ return {
 
 		-- 2. Multiplayer-critical RemoteEvents must exist at their expected paths.
 		local expectedRemotes = {
-			{ "ReplicatedStorage.Shared.Weapon.Remotes.Shoot",        ReplicatedStorage.Shared.Weapon.Remotes:FindFirstChild("Shoot") },
-			{ "ReplicatedStorage.Shared.Weapon.Remotes.Reload",       ReplicatedStorage.Shared.Weapon.Remotes:FindFirstChild("Reload") },
-			{ "ReplicatedStorage.Shared.Weapon.Remotes.ReplicateShot", ReplicatedStorage.Shared.Weapon.Remotes:FindFirstChild("ReplicateShot") },
 			{ "ReplicatedStorage.Shared.GameMode.Remotes.KillFeed",   ReplicatedStorage.Shared.GameMode.Remotes:FindFirstChild("KillFeed") },
 			{ "ReplicatedStorage.Shared.GameMode.Remotes.ScoreUpdate", ReplicatedStorage.Shared.GameMode.Remotes:FindFirstChild("ScoreUpdate") },
 			{ "ReplicatedStorage.Shared.GameMode.Remotes.GameStateChanged", ReplicatedStorage.Shared.GameMode.Remotes:FindFirstChild("GameStateChanged") },
@@ -76,38 +72,14 @@ return {
 
 		-- 3. Server-side BindableEvents the GameMode + Health systems wire on.
 		local healthEvents = ServerScriptService.Server.Health:FindFirstChild("Events")
-		for _, name in { "PlayerDamaged", "PlayerEliminated", "PlayerRespawned" } do
+		for _, name in { "PlayerDamaged", "PlayerEliminated" } do
 			local instance = healthEvents and healthEvents:FindFirstChild(name)
 			if not instance or not instance:IsA("BindableEvent") then
 				table.insert(failures, string.format("ServerScriptService.Server.Health.Events.%s missing or wrong class", name))
 			end
 		end
 
-		-- 4. TDM team infrastructure: when TDM is active, both Red and Blue
-		-- Team instances must exist with non-Neutral SpawnLocations matching
-		-- their TeamColor (otherwise team-aware spawning breaks).
-		local activeMode = workspace:GetAttribute("ActiveGameMode")
-		if activeMode == "TeamDeathmatch" then
-			for _, teamName in { "Red", "Blue" } do
-				local team = Teams:FindFirstChild(teamName)
-				if not team or not team:IsA("Team") then
-					table.insert(failures, string.format("TDM active but Teams.%s missing", teamName))
-				else
-					local matched = false
-					for _, instance in workspace:GetDescendants() do
-						if instance:IsA("SpawnLocation") and not instance.Neutral and instance.TeamColor == team.TeamColor then
-							matched = true
-							break
-						end
-					end
-					if not matched then
-						table.insert(failures, string.format("TDM active but no non-Neutral SpawnLocation matches Teams.%s.TeamColor", teamName))
-					end
-				end
-			end
-		end
-
-		-- 5. Players service should exist with at least one player (the test
+		-- 4. Players service should exist with at least one player (the test
 		-- harness depends on `ctx.player`). This is mostly a sanity check.
 		if #Players:GetPlayers() == 0 then
 			table.insert(failures, "no players in game (test harness needs at least one)")

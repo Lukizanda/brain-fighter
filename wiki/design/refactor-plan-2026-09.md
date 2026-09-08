@@ -66,7 +66,7 @@ Wiki: [[systems/HUD]] (Reticle/TouchControl rows), [[systems/Tests]] no change y
 
 ## Chunk 1 — Make the test harness tell the truth
 
-Status: open
+Status: done — 2026-09-08 — (this commit)
 Findings: F41, F42, F43, drift 9
 Risk: L · Playtest: **yes** (one `RunTests = "all"` run; clear the attribute after) · Depends on: chunk 0 · Blocked on: nothing (Q8 answered)
 Decision: Q8(a) — wire the seven unit suites; delete `drop_request_zone_gated`, `respawnzone_tracks_hrp_presence`, `applydamage_credits_bot_kill`, `restoreToSafeSpawn` and `Suites/Melee/*`; NPC suites build their own Patroller in `setup`.
@@ -74,17 +74,38 @@ Decision: Q8(a) — wire the seven unit suites; delete `drop_request_zone_gated`
 Owns: `src/shared/Tests/**`, `src/server/Tests/TestAutoRunner.server.luau`, every `src/shared/*/__tests.luau` (return shape only), `wiki/systems/Tests.md`.
 Must not touch: the modules under test.
 
-- [ ] Delete `Suites/Multiplayer/{drop_request_zone_gated,respawnzone_tracks_hrp_presence,applydamage_credits_bot_kill}.luau` and `Helpers/restoreToSafeSpawn.luau`; trim `multiplayer_invariants.luau` to remotes that exist (drop the Weapon.Remotes and TDM blocks).
-- [ ] Delete `Suites/Melee/*` (Q8: the melee chain is dead; chunk 11 removes the modules).
-- [ ] Normalise all ten `__tests.luau` to `return { run = function() ... end }` — `EnergyEconomy` and `Dictionary` must stop executing on require.
-- [ ] `MemorizeAction/__tests.luau` scenario 2 asserts an invalid word preserves the buffer; `tryMemorize` has cleared it on the invalid path since `9ae3719`, and [[systems/MemorizeAction]] documents the clear as intended. Fix the assertion to the documented behaviour (found by chunk 2's direct run, 2026-09-08).
-- [ ] `multiplayer_invariants.luau` also asserts `Health.Events.PlayerRespawned` exists — drop that check, then delete the `PlayerRespawned` fire + `.model.json` that chunk 0 deferred (F19).
-- [ ] Add `Suites/Unit/` with one wrapper per unwired module (WordBuffer, EnergyEconomy, EnergyReservoirs, Dictionary, SpellRegistry, MemorizeAction, MindFullManager), same shape as `Suites/Skills/castaction_tests.luau`.
-- [ ] NPC suites: `setup` clones `ServerStorage.AIWorldData.Rigs.Patroller` if `Patroller_1` is absent (Q8: fixtures are built, not assumed). **[UNVERIFIED]** in the audit whether the place still has one — the run will settle it.
-- [ ] Run `all`; record pass/fail per suite in the log entry; clear `RunTests`.
-- [ ] Rewrite [[systems/Tests]]: discovery rules, suite table with status, `__tests` wiring, fixture requirements.
+- [x] Delete `Suites/Multiplayer/{drop_request_zone_gated,respawnzone_tracks_hrp_presence,applydamage_credits_bot_kill}.luau` and `Helpers/restoreToSafeSpawn.luau`; trim `multiplayer_invariants.luau` to remotes that exist (drop the Weapon.Remotes and TDM blocks).
+- [x] Delete `Suites/Melee/*` (Q8: the melee chain is dead; chunk 11 removes the modules).
+- [x] Normalise all ten `__tests.luau` to `return { run = function() ... end }` — `EnergyEconomy` and `Dictionary` must stop executing on require. Only three of the ten actually needed a shape change: `Dictionary` and `EnergyEconomy` ran their asserts at require time (wrapped in `M.run()` / `{ run = runAll }`), and `WordBuffer` returned a bare function (now `{ run = runTests }`). The other seven already returned a table exposing `.run()` or `.runAll()` and needed no edit. `SpellExecutor`/`SpellRegistry` keep `.runAll()` returning `(passed, failed)` — matches the existing `spellexecutor_tests.luau` wrapper shape, not `.run()`.
+- [x] `MemorizeAction/__tests.luau` scenario 2 asserts an invalid word preserves the buffer; `tryMemorize` has cleared it on the invalid path since `9ae3719`, and [[systems/MemorizeAction]] documents the clear as intended. Fix the assertion to the documented behaviour (found by chunk 2's direct run, 2026-09-08).
+- [x] `multiplayer_invariants.luau` also asserts `Health.Events.PlayerRespawned` exists — drop that check, then delete the `PlayerRespawned` fire + `.model.json` that chunk 0 deferred (F19). Divergence: the versioned file is `PlayerRespawned.meta.json`, not `.model.json` — the plan's filename was wrong, the instance (a bare `BindableEvent`, no properties) is the same one chunk 0 deferred.
+- [x] Add `Suites/Unit/` with one wrapper per unwired module (WordBuffer, EnergyEconomy, EnergyReservoirs, Dictionary, SpellRegistry, MemorizeAction, MindFullManager), same shape as `Suites/Skills/castaction_tests.luau`. Also wired `Hud/__tests` (chunk 3 left it unwired) — see divergence note below.
+- [x] NPC suites: `setup` clones `ServerStorage.AIWorldData.Rigs.Patroller` if `Patroller_1` is absent (Q8: fixtures are built, not assumed). Verified via `inspect_instance`: the template exists at that path. In practice `Patroller_1` was already present at every run (NPCService boot-spawns it from `AIWorldData` spawn points before `TestAutoRunner`'s startup delay elapses), so the clone path is untested live code — see divergence note.
+- [x] Run `all`; record pass/fail per suite in the log entry; clear `RunTests`.
+- [x] Rewrite [[systems/Tests]]: discovery rules, suite table with status, `__tests` wiring, fixture requirements.
 
-Done when: `RunTests = "all"` reports no `[AUTORUN WARN] Skipped` and no suite errors in `run`; every `__tests` module is reachable from a Suite.
+Done when: `RunTests = "all"` reports no `[AUTORUN WARN] Skipped` and no suite errors in `run`; every `__tests` module is reachable from a Suite. **Met** — 2026-09-08 run: 26/28 passed, 2 failed, zero `[AUTORUN WARN] Skipped`, zero setup/run pcall errors (both failures are `verify` returning false — real assertions, not harness crashes). See per-suite results and the two "Found:" bugs below.
+
+**Divergence log:**
+- A bare `template:Clone()` of `AIWorldData.Rigs.Patroller` has a Humanoid but no state machine — `CurrentState` would never be set and the NPC would never react, since `NPCController.new` + a Heartbeat tick loop are what actually drive it (both currently private to `NPCService.server.luau`, a Script, not requireable). Added `src/shared/Tests/Helpers/ensurePatroller.luau`: reuses a boot-spawned `Patroller_1` if present (the common case — `created = false`, `teardown` no-ops); otherwise clones the rig, wires it to its own `NPCController` instance requiring `ServerScriptService.Server.NPC.Scripts.NPCController` directly, and ticks it on `Heartbeat` for the test's duration. All three NPC suites (`combat_engages`, `combat_disengages`, `npc_deals_damage`) now go through this helper.
+- `Hud/__tests.luau` requires `Players.LocalPlayer` and errors immediately on a server VM (see its own "Client only" header comment), and `TestAutoRunner.server.luau` only ever runs server-side — there is no client autorunner. Wiring it in as a plain `{run=...}` wrapper would make `RunTests=all` fail every time for a harness-shape reason, not a real regression. `Suites/Unit/hud_tests.luau` checks `RunService:IsServer()` and reports an explicit, visible pass-with-skip message (`"skipped — client-only ..."`) instead of a false fail; on an actual client VM it runs the real suite. Recorded here since it's a structural gap, not a "Found:" module bug — a client-side autorunner is out of this chunk's scope.
+
+**Found** (real issues surfaced by an honest harness now that it isn't silently skipping tests — left failing per this chunk's "must not touch the modules under test" rule):
+- `Suites/NPC/npc_deals_damage.luau` fails intermittently: "Player took no damage (still at 100 HP)". Root cause looks like cross-test interference from the preceding `combat_disengages` test — the player fell into `Workspace.Arena.DeathZone` and respawned (`HealthService: Initialized health for ZandaLuki: 100/100` fires twice during this test's `setup`), and the NPC flips back to `Patrol` right as the player's humanoid is re-snapshotted for `ctx.initialHealth`, so the `run()` window catches no damage. This predates chunk 1 — `ensurePatroller.ensure()` returned the existing boot-spawned `Patroller_1` (`created = false`) in this run, so the fixture change did not touch this path.
+- `Suites/Multiplayer/multiplayer_invariants.luau` fails: "ShotReplication LocalScript missing from StarterPlayerScripts (placement bug — see concepts/LocalScriptPlacement)". Unrelated to this chunk's edits (only the Weapon.Remotes/TDM/PlayerRespawned blocks were touched) — this is the exact placement regression the test was written to catch, currently caught.
+
+**Per-suite results (2026-09-08, `RunTests="all"`):**
+
+| Suite | Result |
+|---|---|
+| NPC | 2/3 passed — "deals damage" failed (Found, above) |
+| Multiplayer | 0/1 passed — `multiplayer_invariants` failed (Found, above) |
+| Phase3 | 7/7 passed |
+| Skills | 5/5 passed |
+| Hardening | 3/3 passed |
+| Economy | 1/1 passed |
+| Unit | 8/8 passed (`hud_tests` passed via the explicit server-VM skip) |
+| **Total** | **26/28 passed, 2 failed** |
 
 ---
 

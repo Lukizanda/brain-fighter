@@ -2,6 +2,10 @@
 -- Test: NPC deals damage to the player while in Combat
 ----------------------------------------------------------------------
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local ensurePatroller = require(ReplicatedStorage.Shared.Tests.Helpers.ensurePatroller)
+
 local ENGAGE_OFFSET = 25
 local ENGAGE_TIMEOUT_SECONDS = 5 -- max time to wait for NPC to enter Combat
 local ENGAGE_POLL_INTERVAL = 0.25 -- re-teleport player near NPC each tick (NPC may be patrolling)
@@ -11,10 +15,12 @@ return {
 	name = "NPC deals damage to player in Combat",
 
 	setup = function(ctx)
-		local npc = workspace:FindFirstChild("Patroller_1")
-		assert(npc, "No Patroller_1 NPC in workspace")
+		local fixture = ensurePatroller.ensure()
+		assert(fixture, "Could not obtain a Patroller_1 NPC (no boot spawn and no AIWorldData.Rigs.Patroller template)")
 		assert(ctx.player, "No local player")
 
+		ctx.npcFixture = fixture
+		local npc = fixture.npc
 		ctx.npc = npc
 
 		-- Poll-teleport: re-fetch character each tick in case the player died
@@ -69,5 +75,6 @@ return {
 		if ctx.humanoid and ctx.humanoid.Parent then
 			ctx.humanoid.Health = ctx.humanoid.MaxHealth
 		end
+		ensurePatroller.teardown(ctx.npcFixture)
 	end,
 }

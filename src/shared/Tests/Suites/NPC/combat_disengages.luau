@@ -2,6 +2,10 @@
 -- Test: NPC disengages Combat when player moves out of range
 ----------------------------------------------------------------------
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local ensurePatroller = require(ReplicatedStorage.Shared.Tests.Helpers.ensurePatroller)
+
 local NEAR_OFFSET = 25 -- inside engage range
 local FAR_OFFSET = 80 -- outside disengage range
 
@@ -9,13 +13,15 @@ return {
 	name = "NPC disengages Combat when player leaves range",
 
 	setup = function(ctx)
-		local npc = workspace:FindFirstChild("Patroller_1")
-		assert(npc, "No Patroller_1 NPC in workspace")
+		local fixture = ensurePatroller.ensure()
+		assert(fixture, "Could not obtain a Patroller_1 NPC (no boot spawn and no AIWorldData.Rigs.Patroller template)")
 		assert(ctx.player, "No local player")
 
 		local character = ctx.player.Character
 		assert(character, "Player has no character")
 
+		ctx.npcFixture = fixture
+		local npc = fixture.npc
 		ctx.npc = npc
 		local npcPos = npc:GetPivot().Position
 
@@ -40,5 +46,9 @@ return {
 			return true, string.format("Disengaged to %s", state)
 		end
 		return false, string.format("Expected Patrol or Idle, got %s", tostring(state))
+	end,
+
+	teardown = function(ctx)
+		ensurePatroller.teardown(ctx.npcFixture)
 	end,
 }

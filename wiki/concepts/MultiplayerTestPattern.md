@@ -45,17 +45,9 @@ Pure server-side asserts on the boot-time DataModel. No `setup`/`run`/`teardown`
 
 These run in milliseconds and catch the kind of bug that ships unnoticed for the project's lifetime.
 
-### Shape 2 — server-authoritative path E2E (synthetic enemy)
+### Shape 2 — server-authoritative path E2E (synthetic enemy) — retired
 
-Stage a `TargetDummy` clone with `BotTeam` + `BotDisplayName` attributes, call `applyDamage.process(...)` directly with the player as `sourcePlayer` and the bot's `Humanoid` as the target. The full chain runs synchronously: damage applies → `playerEliminatedEvent` fires on lethal → `BotSpawner.onPlayerEliminated` recognises the bot attributes → `ScoreTracker.recordBotKill` credits the killer.
-
-Example: [`applydamage_credits_bot_kill.luau`](../../src/shared/Tests/Suites/Multiplayer/applydamage_credits_bot_kill.luau).
-
-Verify side-effects via `leaderstats.Kills` (or `ScoreTracker.getScore` if you imported it). Set `respawnTime = 0` on the synthetic bot so `DeathHandler` cleans up after the explosion FX rather than templating + respawning, which races the test's teardown.
-
-## Things to keep stable for tests
-
-The kill-credit path runs through `BotSpawner.onPlayerEliminated`, which is registered at server boot regardless of `GameConfig.DEV_BOT_COUNT` (the spawning is gated, the listener is always-on). If you ever refactor `BotSpawner`, keep that listener split — tests depend on it. See the early-return logic at the top of `BotSpawner.server.luau`.
+Historical: staged a `TargetDummy` clone with `BotTeam`/`BotDisplayName` attributes and called `applyDamage.process(...)` directly, relying on `BotSpawner.onPlayerEliminated` to credit the kill via `ScoreTracker.recordBotKill`. `BotSpawner` was deleted in the 2026-09 refactor (Chunk 0 — it was the only listener crediting synthetic bot kills, and it was dead dev tooling), and its test, `applydamage_credits_bot_kill.luau`, was deleted alongside the rest of the dead Multiplayer suite files in Chunk 1 (`wiki/design/refactor-plan-2026-09.md`). No replacement shape exists yet for exercising the server-authoritative damage path end-to-end without a real second client.
 
 ## What this pattern does NOT cover
 

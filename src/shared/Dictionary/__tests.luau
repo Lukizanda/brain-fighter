@@ -3,9 +3,10 @@
 ----------------------------------------------------------------------
 -- Dictionary __tests
 ----------------------------------------------------------------------
--- Smoke tests for the Dictionary module. Runs assertions on require
--- (use `require(ReplicatedStorage.Shared.Dictionary.__tests)` in
--- a playtest console or via MCP execute_luau to invoke).
+-- Self-contained — exposes `M.run()`, which throws on any failed
+-- assertion (require alone performs no work):
+--
+--   require(ReplicatedStorage.Shared.Dictionary.__tests).run()
 --
 -- These are pinned to the gameplay-loop design — every word in the
 -- worked-examples table (FIRE, FLAME, DRAGON, ROCK, LIGHTNING, ...)
@@ -34,6 +35,10 @@ local function expect(label: string, actual: any, expected: any)
 		)
 	end
 end
+
+local M = {}
+
+function M.run()
 
 -- isWord — case-insensitive recognition of pinned design words
 expect("isWord('FIRE')", Dictionary.isWord("FIRE"), true)
@@ -136,4 +141,7 @@ log:info(
 	)
 )
 
-return true
+	return true
+end
+
+return M

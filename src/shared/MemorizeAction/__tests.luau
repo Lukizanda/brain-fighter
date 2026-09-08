@@ -9,7 +9,8 @@
 --
 -- Covers the four scenarios from NIM-6:
 --   1. Empty buffer → fizzle "empty"; buffer + reservoirs unchanged.
---   2. Invalid word "XYZ" → fizzle "invalid"; buffer preserved.
+--   2. Invalid word "XYZ" → fizzle "invalid"; buffer cleared (letters
+--      consumed regardless — see wiki/systems/MemorizeAction.md).
 --   3. Valid mono-color "FIRE" → reservoirs.red += 7; buffer cleared.
 --   4. Valid mixed-color "FLAME" → red=12, green=3 split; buffer
 --      cleared; reservoirs accumulate on top of pre-existing state.
@@ -61,8 +62,8 @@ function M.run()
 		local res = MemorizeAction.tryMemorize(b, r)
 		assert(res.ok == false, "invalid: ok should be false")
 		assert(res.reason == "invalid", `invalid: reason should be "invalid", got {tostring(res.reason)}`)
-		assert(b:size() == 3, `invalid: buffer should be preserved at size 3, got {b:size()}`)
-		assert(b:asWord() == "XYZ", `invalid: buffer word should still be "XYZ", got "{b:asWord()}"`)
+		assert(res.pattern == "XYZ", `invalid: pattern should be "XYZ", got "{tostring(res.pattern)}"`)
+		assert(b:size() == 0, `invalid: buffer should be cleared (letters consumed), got size {b:size()}`)
 		assert(r:get("red") == 0, "invalid: no energy deposited")
 		b:destroy()
 		r:destroy()

@@ -8,11 +8,10 @@
 -- worked examples" tables. If a value here drifts from the wiki, the
 -- formula is wrong — fix the implementation, not the table.
 --
--- Required at module load — failing asserts will error out in the
--- console (TestRunner integration is overkill for a pure formula
--- module; the asserts ARE the test). Returns a summary table when
--- everything passes:
---   { passed = N, failed = 0, results = { ... } }
+-- Self-contained — exposes `M.run()`, which throws on any failed case
+-- (require alone performs no work):
+--
+--   require(ReplicatedStorage.Shared.EnergyEconomy.__tests).run()
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -272,4 +271,4 @@ local function runAll()
 	}
 end
 
-return runAll()
+return { run = runAll }

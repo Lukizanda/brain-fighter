@@ -37,7 +37,7 @@ Editor labels (`Label` BillboardGui) on pedestals are hidden at runtime so they 
 
 ## Open work
 
-The drop UX shipped: `RespawnZoneService` (`src/server/Loadout/RespawnZoneService.luau`) is built and wired — `LoadoutService` calls `RespawnZoneService.initialize()` on start and gates every drop request through `RespawnZoneService.isPlayerInZone(...)` so players can only drop while standing in their respawn zone. Covered by the `respawnzone_tracks_hrp_presence` and `drop_request_zone_gated` multiplayer tests.
+The drop UX shipped: `RespawnZoneService` (`src/server/Loadout/RespawnZoneService.luau`) is built and wired — `LoadoutService` calls `RespawnZoneService.initialize()` on start and gates every drop request through `RespawnZoneService.isPlayerInZone(...)` so players can only drop while standing in their respawn zone. The `respawnzone_tracks_hrp_presence` and `drop_request_zone_gated` multiplayer tests that covered this were deleted in the 2026-09 refactor (Chunk 1 § Decision Q8(a), `wiki/design/refactor-plan-2026-09.md`) — no test currently covers this path.
 
 Remaining: team-aware spawn/zone paths stay dormant behind `GameConfig.TEAMS_ENABLED = false` (see the gate section above).
 

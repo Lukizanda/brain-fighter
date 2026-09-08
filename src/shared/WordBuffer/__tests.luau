@@ -3,11 +3,10 @@
 ----------------------------------------------------------------------
 -- WordBuffer smoke tests
 ----------------------------------------------------------------------
--- Standalone runnable: returns a function. The parent module wires the
--- result into the project TestRunner (or a dev harness) as needed.
+-- Self-contained — exposes `M.run()` which throws on any assertion
+-- failure.
 --
---   local runTests = require(ReplicatedStorage.Shared.WordBuffer.__tests)
---   runTests()  -- throws on assertion failure
+--   require(ReplicatedStorage.Shared.WordBuffer.__tests).run()
 --
 -- Covers: append/size/isFull, asWord uppercase, color-bag counts,
 -- reorder, remove, clear, fill-to-cap rejection, changed-signal fire
@@ -178,4 +177,4 @@ local function runTests(): boolean
 	return true
 end
 
-return runTests
+return { run = runTests }
