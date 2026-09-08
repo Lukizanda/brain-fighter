@@ -66,7 +66,7 @@ Wiki: [[systems/HUD]] (Reticle/TouchControl rows), [[systems/Tests]] no change y
 
 ## Chunk 1 — Make the test harness tell the truth
 
-Status: done — 2026-09-08 — `8d9cb83`
+Status: done — 2026-09-08 — `f8d9dc1` (follow-up to `8d9cb83`)
 Findings: F41, F42, F43, drift 9
 Risk: L · Playtest: **yes** (one `RunTests = "all"` run; clear the attribute after) · Depends on: chunk 0 · Blocked on: nothing (Q8 answered)
 Decision: Q8(a) — wire the seven unit suites; delete `drop_request_zone_gated`, `respawnzone_tracks_hrp_presence`, `applydamage_credits_bot_kill`, `restoreToSafeSpawn` and `Suites/Melee/*`; NPC suites build their own Patroller in `setup`.
