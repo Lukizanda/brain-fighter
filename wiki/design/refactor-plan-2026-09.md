@@ -252,7 +252,7 @@ Wiki: [[systems/SpellCastService]] (affordability + validated memorize + Q4 note
 
 ## Chunk 7 — One VFX broadcast lane
 
-Status: claimed — chunk-7-fable — 2026-09-08 — code + wiki landed (commit in the note below); two-client playtest outstanding
+Status: claimed — chunk-7-fable — 2026-09-08 — code + wiki landed in e5d31a7; two-client playtest outstanding
 Findings: F6, F7, F29 (`spellResolved` bindable + lazy cache), F21 (SpellCastController)
 Risk: **H** · Playtest: **yes, two clients** — caster sees cast cue instantly and impact on confirm; the second client sees both once; a rate-limited cast draws nothing on the second client · Depends on: chunk 4 · Blocked on: nothing (Q9 answered)
 Decision: Q9(a) — impact cues arrive on server confirmation; prediction draws the cast cue only; the client-originated relay is deleted outright.
