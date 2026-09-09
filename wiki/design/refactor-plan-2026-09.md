@@ -285,7 +285,7 @@ Wiki: [[design/client-server-boundary]], [[systems/VisualEffects]], [[systems/HU
 
 ## Chunk 8 — Sessions own their scores (and their registry)
 
-Status: done — 2026-09-09 — (commit hash recorded in the follow-up docs commit)
+Status: done — 2026-09-09 — be227ba (two-client scoreboard check closed 2026-09-09, see divergences)
 Findings: F12, F13 (roster), F16, F34 (team plumbing + definition trim), Q7 flags
 Risk: **H** · Playtest: **yes, two sessions** (the disjoint-roster cross-talk test stage 3 never ran) — a round start in one arena leaves the other's scores intact; the scoreboard in each shows only its roster · Depends on: chunk 5, chunk 6 · Blocked on: nothing (Q6, Q7 answered)
 Decision: Q6(a) + Q7(a) — `SessionRegistry` module lands here, before Phase 6 stage 5; `TEAMS_ENABLED` and every team branch deleted; `allowsPvP`, `timeLimit`, `countdownSec` on the mode config; `ROUND_TIMER_ENABLED` and `ROUND_COUNTDOWN_ENABLED` deleted; `RoundTimerGui` reads the payload.
@@ -313,7 +313,7 @@ Divergences (2026-09-09):
 - **The leaderstats mirror follows the current session**: observed Deaths 1 → 0 on a transfer out of the lobby into a fresh Default round. Intended — the mirror is a thin server-wide view of whichever tracker the player is scored in.
 - **`RoundManager`'s optional `onRoundEnd` dependency kept** (minus the team argument); nothing passes it today.
 - Playtest layer 1 (session `chunk-8-sessions`, 2 iterations): death-zone kill in the lobby → client `KillFeed` + 1-row `ScoreUpdate` (`d1`, `ArenaId=Lobby`); `PortalRequest(join)` on the PvE pad → `Transferred Lobby → Default`, attributes `Default` / `InArena`, `[Default] Scores reset` + `Round started! Timer: none`, client 1-row `ScoreUpdate` (`d0`, `ArenaId=Default`) + `GameStateChanged Active timeLimit=nil`, no `[Lobby]` reset or round start afterwards, `RoundTimerGui` container `Visible=false` on the client.
-- Layer 2 (two clients, `nimbalyst-local/chunk8-client-scoreboard.lua`): PENDING — user-driven; result recorded here once it runs.
+- Layer 2 (two clients, `nimbalyst-local/chunk8-client-scoreboard.lua`, Studio Test → Local Server, user-driven): Player1 took the PvE portal at 23:13:50 → attributes `Default` / `InArena`, one `ScoreUpdate` with **1 row** (`Player1 k0 d0 a0`), `GameStateChanged Active timeLimit=nil`, then the existing per-tick Active broadcast (×8 at 1 s). Player2, still in the lobby, printed **nothing** after its `listening` line — no `ScoreUpdate`, no `GameStateChanged` — while Player1's Default round started. Each scoreboard lists only its own session's roster; the lobby player's scores and HUD were untouched. The ×8 repeat is `RoundManager._activeRound`'s pre-existing once-per-second `_broadcastState()` in Active (unchanged by this chunk), not new chatter.
 - Found, not fixed: `EconomyService` logs `round start — reset 0 of 1 roster accounts` on the transfer (the ledger has no account until the player earns one — pre-existing, chunk 6 territory); `RoundManager` still broadcasts `GameStateChanged` every second while Active even with no timer (pre-existing chatter, harmless); `KillFeedGui` keeps a `victimTeamColor` parameter no server path sends any more (client dead code, not in `Owns:`).
 Wiki: [[systems/GameMode]] (the stage-7 rewrite — do it here), [[design/lobby]] (stage rows), [[systems/Health]] (FF section removed).
 
