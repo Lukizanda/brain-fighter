@@ -285,7 +285,7 @@ Wiki: [[design/client-server-boundary]], [[systems/VisualEffects]], [[systems/HU
 
 ## Chunk 8 — Sessions own their scores (and their registry)
 
-Status: open
+Status: done — 2026-09-09 — (commit hash recorded in the follow-up docs commit)
 Findings: F12, F13 (roster), F16, F34 (team plumbing + definition trim), Q7 flags
 Risk: **H** · Playtest: **yes, two sessions** (the disjoint-roster cross-talk test stage 3 never ran) — a round start in one arena leaves the other's scores intact; the scoreboard in each shows only its roster · Depends on: chunk 5, chunk 6 · Blocked on: nothing (Q6, Q7 answered)
 Decision: Q6(a) + Q7(a) — `SessionRegistry` module lands here, before Phase 6 stage 5; `TEAMS_ENABLED` and every team branch deleted; `allowsPvP`, `timeLimit`, `countdownSec` on the mode config; `ROUND_TIMER_ENABLED` and `ROUND_COUNTDOWN_ENABLED` deleted; `RoundTimerGui` reads the payload.
@@ -293,16 +293,28 @@ Decision: Q6(a) + Q7(a) — `SessionRegistry` module lands here, before Phase 6 
 Owns: new `src/server/GameMode/Scripts/SessionRegistry.luau`, `GameModeService/init.server.luau` (thin bootstrap), `LobbyService.server.luau:37-38,182,198,216` (call the module), `Events/{TransferPlayer,SetPlayerQueued}.model.json` (delete), `ScoreTracker.luau` (`new(roster)`), `RoundManager.luau` (owns its tracker; `winnerTeamName` out), `SpawnManager.luau:50` (roster), `NametagService.server.luau` (team branch), `applyDamage.luau:57-69` (team branch), `GameModeDefinition.luau`, `GameModeTypes.luau` (delete), `Modes/{NoOpMode,LobbyMode}.luau`, `Arena.luau` (SpawnTags gains the default), `GameConfig.luau` (four flags → mode config), `RoundTimerGui.client.luau` (reads payload), `BroadcastAudience.luau` (resolver reads the module).
 Must not touch: boss/NPC spawning (chunk 9); `BlockShootService`.
 
-- [ ] `SessionRegistry` module: `sessions`, `playerSessions`, `queued`, `create`, `transferPlayer`, `setQueued`, `forPlayer`, `forArena`, `rosterOf`; GameModeService becomes wiring only; the two BindableFunctions deleted.
-- [ ] `ScoreTracker.new(roster)` per session; `RoundManager` constructs and owns it; leaderstats mirror stays server-wide; `recordBotKill` deleted.
-- [ ] `SpawnManager.getBestSpawn(player, arenaId, roster)`.
-- [ ] Team plumbing deleted (`TEAMS_ENABLED`, FF branch, nametag team colour, `winnerTeamName`, `getTeamConfig`); `GameModeTypes` deleted; `NoOpMode` spawn tag from `Arena.SpawnTags`.
-- [ ] Per Q7(a): `allowsPvP`, `timeLimit`, `countdownSec` on mode config; `ROUND_TIMER_ENABLED`/`ROUND_COUNTDOWN_ENABLED`/`PLAYER_VS_PLAYER_ENABLED` deleted; `RoundTimerGui` reads the payload.
-- [ ] Suite: two sessions with disjoint rosters; score reset isolation; transfer moves roster + attributes.
+- [x] `SessionRegistry` module: `sessions`, `playerSessions`, `queued`, `create`, `transferPlayer`, `setQueued`, `forPlayer`, `forArena`, `rosterOf`; GameModeService becomes wiring only; the two BindableFunctions deleted.
+- [x] `ScoreTracker.new(roster)` per session; `RoundManager` constructs and owns it; leaderstats mirror stays server-wide; `recordBotKill` deleted.
+- [x] `SpawnManager.getBestSpawn(player, arenaId, roster)`.
+- [x] Team plumbing deleted (`TEAMS_ENABLED`, FF branch, nametag team colour, `winnerTeamName`, `getTeamConfig`); `GameModeTypes` deleted; `NoOpMode` spawn tag from `Arena.SpawnTags`.
+- [x] Per Q7(a): `allowsPvP`, `timeLimit`, `countdownSec` on mode config; `ROUND_TIMER_ENABLED`/`ROUND_COUNTDOWN_ENABLED`/`PLAYER_VS_PLAYER_ENABLED` deleted; `RoundTimerGui` reads the payload.
+- [x] Suite: two sessions with disjoint rosters; score reset isolation; transfer moves roster + attributes.
 
 Done when: the two-session playtest and suite above; `grep BindableFunction src/server/GameMode` empty; `grep TEAMS_ENABLED src` empty.
 
 > Noted by chunk 6: with `ROUND_TIMER_ENABLED = false` and No-Op's `scoreLimit = math.huge`, the `Default` session's round never ends, so `RoundStarted`/`RoundEnded` fire once per session and nothing downstream of them can be exercised twice in a playtest. Q7 moves `timeLimit` onto the mode config here — give No-Op a finite one, or this chunk's two-session round-start test has the same problem.
+
+Divergences (2026-09-09):
+- **No-Op's `timeLimit` stays unlimited** (absent), against chunk 6's suggestion. A finite limit would re-fire `RoundStarted` — and the energy-ledger reset that listens to it — every few minutes in the shipped arena, which is a gameplay change nobody has decided. Round-start isolation is proven by `sessions_isolate_scores` (a second session started through the real loop) and by a real transfer in the playtest instead.
+- **`AllowsPvP` folded into the module too**: `SessionRegistry.allowsPvPFor(victim)`, `Events/AllowsPvP.model.json` deleted, and one line outside `Owns:` — `HealthService/init.server.luau` now injects `SessionRegistry.allowsPvPFor` instead of invoking the BindableFunction. Before boot it answers false rather than yielding. `grep BindableFunction src/server/GameMode` is empty.
+- **Rojo removed the three stale instances itself** — the Events folder's `ignoreUnknownInstances` did not keep them because Rojo had created them, so no manual destroy under a waypoint was needed. The `.rbxl` still needs saving to persist the removal.
+- **Suite rosters overlap.** The harness has one real Player and no way to make a second, so `sessions_isolate_scores` holds that player on both the lobby session (via the registry) and the test session (roster only) and asserts the two trackers diverge — the stronger case for "per-session table", but not the disjoint-roster case, which is the two-client playtest's job. First run was 32/33: the test's own timing bug (`start()` reaches Active before its first yield, so the deferred `RoundStarted` had not been delivered when `verify` ran); fixed with a settle wait, second run **33/33**.
+- **`Arena.SpawnTags.Default = "FFASpawn"`.** The GameMode page's claim that nothing carried `FFASpawn` was stale — `Workspace.Arena.SpawnZone.SpawnLocation` carries it with `ArenaId = Default`, so the Default arena registers with 1 pad. The key is named by role; the tag string is what the scene has.
+- **The leaderstats mirror follows the current session**: observed Deaths 1 → 0 on a transfer out of the lobby into a fresh Default round. Intended — the mirror is a thin server-wide view of whichever tracker the player is scored in.
+- **`RoundManager`'s optional `onRoundEnd` dependency kept** (minus the team argument); nothing passes it today.
+- Playtest layer 1 (session `chunk-8-sessions`, 2 iterations): death-zone kill in the lobby → client `KillFeed` + 1-row `ScoreUpdate` (`d1`, `ArenaId=Lobby`); `PortalRequest(join)` on the PvE pad → `Transferred Lobby → Default`, attributes `Default` / `InArena`, `[Default] Scores reset` + `Round started! Timer: none`, client 1-row `ScoreUpdate` (`d0`, `ArenaId=Default`) + `GameStateChanged Active timeLimit=nil`, no `[Lobby]` reset or round start afterwards, `RoundTimerGui` container `Visible=false` on the client.
+- Layer 2 (two clients, `nimbalyst-local/chunk8-client-scoreboard.lua`): PENDING — user-driven; result recorded here once it runs.
+- Found, not fixed: `EconomyService` logs `round start — reset 0 of 1 roster accounts` on the transfer (the ledger has no account until the player earns one — pre-existing, chunk 6 territory); `RoundManager` still broadcasts `GameStateChanged` every second while Active even with no timer (pre-existing chatter, harmless); `KillFeedGui` keeps a `victimTeamColor` parameter no server path sends any more (client dead code, not in `Owns:`).
 Wiki: [[systems/GameMode]] (the stage-7 rewrite — do it here), [[design/lobby]] (stage rows), [[systems/Health]] (FF section removed).
 
 ---

@@ -1,7 +1,7 @@
 ---
 type: system
 description: Damage pipeline — one path. applyDamage.process / applyDamage.heal are the only Humanoid.Health writers; spells reach them through the DamageSink HealthService injects into SkillEffects; every request carries a cause id the kill feed credits; PvP is allowsPvP on the victim's mode, resolved through their session.
-updated: 2026-09-08
+updated: 2026-09-09
 ---
 
 # Health System
@@ -32,10 +32,10 @@ Refactor chunk 4 ([[design/refactor-plan-2026-09]]; audit findings F1, F2, F34) 
 Whether player A may damage player B is a property of **the mode B is playing under**, not a server-wide flag:
 
 - `GameModeDefinition.getConfig().allowsPvP: boolean?` — absent means false. `LobbyMode` and `NoOpMode` set it false; a duel mode sets it true.
-- `GameModeService` answers the `ServerScriptService.Server.GameMode.Events.AllowsPvP` BindableFunction from the victim's session (`modeForPlayer(victim)`). It binds `OnInvoke` at file scope, before anything yields, because a BindableFunction with no handler makes its caller yield forever.
-- `HealthService` injects `allowsPvPFor(victim)` into `applyDamage.initialize`; `applyDamage.process` drops player-on-player damage when it returns false. Self-damage, NPC-on-player and player-on-NPC are never gated.
+- `SessionRegistry.allowsPvPFor(victim)` (a module `HealthService` requires) answers from the victim's session; a player with no session yet gets false. The `AllowsPvP` BindableFunction chunk 4 introduced was deleted in chunk 8 — an unbound BindableFunction makes its caller yield forever, which a module call cannot.
+- `HealthService` injects `SessionRegistry.allowsPvPFor` into `applyDamage.initialize` as `allowsPvPFor`; `applyDamage.process` drops player-on-player damage when it returns false. Self-damage, NPC-on-player and player-on-NPC are never gated.
 
-`GameConfig.PLAYER_VS_PLAYER_ENABLED` was deleted with this; the remaining global round flags move to mode config in chunk 8. See [[design/lobby]] § PvP gate.
+`GameConfig.PLAYER_VS_PLAYER_ENABLED` was deleted with this (chunk 4); `TEAMS_ENABLED` and the round flags went in chunk 8. This gate is the only player-vs-player filter left in `applyDamage` — the team friendly-fire branch is gone with the teams. See [[design/lobby]] § PvP gate.
 
 ## Files
 
@@ -54,10 +54,6 @@ Whether player A may damage player B is a property of **the mode B is playing un
 `HealthService` has no regen logic — health is server-authoritative and only changes via `applyDamage`/respawn. Roblox auto-inserts its own default "Health" LocalScript into every character (from `StarterPlayer.StarterCharacterScripts`) that passively regenerates health over time; left unchecked this fights the server-authoritative model. A no-op `Health.client.luau` at `src/StarterCharacterScripts/` occupies that same name so Roblox's own regen script is never inserted (Roblox only auto-populates a default script when one of that name isn't already present).
 
 **Rojo placement gotcha:** `StarterCharacterScripts` is not a root-level DataModel service — it only exists nested at `StarterPlayer.StarterCharacterScripts`. A `default.project.json` entry for `"StarterCharacterScripts"` as a sibling of `"StarterPlayer"` at the tree root silently fails to sync (no error, no red delete — Rojo just has nowhere valid to put it). It must be nested inside the `"StarterPlayer"` block alongside `"StarterPlayerScripts"`. Caught by a live playtest verification (character's `Health` object was still Roblox's default `Script`, not our `LocalScript`) before this shipped — see [[concepts/RojoJsonValidator]] for the class of Rojo silent-fail traps this belongs to.
-
-## Friendly fire (TDM)
-
-Implemented in `applyDamage.process` — when source and target are on the same `Player.Team`, damage is silently dropped with a diagnostic log.
 
 ## Hit zones
 

@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phase 6 plan (2026-08-20) — a welcome lobby and PvE/PvP mode selection. The finding is that mode choice is a session-container problem, not a menu problem; GameModeService and RoundManager are server-wide singletons. Decision = hub place with in-place arena zones, co-op queued PvE, 1v1 queued duels on a pad pool. Records what PvP needs that the lobby does not provide.
-updated: 2026-09-08
+updated: 2026-09-09
 ---
 
 # Lobby & Mode Selection
@@ -63,10 +63,14 @@ round lifecycle.
 | **Session** | `modeDef` + `slot` + roster + `RoundManager` state. At most one per slot. |
 | **Queue** | Per-mode list of players who have opted in and are waiting for a slot. |
 
+| **Registry** | `SessionRegistry` (ModuleScript, refactor chunk 8) — owns `sessions[arenaId]`, `playerSessions[player]`, `queued`; `create` / `destroy` / `transferPlayer` / `setQueued` / `forPlayer` / `forArena` / `rosterOf`. The only writer of the `ArenaId` / `PlayerState` attributes. |
+| **Scores** | One `ScoreTracker` per session, constructed and owned by its `RoundManager` (chunk 8). A round start resets that roster and nobody else. |
+
 `RoundManager`'s existing `Waiting → Countdown → Active → PostRound` machine is
-the right lifecycle — it just has to stop being a singleton.
-`ROUND_COUNTDOWN_ENABLED` and `ROUND_TIMER_ENABLED` were both set `false` for the
-solo educational build and both want to come back on for PvP.
+the right lifecycle — it stopped being a singleton in stage 1. The timer and the
+countdown are `timeLimit` / `countdownSec` on each mode's config (chunk 8 deleted
+`ROUND_TIMER_ENABLED` and `ROUND_COUNTDOWN_ENABLED`): absent means no timer / no
+countdown, which is what Lobby and NoOp say; the duel mode sets both.
 
 ### Slot allocation
 
@@ -157,7 +161,7 @@ cheating is self-cheating. Stage 6 (duels) should land **after** Phase 5.4.
 Decided as Q2 of the [[design/system-audit-2026-09]] and landed in refactor chunk 4. Whether player A may damage player B is **a property of the mode B is playing under**, so that a duel and the lobby can coexist on one server:
 
 - `GameModeDefinition.getConfig().allowsPvP: boolean?` — absent means false. `LobbyMode` and `NoOpMode` say false; `PvPDuel` (stage 6) says true.
-- `GameModeService` answers the `Server.GameMode.Events.AllowsPvP` BindableFunction from the **victim's** session (`modeForPlayer(victim)`) — the victim is by definition in the arena the hit happened in. Bound at file scope so an early hit can never yield on an unbound function.
+- `SessionRegistry.allowsPvPFor(victim)` answers from the **victim's** session — the victim is by definition in the arena the hit happened in. A player with no session yet (before boot) gets `false`. (Chunk 4 shipped this as an `AllowsPvP` BindableFunction bound by `GameModeService`; chunk 8 deleted it in favour of the module.)
 - `HealthService` injects that answer into `applyDamage` as `allowsPvPFor(victim)`; `applyDamage.process` drops player-on-player damage when it is false. Self-damage, NPC-on-player and player-on-NPC are never gated.
 
 `GameConfig.PLAYER_VS_PLAYER_ENABLED` is deleted. The round timer/countdown flags follow it onto the mode config in chunk 8 (Q7).
@@ -203,9 +207,9 @@ leave it.
 | 2 | ✅ **Done 2026-08-20.** `ArenaId` attribute on `BlockSpawnVolume`; `BlockSpawner.new(opts)` is one pool per arena with `:disable()`/`:destroy()`, and `BlockSpawnerService` groups the tagged volumes by id. `SpawnManager` resolves per arena via `registerArena` + `getBestSpawn(player, arenaId)`. New shared `GameMode/Arena.luau` holds the `ArenaId` / `Default` / `SpawnTags` vocabulary. **The subtle part was density:** `count = density × volume / 1000` summed *every* tagged volume, which is the right answer for one arena and the wrong one for two — verified per-arena with two probe pools resolving to 10 and 5 rather than 15 each. **Absent `ArenaId` resolves to `Default`**, because the shipped arena's eight volumes are tagged but unattributed and requiring the attribute would have emptied it silently. The three new spawn tags are declared but nothing carries them yet. | — |
 | 3 | ✅ **Done 2026-08-20.** All nine HUD sites route through a new `shared/GameMode/BroadcastAudience.luau` — a late-binding pointer at `GameModeService`'s session tables, resolved per fire. `ScoreTracker` and `BossService` both needed it because neither *holds* a roster the way `RoundManager` does. **The boss judgement call:** rather than thread a session through `BossService` (a refactor stage 5 immediately redoes), it resolves `Arena.idOf(BossPoint)` — one attribute read per boss cycle, roster resolved per fire. Fallback on an unresolved lookup is *everyone* (pre-stage-3 behaviour) plus a throttled warn, never an empty audience. **Deliberately incomplete:** ScoreTracker's scores are still server-wide, so another arena's names still appear on the scoreboard — only the audience moved, since the payload shape is frozen for `ScoreboardGui`/`KillFeedGui`. VFX lane untouched as planned. **Not fully verified:** the two-session disjoint-roster test did not run (MCP `start_stop_play` wedged); single-session boot is clean. | Before stage 6 |
 | 4 | **Hub greybox + player state.** Lobby arena slot with its own session, `transferPlayer`, hub greybox, two portals, practice blocks, `InLobby/Queued/InArena` and the HUD suppression table above. Lands as 4a/4b/4c — see § Stage 4 detail. | — |
-| 5 | **PvE mode.** `Modes/PvEBoss.luau` — co-op, `minPlayers = 1`, objective win condition, boss arena slot. Queue → round → back to lobby. | — |
-| 6 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `allowsPvP = true` on its config, timer + countdown back on. | **After Phase 5.4** |
-| 7 | **Wiki + tests.** `wiki/systems/Lobby.md`, `GameMode` page rewritten off its NoOp-only record, session lifecycle tests. | — |
+| 5 | **PvE mode.** `Modes/PvEBoss.luau` — co-op, `minPlayers = 1`, objective win condition, boss arena slot. Queue → round → back to lobby. *Prerequisites landed 2026-09-09 (refactor chunk 8): `SessionRegistry` module, per-session `ScoreTracker`, roster-scored spawns.* | — |
+| 6 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `allowsPvP = true` on its config, `timeLimit` + `countdownSec` set on its config (the global flags are gone). | **After Phase 5.4** |
+| 7 | **Wiki + tests.** ✅ *GameMode page rewritten 2026-09-09 (chunk 8) off its NoOp-only record; session lifecycle tests landed as `Suites/Multiplayer/{sessions_isolate_scores, transfer_moves_roster_and_attributes, registry_views_agree}`.* Still open: `wiki/systems/Lobby.md`. | — |
 
 *Stage numbering changed 2026-08-20: broadcast audience inserted as the new stage
 3, pushing hub/PvE/duel/wiki from 3–6 to 4–7. Stages 1 and 2 are unmoved.*
@@ -452,8 +456,8 @@ never a server log. Two playtests maximum before escalating.
 ### Deliberately not in stage 4
 
 - **Real queue dequeuing.** No pads exist to dequeue into (stage 6).
-- **ScoreTracker's server-wide scores.** Still stage 5. A lobby player's name will
-  still appear on an arena scoreboard.
+- ~~**ScoreTracker's server-wide scores.** Still stage 5.~~ Closed 2026-09-09
+  (refactor chunk 8): one tracker per session, broadcasting to its own members.
 - **Tutorial entry.** Wall space is left for it; [[systems/Tutorial]] is 5.3.
 - **The progression board.** Blocked on Phase 5.5 persistence.
 

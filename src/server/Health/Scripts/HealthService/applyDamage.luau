@@ -40,8 +40,7 @@ function applyDamage.process(request: DamageRequest): DamageResult?
 	-- PvP gate: player-on-player damage is allowed only when the victim's
 	-- mode says so (`allowsPvP` on the mode config, resolved through the
 	-- victim's session — see wiki/design/lobby.md § PvP gate). Self-damage
-	-- (fall, environment) and NPC-on-player damage are never gated. Sits
-	-- ahead of the team friendly-fire branch so it stays authoritative.
+	-- (fall, environment) and NPC-on-player damage are never gated.
 	local sourcePlayer = request.sourcePlayer
 	if sourcePlayer then
 		local targetCharacter = targetHumanoid:FindFirstAncestorOfClass("Model")
@@ -49,26 +48,6 @@ function applyDamage.process(request: DamageRequest): DamageResult?
 		if targetPlayer and targetPlayer ~= sourcePlayer and not refs.allowsPvPFor(targetPlayer) then
 			log:info(string.format("PvP blocked: %s -> %s (victim's mode has allowsPvP=false)",
 				sourcePlayer.Name, targetPlayer.Name))
-			return nil
-		end
-	end
-
-	-- Friendly-fire filter. Same-team player damage drops silently here so
-	-- the damage modifiers, score events, and death feedback never fire.
-	-- FFA modes leave both players Neutral, so the equality check below
-	-- never matches and FFA damage flows through untouched. Self-damage
-	-- (sourcePlayer == targetPlayer) is allowed — fall damage and similar
-	-- still kill you. Environment damage (sourcePlayer == nil) is allowed.
-	if sourcePlayer and sourcePlayer.Team and not sourcePlayer.Neutral then
-		local targetCharacter = targetHumanoid:FindFirstAncestorOfClass("Model")
-		local targetPlayer = targetCharacter and Players:GetPlayerFromCharacter(targetCharacter)
-		if targetPlayer
-			and targetPlayer ~= sourcePlayer
-			and not targetPlayer.Neutral
-			and targetPlayer.Team == sourcePlayer.Team
-		then
-			log:info(string.format("FF blocked: %s -> %s (both on team %s)",
-				sourcePlayer.Name, targetPlayer.Name, sourcePlayer.Team.Name))
 			return nil
 		end
 	end

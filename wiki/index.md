@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-09-08
+updated: 2026-09-09
 ---
 
 # Wiki Index
@@ -30,7 +30,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/NPC]] — Perception → StateMachine → Actions, Patroller archetype, WorldDataManager
 - [[systems/HUD]] — Builder + Config + LayoutManager pattern, attribute bars, Phase 4 gameplay widgets (WeaponRolodex + LoadoutDropClient removed in 6610291)
 - [[systems/Loadout]] — **REMOVED (commit 6610291)**; pedestal pickup / RespawnPedestalManager / drop remote all deleted
-- [[systems/GameMode]] — **sessions** (Phase 6 stage 1): `RoundManager.new(deps)` per arena with its own roster + per-roster broadcast, `GameModeService` as session manager; ScoreTracker/SpawnManager still singletons; FFA/TDM/TeamService deleted (6610291). Registered modes: NoOp + Lobby (stage 4a) — page body still reads NoOp-only, rewritten in stage 7
+- [[systems/GameMode]] — **sessions**: `SessionRegistry` module owns the session tables (chunk 8, 2026-09-09); `RoundManager.new(deps)` per arena with its own roster, per-roster broadcast and its own `ScoreTracker`; `SpawnManager` per arena scored against the roster; `allowsPvP` / `timeLimit` / `countdownSec` on the mode config, no global round or team flags; FFA/TDM/TeamService deleted (6610291). Registered modes: Lobby + NoOp. Page rewritten (Phase 6 stage 7)
 - [[systems/Tests]] — TestRunner + suites for NPC/Melee, MCP-driven harness
 - [[systems/EnergyEconomy]] — Phase 1 pure-Luau module: word → per-color mana (Scrabble values × length tiers, floor-reconciled color splits)
 - [[systems/EnergyReservoirs]] — Phase 1 pure-Luau state container: three per-color energy bars, cap 60, `.changed(color)` BindableEvent signal

@@ -60,6 +60,10 @@ Arena.STATE_ATTRIBUTE = "PlayerState"
 -- (stage 4+) so scene authoring and mode config cannot pick different
 -- spellings of the same idea.
 Arena.SpawnTags = {
+	-- The shipped Default arena's pad. The tag *name* predates this
+	-- vocabulary — it is what the scene carries — so code refers to the key;
+	-- retagging the pad would be a Studio change, not a code change.
+	Default = "FFASpawn",
 	Lobby = "LobbySpawn",
 	PvEArena = "PvEArenaSpawn",
 	PvPArena = "PvPArenaSpawn",

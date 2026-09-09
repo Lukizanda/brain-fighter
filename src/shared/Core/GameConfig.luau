@@ -21,24 +21,6 @@ local GameConfig = {
 	SHOW_EMOTES = true,            -- Emote menu
 
 	----------------------------------------------------------------------
-	-- Combat feature gates
-	----------------------------------------------------------------------
-	-- Brain Fighter is being repurposed as an educational shooter. The
-	-- inherited Archon team/PvP template (TeamService, FFADeathmatch,
-	-- TeamDeathmatch, camera/locomotion/loadout stack) was deleted in
-	-- 6610291 — flipping these flags no longer restores anything; a
-	-- future PvP mode would need to be rebuilt, not un-gated. The flags
-	-- remain because consumers across the mode-registry, spawn, UI, and
-	-- nametag layers still read them directly via
-	-- require(...).TEAMS_ENABLED. Player-vs-player damage is no longer a
-	-- global flag: it is `allowsPvP` on each mode's config (see
-	-- GameModeDefinition), resolved per victim by HealthService.
-	----------------------------------------------------------------------
-	TEAMS_ENABLED = false,            -- Set true to restore Team Deathmatch mode + team UI + team-aware spawn/nametag/score logic.
-	ROUND_TIMER_ENABLED = false,      -- When false, rounds have no time limit; win by score only. Set true to re-enable the 5-minute cap.
-	ROUND_COUNTDOWN_ENABLED = false,  -- When false, the pre-round 10-s countdown is skipped; round starts immediately. Set true to restore.
-
-	----------------------------------------------------------------------
 	-- Dev-only helpers (leave off in shipped builds)
 	----------------------------------------------------------------------
 	DEV_SMOKE_KILLFEED = false, -- when true, loop-fires 3 synthetic KillFeed events (normal kill / self-elim / env kill) so the UI can be verified without real combat

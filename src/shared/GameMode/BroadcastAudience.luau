@@ -5,13 +5,12 @@
 ----------------------------------------------------------------------
 -- Who should receive a screen-space remote.
 --
--- `RoundManager` fires round state at its own roster because it holds one.
--- `ScoreTracker` and `BossService` do not: the first is a server-wide
--- singleton, the second a top-level Script that nothing injects into. This
--- module is the seam that lets them ask the same question anyway —
--- `GameModeService` registers a resolver over its session table at boot, and
--- callers resolve an audience per fire rather than caching one, because a
--- roster changes under a long-lived boss.
+-- `RoundManager` and its `ScoreTracker` fire at their own roster because
+-- they hold one. `BossService` does not: it is a top-level Script that
+-- nothing injects into. This module is the seam that lets it ask the same
+-- question anyway — `SessionRegistry` registers a resolver over its session
+-- tables at boot, and callers resolve an audience per fire rather than
+-- caching one, because a roster changes under a long-lived boss.
 --
 -- Screen-space only. World-space VFX deliberately keep `FireAllClients`:
 -- particles spawn at a world position, so another arena never sees them, and
@@ -54,7 +53,7 @@ local resolver: Resolver? = nil
 -- Registration
 ----------------------------------------------------------------------
 
--- Called once by `GameModeService` at boot. Passing `nil` restores the
+-- Called once by `SessionRegistry` at boot. Passing `nil` restores the
 -- server-wide fallback, which is what a teardown wants.
 function BroadcastAudience.setResolver(newResolver: Resolver?)
 	resolver = newResolver

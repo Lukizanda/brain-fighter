@@ -205,9 +205,7 @@ gameStateChangedRemote.OnClientEvent:Connect(function(state)
 	local roundState = state.roundState
 
 	if roundState == RoundState.PostRound then
-		if state.winnerTeamName then
-			winnerLabel.Text = state.winnerTeamName .. " team wins!"
-		elseif state.winnerName then
+		if state.winnerName then
 			winnerLabel.Text = "Winner: " .. state.winnerName
 		else
 			winnerLabel.Text = "No winner"

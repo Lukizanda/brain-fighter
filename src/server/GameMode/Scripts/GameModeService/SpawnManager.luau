@@ -1,9 +1,9 @@
 ----------------------------------------------------------------------
 -- SpawnManager
 ----------------------------------------------------------------------
--- Intelligent spawn point selection, per arena.
+-- Spawn point selection, per arena.
 -- Uses CollectionService tags to find spawn points in the workspace.
--- Scores each spawn by distance to nearest living enemy and picks
+-- Scores each spawn by distance to the nearest living enemy and picks
 -- the safest one.
 --
 -- Each session registers its arena's spawn tag; a spawn candidate is a
@@ -12,23 +12,22 @@
 -- both `PvPArenaSpawn`) and still keep their pads apart. See
 -- `wiki/design/lobby.md` § Session model.
 --
--- Extensible:
---   - Tag name comes from the mode definition's `spawnTag`
---   - Team-aware: pass a team filter to exclude friendly spawns
---   - Falls back to default SpawnLocations if no tagged spawns exist
+-- Threat scoring reads the roster it is handed, not `Players:GetPlayers()`:
+-- a hub player standing near the arena boundary is not a threat to someone
+-- spawning inside it (refactor chunk 8, F13).
+--
+-- Falls back to any SpawnLocation if no tagged spawns exist for the arena.
 --
 -- Usage:
 --   SpawnManager.initialize()
---   SpawnManager.registerArena("Default", "FFASpawn")
---   local cf = SpawnManager.getBestSpawn(player, "Default")
+--   SpawnManager.registerArena("Default", Arena.SpawnTags.Default)
+--   local cf = SpawnManager.getBestSpawn(player, "Default", session:getPlayers())
 ----------------------------------------------------------------------
 
 local CollectionService = game:GetService("CollectionService")
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
-local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
@@ -46,15 +45,12 @@ local initialized = false
 -- Internal helpers
 ----------------------------------------------------------------------
 
-local function getLivingEnemyPositions(excludePlayer: Player?, teamFilter: string?): { Vector3 }
+-- Positions of everyone on the roster, other than the spawning player,
+-- who currently has a living character.
+local function getLivingEnemyPositions(excludePlayer: Player, roster: { Player }): { Vector3 }
 	local positions = {}
-	for _, player in Players:GetPlayers() do
+	for _, player in roster do
 		if player == excludePlayer then
-			continue
-		end
-
-		-- Team filtering for future TDM support
-		if teamFilter and player.Team and player.Team.Name ~= teamFilter then
 			continue
 		end
 
@@ -69,7 +65,7 @@ local function getLivingEnemyPositions(excludePlayer: Player?, teamFilter: strin
 		end
 
 		local hrp = character:FindFirstChild("HumanoidRootPart")
-		if hrp then
+		if hrp and hrp:IsA("BasePart") then
 			table.insert(positions, hrp.Position)
 		end
 	end
@@ -93,9 +89,7 @@ local function getSpawnPoints(arenaId: string): { BasePart }
 	-- Deliberately NOT filtered by arena. It is the misconfigured-scene
 	-- path — nothing is tagged for this arena — and its whole job is to
 	-- put the player somewhere rather than at origin. Narrowing it by
-	-- arena would make the empty case empty again. The shipped place
-	-- reaches this path today: nothing carries the FFASpawn tag, so every
-	-- player lands on Arena.SpawnZone.SpawnLocation.
+	-- arena would make the empty case empty again.
 	if #spawns == 0 then
 		for _, descendant in workspace:GetDescendants() do
 			if descendant:IsA("SpawnLocation") then
@@ -105,44 +99,6 @@ local function getSpawnPoints(arenaId: string): { BasePart }
 	end
 
 	return spawns
-end
-
--- Restrict the candidate set to spawns the player can use given their
--- Team. SpawnLocations honour their TeamColor / Neutral flags; tagged
--- BaseParts can carry a "Team" attribute to opt into the same filter.
--- Returns the original set unchanged when the player has no team
--- (FFA / pre-assignment) or when TEAMS_ENABLED is off (educational
--- shooter build — every player draws from the neutral spawn pool).
-local function filterSpawnsForPlayer(spawns: { BasePart }, player: Player): { BasePart }
-	if not GameConfig.TEAMS_ENABLED then
-		return spawns
-	end
-	if not player.Team then
-		return spawns
-	end
-	local filtered = {}
-	for _, spawn in spawns do
-		if spawn:IsA("SpawnLocation") then
-			if spawn.Neutral or spawn.TeamColor == player.Team.TeamColor then
-				table.insert(filtered, spawn)
-			end
-		else
-			local teamAttr = spawn:GetAttribute("Team")
-			if teamAttr == nil or teamAttr == player.Team.Name then
-				table.insert(filtered, spawn)
-			end
-		end
-	end
-	-- If the filter wiped out every candidate (misconfigured scene),
-	-- fall back to the unfiltered list rather than spawning at origin.
-	if #filtered == 0 then
-		log:warn(string.format(
-			"No team-matching spawns for %s (team %s); falling back to all spawns",
-			player.Name, player.Team.Name
-		))
-		return spawns
-	end
-	return filtered
 end
 
 local function scoreSpawn(spawnPart: BasePart, enemyPositions: { Vector3 }): number
@@ -180,7 +136,7 @@ function SpawnManager.initialize()
 end
 
 -- Binds an arena to the spawn tag its mode authors pads with. Called by
--- GameModeService as each session is created.
+-- SessionRegistry as each session is created.
 function SpawnManager.registerArena(arenaId: string, spawnTag: string?)
 	if spawnTag then
 		arenaSpawnTags[arenaId] = spawnTag
@@ -199,17 +155,18 @@ end
 
 -- Returns the best CFrame to spawn at, avoiding nearby enemies.
 -- arenaId: which arena's pads to draw from; defaults to the default arena.
--- teamFilter: optional team name to only consider enemies from that team.
-function SpawnManager.getBestSpawn(player: Player, arenaId: string?, teamFilter: string?): CFrame
+-- roster: the players whose living characters count as threats — the
+-- session's roster. Absent means "no known threats".
+function SpawnManager.getBestSpawn(player: Player, arenaId: string?, roster: { Player }?): CFrame
 	local resolvedArenaId = arenaId or Arena.DEFAULT_ID
-	local spawns = filterSpawnsForPlayer(getSpawnPoints(resolvedArenaId), player)
+	local spawns = getSpawnPoints(resolvedArenaId)
 
 	if #spawns == 0 then
 		log:warn(string.format("[%s] No spawn points found, using origin", resolvedArenaId))
 		return GameModeConstants.SPAWN_FALLBACK_CFRAME
 	end
 
-	local enemyPositions = getLivingEnemyPositions(player, teamFilter)
+	local enemyPositions = getLivingEnemyPositions(player, roster or {})
 
 	-- Score each spawn and pick the best
 	local bestSpawn = spawns[1]

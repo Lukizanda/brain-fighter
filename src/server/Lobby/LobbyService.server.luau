@@ -33,9 +33,10 @@ local log = Logger.new("LobbyService")
 
 local portalRequestRemote = ReplicatedStorage.Shared.Lobby.Remotes.PortalRequest :: RemoteEvent
 
-local gameModeEvents = ServerScriptService.Server.GameMode.Events
-local transferPlayerFunction = gameModeEvents.TransferPlayer :: BindableFunction
-local setPlayerQueuedFunction = gameModeEvents.SetPlayerQueued :: BindableFunction
+-- The session tables. A module rather than the BindableFunctions this file
+-- used to invoke (refactor chunk 8): typed calls, and no yield-forever trap
+-- when a handler is unbound.
+local SessionRegistry = require(ServerScriptService.Server.GameMode.Scripts.SessionRegistry)
 
 local ATTR = Lobby.Attributes
 
@@ -177,9 +178,9 @@ local function onJoin(player: Player, portal: BasePart)
 	targetArenaId = type(targetArenaId) == "string" and targetArenaId or ""
 
 	if targetArenaId ~= "" then
-		-- A slot exists. Transfer, and let GameModeService clear the queue
+		-- A slot exists. Transfer, and let SessionRegistry clear the queue
 		-- flag as part of the move.
-		local ok = transferPlayerFunction:Invoke(player, targetArenaId)
+		local ok = SessionRegistry.transferPlayer(player, targetArenaId)
 		if not ok then
 			refuse(player, portal, "transfer to " .. targetArenaId .. " refused")
 			return
@@ -195,7 +196,7 @@ local function onJoin(player: Player, portal: BasePart)
 		return -- already waiting; pressing Join again is not a second place
 	end
 	table.insert(queueFor(portal), player)
-	setPlayerQueuedFunction:Invoke(player, true)
+	SessionRegistry.setQueued(player, true)
 	log:info(string.format("%s queued for %s (position %d)", player.Name,
 		tostring(portal:GetAttribute(ATTR.ModeLabel)), #queueFor(portal)))
 end
@@ -213,7 +214,7 @@ local function onCancel(player: Player, portal: BasePart)
 		end
 	end
 	if not stillQueued then
-		setPlayerQueuedFunction:Invoke(player, false)
+		SessionRegistry.setQueued(player, false)
 	end
 	log:info(string.format("%s left the queue for %s", player.Name,
 		tostring(portal:GetAttribute(ATTR.ModeLabel))))
@@ -257,7 +258,7 @@ Players.PlayerRemoving:Connect(function(player: Player)
 end)
 
 -- Occupancy changes whenever anybody's arena changes, which is exactly
--- when GameModeService republishes their attributes.
+-- when SessionRegistry republishes their attributes.
 Players.PlayerAdded:Connect(function(player: Player)
 	player:GetAttributeChangedSignal(Arena.ID_ATTRIBUTE):Connect(publishAll)
 end)

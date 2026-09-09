@@ -1,96 +1,86 @@
 ----------------------------------------------------------------------
 -- ScoreTracker
 ----------------------------------------------------------------------
--- Server-authoritative kill/death/assist tracking.
--- Standalone module — initialized with dependencies, no globals.
--- Supports per-player scores and optional leaderstats integration.
--- Assist tracking uses a configurable time window.
+-- Server-authoritative kill/death/assist tracking, one instance per
+-- session. `RoundManager` constructs its own tracker and forwards roster
+-- changes to it, so a round start in one arena zeroes that arena's scores
+-- and nobody else's. This used to be one server-wide table (refactor
+-- chunk 8, F12): every session's round start wiped every player, and a
+-- win check in one arena read the other arena's kills.
+--
+-- Two things deliberately stay module-level, because they are facts about
+-- the server rather than about a session:
+--   * the leaderstats mirror — one folder per Player whichever session they
+--     are in; a transfer must not rebuild it.
+--   * the assist history — damage arrives on HealthService's PlayerDamaged
+--     event, which carries no session, and a victim's Humanoid is the same
+--     object whichever tracker later asks about it.
+--
+-- Broadcasts go to the tracker's own members. The scoreboard a player sees
+-- therefore lists only their session's roster, and a kill feed entry lands
+-- only on the session the kill happened in. Payload shapes are unchanged —
+-- `ScoreboardGui` and `KillFeedGui` are untouched.
 --
 -- Usage:
---   ScoreTracker.initialize({ scoreUpdateRemote = ..., killFeedRemote = ... })
---   ScoreTracker.addPlayer(player)
---   ScoreTracker.recordKill(killer, victim, weaponName)
---
--- Phase 6 stage 3 scoped the outgoing broadcasts: ScoreUpdate and KillFeed
--- go to the session the kill happened in, via `BroadcastAudience`, instead of
--- every client on the server. The scores themselves are still one server-wide
--- table — per-session score state is stage 5's problem, and a duellist can
--- still therefore read the boss arena's names off their scoreboard. What is
--- fixed here is that they no longer get a kill feed scrolling past for a
--- fight they are not in. See `wiki/design/lobby.md` § Broadcast audience.
+--   ScoreTracker.initialize({ scoreUpdateRemote = ..., killFeedRemote = ..., playerDamagedEvent = ... })
+--   local tracker = ScoreTracker.new({}, "Default")
+--   tracker:addPlayer(player)
+--   tracker:recordKill(killer, victim, cause)
 ----------------------------------------------------------------------
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local BroadcastAudience = require(ReplicatedStorage.Shared.GameMode.BroadcastAudience)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+
 local log = Logger.new("ScoreTracker")
 
-local ScoreTracker = {}
+-- Damage dealt within this many seconds of the kill earns an assist.
+local ASSIST_TIME_WINDOW = 10
 
--- Configuration
-local ASSIST_TIME_WINDOW = 10 -- seconds: damage within this window earns an assist
+export type PlayerScore = { kills: number, deaths: number, assists: number }
+export type Scores = { [Player]: PlayerScore }
 
--- Internal state
-local scores: { [Player]: { kills: number, deaths: number, assists: number } } = {}
--- Assist bookkeeping, keyed by the *victim's* Humanoid. Bounded two ways
--- (chunk 5, F17): entries older than the assist window are dropped on every
--- insert, and the whole key goes when the Humanoid dies or is destroyed.
--- Without both, a boss or NPC humanoid in a session that never ends a round
--- (Lobby, NoOp) accrues an entry per hit for the lifetime of the server.
-local recentDamage: { [Humanoid]: { { player: Player, timestamp: number } } } = {}
--- One Died/Destroying pair per tracked Humanoid, disconnected with the key.
-local recentDamageCleanup: { [Humanoid]: { RBXScriptConnection } } = {}
-local leaderstatsFolders: { [Player]: Folder } = {}
-
--- Dependencies (injected via initialize)
 type Refs = {
 	scoreUpdateRemote: RemoteEvent?,
 	killFeedRemote: RemoteEvent?,
 	playerDamagedEvent: BindableEvent?,
 }
 local refs: Refs = {} :: Refs
-
 local initialized = false
 
 ----------------------------------------------------------------------
--- Leaderstats
+-- Server-wide: leaderstats mirror
 ----------------------------------------------------------------------
-local function createLeaderstats(player: Player)
-	local folder = Instance.new("Folder")
-	folder.Name = "leaderstats"
-	folder.Parent = player
+local leaderstatsFolders: { [Player]: Folder } = {}
 
-	local kills = Instance.new("IntValue")
-	kills.Name = "Kills"
-	kills.Value = 0
-	kills.Parent = folder
-
-	local deaths = Instance.new("IntValue")
-	deaths.Name = "Deaths"
-	deaths.Value = 0
-	deaths.Parent = folder
-
-	leaderstatsFolders[player] = folder
-	return folder
-end
-
-local function updateLeaderstats(player: Player)
+local function updateLeaderstats(player: Player, score: PlayerScore)
 	local folder = leaderstatsFolders[player]
-	local score = scores[player]
-	if not folder or not score then
+	if not folder then
 		return
 	end
-	local killsVal = folder:FindFirstChild("Kills")
-	local deathsVal = folder:FindFirstChild("Deaths")
-	if killsVal then killsVal.Value = score.kills end
-	if deathsVal then deathsVal.Value = score.deaths end
+	local killsValue = folder:FindFirstChild("Kills")
+	local deathsValue = folder:FindFirstChild("Deaths")
+	if killsValue and killsValue:IsA("IntValue") then
+		killsValue.Value = score.kills
+	end
+	if deathsValue and deathsValue:IsA("IntValue") then
+		deathsValue.Value = score.deaths
+	end
 end
 
 ----------------------------------------------------------------------
--- Damage tracking (for assists)
+-- Server-wide: assist history
 ----------------------------------------------------------------------
+-- Keyed by the *victim's* Humanoid. Bounded two ways (chunk 5, F17):
+-- entries older than the assist window are dropped on every insert, and the
+-- whole key goes when the Humanoid dies or is destroyed. Without both, a
+-- boss or NPC humanoid in a session that never ends a round accrues an entry
+-- per hit for the lifetime of the server.
+type DamageEntry = { player: Player, timestamp: number }
+local recentDamage: { [Humanoid]: { DamageEntry } } = {}
+-- One Died/Destroying pair per tracked Humanoid, disconnected with the key.
+local recentDamageCleanup: { [Humanoid]: { RBXScriptConnection } } = {}
+
 local function forgetDamage(targetHumanoid: Humanoid)
 	recentDamage[targetHumanoid] = nil
 
@@ -140,7 +130,10 @@ local function recordDamage(sourcePlayer: Player?, targetHumanoid: Humanoid)
 	})
 end
 
-local function getAssistants(killer: Player?, targetHumanoid: Humanoid): { Player }
+-- Everyone other than the killer who damaged this Humanoid inside the
+-- window and is still on the server. Clears the history: the kill is the
+-- end of it.
+local function takeAssistants(killer: Player?, targetHumanoid: Humanoid): { Player }
 	local assistants = {}
 	local entries = recentDamage[targetHumanoid]
 	if not entries then
@@ -153,71 +146,28 @@ local function getAssistants(killer: Player?, targetHumanoid: Humanoid): { Playe
 	for _, entry in entries do
 		local isRecent = (now - entry.timestamp) <= ASSIST_TIME_WINDOW
 		local isNotKiller = entry.player ~= killer
-		local isAlive = entry.player.Parent ~= nil -- still in game
+		local isPresent = entry.player.Parent ~= nil
 		local isNotCounted = not seen[entry.player]
 
-		if isRecent and isNotKiller and isAlive and isNotCounted then
+		if isRecent and isNotKiller and isPresent and isNotCounted then
 			seen[entry.player] = true
 			table.insert(assistants, entry.player)
 		end
 	end
 
-	-- Clean up damage history for this target
 	forgetDamage(targetHumanoid)
 
 	return assistants
 end
 
 ----------------------------------------------------------------------
--- Score broadcast
-----------------------------------------------------------------------
--- `audience` is who sees the update, not whose scores are in it. The
--- serialized table stays server-wide so the payload shape — and everything
--- ScoreboardGui derives from it — is untouched.
-local function broadcastScores(audience: { Player })
-	local scoreUpdateRemote = refs.scoreUpdateRemote
-	if not scoreUpdateRemote then
-		return
-	end
-
-	-- Serialize scores keyed by UserId for network transport
-	local serialized: { [number]: { kills: number, deaths: number, assists: number, playerName: string } } = {}
-	for player, score in scores do
-		serialized[player.UserId] = {
-			kills = score.kills,
-			deaths = score.deaths,
-			assists = score.assists,
-			playerName = player.Name,
-		}
-	end
-
-	BroadcastAudience.fire(scoreUpdateRemote, audience, serialized)
-end
-
-local function broadcastKillFeed(audience: { Player }, killer: Player?, victim: Player, weaponName: string)
-	local killFeedRemote = refs.killFeedRemote
-	if not killFeedRemote then
-		return
-	end
-
-	BroadcastAudience.fire(killFeedRemote, audience, {
-		killerId = killer and killer.UserId or 0,
-		killerName = killer and killer.Name or "Environment",
-		victimId = victim.UserId,
-		victimName = victim.Name,
-		weaponName = weaponName or "Unknown",
-	})
-end
-
-----------------------------------------------------------------------
--- Public API
+-- Module API (server-wide)
 ----------------------------------------------------------------------
 
-function ScoreTracker.initialize(dependencies: {
-	scoreUpdateRemote: RemoteEvent?,
-	killFeedRemote: RemoteEvent?,
-	playerDamagedEvent: BindableEvent?,
-})
+local ScoreTracker = {}
+ScoreTracker.__index = ScoreTracker
+
+function ScoreTracker.initialize(dependencies: Refs)
 	if initialized then
 		log:warn("Already initialized")
 		return
@@ -226,10 +176,9 @@ function ScoreTracker.initialize(dependencies: {
 	refs = dependencies
 	initialized = true
 
-	-- Listen to damage events for assist tracking
 	local playerDamagedEvent = refs.playerDamagedEvent
 	if playerDamagedEvent then
-		playerDamagedEvent.Event:Connect(function(sourcePlayer, targetHumanoid, _result)
+		playerDamagedEvent.Event:Connect(function(sourcePlayer: Player?, targetHumanoid: Humanoid, _result: any)
 			recordDamage(sourcePlayer, targetHumanoid)
 		end)
 	end
@@ -237,147 +186,278 @@ function ScoreTracker.initialize(dependencies: {
 	log:info("Initialized")
 end
 
-function ScoreTracker.addPlayer(player: Player)
-	if scores[player] then
+-- One leaderstats folder per Player for the life of their connection.
+-- Idempotent, so a transfer between sessions cannot rebuild it.
+function ScoreTracker.ensureLeaderstats(player: Player)
+	if leaderstatsFolders[player] then
 		return
 	end
 
-	scores[player] = { kills = 0, deaths = 0, assists = 0 }
-	createLeaderstats(player)
-	log:info("Added player:", player.Name)
+	local folder = Instance.new("Folder")
+	folder.Name = "leaderstats"
+
+	local kills = Instance.new("IntValue")
+	kills.Name = "Kills"
+	kills.Value = 0
+	kills.Parent = folder
+
+	local deaths = Instance.new("IntValue")
+	deaths.Name = "Deaths"
+	deaths.Value = 0
+	deaths.Parent = folder
+
+	folder.Parent = player
+	leaderstatsFolders[player] = folder
 end
 
-function ScoreTracker.removePlayer(player: Player)
-	scores[player] = nil
+-- Called when a player leaves the server. Session membership is the
+-- session's business (`RoundManager:removePlayer`); this drops the
+-- server-wide state that referenced them.
+function ScoreTracker.forgetPlayer(player: Player)
 	leaderstatsFolders[player] = nil
 
-	-- Clean up any damage entries referencing this player
-	for humanoid, entries in recentDamage do
-		for i = #entries, 1, -1 do
-			if entries[i].player == player then
-				table.remove(entries, i)
+	for _, entries in recentDamage do
+		for index = #entries, 1, -1 do
+			if entries[index].player == player then
+				table.remove(entries, index)
 			end
 		end
 	end
-
-	log:info("Removed player:", player.Name)
 end
 
--- Record a kill. Returns the list of assistants.
-function ScoreTracker.recordKill(killer: Player?, victim: Player, weaponName: string): { Player }
-	-- Record death
-	if scores[victim] then
-		scores[victim].deaths += 1
-		updateLeaderstats(victim)
+----------------------------------------------------------------------
+-- Instances
+----------------------------------------------------------------------
+
+export type ScoreTracker = typeof(setmetatable(
+	{} :: {
+		_label: string,
+		_scores: Scores,
+		_enabled: boolean,
+		_destroyed: boolean,
+	},
+	ScoreTracker
+))
+
+-- `roster` seeds the members; `label` is the owning session's arena id,
+-- used only in logs.
+function ScoreTracker.new(roster: { Player }, label: string?): ScoreTracker
+	local self = setmetatable({
+		_label = label or "?",
+		_scores = {},
+		_enabled = true,
+		_destroyed = false,
+	}, ScoreTracker)
+
+	for _, player in roster do
+		self:addPlayer(player)
 	end
 
-	-- Record kill
-	if killer and scores[killer] then
-		scores[killer].kills += 1
-		updateLeaderstats(killer)
-	end
-
-	-- Find and record assists
-	local victimCharacter = victim.Character
-	local targetHumanoid = victimCharacter and victimCharacter:FindFirstChildOfClass("Humanoid")
-	local assistants = targetHumanoid and getAssistants(killer, targetHumanoid) or {}
-
-	for _, assistant in assistants do
-		if scores[assistant] then
-			scores[assistant].assists += 1
-			updateLeaderstats(assistant)
-		end
-	end
-
-	log:info(string.format(
-		"Kill: %s -> %s (weapon=%s, assists=%d)",
-		killer and killer.Name or "Environment",
-		victim.Name,
-		weaponName or "Unknown",
-		#assistants
-	))
-
-	-- Anchored on the victim, not the killer: a victim is always a real Player
-	-- in a session, where an environment kill has no killer to resolve from.
-	local audience = BroadcastAudience.forPlayer(victim)
-	broadcastKillFeed(audience, killer, victim, weaponName)
-	broadcastScores(audience)
-
-	return assistants
+	return self
 end
 
--- Record a kill on a non-Player victim (dev bot, NPC, etc). Increments the
--- killer's score and fires a kill-feed entry that includes explicit team-
--- color overrides so the UI doesn't try to look the victim up via UserId.
--- Does NOT track victim deaths (no Player to track) and does NOT broadcast
--- assists. Used by `BotSpawner` so Step-5 tuning can run solo.
-function ScoreTracker.recordBotKill(killer: Player?, victimDisplayName: string, victimTeamColor: Color3?, weaponName: string)
-	if killer and scores[killer] then
-		scores[killer].kills += 1
-		updateLeaderstats(killer)
+----------------------------------------------------------------------
+-- Membership
+----------------------------------------------------------------------
+
+function ScoreTracker:addPlayer(player: Player)
+	if self._destroyed or self._scores[player] then
+		return
 	end
-
-	-- The victim is a bot, so the killer is the only anchor available.
-	local audience = BroadcastAudience.forPlayer(killer)
-
-	local killFeedRemote = refs.killFeedRemote
-	if killFeedRemote then
-		BroadcastAudience.fire(killFeedRemote, audience, {
-			killerId = killer and killer.UserId or 0,
-			killerName = killer and killer.Name or "Environment",
-			victimId = -1, -- sentinel: non-Player victim
-			victimName = victimDisplayName,
-			victimTeamColor = victimTeamColor,
-			weaponName = weaponName or "Unknown",
-		})
-	end
-
-	broadcastScores(audience)
-
-	log:info(string.format(
-		"Bot kill: %s -> %s (weapon=%s)",
-		killer and killer.Name or "Environment",
-		victimDisplayName,
-		weaponName or "Unknown"
-	))
+	self._scores[player] = { kills = 0, deaths = 0, assists = 0 }
 end
 
-function ScoreTracker.getScore(player: Player): { kills: number, deaths: number, assists: number }?
-	return scores[player]
+function ScoreTracker:removePlayer(player: Player)
+	self._scores[player] = nil
 end
 
-function ScoreTracker.getAllScores(): { [Player]: { kills: number, deaths: number, assists: number } }
-	return scores
+function ScoreTracker:hasPlayer(player: Player): boolean
+	return self._scores[player] ~= nil
 end
 
--- `audience` is the roster of the session starting a round. Callers that have
--- one should pass it; omitting it falls back to every client, which is right
--- for a genuinely server-wide reset and wrong for a per-session one — the
--- reason the parameter exists rather than being resolved in here.
-function ScoreTracker.resetAll(audience: { Player }?)
-	for player, score in scores do
-		score.kills = 0
-		score.deaths = 0
-		score.assists = 0
-		updateLeaderstats(player)
+function ScoreTracker:getMembers(): { Player }
+	local members: { Player } = {}
+	for player in self._scores do
+		table.insert(members, player)
 	end
-	for humanoid in recentDamage do
-		forgetDamage(humanoid)
-	end
-	broadcastScores(audience or Players:GetPlayers())
-	log:info("All scores reset")
+	return members
 end
 
-function ScoreTracker.getWinner(): Player?
+----------------------------------------------------------------------
+-- Reads
+----------------------------------------------------------------------
+
+function ScoreTracker:getScore(player: Player): PlayerScore?
+	return self._scores[player]
+end
+
+function ScoreTracker:getAllScores(): Scores
+	return self._scores
+end
+
+function ScoreTracker:getWinner(): Player?
 	local bestPlayer: Player? = nil
 	local bestKills = -1
-	for player, score in scores do
+	for player, score in self._scores do
 		if score.kills > bestKills then
 			bestKills = score.kills
 			bestPlayer = player
 		end
 	end
 	return bestPlayer
+end
+
+----------------------------------------------------------------------
+-- Broadcast (to members only)
+----------------------------------------------------------------------
+
+function ScoreTracker:_fireMembers(remote: RemoteEvent, payload: any)
+	for player in self._scores do
+		if player.Parent then
+			remote:FireClient(player, payload)
+		end
+	end
+end
+
+function ScoreTracker:_broadcastScores()
+	local scoreUpdateRemote = refs.scoreUpdateRemote
+	if not scoreUpdateRemote then
+		return
+	end
+
+	-- Serialize keyed by UserId for network transport. Only this session's
+	-- members are in it, which is what makes the scoreboard per session.
+	local serialized: { [number]: { kills: number, deaths: number, assists: number, playerName: string } } = {}
+	for player, score in self._scores do
+		serialized[player.UserId] = {
+			kills = score.kills,
+			deaths = score.deaths,
+			assists = score.assists,
+			playerName = player.Name,
+		}
+	end
+
+	self:_fireMembers(scoreUpdateRemote, serialized)
+end
+
+function ScoreTracker:_broadcastKillFeed(killer: Player?, victim: Player, cause: string)
+	local killFeedRemote = refs.killFeedRemote
+	if not killFeedRemote then
+		return
+	end
+
+	self:_fireMembers(killFeedRemote, {
+		killerId = killer and killer.UserId or 0,
+		killerName = killer and killer.Name or "Environment",
+		victimId = victim.UserId,
+		victimName = victim.Name,
+		weaponName = cause,
+	})
+end
+
+----------------------------------------------------------------------
+-- Writes
+----------------------------------------------------------------------
+
+-- Record a kill whose victim is in this session. A killer or assistant who
+-- is not a member earns nothing here — they are in some other session's
+-- fight, and cross-session damage is PvP-gated anyway. Returns the
+-- assistants credited.
+function ScoreTracker:recordKill(killer: Player?, victim: Player, cause: string): { Player }
+	if not self._enabled then
+		return {}
+	end
+
+	local victimScore = self._scores[victim]
+	if victimScore then
+		victimScore.deaths += 1
+		updateLeaderstats(victim, victimScore)
+	else
+		log:warn(string.format("[%s] Kill recorded for a non-member victim: %s", self._label, victim.Name))
+	end
+
+	local killerScore = killer and self._scores[killer]
+	if killer and killerScore then
+		killerScore.kills += 1
+		updateLeaderstats(killer, killerScore)
+	end
+
+	local victimCharacter = victim.Character
+	local targetHumanoid = victimCharacter and victimCharacter:FindFirstChildOfClass("Humanoid")
+	local assistants = targetHumanoid and takeAssistants(killer, targetHumanoid) or {}
+
+	local credited: { Player } = {}
+	for _, assistant in assistants do
+		local assistantScore = self._scores[assistant]
+		if assistantScore then
+			assistantScore.assists += 1
+			updateLeaderstats(assistant, assistantScore)
+			table.insert(credited, assistant)
+		end
+	end
+
+	log:info(string.format(
+		"[%s] Kill: %s -> %s (cause=%s, assists=%d)",
+		self._label,
+		killer and killer.Name or "Environment",
+		victim.Name,
+		cause,
+		#credited
+	))
+
+	self:_broadcastKillFeed(killer, victim, cause)
+	self:_broadcastScores()
+
+	return credited
+end
+
+-- Zero every member's score — a round start. Only this session's members,
+-- and only the assist history on their own characters; another session's
+-- fight is not ours to forget.
+function ScoreTracker:reset()
+	if not self._enabled then
+		return
+	end
+
+	for player, score in self._scores do
+		score.kills = 0
+		score.deaths = 0
+		score.assists = 0
+		updateLeaderstats(player, score)
+
+		local character = player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			forgetDamage(humanoid)
+		end
+	end
+
+	self:_broadcastScores()
+	log:info(string.format("[%s] Scores reset", self._label))
+end
+
+----------------------------------------------------------------------
+-- Lifecycle
+----------------------------------------------------------------------
+
+-- Paused: kills and resets are ignored; membership and scores are kept.
+function ScoreTracker:disable()
+	self._enabled = false
+end
+
+function ScoreTracker:enable()
+	if not self._destroyed then
+		self._enabled = true
+	end
+end
+
+function ScoreTracker:destroy()
+	if self._destroyed then
+		return
+	end
+	self:disable()
+	self._destroyed = true
+	table.clear(self._scores)
 end
 
 return ScoreTracker

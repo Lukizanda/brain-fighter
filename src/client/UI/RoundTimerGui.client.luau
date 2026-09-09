@@ -4,18 +4,14 @@
 -- Displays the current round state and timer at the top of the screen.
 -- Listens to GameStateChanged RemoteEvent from the server.
 --
--- Gated behind GameConfig.ROUND_TIMER_ENABLED — set false to hide
--- the timer entirely (score-only win condition mode).
+-- Shown only while the round payload carries a `timeLimit` — a mode with
+-- no timer (NoOp today) never puts a "0:00" on screen. Read from the
+-- payload rather than a global flag because the timer is a property of
+-- the player's session's mode, and two sessions can differ.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-
-local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
-
-if not GameConfig.ROUND_TIMER_ENABLED then
-	return
-end
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
@@ -49,6 +45,7 @@ container.AnchorPoint = Vector2.new(0.5, 0)
 container.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 container.BackgroundTransparency = 0.3
 container.BorderSizePixel = 0
+container.Visible = false -- until a payload with a time limit arrives
 container.Parent = screenGui
 Instance.new("UICorner", container).CornerRadius = UDim.new(0, 8)
 
@@ -89,6 +86,10 @@ end
 gameStateChangedRemote.OnClientEvent:Connect(function(state)
 	local roundState = state.roundState
 	local timeLeft = state.timeRemaining or 0
+
+	-- A payload without a time limit is a session whose mode runs no
+	-- timer; there is nothing to count down, so the chrome stays hidden.
+	container.Visible = state.timeLimit ~= nil
 
 	if roundState == RoundState.WaitingForPlayers then
 		timerLabel.Text = "Waiting for players..."

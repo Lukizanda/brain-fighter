@@ -1,233 +1,172 @@
 ---
 type: system
-description: Game mode framework — GameModeService as a session manager, per-session RoundManager instances, ScoreTracker, per-arena SpawnManager over the shared Arena vocabulary, mode registry, and the BroadcastAudience seam that scopes screen-space remotes to a session roster. FFA/TDM modes + TeamService DELETED (2026-06-22, commit 6610291). Registered modes are NoOp and Lobby; the body below still describes the NoOp-only world and is rewritten in Phase 6 stage 7.
-updated: 2026-09-08
+description: Game mode framework — SessionRegistry (the session tables, as a module) over per-session RoundManager instances that each own a ScoreTracker; per-arena SpawnManager scored against the session roster; mode config carries allowsPvP / timeLimit / countdownSec instead of global flags; BroadcastAudience scopes the remaining screen-space remotes. Registered modes are Lobby and NoOp. Rewritten 2026-09-09 (refactor chunk 8, the Phase 6 stage-7 rewrite).
+updated: 2026-09-09
 ---
 
 # GameMode System
 
-Round-based game modes share a common scaffold: a **session** (a round state machine bound to an arena slot), a per-player score tracker, a spawn manager, and a mode-specific definition. Each mode plugs into the registry under `src/shared/GameMode/`.
+The server runs **sessions**. A session is one mode definition bound to one arena slot, with its own roster, its own round state machine and its own scores. Two exist at boot — the hub (`Lobby`, running `LobbyMode`, never starts a round) and the arena (`Default`, running the mode named by `workspace.ActiveGameMode`, `NoOp` today) — and players move between them by transfer. See [[design/lobby]] § Session model for why this shape.
 
-> **`FFADeathmatch`, `TeamDeathmatch`, and `TeamService` REMOVED 2026-06-22 (commit `6610291`).** They were gated off since Phase 1 and are now deleted, not just disabled — `Modes/init.luau` is stripped to `NoOpMode`-only and `GameModeService`'s `TeamService` require is gone. The gating section below is retained for historical context, but the competitive modes it describes no longer exist and cannot be re-enabled by flipping a flag. What survives and runs today: `GameModeService`, `RoundManager`, `ScoreTracker`, `SpawnManager`, `NametagService`, and `NoOpMode`.
+> The competitive template modes (`FFADeathmatch`, `TeamDeathmatch`, `TeamService`) were deleted in `6610291` (2026-06-22). Refactor chunk 8 (2026-09-09) removed the last of the team plumbing that survived them — `TEAMS_ENABLED`, the friendly-fire branch, nametag team colour, `winnerTeamName`, `getTeamConfig`, `GameModeTypes` — and the three global round flags. Nothing about teams is left to flip.
 
-## Sessions (Phase 6 stage 1, 2026-08-20)
+## Ownership
 
-A **session** is one mode definition bound to one arena slot, running its own round lifecycle over its own roster of players. See [[design/lobby]] § Session model for why this shape.
+| Thing | Owner | Lives in |
+|---|---|---|
+| Which sessions exist, which one a player is in, who is queued | `SessionRegistry` (ModuleScript) | `src/server/GameMode/Scripts/SessionRegistry.luau` |
+| One session's roster, round loop and scores | `RoundManager` instance | `Scripts/GameModeService/RoundManager.luau` |
+| One session's kills / deaths / assists and their broadcast | `ScoreTracker` instance, constructed by its `RoundManager` | `Scripts/GameModeService/ScoreTracker.luau` |
+| The leaderstats mirror and the assist history | `ScoreTracker` module-level (server facts, not session facts) | same file |
+| Which pad a player spawns on, per arena | `SpawnManager` | `Scripts/GameModeService/SpawnManager.luau` |
+| Boot wiring, the player lifecycle, kill routing | `GameModeService` (Script) | `Scripts/GameModeService/init.server.luau` |
+| The `ArenaId` / `PlayerState` Player attributes | `SessionRegistry` — the only writer | — |
 
-`RoundManager` used to be a server-wide singleton holding its state in file-locals — one round, one mode, everybody in it. It is now **instance-per-session**:
+## SessionRegistry (2026-09-09)
+
+`GameModeService` used to hold `sessions`, `playerSessions` and `queued` as Script locals and hand them out through three untyped BindableFunctions (`TransferPlayer`, `SetPlayerQueued`, `AllowsPvP`). Those are gone from disk and from Studio. The tables live in a module every consumer requires:
 
 ```lua
-local session = RoundManager.new({
-    arenaId = "Default",
-    gameStateChangedRemote = ..., roundStartedEvent = ..., roundEndedEvent = ...,
-    modeDefinition = activeMode, scoreTracker = ScoreTracker,
-})
-session:addPlayer(player)
-session:start()      -- begins the loop
-session:disable()    -- reversible halt
-session:destroy()    -- disable + drop all state
+local SessionRegistry = require(ServerScriptService.Server.GameMode.Scripts.SessionRegistry)
+
+SessionRegistry.initialize({ gameStateChangedRemote, roundStartedEvent, roundEndedEvent, fallbackMode })
+SessionRegistry.create(arenaId, modeDefinition)  -- RoundManager.new + SpawnManager.registerArena; does NOT start the loop
+SessionRegistry.destroy(arenaId)                 -- unassigns anyone still in it, unregisters the arena, session:destroy()
+
+SessionRegistry.forPlayer(player)   -- Session?
+SessionRegistry.forArena(arenaId)   -- Session?
+SessionRegistry.rosterOf(arenaId)   -- { Player }? — nil means "no such session", distinct from an empty roster
+SessionRegistry.all()
+
+SessionRegistry.assign(player)      -- join → the Lobby session, always
+SessionRegistry.unassign(player)
+SessionRegistry.transferPlayer(player, targetArenaId)  -- roster move + attributes + pivot to a pad; false if no session
+SessionRegistry.setQueued(player, isQueued)            -- false for a player with no session
+
+SessionRegistry.modeFor(player) · arenaIdFor(player) · isRoundActiveFor(player) · allowsPvPFor(victim)
 ```
 
-`GameModeService` is the **session manager**: it owns `sessions[arenaId]` and `playerSessions[player]`, creates exactly one session at boot (`Arena.DEFAULT_ID = "Default"`), and assigns every player to it. Behaviour is therefore identical to the singleton — the seam exists for Phase 6 stages 4–6 to hang real arenas off. Where the singleton asked `RoundManager.isActive()`, the service now asks `isPlayerRoundActive(player)`, a `playerSessions` lookup.
+Consumers: `GameModeService` (wiring), `LobbyService` (`transferPlayer` / `setQueued` from the portals), `HealthService` (`allowsPvPFor` injected into `applyDamage`), and `BroadcastAudience`, whose resolver `initialize()` registers over these tables.
 
-**Broadcast is per-roster, not `FireAllClients`.** `_broadcastState` iterates the session's roster and `FireClient`s each member. With one session this is unobservable, but with two live sessions a duellist would otherwise receive the boss arena's round state — that leak is the reason the refactor exists. The **payload shape is unchanged** (`roundState`, `timeRemaining`, `winnerId`, `winnerName`, `winnerTeamName`); `GameStateGui`, `RoundTimerGui` and `DeathScreenGui` consume it untouched. `_waitForPlayers` likewise gates on the roster count rather than `#Players:GetPlayers()`.
+**`allowsPvPFor` before boot is false.** A hit that lands before `GameModeService.initialize()` has assigned the victim gets "no PvP", not a hang — the BindableFunction it replaced would have yielded forever if invoked unbound, which is why the old one had to be bound at file scope.
 
-**`disable()` does not `task.cancel` the round thread.** The singleton's `stop()` did both, which was redundant — every await point in the machine is a `task.wait` inside an `_isLive` check, so clearing the `_running` flag unwinds the loop on its own within a second. Cancelling additionally errors on a thread that has already finished (the old `stop()` never cleared `roundThread` on natural exit) and would error if a mode callback such as `onRoundEnd` ever called back into the session from the round thread itself. The one thing cancel bought — no overlap between a winding-down loop and a `start()` issued in the same second — is covered by a `_generation` counter the loop checks at every await point.
+**`transferPlayer` pivots, it does not reload.** Reloading resets health, drops the Tool and rebuilds every `ResetOnSpawn` ScreenGui on a path a player crosses several times a session. A dead player is reloaded because there is nothing to pivot. The spawn pick runs *after* the roster move so threat scoring sees the target arena's roster.
 
-**Still a singleton:** `ScoreTracker`. Its *audience* was scoped in stage 3 (below), but its scores remain server-wide — that is stage 5 work.
+## RoundManager — one session
 
-## Arena binding (Phase 6 stage 2, 2026-08-20)
+`RoundManager.new(deps)` is the state machine `WaitingForPlayers → Countdown → Active → PostRound → loop`, per session:
 
-A session names an arena slot; stage 2 gave that name something to resolve against. `src/shared/GameMode/Arena.luau` is the shared vocabulary — `ID_ATTRIBUTE = "ArenaId"`, `DEFAULT_ID = "Default"`, the `SpawnTags` table, and `Arena.idOf(instance)`. It exists because three scripts across two domains read those strings, and as literals they would be three copies of a coupling with nothing holding them in step. [[systems/BlockSpawner]] and [[systems/Boss]] resolve arenas through the same module.
+- **Roster.** `addPlayer` / `removePlayer` / `getPlayers` / `getPlayerCount`. `_waitForPlayers` gates on the roster count, never on `#Players:GetPlayers()`, so another session's players cannot start this one's round.
+- **Scores.** The constructor builds `ScoreTracker.new({}, arenaId)`; roster changes are forwarded to it; `recordKill(killer, victim, cause)` and `getScoreTracker()` expose it. A round start calls `tracker:reset()` on *this* session's members only.
+- **Timer and countdown come from the mode config.** `_countdown` runs only if `getConfig().countdownSec` is a positive number; `_activeRound` counts down only if `getConfig().timeLimit` is a number, and asks the mode for a leader when it hits zero. Absent means no countdown / unlimited.
+- **Broadcast is per roster.** `_broadcastState` does `FireClient` per member with `{ roundState, timeRemaining, timeLimit, winnerId, winnerName, respawnTime }`. `timeLimit` is the new field: `RoundTimerGui` shows its chrome only when it is present, so an untimed mode never puts "0:00" on screen and two sessions can differ. `winnerTeamName` is gone from the payload and from `GameStateGui`.
+- **`RoundStarted` fires with the roster** (chunk 6) — `EconomyService` zeroes each member's energy ledger off it. `RoundEnded` fires `(winnerId, winnerName)`.
+- `disable()` is a flag, not `task.cancel` — every await point is a `task.wait` inside an `_isLive(generation)` check, and the `_generation` counter covers the stop-then-start overlap cancel used to guard. `destroy()` disables, clears the roster and destroys the tracker.
 
-**`Arena.idOf` treats a missing attribute as `DEFAULT_ID`**, which is the load-bearing decision. The shipped scene's parts are tagged but unattributed; requiring the attribute would have stopped the shipped arena working while every log stayed clean.
+## ScoreTracker — one per session (2026-09-09)
 
-### SpawnManager is per-arena
+Audit F12: the tracker was one server-wide table, so any session's round start zeroed every player on the server and a win check in one arena read the other arena's kills. Now:
 
-`getSpawnPoints()` read one file-local `spawnTag` set at `initialize()`. It now keys off the arena:
+- **Instance state** is `scores[Player]` for the session's members. `recordKill` credits the victim's death, the killer's kill and any assistants *that are members*; a killer in another session earns nothing here (cross-session damage is PvP-gated anyway). `reset()` zeroes members and forgets the assist history on their own characters only.
+- **Broadcasts go to members.** `ScoreUpdate` is serialized from the instance's members alone, so the scoreboard a player sees lists exactly their session's roster; `KillFeed` lands only on the session the kill happened in. `ScoreTracker` no longer needs `BroadcastAudience`. Payload shapes are unchanged — `ScoreboardGui` and `KillFeedGui` are untouched.
+- **Module-level, deliberately:** the leaderstats mirror (`ensureLeaderstats` / `forgetPlayer`, one folder per Player for the life of their connection — a transfer must not rebuild it) and the assist history (`PlayerDamaged` carries no session, and a victim's Humanoid is the same object whichever tracker later asks). The mirror follows whichever session the player is currently scored in: observed Deaths going 1 → 0 on a transfer out of the lobby into a fresh Default round.
+- `recordBotKill` is deleted. `victimTeamColor` is therefore never sent; `KillFeedGui` still tolerates its absence.
 
-| | Before | After |
-|---|---|---|
-| Registration | `initialize({ spawnTag })`, once | `registerArena(arenaId, spawnTag)`, called by `createSession` as each session is built |
-| Candidate set | every part carrying the tag | parts carrying **that arena's** tag whose `Arena.idOf` matches |
-| Lookup | `getBestSpawn(player)` | `getBestSpawn(player, arenaId)`, resolved from `playerSessions` |
+## SpawnManager — per arena, scored against the roster
 
-Two arenas can therefore share a tag name and still keep their pads apart — which is what stage 6's pad pool needs, since both duel pads are `PvPArenaSpawn`.
+`registerArena(arenaId, spawnTag)` binds a slot to the tag its mode authors pads with; a candidate is a `BasePart` carrying that tag whose `Arena.idOf` matches. Nothing tagged → any `SpawnLocation` in the workspace, deliberately unfiltered by arena (the misconfigured-scene path's job is to put the player *somewhere*).
 
-`Arena.SpawnTags` declares `LobbySpawn` / `PvEArenaSpawn` / `PvPArenaSpawn` ahead of the geometry that will carry them (stages 4–6), so scene authoring and mode config cannot pick different spellings of the same idea. `LobbySpawn` is carried by the hub's five pads as of stage 4b; `PvEArenaSpawn` / `PvPArenaSpawn` are still unused — see [[design/lobby]] § Stage 4 detail.
+`getBestSpawn(player, arenaId, roster)` scores each candidate by distance to the nearest living enemy **on the roster it is handed** — audit F13: it used to iterate `Players:GetPlayers()`, so a hub player near the arena boundary counted as a threat. Callers pass `session:getPlayers()` / `SessionRegistry.rosterOf(arenaId)`. The team filter (`filterSpawnsForPlayer`, `teamFilter`) is deleted.
 
-**The `SpawnLocation` fallback is deliberately *not* filtered by arena.** It is the misconfigured-scene path — nothing is tagged for this arena — and its job is to put the player somewhere rather than at origin; narrowing it by arena would make the empty case empty again. The shipped place reaches this path on every spawn: `NoOpMode`'s `spawnTag` is `FFASpawn` and nothing in the scene carries that tag, so every player lands on `Workspace.Arena.SpawnZone.SpawnLocation`. `filterSpawnsForPlayer` is unchanged — it was already tag/attribute-driven, and its `TEAMS_ENABLED` early-out still short-circuits the whole team path.
+`Arena.SpawnTags` now has a `Default` key for the shipped arena's pad. The tag *name* is still `FFASpawn` — that is what `Workspace.Arena.SpawnZone.SpawnLocation` carries (with `ArenaId = Default`), and retagging the pad is a Studio change, not a code change. The old wiki claim that nothing carried `FFASpawn` was stale: the Default arena registers with 1 spawn point.
 
-## Broadcast audience (Phase 6 stage 3, 2026-08-20)
+## Mode config (Q7, 2026-09-09)
 
-`RoundManager` can fire at its own roster because it holds one. The other
-screen-space senders cannot: `ScoreTracker` is a server-wide singleton, and
-`BossService` is a top-level Script that nothing injects into. Rather than give
-each of them its own answer, stage 3 added one seam.
+`GameModeDefinition.getConfig()` returns a `ModeConfig`:
 
-`src/shared/GameMode/BroadcastAudience.luau` is a late-binding pointer at the
-session tables — it stores **no roster of its own**. `GameModeService`
-registers a resolver at the top of `initialize()`:
+| Field | Meaning | Lobby | NoOp |
+|---|---|---|---|
+| `scoreLimit` | kills that end the round | 0 | `math.huge` |
+| `timeLimit?` | seconds of Active before a time-out; **absent = unlimited** | absent | absent |
+| `countdownSec?` | pre-round countdown; **absent or 0 = skipped** | absent | absent |
+| `respawnTime` | `GameModeConstants.RESPAWN_TIME` | 4 | 4 |
+| `spawnTag` | one of `Arena.SpawnTags` | `Lobby` | `Default` |
+| `runsRounds?` | whether the session's loop is started; absent = true | false | true |
+| `allowsPvP?` | player-on-player damage, resolved through the **victim's** session; absent = false | false | false |
 
-```lua
-BroadcastAudience.setResolver({
-    forPlayer = function(player) local s = playerSessions[player] return s and s:getPlayers() end,
-    forArena  = function(arenaId) local s = sessions[arenaId]     return s and s:getPlayers() end,
-})
-```
+`TEAMS_ENABLED`, `ROUND_TIMER_ENABLED` and `ROUND_COUNTDOWN_ENABLED` are deleted from `GameConfig` (`PLAYER_VS_PLAYER_ENABLED` went in chunk 4). A global flag could only ever be right for one session at a time; a duel mode that wants a timer sets `timeLimit` and `countdownSec = GameModeConstants.COUNTDOWN_DURATION` on its own config. `teamBased` is gone; `checkWinCondition` returns `(shouldEnd, winnerUserId)` and `getRoundLeader` returns a user id — no team name anywhere. `onPlayerKill(killer: Player?, victim, cause)` — the third argument is the kill-feed cause id, not a weapon name.
 
-and callers resolve **per fire**, never caching, because a roster changes under
-a long-lived boss. `BroadcastAudience.fire(remote, audience, ...)` then does the
-`FireClient` loop, skipping players who left since resolution.
-
-**The fallback is everyone, not nobody.** An unresolved lookup returns
-`Players:GetPlayers()` — today's pre-stage-3 behaviour — plus a warn throttled
-to 30 s (the boss health path fires at 10 Hz and would otherwise bury the log).
-Degrading to an empty audience would silently blank a HUD, which is the failure
-mode that costs a playtest to notice. Returning an *empty table* from a resolver
-is distinct and is honoured as-is: that means "a real session with nobody in it".
-
-The nine screen-space sites now scoped:
-
-| Remote | Sites | Audience anchor |
-|---|---|---|
-| `ScoreUpdate` | `ScoreTracker` ×1 | the kill's victim (or the round-starting session's roster, via `resetAll(audience)`) |
-| `KillFeed` | `ScoreTracker` ×2 | victim for a player kill, killer for a bot kill |
-| `BossPhaseChanged` | `BossService` ×3 | `Arena.idOf(BossPoint)` |
-| `BossHealthChanged` | `BossService` ×3 | `Arena.idOf(BossPoint)` |
-
-Kill feed is anchored on the **victim, not the killer** — a victim is always a
-real `Player` in a session, where an environment kill has no killer to resolve
-from. `recordBotKill` inverts this of necessity: its victim is a bot.
-
-**`ScoreTracker`'s scores are still server-wide** — only its *audience* moved.
-A duellist therefore still reads the boss arena's names off their scoreboard;
-what stage 3 fixes is the kill feed scrolling past for a fight they are not in.
-Per-session score state is stage 5. This was a deliberate split: the payload
-shape had to stay byte-identical because `ScoreboardGui` and `KillFeedGui` are
-out of scope.
-
-**Out of scope by design:** the eight world-space VFX sites keep
-`FireAllClients`. Particles spawn at a world position, so another arena never
-renders them — only pays to instantiate them, which is a throughput question
-[[systems/VisualEffects]]' `PERF` guardrails already own. See [[design/lobby]]
-§ Broadcast audience for the full inventory.
-
-## Current gating (2026-05-13)
-
-Brain Fighter is being repurposed as an educational shooter, so the inherited competitive modes are gated off via `GameConfig.luau`:
-
-- `TEAMS_ENABLED = false` — `TeamDeathmatch` not registered, `TeamService` is a no-op, team UI/nametag colours fall back to neutral.
-- ~~`PLAYER_VS_PLAYER_ENABLED`~~ — deleted 2026-09-08 (refactor chunk 4). Player-on-player damage is now `allowsPvP` on each mode's `getConfig()`, resolved through the victim's session; `LobbyMode` and `NoOpMode` set it false. Every spell goes through `applyDamage`, so the gate finally gates the path players use. See [[systems/Health]] § PvP gate.
-- `ROUND_TIMER_ENABLED = false` — active rounds have no time limit; they end on score only. `RoundTimerGui` exits early (no "0:00" overlay). Flip true to restore the 5-minute cap + timer HUD.
-- `ROUND_COUNTDOWN_ENABLED = false` — `RoundManager:_countdown()` returns immediately; the round goes live the moment minimum players are met. Flip true to restore the 10-second pre-round delay.
-
-All three round/PvP flags are owned by **Phase 6 stage 6**, which is gated behind Phase 5.4 — do not flip them ad hoc.
-
-With both flags off the only registered mode is `NoOpMode` (`src/shared/GameMode/Modes/NoOpMode.luau`): a 24-hour idle round with `scoreLimit = math.huge`, no team logic, no win condition. The session enters `Active` once and stays there; GameStateGui's PostRound overlay never fires.
-
-### SpawnLocation must be Neutral while teams are off
-
-`Workspace.Arena.SpawnZone.SpawnLocation` is currently set to `Neutral = true` (TeamColor `Bright red` is left as-is for documentation but ignored). When `TEAMS_ENABLED = false` no `Team` instances are created, so a non-Neutral team-locked SpawnLocation rejects every player — Roblox falls back to a default spawn and the player drops in the sky and falls to their death. Re-enabling teams without re-introducing per-team SpawnLocations is fine: a Neutral pad is also usable by any team via `SpawnManager.filterSpawnsForPlayer`. Re-introducing team-locked pads alongside the Neutral one is the right move if/when team spawning resumes.
-
-## Files
-
-```
-src/shared/GameMode/
-  Arena.luau                        — arena slot vocabulary: ArenaId attribute, Default id, SpawnTags, idOf()
-  GameModeConstants.luau            — MIN_PLAYERS, durations, RESPAWN_TIME (the player one), spawn offsets, RoundState enum
-  GameModeDefinition.luau           — the interface each mode implements
-  GameModeTypes.luau                — type definitions
-  Modes/init.luau                   — mode registry (NoOp + Lobby; DEFAULT_MODE = "NoOp")
-  Modes/NoOpMode.luau               — the idle arena mode
-  Modes/LobbyMode.luau              — the hub (stage 4a); `runsRounds = false`, never resolved via ActiveGameMode
-  BroadcastAudience.luau            — who receives a screen-space remote (resolver registered by GameModeService)
-  Remotes/                          — GameStateChanged, ScoreUpdate, KillFeed (.model.json each)
-src/server/GameMode/
-  Events/                           — RoundStarted, RoundEnded BindableEvents (.model.json each)
-  Scripts/GameModeService/
-    init.server.luau                — session manager + player/kill wiring
-    RoundManager.luau               — per-session state machine: Waiting → Countdown → Active → PostRound
-    ScoreTracker.luau               — per-player kills/deaths/assists (scores still server-wide; audience scoped stage 3)
-    SpawnManager.luau               — picks a spawn per arena; SpawnLocation fallback when nothing is tagged.
-                                      Offsets are GameModeConstants.SPAWN_VERTICAL_OFFSET / SPAWN_FALLBACK_CFRAME
-  Scripts/NametagService.server.luau — nametags above heads
-src/server/Arena/
-  DeathZoneService.server.luau      — fall-kill volume (CollectionService tag "DeathZone")
-```
-
-## Mode resolution
-
-Active mode is read from `workspace:GetAttribute("ActiveGameMode")` and looked up in `Modes/init.luau`; unset or unknown keys fall back to `DEFAULT_MODE = "NoOp"`. (The attribute in the current `.rbxl` is still `TeamDeathmatch`, a mode that no longer exists — it resolves to `NoOp`, which is why the boot log reads `mode: No-Op (key=NoOp, requested=TeamDeathmatch)`.) Each mode exposes:
-
-- `getConfig()` — score limit, round time, respawn time, spawn-tag, etc.
-- `onPlayerJoin(player)` — hook for mode-specific player setup
-- `onRoundStart()` / `onRoundEnd()` / `onPlayerKill(...)`
-- `checkWinCondition(scores)` / `getRoundLeader(scores)`
-
-`GameModeDefinition` is kill-centric, which fits a duel nearly unchanged and a boss fight badly — [[design/lobby]] § Interface note records the decision to add an objective-shaped win condition rather than model "the boss died" as a player kill.
-
-## Round states
-
-```
-Waiting   — roster below MIN_PLAYERS, idle
-Countdown — pre-round delay (skipped when ROUND_COUNTDOWN_ENABLED = false)
-Active    — gameplay; ScoreTracker accrues; ends on score limit or time (time disabled when ROUND_TIMER_ENABLED = false)
-PostRound — winner overlay, auto-restart timer
-```
-
-`RoundStarted` / `RoundEnded` BindableEvents are fired by each session. Note: these are versioned via per-file `.model.json` (the legacy `children`-array format silently failed Rojo sync — see [[concepts/ModelJsonInstances]]).
+**NoOp's `timeLimit` is deliberately still unlimited.** Chunk 6 noted that the Default round therefore starts exactly once per session and nothing downstream of `RoundStarted` fires twice in a playtest. A finite limit would fix that at the cost of re-firing `RoundStarted` — and the energy-ledger reset that listens to it — every few minutes in the shipped arena, which is a gameplay decision nobody has taken. Round-start isolation is proven by the suite and by a real transfer instead (§ Verification).
 
 ## Modes
 
 | Mode | Status | Notes |
 |---|---|---|
-| NoOp | Live | 24-hour idle round, `scoreLimit = math.huge`; the session parks in `Active`. |
-| PvE Boss | Planned — Phase 6 stage 5 | Co-op, `minPlayers = 1`, objective win condition, boss arena slot. |
-| PvP Duel | Planned — Phase 6 stage 6, gated behind Phase 5.4 | Exactly 2 players, pad pool, timer + countdown back on. |
-| FFA Deathmatch / Team Deathmatch | **Deleted** `6610291` | Not recoverable by a flag flip; the modules are gone. |
+| Lobby | Live (hub) | `runsRounds = false`; the session holds a roster and pads but its loop is never started, so `RoundManager` needs no notion of a lobby. |
+| NoOp | Live (Default arena) | `scoreLimit = math.huge`, no timer, no countdown: the session enters Active once and stays there, which is what spawn protection and the respawn loop key on. |
+| PvE Boss | Planned — Phase 6 stage 5 | Co-op, `minPlayers = 1`, objective win condition, boss arena slot. Per-session scores are no longer a prerequisite — done here. |
+| PvP Duel | Planned — Phase 6 stage 6, gated behind Phase 5.4 | Exactly 2, pad pool, `allowsPvP = true`, `timeLimit` + `countdownSec` set on its config. |
+| FFA Deathmatch / Team Deathmatch | **Deleted** `6610291` | Not recoverable by a flag flip; the modules and now the team plumbing are gone. |
 
-## Friendly fire
+Mode resolution: `workspace:GetAttribute("ActiveGameMode")` looked up in `Modes/init.luau`; unset or unknown falls back to `DEFAULT_MODE = "NoOp"`. The `.rbxl` still says `TeamDeathmatch`, hence the boot line `mode: No-Op (key=NoOp, requested=TeamDeathmatch)`. `LobbyMode` is required directly by `GameModeService` — whether there is a hub is not a configurable question.
 
-The friendly-fire block lives in `HealthService.applyDamage.process` (not in the deleted `TeamService`) — that way it applies to any damage path uniformly. See [[systems/Health]]. Dormant while `TEAMS_ENABLED = false`.
+## Broadcast audience
+
+`shared/GameMode/BroadcastAudience.luau` is the seam for a screen-space sender that does not hold a roster. After chunk 8 that is **`BossService` only** — `RoundManager` and `ScoreTracker` fire at their own members. `SessionRegistry.initialize()` registers the resolver (`forPlayer` → `playerSessions`, `forArena` → `sessions`); callers resolve per fire, never caching. An unresolved lookup falls back to *everyone* plus a throttled warn, never to an empty audience — a blank HUD is the failure that costs a playtest to notice. World-space VFX keep `FireAllClients` by design ([[systems/VisualEffects]]).
+
+## Player state
+
+`SessionRegistry` publishes two attributes on the Player instance — `ArenaId` and `PlayerState` (`InLobby` / `Queued` / `InArena`) — because attributes replicate on their own and a late-starting LocalScript reads them the moment it asks. The arena half is derived from the session's mode (`runsRounds` → `InArena`); `Queued` is pushed in by `LobbyService` through `setQueued`, since a queued player is standing in the lobby like everybody else. Entering an arena clears the queue flag. `HudGate` and `LobbyService`'s occupancy counts read these.
 
 ## Respawn (2026-09-08)
 
-**GameModeService is the only thing that gives a player a character.** Chunk 5 of
-[[design/refactor-plan-2026-09]] made that literal:
+**GameModeService is the only thing that gives a player a character** (chunk 5):
 
-- `Players.CharacterAutoLoads = false` is set as the first statement of
-  `initialize()`, before anything yields, so the engine never spawns anyone.
-- `onPlayerAdded` connects `setupCharacter` to `CharacterAdded` and then calls
-  `player:LoadCharacter()` (or adopts an already-loaded character, for a player
-  who was in the server before this Script initialized). That first spawn is a
-  bare `LoadCharacter` with no pad pick — the engine's SpawnLocation choice, i.e.
-  exactly what auto-load used to do, and it lands in the lobby, which has no
-  threat scoring to do.
-- Every later character comes from the `humanoid.Died` handler inside
-  `setupCharacter`: wait the player's session's `respawnTime`, then
-  `SpawnManager.getBestSpawn` in that session's arena, `LoadCharacter`, `PivotTo`.
-- The `RequestRespawn` remote in [[systems/Health]] is deleted. There is no way
-  for a client to ask for a respawn, and no second `LoadCharacter` to race.
+- `Players.CharacterAutoLoads = false` is the first statement of `initialize()`.
+- `onPlayerAdded` connects `setupCharacter` to `CharacterAdded` **before** the bare `LoadCharacter()` that gives a joiner their first body (the engine's SpawnLocation pick lands in the lobby, which has no threat scoring to do). Adopts an already-loaded character for a player who was in the server before the Script initialized.
+- Every later character comes from the `humanoid.Died` handler: wait `SessionRegistry.modeFor(player).getConfig().respawnTime`, then `SpawnManager.getBestSpawn(player, arenaId, SessionRegistry.rosterOf(arenaId))`, `LoadCharacter`, `PivotTo`. Gated on "has a session", not "round active", so a player who falls off the hub comes back.
+- Spawn protection (`ForceField` for `SPAWN_PROTECTION_DURATION`) uses `SessionRegistry.isRoundActiveFor(player)` — the player's own session, not a global round state.
 
-Measured: one `CharacterAdded` per death, in the hub and in the arena
-(`CharacterAdded` counter installed on the Server datamodel before the kill).
+Measured (chunk 5): one `CharacterAdded` per death, in the hub and in the arena.
 
-### Respawn handler ordering
+## Kill routing
 
-`setupCharacter` is **connected to `CharacterAdded` BEFORE** the `LoadCharacter()`
-call below it. Otherwise the very-first character gets no Died handler and the
-player appears stuck on the respawn screen after their first death. Fixed
-`dcd312d`; still load-bearing, and more so now that `CharacterAutoLoads` is off
-and that `LoadCharacter` is the only first spawn.
+`PlayerEliminated` → `GameModeService.onPlayerEliminated` → `SessionRegistry.forPlayer(victim)` → `session:getMode().onPlayerKill(killer, victim, cause)` then `session:recordKill(killer, victim, cause)`. The **victim's** session, because the victim is by definition in the arena the kill happened in. `cause` is `DamageResult.cause` (a skill name, a `DamageTypes.Cause`), which is what the kill feed prints. NPC/dummy victims are not tracked.
 
-Both the ForceField and the respawn use `isPlayerRoundActive(player)` /
-`playerSessions[player]` — the player's own session — rather than a global round
-state.
+## Files
+
+```
+src/shared/GameMode/
+  Arena.luau                        — arena slot vocabulary: ArenaId attribute, Default/Lobby ids, SpawnTags (Default, Lobby, PvEArena, PvPArena), idOf()
+  GameModeConstants.luau            — MIN_PLAYERS, COUNTDOWN_DURATION, INTERMISSION_DURATION, RESPAWN_TIME, spawn offsets, RoundState enum
+  GameModeDefinition.luau           — the interface each mode implements; exports ModeConfig, PlayerScore, Scores
+  Modes/init.luau                   — mode registry (NoOp + Lobby; DEFAULT_MODE = "NoOp")
+  Modes/NoOpMode.luau               — the arena's idle mode
+  Modes/LobbyMode.luau              — the hub; runsRounds = false
+  BroadcastAudience.luau            — who receives a screen-space remote (resolver registered by SessionRegistry)
+  Remotes/                          — GameStateChanged, ScoreUpdate, KillFeed (.model.json each)
+src/server/GameMode/
+  Events/                           — RoundStarted, RoundEnded BindableEvents (.model.json each). No BindableFunctions.
+  Scripts/SessionRegistry.luau      — the session tables (module)
+  Scripts/GameModeService/
+    init.server.luau                — boot wiring, player lifecycle, kill routing
+    RoundManager.luau               — per-session state machine + roster + its ScoreTracker
+    ScoreTracker.luau               — per-session scores; module-level leaderstats mirror + assist history
+    SpawnManager.luau               — pad pick per arena, scored against a roster
+  Scripts/NametagService.server.luau — neutral-coloured nametags above heads
+src/shared/Tests/Suites/Multiplayer/
+  sessions_isolate_scores · transfer_moves_roster_and_attributes · registry_views_agree · multiplayer_invariants
+```
+
+## Verification (2026-09-09, chunk 8)
+
+- **Suite** (`RunTests = all`): 33 tests. `sessions_isolate_scores` seeds a death on the lobby tracker, starts a round in a second session whose roster also holds the one harness player, and asserts the lobby's deaths survive and `RoundStarted` carried exactly the test roster. `transfer_moves_roster_and_attributes` and `registry_views_agree` round-trip the real `transferPlayer` into a throwaway arena and back.
+- **Single-client playtest, real portal path:** death-zone kill while in the lobby → client received `KillFeed` + a **1-row** `ScoreUpdate` (`d1`, `ArenaId=Lobby`). `PortalRequest(join)` on the PvE pad → `Transferred Lobby → Default`, attributes flipped to `Default` / `InArena`, `[Default] Scores reset` + `Round started! Timer: none`, client received a **1-row** `ScoreUpdate` (`d0`, `ArenaId=Default`) and `GameStateChanged Active timeLimit=nil`; **no** `[Lobby] Scores reset` or `[Lobby] Round started` followed; `RoundTimerGui`'s container stayed `Visible = false` on the client; leaderstats mirror went Deaths 1 → 0 with the session.
+- **Two-client half** (each scoreboard lists only its own session's roster; a Default round start leaves the *other* player's lobby scores alone) is user-driven with `nimbalyst-local/chunk8-client-scoreboard.lua` — see the chunk's divergence note in [[design/refactor-plan-2026-09]] for whether it ran.
 
 ## Cross-references
 
-- Phase 6 session/lobby plan → [[design/lobby]], [[design/build-plan]] § Phase 6
+- Phase 6 session/lobby plan → [[design/lobby]], [[design/build-plan]] § Phase 6; the audit findings this page closes → [[design/system-audit-2026-09]] F12, F13, F16, F34, Q6, Q7
+- PvP gate mechanism → [[systems/Health]] § PvP gate
 - Death zone wiring → `src/server/Arena/DeathZoneService.server.luau`
-- Kill feed remote → `gameModeRemotes.KillFeed` (`KillFeedGui` consumes it), scoped per session — see § Broadcast audience
-- Boss HUD remotes use the same seam → [[systems/Boss]] § Broadcast audience
+- Boss HUD remotes use the broadcast seam → [[systems/Boss]] § Broadcast audience

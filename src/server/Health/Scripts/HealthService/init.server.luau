@@ -19,11 +19,10 @@ local healthEvents = ServerScriptService.Server.Health.Events
 local playerDamagedEvent = healthEvents.PlayerDamaged
 local playerEliminatedEvent = healthEvents.PlayerEliminated
 
--- "May other players damage this one?" — answered by GameModeService from
--- the victim's session. A BindableFunction because the session tables
--- live in a Script, not a module. GameModeService binds OnInvoke at file
--- scope, before anything yields, so an Invoke can never hang waiting.
-local allowsPvPFunction = ServerScriptService.Server.GameMode.Events.AllowsPvP
+-- "May other players damage this one?" — answered from the victim's
+-- session by SessionRegistry, so a duellist and a lobby player on the same
+-- server get different answers. A player with no session yet gets false.
+local SessionRegistry = require(ServerScriptService.Server.GameMode.Scripts.SessionRegistry)
 
 local function initializeCharacterHealth(character: Model)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -81,9 +80,7 @@ local function initialize()
 		damageConfirmRemote = damageConfirmRemote,
 		playerDamagedEvent = playerDamagedEvent,
 		playerEliminatedEvent = playerEliminatedEvent,
-		allowsPvPFor = function(victim: Player): boolean
-			return allowsPvPFunction:Invoke(victim) == true
-		end,
+		allowsPvPFor = SessionRegistry.allowsPvPFor,
 	})
 
 	-- Every spell's damage and heal lands here. Injected downward rather

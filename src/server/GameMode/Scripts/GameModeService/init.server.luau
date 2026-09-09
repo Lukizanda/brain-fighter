@@ -1,33 +1,22 @@
 ----------------------------------------------------------------------
 -- GameModeService
 ----------------------------------------------------------------------
--- Server session manager. Owns a table of RoundManager sessions keyed by
--- arena id, assigns each player to one, and wires them to:
---   ScoreTracker (kill/death tracking), SpawnManager (intelligent spawning),
---   and a GameModeDefinition.
+-- Boot wiring for the session system. The session tables themselves live
+-- in `SessionRegistry` (a module, so LobbyService and HealthService require
+-- it rather than invoking Bindable functions — refactor chunk 8). This
+-- Script does what a Script is for:
 --
--- Phase 6 stage 1 (see `wiki/design/lobby.md`) turned RoundManager from a
--- server-wide singleton into a per-session instance. Stage 2 bound the
--- world to it: each session names an arena slot, and SpawnManager resolves
--- that arena's spawn pads. Exactly one session is created at boot and every
--- player joins it, so behaviour is identical to the singleton — the seam is
--- here for stages 4-6 to hang arenas off.
+--   * resolves the remotes/events and the boot mode,
+--   * initializes ScoreTracker (server-wide damage listener), SpawnManager
+--     and SessionRegistry, then creates the two sessions — the hub and the
+--     arena — and starts the one whose mode runs rounds,
+--   * owns the player lifecycle: join → lobby session, leave → unassign,
+--     and every character a player ever gets (chunk 5: one respawn owner),
+--   * routes a player kill to the victim's session, whose ScoreTracker
+--     credits it.
 --
--- Stage 3 scoped the rest of the screen-space broadcasts: this file
--- registers a `BroadcastAudience` resolver over the session tables, which is
--- how ScoreTracker and BossService reach a roster without being handed one.
--- ScoreTracker is still a server-wide singleton — its *scores* are stage 5's
--- problem; only its audience moved.
---
--- Stage 4a makes the second session real. The hub is an arena slot like any
--- other, running `LobbyMode`, and it is the session players join. What used
--- to be "the" session is now the arena they walk into. The primitive that
--- moves them is `transferPlayer`, exposed as a BindableFunction so stage 4c's
--- portal service can call it; stages 5 and 6 are that same call with a queue
--- in front of it.
---
--- Hooks into existing Health system via BindableEvents.
--- Does NOT modify the damage pipeline — listens to events only.
+-- Hooks into the Health system via BindableEvents. Does NOT modify the
+-- damage pipeline — listens to events only.
 ----------------------------------------------------------------------
 
 local Players = game:GetService("Players")
@@ -36,7 +25,6 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
 local DamageTypes = require(ReplicatedStorage.Shared.Health.DamageTypes)
-local BroadcastAudience = require(ReplicatedStorage.Shared.GameMode.BroadcastAudience)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
 local GameModes = require(ReplicatedStorage.Shared.GameMode.Modes)
@@ -49,7 +37,7 @@ local ACTIVE_MODE_ATTRIBUTE = "ActiveGameMode"
 
 local ScoreTracker = require(script.ScoreTracker)
 local SpawnManager = require(script.SpawnManager)
-local RoundManager = require(script.RoundManager)
+local SessionRegistry = require(script.Parent.SessionRegistry)
 
 local log = Logger.new("GameModeService")
 
@@ -68,31 +56,13 @@ local gameModeEvents = ServerScriptService.Server.GameMode.Events
 local roundStartedEvent = gameModeEvents.RoundStarted
 local roundEndedEvent = gameModeEvents.RoundEnded
 
--- Server-side entry point for "move this player to that arena". A
--- BindableFunction rather than an exported module function because this file
--- is a Script, not a ModuleScript — the session tables live here and the
--- callers (stage 4c's portal service, dev probes) are other Scripts.
--- Invocation returns true on success, false with a reason logged otherwise.
-local transferPlayerFunction = gameModeEvents.TransferPlayer
-
--- Queue membership, set by LobbyService. `Queued` is the one part of
--- PlayerState that cannot be derived from a roster — a queued player is
--- standing in the lobby like everybody else — so it is pushed in rather
--- than read out. This file stays the only writer of the attribute.
-local setPlayerQueuedFunction = gameModeEvents.SetPlayerQueued
-
--- HealthService's PvP gate: may other players damage this one? Answered
--- from the victim's session (see `modeForPlayer`), so a duellist and a
--- lobby player on the same server get different answers.
-local allowsPvPFunction = gameModeEvents.AllowsPvP
-
 -- Health system events (listen only — no modification)
 local healthEvents = ServerScriptService.Server.Health.Events
 local playerEliminatedEvent = healthEvents.PlayerEliminated
 local playerDamagedEvent = healthEvents.PlayerDamaged
 
 ----------------------------------------------------------------------
--- Active game mode definition
+-- Boot mode
 -- Resolved from workspace:GetAttribute("ActiveGameMode") at boot;
 -- falls back to the registry default. Set the attribute in Studio
 -- Properties before starting the server to pick a different mode.
@@ -101,238 +71,18 @@ local requestedModeKey = workspace:GetAttribute(ACTIVE_MODE_ATTRIBUTE)
 local activeMode, resolvedModeKey = GameModes.get(requestedModeKey)
 
 ----------------------------------------------------------------------
--- Sessions
-----------------------------------------------------------------------
-
-local sessions: { [string]: RoundManager.RoundManager } = {}
-local playerSessions: { [Player]: RoundManager.RoundManager } = {}
-
-local function createSession(arenaId: string, modeDefinition: any): RoundManager.RoundManager
-	local session = RoundManager.new({
-		arenaId = arenaId,
-		gameStateChangedRemote = gameStateChangedRemote,
-		roundStartedEvent = roundStartedEvent,
-		roundEndedEvent = roundEndedEvent,
-		modeDefinition = modeDefinition,
-		scoreTracker = ScoreTracker,
-	})
-
-	-- Bind the arena's spawn pads at the same moment its session exists, so
-	-- there is one place that knows an arena was created.
-	SpawnManager.registerArena(arenaId, modeDefinition.getConfig().spawnTag)
-
-	sessions[arenaId] = session
-	return session
-end
-
--- Absent `runsRounds` means true, so a mode written before stage 4a keeps
--- its round loop without being edited.
-local function modeRunsRounds(modeDefinition: any): boolean
-	return modeDefinition.getConfig().runsRounds ~= false
-end
-
--- Which session a joining player belongs to: the hub, always. Walking out
--- of it is `transferPlayer`, and there is no path that puts a joining player
--- straight into an arena — see `wiki/design/lobby.md` § Player state.
-local function pickSessionFor(_player: Player): RoundManager.RoundManager?
-	return sessions[Arena.LOBBY_ID]
-end
-
--- The mode a player is currently living under. With two sessions running
--- different definitions, "the active mode" is no longer a single answer:
--- respawn time and kill credit belong to the player's session, not to
--- whichever mode the server booted the arena with.
-local function modeForPlayer(player: Player): any
-	local session = playerSessions[player]
-	return session and session:getMode() or activeMode
-end
-
--- Bound here, at file scope, rather than in initialize(): a BindableFunction
--- with no OnInvoke makes its caller yield forever, and HealthService may
--- process a hit before initialize() has finished building sessions. A
--- player with no session yet falls back to the boot mode, as everywhere.
-allowsPvPFunction.OnInvoke = function(victim: Player): boolean
-	if typeof(victim) ~= "Instance" or not victim:IsA("Player") then
-		log:warn("AllowsPvP invoked with bad arguments")
-		return false
-	end
-	return modeForPlayer(victim).getConfig().allowsPvP == true
-end
-
--- Which arena to spawn a player into. Falls back to the default arena for a
--- player with no session — the same "put them somewhere" instinct as
--- SpawnManager's SpawnLocation fallback.
-local function arenaIdForPlayer(player: Player): string
-	local session = playerSessions[player]
-	return session and session:getArenaId() or Arena.DEFAULT_ID
-end
-
--- Publish the player's position in the lobby → arena cycle onto the Player
--- instance, where every client can read it without a remote.
---
--- The arena half is *derived* from the session's mode rather than stored,
--- so it cannot drift out of step with the roster it describes. `Queued` is
--- the exception and has to be pushed in: a queued player is standing in
--- the lobby like everybody else, so no roster distinguishes them.
-local queued: { [Player]: true } = {}
-
-local function publishPlayerState(player: Player)
-	local session = playerSessions[player]
-	if not session then
-		player:SetAttribute(Arena.ID_ATTRIBUTE, nil)
-		player:SetAttribute(Arena.STATE_ATTRIBUTE, nil)
-		return
-	end
-
-	local state: string
-	if modeRunsRounds(session:getMode()) then
-		state = Arena.PlayerState.InArena
-	elseif queued[player] then
-		state = Arena.PlayerState.Queued
-	else
-		state = Arena.PlayerState.InLobby
-	end
-
-	player:SetAttribute(Arena.ID_ATTRIBUTE, session:getArenaId())
-	player:SetAttribute(Arena.STATE_ATTRIBUTE, state)
-end
-
--- Queue membership is meaningless once a player is in an arena, so
--- entering one clears it rather than leaving a stale flag to surface on
--- the way back out.
-local function setPlayerQueued(player: Player, isQueued: boolean)
-	queued[player] = isQueued or nil
-	publishPlayerState(player)
-end
-
-local function assignPlayerToSession(player: Player)
-	local session = pickSessionFor(player)
-	if not session then
-		log:warn("No session available for", player.Name)
-		return
-	end
-
-	playerSessions[player] = session
-	session:addPlayer(player)
-	publishPlayerState(player)
-end
-
-local function unassignPlayer(player: Player)
-	local session = playerSessions[player]
-	if session then
-		session:removePlayer(player)
-		playerSessions[player] = nil
-	end
-	queued[player] = nil
-	publishPlayerState(player)
-end
-
--- "Is *this player's* round active" — the per-session replacement for the
--- singleton's global `RoundManager.isActive()`.
-local function isPlayerRoundActive(player: Player): boolean
-	local session = playerSessions[player]
-	return session ~= nil and session:isActive()
-end
-
-----------------------------------------------------------------------
--- Transfer
-----------------------------------------------------------------------
--- Move a player from one session to another. The whole of stage 4's
--- interesting behaviour, and what stages 5 and 6 reduce to once they have a
--- queue in front of them.
---
--- The character is **pivoted, not reloaded**. Reloading would be the more
--- obvious "fresh start", but it resets health, drops the equipped Tool and
--- rebuilds every ScreenGui with `ResetOnSpawn = true` on a path a player
--- crosses several times a session. Restoring health belongs to a mode's
--- round start, where it can mean something; a transfer just moves you.
--- A player with no living character is reloaded, because there is nothing
--- to pivot.
-local function transferPlayer(player: Player, targetArenaId: string): boolean
-	if not player.Parent then
-		return false
-	end
-
-	local target = sessions[targetArenaId]
-	if not target then
-		log:warn(string.format("Transfer refused: no session for arena %s", targetArenaId))
-		return false
-	end
-
-	local current = playerSessions[player]
-	if current == target then
-		return true
-	end
-
-	if current then
-		current:removePlayer(player)
-	end
-
-	playerSessions[player] = target
-	target:addPlayer(player)
-	-- Either they got the slot they queued for or they went home. Both
-	-- end the wait, and a stale flag would surface on the way back out.
-	queued[player] = nil
-	publishPlayerState(player)
-
-	-- After the roster move, so the spawn scoring sees the player as
-	-- belonging to the arena it is picking a pad in.
-	local spawnCFrame = SpawnManager.getBestSpawn(player, targetArenaId)
-
-	local character = player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if character and humanoid and humanoid.Health > 0 then
-		character:PivotTo(spawnCFrame)
-	else
-		player:LoadCharacter()
-		local newCharacter = player.Character or player.CharacterAdded:Wait()
-		task.wait() -- one frame for the character to initialize
-		newCharacter:PivotTo(spawnCFrame)
-	end
-
-	log:info(string.format("Transferred %s: %s → %s",
-		player.Name, current and current:getArenaId() or "<none>", targetArenaId))
-	return true
-end
-
-----------------------------------------------------------------------
--- Broadcast audience
-----------------------------------------------------------------------
--- ScoreTracker and BossService also send screen-space remotes, and neither
--- can be handed a roster the way RoundManager holds one: ScoreTracker is a
--- server-wide singleton and BossService is a top-level Script nothing
--- injects into. Registering a resolver over the session tables gives them
--- the same answer without either of them learning what a session is.
---
--- `nil` means "no session", which BroadcastAudience reads as "fall back to
--- every client" — deliberately not the same as an empty roster.
-local function registerBroadcastAudience()
-	BroadcastAudience.setResolver({
-		forPlayer = function(player: Player): { Player }?
-			local session = playerSessions[player]
-			return session and session:getPlayers()
-		end,
-
-		forArena = function(arenaId: string): { Player }?
-			local session = sessions[arenaId]
-			return session and session:getPlayers()
-		end,
-	})
-end
-
-----------------------------------------------------------------------
--- Player management
+-- Player lifecycle
 ----------------------------------------------------------------------
 
 local function onPlayerAdded(player: Player)
-	ScoreTracker.addPlayer(player)
+	ScoreTracker.ensureLeaderstats(player)
 
 	-- Assign before the mode hook, so `onPlayerJoin` is the *lobby's* hook
 	-- rather than the arena's. It is the same call on the same player; the
 	-- ordering is what stops "which mode did this player join under" from
 	-- having two answers.
-	assignPlayerToSession(player)
-	modeForPlayer(player).onPlayerJoin(player)
+	SessionRegistry.assign(player)
+	SessionRegistry.modeFor(player).onPlayerJoin(player)
 
 	-- Per-character setup: spawn protection + Died → respawn loop.
 	-- Defined as a local so we can both Connect it for future spawns
@@ -342,7 +92,7 @@ local function onPlayerAdded(player: Player)
 		local humanoid = character:WaitForChild("Humanoid")
 
 		-- Spawn protection: ForceField blocks all damage for a short duration
-		if isPlayerRoundActive(player) then
+		if SessionRegistry.isRoundActiveFor(player) then
 			local forceField = Instance.new("ForceField")
 			forceField.Parent = character
 			task.delay(GameModeConstants.SPAWN_PROTECTION_DURATION, function()
@@ -355,16 +105,15 @@ local function onPlayerAdded(player: Player)
 		-- Auto-respawn: wait the configured respawn time, then respawn at
 		-- the best pad in whichever arena the player belongs to.
 		--
-		-- Gated on "has a session", not on `isPlayerRoundActive`. The old
-		-- gate was correct while every session ran a round; the hub's
-		-- session never enters Active, so it would have left a player who
-		-- fell off the lobby dead on the floor with nothing in the log.
+		-- Gated on "has a session", not on "round active". The hub's
+		-- session never enters Active, and a player who fell off the lobby
+		-- still has to come back.
 		humanoid.Died:Connect(function()
-			if not playerSessions[player] then
+			if not SessionRegistry.forPlayer(player) then
 				return
 			end
 
-			local config = modeForPlayer(player).getConfig()
+			local config = SessionRegistry.modeFor(player).getConfig()
 			task.wait(config.respawnTime)
 
 			-- Player may have left during respawn wait
@@ -372,7 +121,8 @@ local function onPlayerAdded(player: Player)
 				return
 			end
 
-			local spawnCFrame = SpawnManager.getBestSpawn(player, arenaIdForPlayer(player))
+			local arenaId = SessionRegistry.arenaIdFor(player)
+			local spawnCFrame = SpawnManager.getBestSpawn(player, arenaId, SessionRegistry.rosterOf(arenaId))
 			player:LoadCharacter()
 
 			-- PivotTo after character loads
@@ -402,8 +152,8 @@ local function onPlayerAdded(player: Player)
 end
 
 local function onPlayerRemoving(player: Player)
-	unassignPlayer(player)
-	ScoreTracker.removePlayer(player)
+	SessionRegistry.unassign(player)
+	ScoreTracker.forgetPlayer(player)
 	log:info("Player removing:", player.Name)
 end
 
@@ -422,21 +172,24 @@ local function onPlayerEliminated(sourcePlayer: Player?, targetHumanoid: Humanoi
 		return -- NPC/dummy kill, not tracked by game mode
 	end
 
-	-- What the kill feed credits. The cause is stamped by whoever built
-	-- the damage request — a skill name, a Cause id, a weapon name — which
-	-- is the only party that knows. Reading the attacker's equipped Tool
-	-- never worked here: the Spelling Staff casts every spell, so every
-	-- entry read "Unknown".
-	local weaponName = result and result.cause or DamageTypes.Cause.Unknown
-
-	-- Let the game mode definition process the kill (e.g., Gun Game weapon
-	-- switch). Resolved from the *victim's* session: the victim is by
+	-- The kill belongs to the *victim's* session: the victim is by
 	-- definition in the arena the kill happened in, whereas a killer could
 	-- in principle be reaching in from outside it.
-	local scoreChange = modeForPlayer(victim).onPlayerKill(sourcePlayer, victim, weaponName)
+	local session = SessionRegistry.forPlayer(victim)
+	if not session then
+		log:warn("Kill on a player with no session:", victim.Name)
+		return
+	end
 
-	-- Record in ScoreTracker (handles broadcast to clients)
-	ScoreTracker.recordKill(sourcePlayer, victim, weaponName)
+	-- What the kill feed credits. The cause is stamped by whoever built
+	-- the damage request — a skill name, a Cause id, a weapon name — which
+	-- is the only party that knows.
+	local cause = result and result.cause or DamageTypes.Cause.Unknown
+
+	-- Let the mode process the kill (e.g. a Gun Game weapon switch), then
+	-- the session's own tracker records and broadcasts it to its roster.
+	session:getMode().onPlayerKill(sourcePlayer, victim, cause)
+	session:recordKill(sourcePlayer, victim, cause)
 end
 
 ----------------------------------------------------------------------
@@ -456,13 +209,9 @@ local function initialize()
 	-- `Died` handler is the only thing that ever hands them a later one.
 	Players.CharacterAutoLoads = false
 
-	-- First, so nothing broadcasts before an audience can be resolved. The
-	-- resolver reads the session tables lazily, so it is safe to register
-	-- before any session exists — an unresolved lookup falls back to every
-	-- client, which is exactly the pre-stage-3 behaviour.
-	registerBroadcastAudience()
-
-	-- Initialize sub-systems with dependency injection
+	-- Initialize sub-systems with dependency injection. SessionRegistry
+	-- registers the BroadcastAudience resolver, so it goes before anything
+	-- that could broadcast.
 	ScoreTracker.initialize({
 		scoreUpdateRemote = scoreUpdateRemote,
 		killFeedRemote = killFeedRemote,
@@ -471,33 +220,20 @@ local function initialize()
 
 	SpawnManager.initialize()
 
+	SessionRegistry.initialize({
+		gameStateChangedRemote = gameStateChangedRemote,
+		roundStartedEvent = roundStartedEvent,
+		roundEndedEvent = roundEndedEvent,
+		fallbackMode = activeMode,
+	})
+
 	-- Create both sessions before wiring players, so every player added
-	-- below has somewhere to be assigned. createSession registers the
-	-- arena's spawns, so this must precede any getBestSpawn call.
+	-- below has somewhere to be assigned. `create` registers the arena's
+	-- spawns, so this must precede any getBestSpawn call.
 	--
 	-- The lobby first, because it is the one players join.
-	createSession(Arena.LOBBY_ID, LobbyMode)
-	createSession(Arena.DEFAULT_ID, activeMode)
-
-	transferPlayerFunction.OnInvoke = function(player: Player, targetArenaId: string): boolean
-		if typeof(player) ~= "Instance" or not player:IsA("Player") or type(targetArenaId) ~= "string" then
-			log:warn("TransferPlayer invoked with bad arguments")
-			return false
-		end
-		return transferPlayer(player, targetArenaId)
-	end
-
-	setPlayerQueuedFunction.OnInvoke = function(player: Player, isQueued: boolean): boolean
-		if typeof(player) ~= "Instance" or not player:IsA("Player") then
-			log:warn("SetPlayerQueued invoked with bad arguments")
-			return false
-		end
-		if not playerSessions[player] then
-			return false
-		end
-		setPlayerQueued(player, isQueued == true)
-		return true
-	end
+	SessionRegistry.create(Arena.LOBBY_ID, LobbyMode)
+	SessionRegistry.create(Arena.DEFAULT_ID, activeMode)
 
 	-- Wire up player events
 	for _, player in Players:GetPlayers() do
@@ -513,8 +249,8 @@ local function initialize()
 	-- left unstarted: it holds a roster and owns spawn pads like any other
 	-- session, it just has no round. That is the whole of how RoundManager
 	-- avoids learning what a lobby is — see `Modes/LobbyMode.luau`.
-	for arenaId, session in sessions do
-		if modeRunsRounds(session:getMode()) then
+	for arenaId, session in SessionRegistry.all() do
+		if SessionRegistry.runsRounds(session:getMode()) then
 			session:start()
 			log:info("Session started:", arenaId)
 		else

@@ -6,17 +6,21 @@
 --
 -- A session is one game mode definition bound to one arena slot, running its
 -- own round lifecycle over its own roster of players — see
--- `wiki/design/lobby.md` § Session model. Phase 6 stage 1 turned this from a
--- server-wide singleton into an instance; `GameModeService` owns the table of
--- sessions and there is exactly one of them today, so behaviour is unchanged.
+-- `wiki/design/lobby.md` § Session model. `SessionRegistry` owns the table of
+-- sessions; this file owns one session's round, roster and scores.
+--
+-- Scores are per session (refactor chunk 8, F12): each instance constructs
+-- its own `ScoreTracker` and forwards roster changes to it, so a round start
+-- here resets these players' scores and nobody else's. The timer and the
+-- countdown come from the mode config (`timeLimit`, `countdownSec`) rather
+-- than from global flags, so two live sessions can run different rules.
 --
 -- Mode-agnostic: the game mode definition provides win conditions and
--- callbacks. `GameModeService` wires each session up with ScoreTracker and
--- SpawnManager (both still server-wide singletons — stage 2/4 work).
+-- callbacks.
 --
 -- Usage:
 --   local session = RoundManager.new({ arenaId = "Default", ... })
---   session:addPlayer(player)  -- roster drives broadcasts + the min-player gate
+--   session:addPlayer(player)  -- roster drives broadcasts, scores + the min-player gate
 --   session:start()            -- begins the loop
 --   session:disable()          -- halts the loop (reversible)
 --   session:destroy()          -- disable + drop all state (permanent)
@@ -25,23 +29,22 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
-local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
+
+local ScoreTracker = require(script.Parent.ScoreTracker)
 
 local log = Logger.new("RoundManager")
 
 local RoundState = GameModeConstants.RoundState
 
 export type Dependencies = {
-	-- Identifies the arena slot this session runs in. Stage 1 uses a single
-	-- whole-server id; stage 2 binds these to tagged arena zones.
+	-- Identifies the arena slot this session runs in.
 	arenaId: string,
 	gameStateChangedRemote: RemoteEvent,
 	roundStartedEvent: BindableEvent,
 	roundEndedEvent: BindableEvent,
 	modeDefinition: any, -- GameModeDefinition table
-	scoreTracker: any, -- ScoreTracker module
-	onRoundEnd: ((winnerId: number?, winnerName: string?, winnerTeamName: string?) -> ())?,
+	onRoundEnd: ((winnerId: number?, winnerName: string?) -> ())?,
 }
 
 local RoundManager = {}
@@ -52,6 +55,7 @@ export type RoundManager = typeof(setmetatable(
 		arenaId: string,
 		_refs: Dependencies,
 		_roster: { [Player]: true },
+		_scoreTracker: ScoreTracker.ScoreTracker,
 		_currentState: string,
 		_timeRemaining: number,
 		_running: boolean,
@@ -71,6 +75,7 @@ function RoundManager.new(dependencies: Dependencies): RoundManager
 		arenaId = dependencies.arenaId,
 		_refs = dependencies,
 		_roster = {},
+		_scoreTracker = ScoreTracker.new({}, dependencies.arenaId),
 		_currentState = RoundState.WaitingForPlayers,
 		_timeRemaining = 0,
 		_running = false,
@@ -90,7 +95,8 @@ end
 ----------------------------------------------------------------------
 -- The set of players this session owns. Everything that used to reach for
 -- `Players:GetPlayers()` reads this instead, so a second session's round
--- state never reaches players who aren't in it.
+-- state never reaches players who aren't in it. The score tracker's
+-- membership follows the roster exactly.
 
 function RoundManager:addPlayer(player: Player)
 	if self._destroyed then
@@ -98,10 +104,12 @@ function RoundManager:addPlayer(player: Player)
 		return
 	end
 	self._roster[player] = true
+	self._scoreTracker:addPlayer(player)
 end
 
 function RoundManager:removePlayer(player: Player)
 	self._roster[player] = nil
+	self._scoreTracker:removePlayer(player)
 end
 
 function RoundManager:hasPlayer(player: Player): boolean
@@ -125,6 +133,19 @@ function RoundManager:getPlayerCount(): number
 end
 
 ----------------------------------------------------------------------
+-- Scores
+----------------------------------------------------------------------
+
+function RoundManager:getScoreTracker(): ScoreTracker.ScoreTracker
+	return self._scoreTracker
+end
+
+-- A kill whose victim is on this roster. Returns the assistants credited.
+function RoundManager:recordKill(killer: Player?, victim: Player, cause: string): { Player }
+	return self._scoreTracker:recordKill(killer, victim, cause)
+end
+
+----------------------------------------------------------------------
 -- Loop liveness
 ----------------------------------------------------------------------
 -- Single predicate for "should the loop that started at `generation` keep
@@ -139,7 +160,7 @@ end
 -- State broadcast
 ----------------------------------------------------------------------
 
-function RoundManager:_broadcastState(winnerId: number?, winnerName: string?, winnerTeamName: string?)
+function RoundManager:_broadcastState(winnerId: number?, winnerName: string?)
 	if self._destroyed then
 		return
 	end
@@ -149,22 +170,25 @@ function RoundManager:_broadcastState(winnerId: number?, winnerName: string?, wi
 		return
 	end
 
+	local config = self._refs.modeDefinition.getConfig()
 	local payload = {
 		roundState = self._currentState,
 		timeRemaining = self._timeRemaining,
+		-- Absent when the mode runs no timer. RoundTimerGui hides itself on
+		-- that, instead of reading a global flag that could only ever be
+		-- right for one session at a time.
+		timeLimit = config.timeLimit,
 		winnerId = winnerId,
 		winnerName = winnerName,
-		winnerTeamName = winnerTeamName,
-		-- Additive: DeathScreenGui reads this instead of keeping its own
-		-- copy of the mode's respawn delay (see chunk 2 — one RESPAWN_TIME).
-		respawnTime = self._refs.modeDefinition.getConfig().respawnTime,
+		-- DeathScreenGui reads this instead of keeping its own copy of the
+		-- mode's respawn delay (see chunk 2 — one RESPAWN_TIME).
+		respawnTime = config.respawnTime,
 	}
 
 	-- Per-roster `FireClient`, not `FireAllClients`: with more than one
 	-- session live, a duellist would otherwise receive the boss arena's
-	-- round state. Unobservable with today's single session, but it is the
-	-- reason this refactor exists. The payload shape is deliberately
-	-- unchanged — GameStateGui, RoundTimerGui and DeathScreenGui consume it.
+	-- round state. GameStateGui, RoundTimerGui and DeathScreenGui consume
+	-- this payload.
 	for player in self._roster do
 		if player.Parent then
 			remote:FireClient(player, payload)
@@ -194,13 +218,14 @@ function RoundManager:_waitForPlayers(generation: number)
 end
 
 function RoundManager:_countdown(generation: number)
-	if not GameConfig.ROUND_COUNTDOWN_ENABLED then
-		log:info(string.format("[%s] Countdown disabled — skipping", self.arenaId))
+	local countdownSec: number? = self._refs.modeDefinition.getConfig().countdownSec
+	if not countdownSec or countdownSec <= 0 then
+		log:info(string.format("[%s] Mode has no countdown — skipping", self.arenaId))
 		return
 	end
 
 	self._currentState = RoundState.Countdown
-	self._timeRemaining = GameModeConstants.COUNTDOWN_DURATION
+	self._timeRemaining = countdownSec
 	log:info(string.format("[%s] Countdown: %d seconds", self.arenaId, self._timeRemaining))
 
 	while self:_isLive(generation) and self._timeRemaining > 0 do
@@ -216,26 +241,28 @@ function RoundManager:_countdown(generation: number)
 	self:_broadcastState()
 end
 
-function RoundManager:_activeRound(generation: number): (number?, string?)
+-- Returns the winning user id, or nil for none.
+function RoundManager:_activeRound(generation: number): number?
 	self._currentState = RoundState.Active
 	local config = self._refs.modeDefinition.getConfig()
-	self._timeRemaining = GameConfig.ROUND_TIMER_ENABLED and config.timeLimit or 0
+	-- Absent means unlimited: the round runs until the score limit is hit
+	-- or the session is disabled.
+	local timeLimit: number? = config.timeLimit
+	self._timeRemaining = timeLimit or 0
 
-	-- Reset scores and notify. The roster goes with it so the resulting
-	-- ScoreUpdate lands on this session's players rather than the server —
-	-- the scores it resets are still server-wide (stage 5), the broadcast is
-	-- not. See `wiki/design/lobby.md` § Broadcast audience.
-	self._refs.scoreTracker.resetAll(self:getPlayers())
+	-- Reset this session's scores and notify. Only this roster's scores
+	-- are in the tracker, so another arena's round is untouched.
+	self._scoreTracker:reset()
 	self._refs.modeDefinition.onRoundStart()
-	-- The roster rides along for the same reason the score reset takes it:
-	-- a round belongs to this arena session, not to the server. EconomyService
-	-- zeroes each member's energy ledger off this, mirroring the client's
-	-- own reset on the transition into Active.
+	-- The roster rides along for the same reason the score reset is per
+	-- session: a round belongs to this arena, not to the server.
+	-- EconomyService zeroes each member's energy ledger off this, mirroring
+	-- the client's own reset on the transition into Active.
 	self._refs.roundStartedEvent:Fire(self:getPlayers())
 
 	log:info(string.format("[%s] Round started! Timer: %s Score limit: %s",
 		self.arenaId,
-		GameConfig.ROUND_TIMER_ENABLED and (self._timeRemaining .. "s") or "disabled",
+		timeLimit and (timeLimit .. "s") or "none",
 		tostring(config.scoreLimit)))
 	self:_broadcastState()
 
@@ -245,21 +272,21 @@ function RoundManager:_activeRound(generation: number): (number?, string?)
 			break
 		end
 
-		if GameConfig.ROUND_TIMER_ENABLED then
+		if timeLimit then
 			self._timeRemaining -= 1
 			if self._timeRemaining <= 0 then
 				break
 			end
 		end
 
-		-- Check win condition each tick
-		local scores = self._refs.scoreTracker.getAllScores()
-		local shouldEnd, winnerId, winnerTeamName = self._refs.modeDefinition.checkWinCondition(scores)
+		-- Check win condition each tick, against this session's scores only.
+		local scores = self._scoreTracker:getAllScores()
+		local shouldEnd, winnerId = self._refs.modeDefinition.checkWinCondition(scores)
 		if shouldEnd then
 			log:info(string.format("[%s] Win condition met! Winner: %s",
 				self.arenaId,
-				winnerTeamName or (winnerId and ("UserId=" .. winnerId)) or "none"))
-			return winnerId, winnerTeamName
+				winnerId and ("UserId=" .. winnerId) or "none"))
+			return winnerId
 		end
 
 		-- Broadcast time update every second
@@ -269,38 +296,34 @@ function RoundManager:_activeRound(generation: number): (number?, string?)
 	-- Halted mid-round rather than reaching the time limit — there is no
 	-- winner to resolve, and the caller is about to break out anyway.
 	if not self:_isLive(generation) then
-		return nil, nil
+		return nil
 	end
 
 	-- Time ran out — ask the mode who's leading.
-	local scores = self._refs.scoreTracker.getAllScores()
-	local leaderId, leaderTeamName = self._refs.modeDefinition.getRoundLeader(scores)
-	return leaderId, leaderTeamName
+	local scores = self._scoreTracker:getAllScores()
+	return self._refs.modeDefinition.getRoundLeader(scores)
 end
 
-function RoundManager:_postRound(generation: number, winnerId: number?, winnerName: string?, winnerTeamName: string?)
+function RoundManager:_postRound(generation: number, winnerId: number?, winnerName: string?)
 	self._currentState = RoundState.PostRound
 	self._timeRemaining = GameModeConstants.INTERMISSION_DURATION
 
 	self._refs.modeDefinition.onRoundEnd()
-	self._refs.roundEndedEvent:Fire(winnerId, winnerName, winnerTeamName)
+	self._refs.roundEndedEvent:Fire(winnerId, winnerName)
 
-	local label = winnerTeamName and (winnerTeamName .. " team")
-		or winnerName
-		or "none"
 	log:info(string.format("[%s] Round over! Winner: %s. Intermission: %ds",
-		self.arenaId, label, self._timeRemaining))
+		self.arenaId, winnerName or "none", self._timeRemaining))
 
 	if self._refs.onRoundEnd then
-		self._refs.onRoundEnd(winnerId, winnerName, winnerTeamName)
+		self._refs.onRoundEnd(winnerId, winnerName)
 	end
 
-	self:_broadcastState(winnerId, winnerName, winnerTeamName)
+	self:_broadcastState(winnerId, winnerName)
 
 	while self:_isLive(generation) and self._timeRemaining > 0 do
 		task.wait(1)
 		self._timeRemaining -= 1
-		self:_broadcastState(winnerId, winnerName, winnerTeamName)
+		self:_broadcastState(winnerId, winnerName)
 	end
 end
 
@@ -316,11 +339,11 @@ function RoundManager:_roundLoop(generation: number)
 		self:_countdown(generation)
 		if not self:_isLive(generation) then break end
 
-		local winnerId, winnerTeamName = self:_activeRound(generation)
+		local winnerId = self:_activeRound(generation)
 		if not self:_isLive(generation) then break end
 
-		-- Resolve player winner's display name (team-mode rounds skip this).
-		-- Scans the roster: a winner of this round is by definition in it.
+		-- Resolve the winner's display name. Scans the roster: a winner of
+		-- this round is by definition in it.
 		local winnerName: string? = nil
 		if winnerId then
 			for player in self._roster do
@@ -331,7 +354,7 @@ function RoundManager:_roundLoop(generation: number)
 			end
 		end
 
-		self:_postRound(generation, winnerId, winnerName, winnerTeamName)
+		self:_postRound(generation, winnerId, winnerName)
 	end
 
 	log:info(string.format("[%s] Round loop stopped", self.arenaId))
@@ -411,7 +434,7 @@ end
 -- Permanent teardown. `_refs` is deliberately left in place: a loop halted by
 -- `disable()` above is still parked in a `task.wait` and will touch it once
 -- more on its way out. The instance is dropped by its owner, so the
--- dependency table goes with it; the roster is what actually holds
+-- dependency table goes with it; the roster and the tracker are what hold
 -- references worth clearing eagerly.
 function RoundManager:destroy()
 	if self._destroyed then
@@ -421,6 +444,7 @@ function RoundManager:destroy()
 	self:disable()
 	self._destroyed = true
 	table.clear(self._roster)
+	self._scoreTracker:destroy()
 
 	log:info(string.format("[%s] Destroyed", self.arenaId))
 end
