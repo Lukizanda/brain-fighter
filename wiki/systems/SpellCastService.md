@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server relay for client-initiated spell casts. Applies effects server-side because client Humanoid.Health writes don't replicate for server-owned rigs. Hardened in 5.4; affordability is checked and, since 2026-09-08, enforced by the validated-memorize ledger.
-updated: 2026-09-08
+updated: 2026-09-09
 ---
 
 # SpellCastService
@@ -50,7 +50,7 @@ The `ChargeState` remote itself lives in `server/SpellCast/ChargeStateService.se
 
 ### Tuning
 
-`MAX_TARGET_DISTANCE_STUDS` = `SpellRegistry.AUTO_TARGET_RANGE_STUDS` (150) + `TARGET_DRIFT_ALLOWANCE_STUDS` (50). The 150 is the range the client's auto-targeter (`SpellMenuGui.findAutoTarget`) will lock within — both sides now read it from [[systems/SpellRegistry]] instead of keeping independent copies. The 50 absorbs drift: both caster and target keep moving during the client→server hop, so a target locked at exactly the client's limit can be measurably further away by the time the server reads it.
+`MAX_TARGET_DISTANCE_STUDS` = `SpellRegistry.AUTO_TARGET_RANGE_STUDS` (150) + `TARGET_DRIFT_ALLOWANCE_STUDS` (50). The 150 is the range the client's auto-targeter (`SpellCastController.findAutoTarget`) will lock within — both sides now read it from [[systems/SpellRegistry]] instead of keeping independent copies. The 50 absorbs drift: both caster and target keep moving during the client→server hop, so a target locked at exactly the client's limit can be measurably further away by the time the server reads it.
 >
 > **Resolved 2026-09-08 (refactor chunk 2).** The 150 used to be copied — `client/UI/SpellMenuGui` and `SpellCastConstants` each declared their own — with a comment noting a server Script can't require a LocalScript. Since `SpellRegistry` is a *shared* module, both sides can require it directly; there was never a cross-VM barrier here; only `SpellMenuGui`'s inline copy needed removing.
 

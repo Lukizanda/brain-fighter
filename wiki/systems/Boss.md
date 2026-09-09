@@ -1,7 +1,7 @@
 ---
 type: system
 description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. HUD remotes are scoped to the BossPoint's arena roster (Phase 6 stage 3).
-updated: 2026-09-08
+updated: 2026-09-09
 ---
 
 # Boss
@@ -180,7 +180,7 @@ The boss **windup VFX** in `BossStates.luau:176` deliberately keeps
 
 No changes needed in other systems:
 
-- **SpellExecutor** — damages any Humanoid; Boss is `workspace.Boss` so SpellMenuGui auto-targets it
+- **SpellExecutor** — damages any Humanoid; Boss is `workspace.Boss` so `SpellCastController.findAutoTarget` picks it (alongside `NPC`- and `Damageable`-tagged models)
 - **applyDamage.process()** — `sourcePlayer = nil` bypasses the PvP gate; firearm hits damage the boss normally
 - **DeathHandler** — only handles `DAMAGEABLE_TAG` models; Boss is tagged `"Boss"`, not `DAMAGEABLE_TAG`, so BossService owns the full death/respawn cycle
 

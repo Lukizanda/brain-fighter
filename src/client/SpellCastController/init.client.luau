@@ -31,6 +31,7 @@ local Logger        = require(ReplicatedStorage.Shared.Core.Logger)
 local CastAction    = require(ReplicatedStorage.Shared.CastAction)
 local SpellRegistry = require(ReplicatedStorage.Shared.SpellRegistry)
 local NPCConstants  = require(ReplicatedStorage.Shared.NPC.NPCConstants)
+local HealthConstants = require(ReplicatedStorage.Shared.Health.HealthConstants)
 local PlayerSession = require(script.Parent.PlayerSession)
 
 local spellCastRemote = ReplicatedStorage.Shared.SpellCast.Remotes.SpellCastServer :: RemoteEvent
@@ -51,8 +52,11 @@ export type CastRequestResult = {
 	reason: string?,
 }
 
--- Nearest living enemy Model (NPC or the Boss-system boss) within
--- SpellRegistry.AUTO_TARGET_RANGE_STUDS of the character, or nil.
+-- Nearest living enemy Model within SpellRegistry.AUTO_TARGET_RANGE_STUDS
+-- of the character, or nil. Candidates: NPC-tagged models, Damageable-tagged
+-- models (the lobby's TargetDummy — it was never a candidate before
+-- 2026-09-09, so attack spells fizzled in the lobby), and the Boss-system
+-- boss, which is neither tagged.
 local function findAutoTarget(character: Model): Model?
 	local hrp = character:FindFirstChild("HumanoidRootPart")
 	if not hrp or not hrp:IsA("BasePart") then
@@ -80,6 +84,11 @@ local function findAutoTarget(character: Model): Model?
 
 	for _, npc in CollectionService:GetTagged(NPCConstants.TAG_NPC) do
 		consider(npc)
+	end
+
+	-- `consider` dedupes by distance, so a model carrying both tags is fine.
+	for _, damageable in CollectionService:GetTagged(HealthConstants.DAMAGEABLE_TAG) do
+		consider(damageable)
 	end
 
 	local boss = workspace:FindFirstChild(BOSS_MODEL_NAME)

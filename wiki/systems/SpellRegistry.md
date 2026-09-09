@@ -1,7 +1,7 @@
 ---
 type: system
 description: Pure-Luau config layer for the spell roster (R/G/B × T1–T4) — name, color, tier, cost, targeting mode, skill:SkillSpec. Single source of truth consumed by SpellExecutor and the cast-menu HUD.
-updated: 2026-09-08
+updated: 2026-09-09
 ---
 
 # SpellRegistry
@@ -68,7 +68,7 @@ Declared as `TIER_COSTS = { 5, 10, 20, 40 }` in `init.luau`. Cost and drain are 
 
 ## Auto-target range
 
-`SpellRegistry.AUTO_TARGET_RANGE_STUDS = 150` is the single source for how far the client's auto-targeter (`SpellMenuGui.findAutoTarget`) will lock onto an enemy. It used to be two independently-declared `150`s — one in `SpellMenuGui` and one as `SpellCastConstants.CLIENT_AUTO_TARGET_RANGE_STUDS` (server-side trust check) — that a future tuning pass could have silently pulled apart. `SpellCastConstants.MAX_TARGET_DISTANCE_STUDS` now reads this value and adds its own drift allowance on top; see [[systems/SpellCastService]] § Tuning.
+`SpellRegistry.AUTO_TARGET_RANGE_STUDS = 150` is the single source for how far the client's auto-targeter (`SpellCastController.findAutoTarget` since refactor chunk 7) will lock onto an enemy. Candidates since 2026-09-09: models tagged `NPC`, models tagged `Damageable` (the lobby TargetDummy), and `workspace.Boss`; before that the Damageable dummy was never a candidate, so attack spells fizzled in the lobby. It used to be two independently-declared `150`s — one in `SpellMenuGui` and one as `SpellCastConstants.CLIENT_AUTO_TARGET_RANGE_STUDS` (server-side trust check) — that a future tuning pass could have silently pulled apart. `SpellCastConstants.MAX_TARGET_DISTANCE_STUDS` now reads this value and adds its own drift allowance on top; see [[systems/SpellCastService]] § Tuning.
 
 ## The 10-spell roster
 
