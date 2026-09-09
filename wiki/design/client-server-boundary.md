@@ -1,7 +1,7 @@
 ---
 type: design
 description: Audit of which systems run gameplay code on both VMs, and the staged plan to replace the accidental client-side prediction in the Skills pipeline with an explicit authority / prediction / presentation split.
-updated: 2026-09-08
+updated: 2026-09-09
 ---
 
 # Client/Server Boundary
@@ -163,6 +163,8 @@ Each stage leaves the game shippable and is independently revertable. Stages 1�
 *Verified* — Skills suite 4/4, SpellExecutor 11/11, plus a live client-side wire check: a player cast broadcast `predictedBy = <that player's UserId>`, the boss's own 30-projectile Volley in the same playtest broadcast `predictedBy = nil`, and the retired `casterUserId` key was absent from every payload. Both branches of the discrimination exercised on a client, across the wire.
 
 *Still outstanding:* the two-client visual confirmation (one burst for the caster, one for the observer). The wire check proves the right UserId is on the payload and that `ProjectileVfxController` tests the right field, which is the part that could regress silently; seeing it with two players is cheap and worth doing at the next friends checkpoint.
+
+*Closed 2026-09-09* (refactor chunk 7, after the client-originated relay was deleted): Studio local server with two players, a paste-in counter on each client. The observer received the caster's `cast_green_t1` payload once with `drawnLocallyBy` = the caster and drew it once; both clients received `impact_heal` with no exclusion and drew it once; the caster drew its predicted cast cue once and skipped the server copy. Three server-refused casts drew the cast cue on the caster only and nothing on the observer. Counts are in [[design/refactor-plan-2026-09]] § Chunk 7.
 
 **Stage 3 — Make effects authoritative-only.** ✅ **Done 2026-08-04.** Damage, heal, freeze, knockup, shield and buff stop running twice. The caster loses the local pre-flash of a frozen rig; `_frozen` now arrives from replication (~one round trip). If that reads badly in playtest, the fix is a *presentation* one — `FreezeVfxController` gets an optimistic local hint — not a return to double simulation.
 

@@ -1,7 +1,7 @@
 ---
 type: design
 description: Ordered, tickable refactor plan from the 2026-09 audit — 12 chunks sized to one session each, cheap de-risking work first, the structural authority/session work behind it. Each item names its files, its no-touch list, its done condition, risk, playtest need and dependencies. Sessions claim a chunk, tick items, and record the commit.
-updated: 2026-09-08
+updated: 2026-09-09
 ---
 
 # Refactor Plan — 2026-09
@@ -252,7 +252,7 @@ Wiki: [[systems/SpellCastService]] (affordability + validated memorize + Q4 note
 
 ## Chunk 7 — One VFX broadcast lane
 
-Status: claimed — chunk-7-fable — 2026-09-08 — code + wiki landed in e5d31a7; two-client playtest outstanding
+Status: done — 2026-09-09 — e5d31a7 (two-client check closed 2026-09-09, see note)
 Findings: F6, F7, F29 (`spellResolved` bindable + lazy cache), F21 (SpellCastController)
 Risk: **H** · Playtest: **yes, two clients** — caster sees cast cue instantly and impact on confirm; the second client sees both once; a rate-limited cast draws nothing on the second client · Depends on: chunk 4 · Blocked on: nothing (Q9 answered)
 Decision: Q9(a) — impact cues arrive on server confirmation; prediction draws the cast cue only; the client-originated relay is deleted outright.
@@ -272,7 +272,12 @@ Wiki: [[design/client-server-boundary]], [[systems/VisualEffects]], [[systems/HU
 
 > **2026-09-08 note (chunk-7-fable).** Every item above landed; the chunk stays `claimed` only because the two-client check could not be counted. **Verified, single client** (MCP playtest, lock `chunk-7-vfx`, energy earned honestly — five blocks consumed, `ALOHA` memorized, ledger enforcing): a T1 Mend tapped on the menu drew `cast_green_t1` on the caster's HRP at t+0.000 (predicted, `VfxController`) and `impact_heal` on the same HRP at t+0.063 from the server — exactly one of each, no duplicate cast cue, so `drawnLocallyBy = predictedBy` skipped the caster correctly. A second Mend the ledger refused (`green cast costs 5, ledger has 2`) drew the cast cue only and nothing else. Boss `FireballVolley` shots rendered through the new `projectile` world-lane kind (160 `CosmeticProjectile` Parts counted). Harness `all` in its own playtest: **30/30**, `predicted_run_writes_nothing` green, `RunTests` cleared. `grep -rn FireServer src/client/Vfx` is empty; the five relay instances are gone from disk and from Studio.
 >
-> **Outstanding:** the two-client playtest. Studio's Test-tab local server opens client windows the MCP proxy does not register (only the Edit window is listed), and the user chose to commit without a manual run. `nimbalyst-local/chunk7-client-counter.lua` is a paste-in counter for each client's command bar; expected on the second client: one `RECEIVED attached cast_*` payload with `drawnLocallyBy = caster` (drawn once), one `impact_*` with none, and nothing for a rejected cast.
+> **Two-client check, 2026-09-09 (parent session, user-driven).** Studio Test tab → Local Server with 2 players; `nimbalyst-local/chunk7-client-counter.lua` pasted into each client's Command Bar (it logs every `WorldVfxEvent` payload it receives and every cast/impact cue it actually builds on an HRP). Caster = Player1 (UserId -1), observer = Player2 (UserId -2); energy earned honestly (`RAN`, `DATE` memorized, ledger enforcing), then a T1 Mend tapped on the menu; then DevDebug `1` (client reservoirs only) and three more Mends the server had no ledger energy for.
+> - **Accepted Mend** (server: `Player1 cast Mend on self (server apply)`). Player1: `DREW cast_green_t1` at t+0.000 (predicted) → `RECEIVED attached cast_green_t1 drawnLocallyBy=-1 (me=-1)` at t+0.047, **not drawn again** → `RECEIVED attached impact_heal drawnLocallyBy=nil` → `DREW impact_heal`. One cast cue, one impact. Player2: `RECEIVED attached cast_green_t1 on=Player1 drawnLocallyBy=-1 (me=-2)` → `DREW cast_green_t1 on Player1`; `RECEIVED attached impact_heal drawnLocallyBy=nil` → `DREW impact_heal on Player1`. **Exactly one of each on the observer.**
+> - **Refused casts ×3** (server: `rejected SpellCast from Player1 — green cast costs 5, ledger has 1` for the first; the next two were refused silently because `SpellCastService` budgets its rejection log to one line per `REJECTION_LOG_THROTTLE_SEC` — a ledger refusal and a rate-limit refusal take the same early return ahead of any broadcast, so this is the "rejected cast draws nothing on the second client" case the Playtest line asks for). Player1: `DREW cast_green_t1` once per cast (prediction), no `RECEIVED` lines. Player2: **nothing** — its log, copied after the third refusal, ends at the accepted Mend's impact.
+> - Block pops throughout: every `block_pop_*` payload arrived on both clients with `drawnLocallyBy=-1`; Player1 (me=-1) skipped its own, Player2 drew them — the exclusion holds across the wire, not just in one VM.
+>
+> The counter script stays in `nimbalyst-local/` (gitignored) for chunks 8–10, which also need a second client. The MCP proxy registers only the Edit window, so this remains a user-driven step.
 >
 > **Divergences from `Owns`:** (1) the cast cue is raised in `SpellExecutor.cast` (not listed) — it is the one authoritative entry that sees `spec.color`/`spec.tier` — and `SkillTypes.DeliveryCtx` gained `tier: number?` so the `instant` handler can pick Inferno's tiered impact entry; (2) `ProjectileVfxController` was folded into `WorldVfxController` as the `projectile` handler and deleted, rather than re-pointed at the world lane; (3) `SpellCastController` is `src/client/SpellCastController/init.client.luau` + `RequestCast.model.json` (a BindableFunction) so `SpellMenuGui` reads the cast result synchronously for its fired-flash/fizzle; (4) the `SkillDelivery` Heartbeat cache connects on the first `collectHittables` call, which is server-only by construction (only authoritative branches call it) rather than by an `IsServer()` guard, keeping that module free of VM checks.
 
