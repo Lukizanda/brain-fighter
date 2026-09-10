@@ -124,6 +124,21 @@ function PortalPanelBuilder.build(): PortalPanel
 
 	local panel = {} :: PortalPanel
 	local activeTween: Tween? = nil
+	local activeCompleted: RBXScriptConnection? = nil
+
+	-- `Tween:Cancel()` re-fires `Completed` — with `Cancelled`, and even on a
+	-- tween that already finished naturally. Dropping the listener before the
+	-- cancel is what keeps a stale fade from talking after its turn is over.
+	local function clearActiveTween()
+		if activeCompleted then
+			activeCompleted:Disconnect()
+			activeCompleted = nil
+		end
+		if activeTween then
+			activeTween:Cancel()
+			activeTween = nil
+		end
+	end
 
 	panel.gui = container
 	panel.confirmed = primary.Activated
@@ -150,10 +165,7 @@ function PortalPanelBuilder.build(): PortalPanel
 	-- visibility; this is the proximity half, and they compose because the
 	-- gate ANDs over the owner's intent.
 	function panel:setShown(shown: boolean)
-		if activeTween then
-			activeTween:Cancel()
-			activeTween = nil
-		end
+		clearActiveTween()
 		if shown then
 			container.Visible = true
 		end
@@ -162,22 +174,24 @@ function PortalPanelBuilder.build(): PortalPanel
 			TweenInfo.new(PortalPanelConfig.TWEEN_SEC, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), goal)
 		activeTween = tween
 		if not shown then
-			tween.Completed:Connect(function()
-				if not container.Visible then
+			-- Only a fade that ran to the end means "hidden". A `Cancelled` fire
+			-- means someone asked for the panel back, and the guard below is the
+			-- whole bug: the re-fire lands deferred, just after `Visible = true`
+			-- and just before the show tween has moved transparency off 1, so the
+			-- old handler hid a panel that was on its way in. Stepping off a
+			-- portal and back on then showed nothing.
+			activeCompleted = tween.Completed:Connect(function(state: Enum.PlaybackState)
+				if state ~= Enum.PlaybackState.Completed then
 					return
 				end
-				if container.BackgroundTransparency >= 1 then
-					container.Visible = false
-				end
+				container.Visible = false
 			end)
 		end
 		tween:Play()
 	end
 
 	function panel:destroy()
-		if activeTween then
-			activeTween:Cancel()
-		end
+		clearActiveTween()
 		container:Destroy()
 	end
 

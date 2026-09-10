@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phase 6 plan (2026-08-20) — a welcome lobby and PvE/PvP mode selection. The finding is that mode choice is a session-container problem, not a menu problem; GameModeService and RoundManager are server-wide singletons. Decision = hub place with in-place arena zones, co-op queued PvE, 1v1 queued duels on a pad pool. Records what PvP needs that the lobby does not provide.
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # Lobby & Mode Selection
@@ -426,6 +426,24 @@ no health bar. The fix keys off the gate's state at the time of the write
 instead of a flag: with the gate open the gate never writes, so any change is
 the owner's; with it closed, a value going **true** can only be the owner and is
 recorded, and a value going false is assumed to be ours.
+
+**The second bug worth recording: `Tween:Cancel()` re-fires `Completed`.**
+Found in play 2026-09-10. Declining a portal with "Not now", stepping off the
+pad and stepping back on showed no panel at all — and the same happened on any
+second approach, dismissal or not. `PortalPanelBuilder:setShown(false)`
+connected a `Completed` handler that hid the frame, and `setShown(true)`
+cancelled that tween to start the fade in. Roblox fires `Completed` again on
+`Cancel()` — with `Enum.PlaybackState.Cancelled`, and even for a tween that had
+already finished naturally — and, being deferred, it landed just after
+`Visible = true` and just before the show tween moved `BackgroundTransparency`
+off 1. The stale handler's "am I fully faded?" guard therefore read true and hid
+a panel on its way in. The tell is a frame at the panel's normal transparency
+with `Visible = false`: the fade ran, the frame was not on screen. Fix: hide
+only on `Enum.PlaybackState.Completed`, and disconnect the handler before
+cancelling so a stale fade cannot speak after its turn. Sibling of the deferred
+`GetPropertyChangedSignal` bug above — same lesson, different signal. The
+dismissal bookkeeping in `PortalGui` (`dismissedPortal`, cleared on walking out
+of range) was correct throughout.
 
 **`LobbyOnly` has no users, and the reason is the return pad.** The policy table
 assigned the portal panel `LobbyOnly`, which is wrong the moment the arena
