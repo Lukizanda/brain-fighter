@@ -3,8 +3,9 @@
 -- DevDebug — keyboard shortcuts for feature playtesting.
 -- Remove before shipping.
 --
---   [  append next letter of TEST_WORD cycling (default: "CATALOG")
---   ]  trigger memorize action
+--   [  append next letter of TEST_WORD cycling (default: "CATALOG"),
+--       and credit it to the server's EnergyLedger as held
+--   ]  trigger memorize action (validates against those held letters)
 --   \  clear the buffer
 --   1  fill all reservoirs to T1 threshold (5)
 --   2  fill all reservoirs to T2 threshold (10)
@@ -41,6 +42,7 @@ local letterIdx = 1
 local session = PlayerSession.get()
 
 local devGrantRemote = ReplicatedStorage.Shared.Economy.Remotes.DevGrantEnergy :: RemoteEvent
+local devCreditRemote = ReplicatedStorage.Shared.Economy.Remotes.DevCreditLetter :: RemoteEvent
 
 local function fillReservoirsToAmount(amount: number)
 	for _, color in TEST_COLORS do
@@ -111,17 +113,23 @@ onDevFillMana()
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 
-	-- NOTE: these letters are conjured, not taken from a block, so the
-	-- server's EnergyLedger never saw them arrive. Memorizing them will
-	-- always log a coverage failure ("claimed 1 x A/red, holds 0"). That
-	-- is the dev path being a dev path, NOT a shadow-mode finding —
-	-- discount any would-reject line that follows a `[` press before
-	-- reading the log as evidence about real players.
+	-- These letters are conjured rather than taken from a block, so the
+	-- server is told separately that the player now holds them — the pop
+	-- that would normally credit the ledger never happened. Without that
+	-- the `]` below fails coverage ("claimed 1 x A/red, holds 0") and,
+	-- under ENFORCE, banks energy on the client that the server will not
+	-- let any cast spend.
+	--
+	-- Only the letter's ORIGIN is faked. The memorize that follows is the
+	-- real remote, the real coverage check and the real energy split, so
+	-- a rejection after a `[` press is once again a finding worth reading
+	-- rather than noise to discount.
 	if input.KeyCode == Enum.KeyCode.LeftBracket then
 		local letter = string.sub(TEST_WORD, letterIdx, letterIdx)
 		letterIdx = (letterIdx % #TEST_WORD) + 1
 		local color = TEST_COLORS[math.random(1, #TEST_COLORS)]
 		session.wordBuffer:append(letter, color)
+		devCreditRemote:FireServer(letter, color)
 		local word = session.wordBuffer:asWord()
 		log:info(string.format("append '%s' [%s] → '%s'  valid=%s", letter, color, word, tostring(Dictionary.isSpellable(word))))
 

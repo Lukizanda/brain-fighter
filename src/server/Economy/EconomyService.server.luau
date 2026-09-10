@@ -30,6 +30,7 @@ local log = Logger.new("EconomyService")
 
 local reportRemote = ReplicatedStorage.Shared.MemorizeAction.Remotes.ReportMemorize :: RemoteEvent
 local devGrantRemote = ReplicatedStorage.Shared.Economy.Remotes.DevGrantEnergy :: RemoteEvent
+local devCreditRemote = ReplicatedStorage.Shared.Economy.Remotes.DevCreditLetter :: RemoteEvent
 
 -- Server-side round signal. A sibling folder under Server, so it is in
 -- the tree by the time this Script runs, same as the Utility require.
@@ -141,6 +142,38 @@ devGrantRemote.OnServerEvent:Connect(function(player: Player, tier: any)
 
 	log:info(string.format("dev mana grant — %s ledger set to T%d (%d per colour)",
 		player.Name, tier, amount))
+end)
+
+-- DevDebug's `[` key conjures a letter into the buffer without popping a
+-- block, so the ledger never saw it arrive and the `]` memorize that
+-- follows fails coverage ("claimed 2 x A/blue, holds 0"). Under ENFORCE
+-- that is not just a noisy log: the memorize credits the client's
+-- reservoirs and nothing on the server, so the dev word earns energy
+-- that no cast can spend.
+--
+-- Crediting the held set is the honest repair, and a better one than the
+-- tier grant above: the `]` that follows goes through the real
+-- ReportMemorize path, the real coverage check and the real
+-- EnergyEconomy split, so the dev word earns exactly what a spelled word
+-- earns. The cheat is in where the letter came from, not in what it is
+-- worth.
+--
+-- Same Studio-only guard, for the same reason.
+devCreditRemote.OnServerEvent:Connect(function(player: Player, letter: any, color: any)
+	if not DEV_CHEAT_ALLOWED then
+		log:warn(string.format("dev letter credit from %s refused — not a Studio session", player.Name))
+		return
+	end
+
+	if typeof(letter) ~= "string" or typeof(color) ~= "string" then
+		log:warn(string.format("dev letter credit from %s ignored — want (letter, color) strings", player.Name))
+		return
+	end
+
+	-- creditBlock normalizes and refuses anything that could not have
+	-- come from a real block, so a malformed pair costs a warn and not a
+	-- corrupt held set.
+	EnergyLedger.creditBlock(player.UserId, letter, color)
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)
