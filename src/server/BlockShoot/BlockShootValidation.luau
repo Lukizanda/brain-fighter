@@ -17,6 +17,7 @@
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 local BlockShootConstants = require(script.Parent.BlockShootConstants)
 
@@ -78,6 +79,29 @@ function BlockShootValidation.checkRange(character: Model?, block: Model): (bool
 		)
 	end
 
+	return true, nil
+end
+
+-- Is `block` in the arena the popping player's session is in? Blocks
+-- carry the ArenaId of the pool that spawned them (BlockSpawner stamps
+-- it); the player's arena is `SessionRegistry.arenaIdFor(player)`, which
+-- the service resolves and passes in so this stays testable without a
+-- session. An unstamped block is the Default arena's, per `Arena.idOf`.
+--
+-- Distance is not membership: the range bound is wide enough that a hub
+-- player standing at an arena's edge is "in range" of its blocks, and a
+-- transferred player's old arena is a portal away. This check is what
+-- makes "you can only pop your own arena's blocks" a rule rather than a
+-- consequence of geometry.
+function BlockShootValidation.checkArena(playerArenaId: string, block: Model): (boolean, string?)
+	local blockArenaId = Arena.idOf(block)
+	if blockArenaId ~= playerArenaId then
+		return false, string.format(
+			"arena mismatch (player in %s, block in %s)",
+			playerArenaId,
+			blockArenaId
+		)
+	end
 	return true, nil
 end
 

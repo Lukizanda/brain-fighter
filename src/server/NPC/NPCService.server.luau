@@ -4,8 +4,20 @@
 	Top-level NPC orchestrator. Spawns NPCs from tagged spawn points,
 	creates an NPCController per NPC, ticks them on Heartbeat.
 
-	Phase 3: NPCController + StateMachine + Patrol state.
-	NPCs autonomously cycle patrol points.
+	One NPC set per arena session (refactor chunk 9). NPCs used to be
+	spawned once at boot from every NPCSpawn marker in the place and
+	lived for the server's lifetime, hunting whoever was closest. They now
+	belong to the arena whose round is running: a set is created when that
+	arena's `RoundStarted` fires — or, at boot, for any session already
+	Active, because the Default round starts during GameModeService's boot
+	and the WorldDataManager wait below can outlast it — and torn down on
+	its `RoundEnded`. Every spawned Model carries `ArenaId`, which is what
+	Perception reads to scope its target scan to that arena's roster, so a
+	hub player is never an NPC target: nothing hostile carries `Lobby`.
+
+	A marker's arena is its own `ArenaId` attribute, snapshotted with the
+	marker by WorldDataManager. An unattributed marker is the Default
+	arena's, the same reading `Arena.idOf` gives every other authored part.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -15,6 +27,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 
+local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local NPCConstants = require(ReplicatedStorage.Shared.NPC.NPCConstants)
 local NPCTypes = require(ReplicatedStorage.Shared.NPC.NPCTypes)
@@ -25,16 +38,38 @@ local NPCController = require(scriptsFolder.NPCController)
 
 -- AIWorldData — authoritative source for spawn/patrol positions
 local WorldDataManager = require(ServerScriptService.Server.AI.Scripts.WorldDataManager)
+-- Which sessions exist and whether their round is running, for the boot
+-- reconcile. Called, never written to.
+local SessionRegistry = require(ServerScriptService.Server.GameMode.Scripts.SessionRegistry)
+
+local gameModeEvents = ServerScriptService.Server.GameMode.Events
+local roundStartedEvent = gameModeEvents.RoundStarted :: BindableEvent
+local roundEndedEvent = gameModeEvents.RoundEnded :: BindableEvent
 
 local log = Logger.new("NPCService")
+
+-- Seconds a freshly spawned set stands before its controllers are ticked,
+-- so the rigs settle on the floor before being commanded.
+local SPAWN_SETTLE_SEC = 2
 
 -- ============================================================
 -- State
 -- ============================================================
 type Archetype = NPCTypes.Archetype
+type MarkerSnapshot = WorldDataManager.MarkerSnapshot
+type NPCControllerInstance = NPCController.NPCControllerInstance
 
-local controllers: { NPCController.NPCControllerInstance } = {}
+-- The NPCs that fight for one arena's round.
+type ArenaSet = {
+	arenaId: string,
+	controllers: { NPCControllerInstance },
+	tickFrom: number, -- os.clock() after which the set is ticked
+}
+
+local sets: { [string]: ArenaSet } = {}
 local spawnCounter = 0
+local heartbeatConn: RBXScriptConnection? = nil
+local eventConns: { RBXScriptConnection } = {}
 
 -- ============================================================
 -- Spawn helpers
@@ -90,9 +125,9 @@ local function equipWeapon(npc: Model, weaponTemplateName: string?): Tool?
 
 	-- Strip scripts from the cloned tool — the NPC shoots via NPC logic,
 	-- not the weapon's own Scripts folder (which targets players).
-	local scriptsFolder = weapon:FindFirstChild("Scripts")
-	if scriptsFolder then
-		scriptsFolder:Destroy()
+	local weaponScripts = weapon:FindFirstChild("Scripts")
+	if weaponScripts then
+		weaponScripts:Destroy()
 	end
 	for _, child in weapon:GetChildren() do
 		if child:IsA("LocalScript") or child:IsA("Script") then
@@ -115,7 +150,19 @@ local function equipWeapon(npc: Model, weaponTemplateName: string?): Tool?
 	return weapon
 end
 
+-- The arena a spawn marker belongs to. Mirrors `Arena.idOf` over the
+-- snapshot's attribute table, since the marker Part itself is destroyed
+-- after WorldDataManager snapshots it.
+local function markerArenaId(snapshot: MarkerSnapshot): string
+	local attribute = snapshot.attributes[Arena.ID_ATTRIBUTE]
+	if type(attribute) == "string" and attribute ~= "" then
+		return attribute
+	end
+	return Arena.DEFAULT_ID
+end
+
 local function spawnNPCAtPosition(
+	set: ArenaSet,
 	spawnName: string,
 	spawnPosition: Vector3,
 	archetype: Archetype
@@ -141,6 +188,11 @@ local function spawnNPCAtPosition(
 		log:warn("Template has no Humanoid:", archetype.templateName)
 	end
 
+	-- Which arena this NPC fights for (Perception's target scope, and the
+	-- Hittables filter every skill reads), and what the kill feed calls it.
+	npc:SetAttribute(Arena.ID_ATTRIBUTE, set.arenaId)
+	npc:SetAttribute(NPCConstants.ARCHETYPE_ATTRIBUTE, archetype.name)
+
 	-- Tag for queries / cleanup
 	CollectionService:AddTag(npc, NPCConstants.TAG_NPC)
 
@@ -152,42 +204,155 @@ local function spawnNPCAtPosition(
 	-- Create the controller for this NPC
 	local controller = NPCController.new(npc, archetype, weapon)
 	if controller then
-		table.insert(controllers, controller)
+		table.insert(set.controllers, controller)
 	else
 		log:warn("Failed to create controller for", npc.Name)
 	end
 
-	log:info(string.format("Spawned %s at %s", npc.Name, spawnName))
+	log:info(string.format("[%s] Spawned %s at %s", set.arenaId, npc.Name, spawnName))
 	return npc
 end
 
-local function spawnAllFromWorldData()
-	local spawns = WorldDataManager.getSpawns()
-
-	for _, snapshot in spawns do
-		spawnNPCAtPosition(snapshot.name, snapshot.position, Patroller)
+-- ============================================================
+-- Per-arena sets
+-- ============================================================
+local function spawnArena(arenaId: string)
+	if sets[arenaId] then
+		log:info(string.format("[%s] NPC set already exists — leaving it", arenaId))
+		return
 	end
 
-	log:info(string.format("Processed %d spawn points, spawned %d controllers", #spawns, #controllers))
+	local set: ArenaSet = {
+		arenaId = arenaId,
+		controllers = {},
+		tickFrom = os.clock() + SPAWN_SETTLE_SEC,
+	}
+	sets[arenaId] = set
+
+	local considered = 0
+	for _, snapshot in WorldDataManager.getSpawns() do
+		if markerArenaId(snapshot) ~= arenaId then
+			continue
+		end
+		considered += 1
+		spawnNPCAtPosition(set, snapshot.name, snapshot.position, Patroller)
+	end
+
+	log:info(string.format("[%s] NPC set created — %d spawn point(s), %d controller(s)",
+		arenaId, considered, #set.controllers))
+end
+
+local function teardownArena(arenaId: string)
+	local set = sets[arenaId]
+	if not set then
+		return
+	end
+	sets[arenaId] = nil
+
+	local count = #set.controllers
+	for _, controller in set.controllers do
+		local npc = controller:getBlackboard().npc
+		controller:destroy()
+		if npc and npc.Parent then
+			npc:Destroy()
+		end
+	end
+	table.clear(set.controllers)
+
+	log:info(string.format("[%s] NPC set torn down — %d controller(s)", arenaId, count))
 end
 
 -- ============================================================
 -- Tick loop
 -- ============================================================
 local function tickAllControllers(dt: number)
-	-- Iterate in reverse so we can remove dead controllers safely
-	for i = #controllers, 1, -1 do
-		local controller = controllers[i]
-		controller:tick(dt)
+	local now = os.clock()
+	for _, set in sets do
+		if now < set.tickFrom then
+			continue
+		end
+		local controllers = set.controllers
+		-- Iterate in reverse so we can remove dead controllers safely
+		for i = #controllers, 1, -1 do
+			local controller = controllers[i]
+			controller:tick(dt)
 
-		-- If the controller's NPC died, the controller will have flipped to
-		-- not-alive on its next tick. Cull it from the list.
-		local bb = controller:getBlackboard()
-		if not bb.npc or not bb.npc.Parent then
-			controller:destroy()
-			table.remove(controllers, i)
+			-- If the controller's NPC died, the controller will have flipped to
+			-- not-alive on its next tick. Cull it from the list.
+			local bb = controller:getBlackboard()
+			if not bb.npc or not bb.npc.Parent then
+				controller:destroy()
+				table.remove(controllers, i)
+			end
 		end
 	end
+end
+
+-- ============================================================
+-- Round events
+-- ============================================================
+local function onRoundStarted(_roster: { Player }, arenaId: any)
+	if type(arenaId) ~= "string" then
+		log:warn("RoundStarted fired without an arena id — no NPC set created")
+		return
+	end
+	spawnArena(arenaId)
+end
+
+local function onRoundEnded(_winnerId: any, _winnerName: any, arenaId: any)
+	if type(arenaId) ~= "string" then
+		return
+	end
+	teardownArena(arenaId)
+end
+
+-- Sessions whose round was already running before this Script connected.
+local function reconcile()
+	for arenaId, session in SessionRegistry.all() do
+		if session:isActive() and not sets[arenaId] then
+			spawnArena(arenaId)
+		end
+	end
+end
+
+-- ============================================================
+-- Lifecycle
+-- ============================================================
+local NPCService = {}
+
+-- Pause: stops ticking, leaves every set standing. Reversible via enable().
+function NPCService.disable()
+	if heartbeatConn then
+		heartbeatConn:Disconnect()
+		heartbeatConn = nil
+	end
+	log:info("Disabled — tick loop stopped")
+end
+
+function NPCService.enable()
+	if heartbeatConn then
+		return
+	end
+	heartbeatConn = RunService.Heartbeat:Connect(tickAllControllers)
+	log:info("Tick loop started")
+end
+
+-- Permanent teardown: every set, every NPC, every listener.
+function NPCService.destroy()
+	NPCService.disable()
+	for _, conn in eventConns do
+		conn:Disconnect()
+	end
+	table.clear(eventConns)
+
+	local arenaIds: { string } = {}
+	for arenaId in sets do
+		table.insert(arenaIds, arenaId)
+	end
+	for _, arenaId in arenaIds do
+		teardownArena(arenaId)
+	end
+	log:info("Destroyed")
 end
 
 -- ============================================================
@@ -201,14 +366,14 @@ local function initialize()
 	-- Wait for WorldDataManager to finish snapshotting before spawning NPCs
 	WorldDataManager.waitForInit()
 
-	spawnAllFromWorldData()
+	-- Listen first, then reconcile: a round that starts after this line is
+	-- caught by the event, one that started before it by the reconcile.
+	table.insert(eventConns, roundStartedEvent.Event:Connect(onRoundStarted))
+	table.insert(eventConns, roundEndedEvent.Event:Connect(onRoundEnded))
+	reconcile()
 
-	-- Start the tick loop after a brief delay so spawned NPCs have time
-	-- to settle on the floor before we start commanding them
-	task.delay(2, function()
-		RunService.Heartbeat:Connect(tickAllControllers)
-		log:info("Tick loop started for", #controllers, "controllers")
-	end)
+	NPCService.enable()
+	game:BindToClose(NPCService.destroy)
 
 	log:info("Initialized")
 end

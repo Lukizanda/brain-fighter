@@ -240,6 +240,14 @@ local function applySpread(direction: Vector3, spreadDegrees: number): Vector3
 	return cf.LookVector
 end
 
+-- What the kill feed credits an NPC kill to: the archetype name NPCService
+-- stamped on the Model. A rig spawned by something else (a test fixture)
+-- carries none and reports Unknown, which is what it used to say always.
+local function npcCause(bb: Blackboard): string
+	local archetype = bb.npc:GetAttribute(NPCConstants.ARCHETYPE_ATTRIBUTE)
+	return if type(archetype) == "string" and archetype ~= "" then archetype else DamageTypes.Cause.Unknown
+end
+
 -- Determine hit zone from the instance hit (for damage modifiers like headshots)
 local function getHitZone(instance: Instance): string
 	local name = instance.Name
@@ -344,6 +352,7 @@ function Actions.Shoot(bb: Blackboard): ActionResult
 		damageType = DamageTypes.DamageType.Bullet,
 		hitZone = getHitZone(hitInstance),
 		sourceWeapon = bb.weapon,
+		cause = npcCause(bb),
 		timestamp = now,
 	})
 
@@ -408,6 +417,7 @@ function Actions.MeleeAttack(bb: Blackboard): ActionResult
 			damageType = DamageTypes.DamageType.Melee,
 			hitZone = DamageTypes.HitZone.Torso,
 			sourceWeapon = bb.weapon,
+			cause = npcCause(bb),
 			timestamp = now,
 		})
 	end

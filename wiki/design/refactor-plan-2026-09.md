@@ -321,7 +321,7 @@ Wiki: [[systems/GameMode]] (the stage-7 rewrite — do it here), [[design/lobby]
 
 ## Chunk 9 — The world knows its arena
 
-Status: open
+Status: claimed — chunk-9 — 2026-09-09
 Findings: F14, F15, F30 (Hittables helper as the filter seam)
 Risk: **H** · Playtest: **yes, two arenas** — a boss in one arena never targets the other's players; a hub player cannot pop arena blocks even in range · Depends on: chunk 8 · Blocked on: nothing (Q10 answered)
 Decision: Q10(a) — this chunk runs as its own session immediately before Phase 6 stage 5; stage 5 is then only `Modes/PvEBoss.luau` and the queue.
@@ -329,15 +329,25 @@ Decision: Q10(a) — this chunk runs as its own session immediately before Phase
 Owns: `src/shared/BlockSpawner/init.luau:426-437` (ArenaId stamp), `src/server/BlockShoot/BlockShootService.server.luau` (+ `BlockShootValidation`), new `src/shared/Skills/Hittables.luau`, `SkillDelivery.luau:146-200` and `CosmeticProjectile.luau:160-190` (use it), `Perception.luau:82`, `BossService.server.luau` (per-arena BossPoint), `NPCService.server.luau` (per-arena spawns, `destroy()`), `Suites/Hardening/blockshoot_*`, `Suites/Phase3/*`.
 Must not touch: mode files; `LobbyService`.
 
-- [ ] Blocks carry `ArenaId`; `ConsumeBlock` refuses a mismatch; Hardening suite case.
-- [ ] `Hittables.collect(arenaId?)` shared by `SkillDelivery`, `CosmeticProjectile`, and `Perception`; one target definition.
-- [ ] BossPoints and NPC spawns tagged with `ArenaId`; one boss / NPC set per session; `NPCService` gains `disable()`/`destroy()`.
-- [ ] Studio: tag the existing `BossPoint` and NPC spawn snapshots with `ArenaId = Default` (MCP, under a `ChangeHistoryService` waypoint).
+- [x] Blocks carry `ArenaId`; `ConsumeBlock` refuses a mismatch; Hardening suite case.
+- [x] `Hittables.collect(arenaId?)` shared by `SkillDelivery`, `CosmeticProjectile`, and `Perception`; one target definition.
+- [x] BossPoints and NPC spawns tagged with `ArenaId`; one boss / NPC set per session; `NPCService` gains `disable()`/`destroy()`.
+- [x] Studio: tag the existing `BossPoint` and NPC spawn snapshots with `ArenaId = Default` (MCP, under a `ChangeHistoryService` waypoint).
 
 Done when: the playtest above; `grep "Players:GetPlayers()" src/shared/Skills src/server/NPC` empty.
 Wiki: [[systems/Boss]], [[systems/NPC]], [[systems/BlockShoot]], [[systems/BlockSpawner]].
 
 - Note (chunk 4, 2026-09-08): `MeleeHitDetector` builds its `DamageRequest` without a `cause`, so an NPC kill still shows "Unknown" in the kill feed. Pass the archetype name (or a `DamageTypes.Cause` id) when this chunk touches the NPC damage call.
+
+Divergences (2026-09-10):
+- **`RoundStarted` / `RoundEnded` carry the arena id.** `RoundManager` (outside `Owns:`, not under `Must not touch:`) now fires `RoundStarted(roster, arenaId)` and `RoundEnded(winnerId, winnerName, arenaId)` — one trailing argument each. The roster alone cannot name the arena: the Default round starts at boot with nobody in it. `EconomyService` ignores the extra argument. A `RoundStarted` fired raw by `Suites/Economy/ledger_resets_on_round_start` (no id) makes both services log a warn and do nothing.
+- **Boss and NPCs exist only while an arena's round is running.** In this session's playtests every player joined the Lobby, so the Default session sat in `WaitingForPlayers` and a fresh single-player playtest had **no boss and no NPC** until somebody took the PvE pad — verified: `RoundStarted(Default)` on the transfer → `Patroller_1` (`ArenaId=Default`, `Archetype=Patroller`) and `Boss` (`ArenaId=Default`) spawned in the same second, and the boot reconcile over `SessionRegistry.all()` covers a round already Active when the services connect (the parent observed a boot-time Default set in one run). This is the plan's "created on RoundStarted" reading; if the shipped arena should keep a standing boss for solo play, stage 5's mode (or a `minPlayers = 0` No-Op) decides that, not this chunk. NPC spawn markers rely on the unstamped-means-Default reading of their snapshot attributes; the Studio tag on `NPCSpawn_1` is belt-and-braces.
+- **`Hittables.collect(players, arenaId?)` takes the player list** rather than reading `Players:GetPlayers()` itself, so the module satisfies the Done-when grep on both VMs: `SkillDelivery` and `Perception` pass `BroadcastAudience.forArena(arenaId)` (the roster), `CosmeticProjectile` passes everyone and the attribute filter does the rest. The frame cache moved into `Hittables`, keyed by arena id. `arenaOfSource` answers "which arena" from `ctx.source` (Player attribute for a character, the rig's own for boss/NPC), so `DeliveryCtx` and `BossStates` are untouched.
+- **AoE still hits players only.** The `aoe` handler reads the shared list but keeps the `player ~= nil` subset it always had — a boss slam aimed at the roster should not clip its own arena's NPCs. Flagged, not changed.
+- **Fixture change outside `Owns:`** — `Suites/NPC/*` and `Helpers/ensurePatroller`. The three NPC suites used to borrow the boot-spawned arena `Patroller_1`; per-arena NPCs made that unusable (it lives on the far side of the place, path-fails from there and walks into the DeathZone mid-suite, and its Perception can no longer see a harness player sitting in the Lobby session). Three harness passes to get there: pass 1 NPC 0/3 (helper fallback at `(0, 10, 0)`, ~190 studs under the floor), pass 2 2/3 (rig 20 studs from the player opened fire during `npc_deals_damage`'s health-stabilise wait), pass 3 0/3 (helper still reused the arena rig). `ensure(player)` now **always clones its own `Patroller_Fixture`**, stamps it with the player's arena and `Archetype = Patroller`, stands it 30 studs east of the character, and only ticks its controller on `fixture:engage()`, which each suite calls once its own setup is ready; `teardown` always destroys it. Harness after the fix: 33/34 on the fourth pass — the last failure was `npc_deals_damage` building the fixture before the player's health had settled (the previous suite's 80-stud far teleport had just killed the player); its setup was reordered (stabilise first, then `ensure`) and the fifth pass, run by the parent session with the user's approval to go past the two-iteration cap, was **34/34** with the NPC hits logging `cause=Patroller`.
+- **`Archetype` attribute** (`NPCConstants.ARCHETYPE_ATTRIBUTE`) is how `Actions` learns the cause: `NPCService` stamps it at spawn, `npcCause(bb)` reads it, a fixture rig without it reports `Unknown` as before. The kill-feed note is closed for `NPCService`-spawned rigs.
+- **Studio tagging** (`Workspace.BossPoint`, `Workspace.Test Area.NPCSpawns.NPCSpawn_1` → `ArenaId = Default`) went through, but `ChangeHistoryService:TryBeginRecording` returned nil from the MCP context, so there is no undo waypoint for it; the values survived a Studio relaunch, so the `.rbxl` appears to have been saved since. `Workspace.Lobby.TargetDummy` already carried `ArenaId = Lobby`.
+- **Single-client checks (this session, first playtest):** Lobby player firing `ConsumeBlock` at a Default block → server `rejected ConsumeBlock from ZandaLuki — arena mismatch (player in Lobby, block in Default)`, rejection id echoed, block intact; the same player popping a Lobby block 14 studs away → consumed. Portal join → `Transferred Lobby → Default`, boss and NPC spawned with `ArenaId=Default`. The NPC-targeting positive/negative pair and the two-client run are recorded below when they land.
 
 ---
 

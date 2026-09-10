@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server-side letter-block populator — one instance per arena, maintaining that arena's target count of floating LetterBlocks with Scrabble-weighted letter distribution, configurable color weights, and a per-block respawn cooldown.
-updated: 2026-08-21
+updated: 2026-09-10
 ---
 
 # BlockSpawner
@@ -88,6 +88,8 @@ It is now one instance per arena, following the idiom [[systems/GameMode]]'s `Ro
 
 **Verified 2026-08-20** by playtest — the shipped arena boots to one `Default` pool, 8 boxes, 397,600 cu studs, target 40, spawned 40, all inside tagged volumes; a client-fired `ConsumeBlock` popped a block and the pool refilled to 40. Two probe pools then confirmed disjoint targets, independent refill, blocks confined to their own boxes, and no movement in the live arena's count.
 
+**Blocks carry the pool's id (refactor chunk 9, 2026-09-10).** `_spawnOne` stamps every block it spawns with `ArenaId = self.arenaId`, so a block can answer "whose are you?" on its own. [[systems/BlockShoot]]'s `ConsumeBlock` reads it (`checkArena`) and refuses a player whose session is in a different arena — the range check alone let a hub player at the boundary pop arena blocks. `Suites/Phase3/blockspawner_fills_to_target` asserts the stamp on every block of its pool.
+
 A side effect worth knowing: the Phase 3 suites no longer have to stop the live spawner to isolate themselves. Under the singleton each fixture called `BlockSpawner.stop()` in `setup` and never restarted it, so running a block test left the real arena frozen for the rest of the playtest. They now build their own pool in their own arena id.
 
 ### Letter distribution: Scrabble-frequency soft heuristic
@@ -168,7 +170,7 @@ Scrabble's own ratio is 2 blanks per 98 tiles (≈2%), but blocks here recycle c
 ## Consumers
 
 - **BlockSpawnerService** (`src/server/BlockSpawner/`) — the server bootstrap.
-- **[[systems/BlockShoot]]** (Phase 3) — destroys blocks on hit, triggering auto-refill.
+- **[[systems/BlockShoot]]** (Phase 3) — destroys blocks on hit, triggering auto-refill; since chunk 9 it reads the block's `ArenaId` stamp to refuse cross-arena pops.
 
 ## See also
 

@@ -13,8 +13,8 @@ return {
 	name = "NPC enters Combat when player is within engage range",
 
 	setup = function(ctx)
-		local fixture = ensurePatroller.ensure()
-		assert(fixture, "Could not obtain a Patroller_1 NPC (no boot spawn and no AIWorldData.Rigs.Patroller template)")
+		local fixture = ensurePatroller.ensure(ctx.player)
+		assert(fixture, "Could not build the Patroller fixture (no AIWorldData.Rigs.Patroller template)")
 		assert(ctx.player, "No local player")
 
 		local character = ctx.player.Character
@@ -30,6 +30,7 @@ return {
 		local npcPos = fixture.npc:GetPivot().Position
 		local targetPos = npcPos + Vector3.new(0, 0, OFFSET_FROM_NPC)
 		character:PivotTo(CFrame.new(targetPos, npcPos))
+		fixture:engage()
 	end,
 
 	run = function(_ctx)

@@ -13,6 +13,11 @@ local NPCConstants = {
 	TAG_NPC_SPAWN = "NPCSpawn",       -- parts that mark where NPCs spawn
 	TAG_PATROL_POINT = "PatrolPoint", -- parts that define patrol routes
 
+	-- Attribute stamped on a spawned NPC Model naming its archetype, so
+	-- the damage it deals carries a cause the kill feed can print
+	-- ("Patroller") instead of "Unknown".
+	ARCHETYPE_ATTRIBUTE = "Archetype",
+
 	-- ============================================================
 	-- Movement
 	-- ============================================================

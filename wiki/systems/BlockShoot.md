@@ -1,7 +1,7 @@
 ---
 type: system
 description: Shared helpers and server handler for block consumption. Client input is BlockTapController (Phase 5.7 — click/tap a block directly). Server-trust validation added in 5.4 and unchanged by the input migration.
-updated: 2026-08-10
+updated: 2026-09-10
 ---
 
 # BlockShoot
@@ -16,7 +16,7 @@ Shared library and server handler for the letter-block consume pipeline. The inp
 - `src/client/BlockTapController.client.luau` — client input: always mounted, no Tool required.
 - `src/server/BlockShoot/BlockShootService.server.luau` — server handler: validates the payload, destroys the block (triggers BlockSpawner auto-refill).
 - `src/server/BlockShoot/BlockShootConstants.luau` — trust thresholds, each derived from a client-side number rather than picked.
-- `src/server/BlockShoot/BlockShootValidation.luau` — `checkBlock` / `checkRange` predicates, split out so the Hardening suite can drive them without a live remote fire.
+- `src/server/BlockShoot/BlockShootValidation.luau` — `checkBlock` / `checkArena` / `checkRange` predicates, split out so the Hardening suite can drive them without a live remote fire.
 - `src/server/Utility/RateLimiter.luau` — shared per-key token bucket (also used by [[systems/SpellCastService]]).
 - `src/client/PlayerSession.luau` — ModuleScript: lazy-creates and caches the player's WordBuffer + MindFullManager + EnergyReservoirs.
 
@@ -32,7 +32,7 @@ Steps 1–3 live in `BlockTapController`; 4–8 are this module.
 4. If the hit instance is inside a tagged `LetterBlock` Model (ancestor walk via `findLetterBlock`), read `Block.Letter` + `Block.Color` attributes (`readBlock`).
 5. `WordBuffer:append(letter, color)` on the local session buffer.
 6. Fire `ConsumeBlock` remote to the server with the block Model reference.
-7. Server handler validates the payload (rate, Instance, in-workspace, tagged, in-range — see § Trust model) and calls `block:Destroy()`.
+7. Server handler validates the payload (rate, Instance, in-workspace, tagged, same arena, in-range — see § Trust model) and calls `block:Destroy()`.
 8. The `CollectionService` removed signal triggers [[systems/BlockSpawner]]'s auto-refill to maintain target count.
 
 ## `gameProcessedEvent` is load-bearing
@@ -176,7 +176,10 @@ Checks run in this order, cheapest and most-abused first. Every failure drops th
 | 2 | `validateInstance(block, "Model")` | A table wearing a Model's property names, primitives, `nil` |
 | 3 | `block:IsDescendantOf(workspace)` | The `LetterBlocks.Template` in ReplicatedStorage; an already-consumed block |
 | 4 | `CollectionService:HasTag(block, "LetterBlock")` | Any other world Model — griefing the boss, NPCs, scenery |
-| 5 | `checkRange(character, block)` | Blocks beyond `MAX_CONSUME_DISTANCE_STUDS` of the tapper |
+| 5 | `checkArena(SessionRegistry.arenaIdFor(player), block)` | A block of another arena — a hub player reaching into the arena field, or a transferred player popping their old arena's blocks (chunk 9) |
+| 6 | `checkRange(character, block)` | Blocks beyond `MAX_CONSUME_DISTANCE_STUDS` of the tapper |
+
+**Arena membership (refactor chunk 9, 2026-09-10).** Every block carries the `ArenaId` of the [[systems/BlockSpawner]] pool that spawned it; the player's arena is their session's (`SessionRegistry.arenaIdFor`). Check 5 refuses a mismatch with `arena mismatch (player in X, block in Y)` in the server log. It sits before the range check on purpose: distance is not membership — the 300-stud bound is wide enough that a hub player at an arena's edge is "in range" of its blocks — and a cross-arena attempt should log as the rule it broke, not as a long tap. An unstamped block is the Default arena's, per `Arena.idOf`. The rejection reaches the client the same way as every other check (the request id echo), so `BlockTapController` rolls the letter back. Covered by `Suites/Hardening/blockshoot_arena_match`.
 
 Check 3 also makes a double-consume race a no-op for free: the first `Destroy` unparents the block, so the second request fails the check rather than needing a claimed-set. This is the half of the PvP contention problem that already works — see § Known gap for the half that does not.
 

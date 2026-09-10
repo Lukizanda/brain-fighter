@@ -14,8 +14,8 @@ return {
 	name = "NPC disengages Combat when player leaves range",
 
 	setup = function(ctx)
-		local fixture = ensurePatroller.ensure()
-		assert(fixture, "Could not obtain a Patroller_1 NPC (no boot spawn and no AIWorldData.Rigs.Patroller template)")
+		local fixture = ensurePatroller.ensure(ctx.player)
+		assert(fixture, "Could not build the Patroller fixture (no AIWorldData.Rigs.Patroller template)")
 		assert(ctx.player, "No local player")
 
 		local character = ctx.player.Character
@@ -27,6 +27,7 @@ return {
 		local npcPos = npc:GetPivot().Position
 
 		character:PivotTo(CFrame.new(npcPos + Vector3.new(0, 0, NEAR_OFFSET), npcPos))
+		fixture:engage()
 		task.wait(2) -- let NPC detect and enter Combat
 
 		assert(npc:GetAttribute("CurrentState") == "Combat",

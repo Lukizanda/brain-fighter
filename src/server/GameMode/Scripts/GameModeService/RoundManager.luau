@@ -257,8 +257,11 @@ function RoundManager:_activeRound(generation: number): number?
 	-- The roster rides along for the same reason the score reset is per
 	-- session: a round belongs to this arena, not to the server.
 	-- EconomyService zeroes each member's energy ledger off this, mirroring
-	-- the client's own reset on the transition into Active.
-	self._refs.roundStartedEvent:Fire(self:getPlayers())
+	-- the client's own reset on the transition into Active. The arena id
+	-- rides along too (chunk 9): the boss and NPC services build their
+	-- per-arena sets off it, and an empty roster — the Default round
+	-- starts at boot with nobody in it — cannot name the arena on its own.
+	self._refs.roundStartedEvent:Fire(self:getPlayers(), self.arenaId)
 
 	log:info(string.format("[%s] Round started! Timer: %s Score limit: %s",
 		self.arenaId,
@@ -309,7 +312,7 @@ function RoundManager:_postRound(generation: number, winnerId: number?, winnerNa
 	self._timeRemaining = GameModeConstants.INTERMISSION_DURATION
 
 	self._refs.modeDefinition.onRoundEnd()
-	self._refs.roundEndedEvent:Fire(winnerId, winnerName)
+	self._refs.roundEndedEvent:Fire(winnerId, winnerName, self.arenaId)
 
 	log:info(string.format("[%s] Round over! Winner: %s. Intermission: %ds",
 		self.arenaId, winnerName or "none", self._timeRemaining))

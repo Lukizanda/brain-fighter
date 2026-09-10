@@ -14,8 +14,10 @@
 --   2. the block is a live, tagged LetterBlock still parented to
 --      workspace — not the ReplicatedStorage template, not an already
 --      destroyed block, not an arbitrary world Model;
---   3. it is within a sane radius of the popping player's character;
---   4. the player is inside a token budget matched to the client's
+--   3. it belongs to the arena the player's session is in (chunk 9 —
+--      blocks carry the ArenaId of the pool that spawned them);
+--   4. it is within a sane radius of the popping player's character;
+--   5. the player is inside a token budget matched to the client's
 --      tap cooldown.
 --
 -- Every rejection drops the request and logs; nothing throws, so one
@@ -33,6 +35,7 @@ local BlockShootValidation = require(script.Parent.BlockShootValidation)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 local EnergyLedger = require(script.Parent.Parent.Economy.EnergyLedger)
 local RateLimiter = require(script.Parent.Parent.Utility.RateLimiter)
+local SessionRegistry = require(script.Parent.Parent.GameMode.Scripts.SessionRegistry)
 local VfxBroadcast = require(ReplicatedStorage.Shared.Vfx.VfxBroadcast)
 local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 
@@ -139,6 +142,15 @@ consumeRemote.OnServerEvent:Connect(function(player: Player, block: any, request
 		return
 	end
 
+	-- Arena before range: it is the cheaper check, and it is the one that
+	-- names the real rule. A block in range but in another arena is a
+	-- reach across the boundary, not a long tap.
+	local inArena, arenaReason = BlockShootValidation.checkArena(SessionRegistry.arenaIdFor(player), model)
+	if not inArena then
+		reject(player, arenaReason or "arena mismatch", requestId)
+		return
+	end
+
 	local character = player.Character
 	local inRange, rangeReason = BlockShootValidation.checkRange(character, model)
 	if not inRange then
@@ -173,4 +185,4 @@ Players.PlayerRemoving:Connect(function(player: Player)
 	rejectionLogBudget:forgetPrefix(string.format("%d:", player.UserId))
 end)
 
-log:info("BlockShootService ready — payload, range and rate validation active")
+log:info("BlockShootService ready — payload, arena, range and rate validation active")

@@ -1,7 +1,7 @@
 ---
 type: system
-description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. HUD remotes are scoped to the BossPoint's arena roster (Phase 6 stage 3).
-updated: 2026-09-09
+description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. One boss cycle per arena session, started on RoundStarted and stopped on RoundEnded; HUD remotes, perception and skill targets are all scoped to the BossPoint's arena (Phase 6 stage 3 + refactor chunk 9).
+updated: 2026-09-10
 ---
 
 # Boss
@@ -143,11 +143,13 @@ bar over a fight that has no boss in it. Position is irrelevant — it is a GUI.
 All six sites now route through [[systems/GameMode]]'s `BroadcastAudience`
 instead of `FireAllClients`.
 
-**Which roster?** The boss is not owned by a session today — it exists in the
-world, not in a mode — so this was a genuine question rather than a lookup. It
-is answered the same way every other arena-bound thing in the place answers it:
-`BossPoint` carries the shared `ArenaId` attribute, and the audience is that
-arena's roster.
+**Which roster?** When this landed the boss was not owned by a session — it
+existed in the world, not in a mode — so this was a genuine question rather
+than a lookup. It is answered the same way every other arena-bound thing in the
+place answers it: `BossPoint` carries the shared `ArenaId` attribute, and the
+audience is that arena's roster. Chunk 9 (below) made the boss a per-session
+thing after all, and the attribute is still the key: the session's arena id is
+the BossPoint's.
 
 ```lua
 local arenaId = Arena.idOf(bossPoint)          -- per cycle
@@ -166,32 +168,64 @@ inherit `Arena.DEFAULT_ID`. That was the point of using the attribute instead
 of threading a session reference through `BossService` — a large refactor for a
 seam that stage 5 would immediately redo.
 
-**Boot ordering.** `BossService` starts its cycle *before* `GameModeService`
-registers the resolver, so the spawn announcement resolves through the
-"everyone" fallback. Harmless: there are no players in the server at that
-point, and `BossHudGui`'s existing late-join path (which reads `workspace.Boss`
-directly) is what actually populates the bar for a player who joins after the
-boss spawned. That was already true with `FireAllClients`.
+**Boot ordering.** Since chunk 9 the cycle starts from the Default session's
+`RoundStarted` (or the boot reconcile against `SessionRegistry.all()`), which
+is after the resolver is registered, so the spawn announcement resolves to the
+real — empty — Default roster. `BossHudGui`'s existing late-join path (which
+reads `workspace.Boss` directly) is what populates the bar for a player who
+transfers in after the boss spawned. That was already true with `FireAllClients`.
 
 The boss **windup VFX** in `BossStates.luau:176` deliberately keeps
 `FireAllClients` — it is world-space. See [[design/lobby]] § Broadcast audience.
+
+## Arena ownership (refactor chunk 9, 2026-09-10)
+
+One boss cycle per arena session. `BossService` listens to the GameMode
+`RoundStarted` / `RoundEnded` BindableEvents — both now carry the session's
+`arenaId` as a trailing argument — and keeps a `cycles[arenaId]` table:
+
+- **Start** (`RoundStarted`, or the boot reconcile over `SessionRegistry.all()`
+  for a session already Active — the Default round starts during
+  `GameModeService`'s boot, before this Script has connected): find the
+  `BasePart` named `BossPoint` whose `Arena.idOf` is the arena (the Lobby has
+  none, so it gets no boss), spawn, and **stamp the Model with `ArenaId`**.
+- **Stop** (`RoundEnded`, `destroy()`): cancel the pending retry/respawn
+  `task.delay` thread, disconnect the tick, destroy the controller, fire the
+  defeat sentinel (phase 0) to the arena roster so `BossHudGui` clears, destroy
+  the Model.
+- `disable()` / `enable()` pause and resume every live cycle's tick;
+  `destroy()` is bound to `game:BindToClose`.
+
+**Why the stamp matters.** The boss shares the NPC system's `Perception`, which
+now scans `Hittables.collect(BroadcastAudience.forArena(id), id)` with the id
+read off the rig's own `ArenaId` attribute — so a boss in arena A never sees
+arena B's players, and never sees a hub player at all (nothing hostile carries
+`Lobby`). Its skills go through `SkillDelivery`, whose `collectHittables(source)`
+reads the same attribute off `ctx.source`, so a Fireball or Ground Slam lands
+only on its own arena's roster. See [[systems/NPC]] § Arena ownership and
+`src/shared/Skills/Hittables.luau`.
+
+Studio: `Workspace.BossPoint` carries `ArenaId = Default` (set 2026-09-09 via
+MCP; the `.rbxl` needs saving). Stage 5's `Modes/PvEBoss.luau` will author its
+own BossPoint with its own id.
 
 ## Integration Points
 
 No changes needed in other systems:
 
-- **SpellExecutor** — damages any Humanoid; Boss is `workspace.Boss` so `SpellCastController.findAutoTarget` picks it (alongside `NPC`- and `Damageable`-tagged models)
+- **SpellExecutor** — damages any Humanoid; Boss is `workspace.Boss` so `SpellCastController.findAutoTarget` picks it (alongside `NPC`- and `Damageable`-tagged models); server-side the same three sources are `Hittables` (chunk 9), filtered to the caster's arena
 - **applyDamage.process()** — `sourcePlayer = nil` bypasses the PvP gate; firearm hits damage the boss normally
 - **DeathHandler** — only handles `DAMAGEABLE_TAG` models; Boss is tagged `"Boss"`, not `DAMAGEABLE_TAG`, so BossService owns the full death/respawn cycle
 
 ## Lifecycle
 
-1. `BossService` finds `workspace.BossPoint` at startup.
-2. `BossSpawner.spawn(bossPoint)` clones the Patroller rig, scales it 3×, places it.
+1. An arena's `RoundStarted` fires (or its session is already Active at boot); `BossService` finds that arena's `BossPoint` by name + `ArenaId`.
+2. `BossSpawner.spawn(bossPoint)` clones the Patroller rig, scales it 3×, places it; `BossService` stamps it with the arena's `ArenaId`.
 3. `BossController.new(boss, onPhaseChanged)` wires Perception + StateMachine + BossPhaseManager.
 4. `RunService.Heartbeat` drives `controller:tick(dt)` each frame.
 5. `humanoid.HealthChanged` fires `BossHealthChanged` (throttled 0.1 s).
 6. `humanoid.Died` → disconnect Heartbeat, destroy controller, fire defeat events (phaseIndex=0), destroy Model after 1 s, respawn after `BossConfig.RESPAWN_DELAY_SEC` (5 s).
+7. The arena's `RoundEnded` → the cycle stops (pending respawn cancelled, defeat sentinel fired, Model destroyed); the next `RoundStarted` begins a fresh one.
 
 ## Key Tuning (BossConfig.BOSS_TYPES.Brain)
 

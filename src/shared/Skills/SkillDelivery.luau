@@ -35,12 +35,13 @@
 -- Callers that don't need a completion signal omit onComplete.
 ----------------------------------------------------------------------
 
-local CollectionService = game:GetService("CollectionService")
 local Debris            = game:GetService("Debris")
-local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
 
+local Arena             = require(ReplicatedStorage.Shared.GameMode.Arena)
+local BroadcastAudience = require(ReplicatedStorage.Shared.GameMode.BroadcastAudience)
+local Hittables         = require(ReplicatedStorage.Shared.Skills.Hittables)
 local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillBuffs     = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
 local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
@@ -123,63 +124,23 @@ local SHIELD_BLOCK_EFFECT_ID = "shield_block"
 -- every spec.
 local DEFAULT_DESTROY_EFFECT_ID = "projectile_destroy"
 
--- CollectionService tags whose tagged Models carry a Humanoid+HRP and
--- should be hittable by projectile collision / splash. The project tags
--- spawned NPCs ("NPC"), the active boss ("Boss"), and dev-mode rigs
--- ("Damageable") — anything carrying any of these counts as a target.
--- Player characters are NOT tagged; they're enumerated via Players.
+-- The rigs a shot can land on, scoped to the caster's arena. The
+-- definition itself lives in Hittables — shared with CosmeticProjectile
+-- and the NPC Perception scan, so the damage, the picture and the AI
+-- cannot disagree about who is in the fight. This wrapper only answers
+-- "which arena": a player's character reads its Player's ArenaId, a boss
+-- or NPC reads its own, and the roster behind that id comes from the same
+-- BroadcastAudience seam BossService draws its HUD audience from. A
+-- sourceless delivery is the Default arena's, as every unattributed thing
+-- in the place is.
 --
--- Shared with FreezeVfxController, which watches the same set for the
--- `_frozen` flag. A rig in one list but not the other would be hittable
--- without ever drawing its status visual.
-local DAMAGEABLE_TAGS: { string } = SkillConstants.DAMAGEABLE_TAGS
+-- Hittables frame-caches per arena, so Boss Volley's 30 concurrent
+-- projectiles still share one query per Heartbeat.
+type Hittable = Hittables.Hittable
 
-type Hittable = { hum: Humanoid, hrp: BasePart }
-
--- Frame-level cache: rebuilt once per Heartbeat and shared across all
--- concurrent in-flight projectiles. Boss Volley fires 30 at once — without
--- this every projectile would re-query CollectionService each tick.
--- Deduped by humanoid so a model carrying multiple tags doesn't double-hit.
---
--- The Heartbeat that invalidates it connects on first use, not at module
--- scope. Only the authoritative branches of `projectile` and `aoe` call
--- collectHittables, so a VM that only ever runs predicted casts — every
--- client — never pays a per-frame callback for a cache it never fills.
-local _hittablesCache: { Hittable }? = nil
-local _hittablesInvalidator: RBXScriptConnection? = nil
-
-local function collectHittables(): { Hittable }
-	if _hittablesCache then return _hittablesCache end
-	if not _hittablesInvalidator then
-		_hittablesInvalidator = RunService.Heartbeat:Connect(function()
-			_hittablesCache = nil
-		end)
-	end
-	local results: { Hittable } = {}
-	local seen: { [Humanoid]: true } = {}
-
-	local function tryAdd(model: Instance?)
-		if not model or not model:IsA("Model") then return end
-		local m = model :: Model
-		local hum = m:FindFirstChildOfClass("Humanoid")
-		if not hum or hum.Health <= 0 then return end
-		if seen[hum] then return end
-		local hrp = m:FindFirstChild("HumanoidRootPart")
-		if not hrp or not hrp:IsA("BasePart") then return end
-		seen[hum] = true
-		table.insert(results, { hum = hum, hrp = hrp :: BasePart })
-	end
-
-	for _, player in Players:GetPlayers() do
-		tryAdd(player.Character)
-	end
-	for _, tag in DAMAGEABLE_TAGS do
-		for _, inst in CollectionService:GetTagged(tag) do
-			tryAdd(inst)
-		end
-	end
-	_hittablesCache = results
-	return results
+local function collectHittables(source: Instance?): { Hittable }
+	local arenaId = Hittables.arenaOfSource(source) or Arena.DEFAULT_ID
+	return Hittables.collect(BroadcastAudience.forArena(arenaId), arenaId)
 end
 
 -- Map a raycast hit back to the rig that owns it, if any. Lets the swept
@@ -473,7 +434,7 @@ SkillDelivery.handlers = {
 				-- inside proximityRadius is guaranteed to also be considered
 				-- for splash.
 				local struck = 0
-				for _, h in collectHittables() do
+				for _, h in collectHittables(source) do
 					if h.hum.Parent == source then continue end -- skip caster
 					if h.hum.Health <= 0 then continue end
 					if (h.hrp.Position - hitPos).Magnitude <= impactRadius then
@@ -733,7 +694,7 @@ SkillDelivery.handlers = {
 					-- Snapshot all hittables this tick (players + tagged NPCs +
 					-- boss + Damageable rigs). detonate() re-reads the same
 					-- frame-cached table.
-					local hittables = collectHittables()
+					local hittables = collectHittables(source)
 
 					if os.clock() - startTime >= lifetimeSec then
 						conn:Disconnect()
@@ -891,17 +852,16 @@ SkillDelivery.handlers = {
 				-- — see the note in the projectile handler.
 			})
 
-			-- Apply onImpact to all players in radius
-			for _, player in Players:GetPlayers() do
-				local char = player.Character
-				if not char then continue end
-				local hrp = char:FindFirstChild("HumanoidRootPart")
-				if not hrp or not hrp:IsA("BasePart") then continue end
-				local hum = char:FindFirstChildOfClass("Humanoid")
-				if not hum or hum.Health <= 0 then continue end
-				local dist = ((hrp :: BasePart).Position - center).Magnitude
+			-- Apply onImpact to every player of the caster's arena in
+			-- radius. Players only, as it was before the target list was
+			-- shared: a boss slam is aimed at the roster, not at its own
+			-- arena's NPCs.
+			for _, h in collectHittables(source) do
+				local player = h.player
+				if not player then continue end
+				local dist = (h.hrp.Position - center).Magnitude
 				if dist > radius then continue end
-				applyImpactEffects(skill, hum, source, ctx.mode)
+				applyImpactEffects(skill, h.hum, source, ctx.mode)
 				log:info(("aoe hit %s dist=%.1f (skill=%s)"):format(player.Name, dist, skill.name))
 			end
 		end)

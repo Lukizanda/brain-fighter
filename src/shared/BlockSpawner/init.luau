@@ -432,6 +432,10 @@ function BlockSpawner._spawnOne(self: BlockSpawner): Model
 	local color = if Wildcard.isWildcard(letter) then Wildcard.COLOR else self:_pickColor()
 
 	local block = LetterBlocks.spawn(letter, color, cf, self._opts.parent)
+	-- Which pool's block this is. ConsumeBlock refuses a player whose
+	-- session is in a different arena — the range check alone would let a
+	-- hub player at the boundary pop arena blocks (chunk 9).
+	block:SetAttribute(Arena.ID_ATTRIBUTE, self.arenaId)
 	self._active[block] = true
 	self._activeCount += 1
 	return block

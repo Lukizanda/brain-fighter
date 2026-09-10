@@ -1,6 +1,7 @@
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
 local BlockSpawner = require(ReplicatedStorage.Shared.BlockSpawner)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 local Colors = require(ReplicatedStorage.Shared.Core.Colors)
@@ -60,9 +61,15 @@ return {
 			if type(color) ~= "string" or not VALID_TILE_COLORS[color] then
 				return false, string.format("invalid color attribute: %s", tostring(color))
 			end
+			-- Chunk 9: every block names the pool's arena, which is what
+			-- ConsumeBlock's arena check reads.
+			local arenaId = block:GetAttribute(Arena.ID_ATTRIBUTE)
+			if arenaId ~= TEST_ARENA_ID then
+				return false, string.format("block ArenaId: expected %s, got %s", TEST_ARENA_ID, tostring(arenaId))
+			end
 		end
 
-		return true, string.format("%d blocks spawned with valid attributes", #blocks)
+		return true, string.format("%d blocks spawned with valid attributes, all stamped ArenaId=%s", #blocks, TEST_ARENA_ID)
 	end,
 
 	teardown = function(ctx)

@@ -64,16 +64,25 @@ return {
 	name = "NPC deals damage to player in Combat",
 
 	setup = function(ctx)
-		local fixture = ensurePatroller.ensure()
-		assert(fixture, "Could not obtain a Patroller_1 NPC (no boot spawn and no AIWorldData.Rigs.Patroller template)")
 		assert(ctx.player, "No local player")
 
+		-- Settle the player BEFORE building the fixture: ensure() stands the
+		-- rig relative to the player's character, and a character still
+		-- falling to its death from the previous suite's far teleport puts
+		-- the rig in the void with it (harness pass 4: two respawns during
+		-- this setup, NPC never in Combat).
 		local settledHumanoid, stabiliseErr = waitForStableFullHealth(ctx.player)
 		assert(settledHumanoid, stabiliseErr)
+
+		local fixture = ensurePatroller.ensure(ctx.player)
+		assert(fixture, "Could not build the Patroller fixture (no AIWorldData.Rigs.Patroller template)")
 
 		ctx.npcFixture = fixture
 		local npc = fixture.npc
 		ctx.npc = npc
+		-- Only now: ticking earlier lets the rig shoot the player while
+		-- waitForStableFullHealth is still waiting for a settled 100/100.
+		fixture:engage()
 
 		-- Poll-teleport: re-fetch character each tick in case the player died
 		-- in a prior test and respawned. Also re-snap to NPC position since it

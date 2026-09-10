@@ -6,15 +6,18 @@
 	The Decision layer reads blackboard fields and reacts.
 
 	Outputs:
-	- nearestPlayer, distanceToNearest: closest player within DETECTION_RANGE
+	- nearestPlayer, distanceToNearest: closest player of this NPC's arena
+	  within DETECTION_RANGE (the arena is the NPC Model's ArenaId attribute)
 	- targetHumanoid, targetRootPart: cached refs for the Action layer
 	- canSeeTarget: raycast-based line-of-sight check (blocked by walls/terrain)
 ]]
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
+local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
+local BroadcastAudience = require(ReplicatedStorage.Shared.GameMode.BroadcastAudience)
+local Hittables = require(ReplicatedStorage.Shared.Skills.Hittables)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local NPCConstants = require(ReplicatedStorage.Shared.NPC.NPCConstants)
 local NPCTypes = require(ReplicatedStorage.Shared.NPC.NPCTypes)
@@ -79,21 +82,20 @@ function Perception.update(bb: Blackboard)
 	local nearestHumanoid: Humanoid? = nil
 	local nearestRootPart: BasePart? = nil
 
-	for _, player in Players:GetPlayers() do
-		local character = player.Character
-		if not character then
+	-- Candidates are the roster of this NPC's arena — read off the ArenaId
+	-- attribute the spawning service stamped on it — filtered through the
+	-- same Hittables definition the skill pipeline lands on. Players only:
+	-- an NPC (or the boss, which shares this scan) hunts the roster, never
+	-- the boss or another NPC. A hub player is never here because nothing
+	-- hostile carries the Lobby id.
+	local arenaId = Arena.idOf(bb.npc)
+	for _, hittable in Hittables.collect(BroadcastAudience.forArena(arenaId), arenaId) do
+		local player = hittable.player
+		if not player then
 			continue
 		end
-
-		local hum = character:FindFirstChildOfClass("Humanoid")
-		if not hum or hum.Health <= 0 then
-			continue
-		end
-
-		local hrp = character:FindFirstChild("HumanoidRootPart")
-		if not hrp or not hrp:IsA("BasePart") then
-			continue
-		end
+		local hum = hittable.hum
+		local hrp = hittable.hrp
 
 		local distance = (hrp.Position - npcPos).Magnitude
 		local perceptionRange = (bb :: any).perceptionRange or NPCConstants.DETECTION_RANGE

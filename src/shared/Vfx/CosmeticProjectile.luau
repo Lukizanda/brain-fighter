@@ -28,7 +28,6 @@
 -- server still decides who took damage.
 ----------------------------------------------------------------------
 
-local CollectionService = game:GetService("CollectionService")
 local Debris            = game:GetService("Debris")
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -36,7 +35,8 @@ local RunService        = game:GetService("RunService")
 
 local HealthConstants = require(ReplicatedStorage.Shared.Health.HealthConstants)
 local SkillBuffs      = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
-local SkillConstants  = require(ReplicatedStorage.Shared.Skills.SkillConstants)
+local Arena           = require(ReplicatedStorage.Shared.GameMode.Arena)
+local Hittables       = require(ReplicatedStorage.Shared.Skills.Hittables)
 local SkillVisuals    = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 local VfxConfig       = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 local spawnEffect     = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
@@ -149,52 +149,22 @@ local function shieldedRoots(source: Instance?): { BasePart }
 	return roots
 end
 
+-- Every live rig a shot can terminate on, scoped to the shooter's arena.
 -- Was a hand-kept mirror of SkillDelivery's list, with a comment noting
 -- the two had to agree or this copy would stop on rigs the authoritative
--- shot flies past. Now they share one definition, so they can't disagree.
-local DAMAGEABLE_TAGS: { string } = SkillConstants.DAMAGEABLE_TAGS
+-- shot flies past. Both now read Hittables, so the proximity rule below
+-- measures against exactly the set the server does. The caster is
+-- filtered at the call site, exactly as the server does it.
+--
+-- This runs on a client, so the candidate players are everyone on the
+-- server and Hittables keeps only those whose ArenaId matches the
+-- shooter's. It frame-caches per arena for the reason SkillDelivery's copy
+-- did: a Brain volley puts 30 cosmetics in the air at once.
+type Rig = Hittables.Hittable
 
-type Rig = { model: Model, hrp: BasePart }
-
--- Frame-level cache, for the same reason SkillDelivery keeps one: a Brain
--- volley puts 30 cosmetics in the air at once, and without this every one
--- of them re-queries CollectionService every Heartbeat.
-local _rigsCache: { Rig }? = nil
-RunService.Heartbeat:Connect(function()
-	_rigsCache = nil
-end)
-
--- Every live rig a shot can terminate on. Mirrors
--- SkillDelivery.collectHittables — players enumerated, everything else by
--- tag — because the proximity rule below has to measure against the same
--- set the server does. The caster is filtered at the call site, exactly as
--- the server does it, so the cache stays shared across all shots in flight.
-local function collectRigs(): { Rig }
-	if _rigsCache then return _rigsCache end
-	local rigs: { Rig } = {}
-	local seen: { [Instance]: true } = {}
-
-	local function tryAdd(model: Instance?)
-		if not model or not model:IsA("Model") then return end
-		if seen[model] then return end
-		local hum = (model :: Model):FindFirstChildOfClass("Humanoid")
-		if not hum or (hum :: Humanoid).Health <= 0 then return end
-		local hrp = (model :: Model):FindFirstChild("HumanoidRootPart")
-		if not hrp or not hrp:IsA("BasePart") then return end
-		seen[model] = true
-		table.insert(rigs, { model = model :: Model, hrp = hrp :: BasePart })
-	end
-
-	for _, player in Players:GetPlayers() do
-		tryAdd(player.Character)
-	end
-	for _, tag in DAMAGEABLE_TAGS do
-		for _, inst in CollectionService:GetTagged(tag) do
-			tryAdd(inst)
-		end
-	end
-	_rigsCache = rigs
-	return rigs
+local function collectRigs(source: Instance?): { Rig }
+	local arenaId = Hittables.arenaOfSource(source) or Arena.DEFAULT_ID
+	return Hittables.collect(Players:GetPlayers(), arenaId)
 end
 
 -- The rig this ray stopped on, or nil for a wall or prop. Returns the Model
@@ -519,7 +489,7 @@ function CosmeticProjectile.launch(params: LaunchParams)
 		-- hit, and the shot reaching a body is the one death that is already
 		-- announced.
 		if proximityRadius > 0 and consumeOnHit then
-			for _, rig in collectRigs() do
+			for _, rig in collectRigs(params.source) do
 				if rig.model == params.source then continue end
 				if (rig.hrp.Position - pos).Magnitude <= proximityRadius then
 					conn:Disconnect()
