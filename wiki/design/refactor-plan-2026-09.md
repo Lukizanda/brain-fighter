@@ -321,7 +321,7 @@ Wiki: [[systems/GameMode]] (the stage-7 rewrite — do it here), [[design/lobby]
 
 ## Chunk 9 — The world knows its arena
 
-Status: claimed — chunk-9 — 2026-09-09
+Status: done — 2026-09-10 — e2197ff (two-arena client check pending, see divergences)
 Findings: F14, F15, F30 (Hittables helper as the filter seam)
 Risk: **H** · Playtest: **yes, two arenas** — a boss in one arena never targets the other's players; a hub player cannot pop arena blocks even in range · Depends on: chunk 8 · Blocked on: nothing (Q10 answered)
 Decision: Q10(a) — this chunk runs as its own session immediately before Phase 6 stage 5; stage 5 is then only `Modes/PvEBoss.luau` and the queue.
