@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server relay for client-initiated spell casts. Applies effects server-side because client Humanoid.Health writes don't replicate for server-owned rigs. Hardened in 5.4; affordability is checked and, since 2026-09-08, enforced by the validated-memorize ledger.
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # SpellCastService
@@ -97,6 +97,8 @@ Landed as `server/Economy/` — `EnergyLedger` (state + verdicts, keyed by UserI
 **Owed:** the happy path end-to-end — tap real blocks, memorize, see the credit — has not been driven, because it needs actual tapping rather than injected Luau. The wire is proven; the credit path is proven only by the suite.
 
 **Reading the shadow log:** `DevDebug`'s `[` hotkey conjures letters into the buffer without consuming a block, so every dev memorize logs a coverage failure. Those are not findings. Discount any would-reject line following a `[` press.
+
+**The dev mana cheat needs a server half (2026-09-10).** `DevDebug`'s `1`-`4` keys fill the client's `EnergyReservoirs` directly, which was the whole cheat while `ENFORCE` was false. Enforcement made those casts unaffordable — the ledger credits only spelled-for energy, so a cheated cast dies at `checkCast` with `red cast costs 5, ledger has 0` after reporting `ok` on the client. Reported as "spells are broken", which is how a stale cheat presents. The keys now also fire `Shared.Economy.Remotes.DevGrantEnergy`, and `EconomyService` writes the matching ceiling through `EnergyLedger.devSetCeiling` (set, not add, so pressing `2` after `4` lowers both halves together). The wire carries the **tier**, not an amount, and the handler is gated on `RunService:IsStudio()` — a remote that hands out energy is not something to leave one config flag away from a live server. See [[concepts/DevDebugHotkeys]].
 
 #### Design
 

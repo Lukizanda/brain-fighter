@@ -326,6 +326,30 @@ function EnergyLedger.debitCast(userId: number, color: string, cost: number)
 end
 
 ----------------------------------------------------------------------
+-- Dev seam
+----------------------------------------------------------------------
+
+-- Set a colour's ceiling outright, bypassing the earn path.
+--
+-- The dev mana cheat exists because a playtester needs a loaded spell
+-- bar in seconds, and spelling four words to get one is not a test of
+-- the thing being tested. It fills the client's reservoirs directly, so
+-- without a matching write here the two halves disagree and every cheat
+-- cast dies at `checkCast` — which is exactly what happened when
+-- ENFORCE flipped to true.
+--
+-- Set rather than add, mirroring the client's fill: pressing 2 after 4
+-- must take you down to T2 on both sides, or the cheat quietly leaves
+-- the server richer than the player.
+--
+-- Callers are responsible for the guard. `EconomyService` is the only
+-- one, and it refuses outside Studio.
+function EnergyLedger.devSetCeiling(userId: number, color: string, amount: number)
+	local account = accountFor(userId)
+	account.ceiling[color] = math.clamp(amount, EMPTY, EnergyReservoirs.CAP_PER_COLOR)
+end
+
+----------------------------------------------------------------------
 -- Lifecycle
 ----------------------------------------------------------------------
 

@@ -10,6 +10,8 @@
 --   2  fill all reservoirs to T2 threshold (10)
 --   3  fill all reservoirs to T3 threshold (20)
 --   4  fill all reservoirs to T4 threshold (40)
+--       (1-4 also grant the server's EnergyLedger the same tier, or the
+--        cheated cast is refused as unaffordable — see fillToTier)
 --   M  toggle mobile-input override (forces InputCategorizer to "Touch"
 --       so touch-only HUD widgets like the dash button appear on desktop)
 --   ;  toggle boss phase label visibility
@@ -38,6 +40,8 @@ local letterIdx = 1
 
 local session = PlayerSession.get()
 
+local devGrantRemote = ReplicatedStorage.Shared.Economy.Remotes.DevGrantEnergy :: RemoteEvent
+
 local function fillReservoirsToAmount(amount: number)
 	for _, color in TEST_COLORS do
 		local current = session.energyReservoirs:get(color)
@@ -47,6 +51,22 @@ local function fillReservoirsToAmount(amount: number)
 			session.energyReservoirs:add(color, amount - current)
 		end
 	end
+end
+
+-- The cheat has two halves and both are required.
+--
+-- Filling the reservoirs alone stopped working when EconomyConstants
+-- .ENFORCE went true: the client happily spends energy it was handed,
+-- then the server prices the cast against an EnergyLedger that never saw
+-- a memorize and refuses it ("red cast costs 5, ledger has 0"). The cast
+-- looks fine locally and simply never lands.
+--
+-- So the same press tells the Economy too, and the tier goes on the wire
+-- rather than the amount so the server stays the one deciding what a
+-- tier is worth. The server ignores the fire outside Studio.
+local function fillToTier(tier: number)
+	fillReservoirsToAmount(TIER_ENERGY[tier])
+	devGrantRemote:FireServer(tier)
 end
 
 ----------------------------------------------------------------------
@@ -76,7 +96,7 @@ local function onDevFillMana()
 		log:warn(string.format("%s = %s ignored — want an integer 1-%d",
 			DEV_FILL_MANA_ATTR, tostring(tier), #TIER_ENERGY))
 	else
-		fillReservoirsToAmount(TIER_ENERGY[tier])
+		fillToTier(tier)
 		log:info(string.format("%s -> reservoirs set to T%d (%d each)",
 			DEV_FILL_MANA_ATTR, tier, TIER_ENERGY[tier]))
 	end
@@ -120,16 +140,16 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		log:info("buffer cleared")
 
 	elseif input.KeyCode == Enum.KeyCode.One then
-		fillReservoirsToAmount(TIER_ENERGY[1])
+		fillToTier(1)
 		log:info(string.format("reservoirs set to T1 (%d each)", TIER_ENERGY[1]))
 	elseif input.KeyCode == Enum.KeyCode.Two then
-		fillReservoirsToAmount(TIER_ENERGY[2])
+		fillToTier(2)
 		log:info(string.format("reservoirs set to T2 (%d each)", TIER_ENERGY[2]))
 	elseif input.KeyCode == Enum.KeyCode.Three then
-		fillReservoirsToAmount(TIER_ENERGY[3])
+		fillToTier(3)
 		log:info(string.format("reservoirs set to T3 (%d each)", TIER_ENERGY[3]))
 	elseif input.KeyCode == Enum.KeyCode.Four then
-		fillReservoirsToAmount(TIER_ENERGY[4])
+		fillToTier(4)
 		log:info(string.format("reservoirs set to T4 (%d each)", TIER_ENERGY[4]))
 
 	elseif input.KeyCode == Enum.KeyCode.M then
