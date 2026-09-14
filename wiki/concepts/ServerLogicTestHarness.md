@@ -1,16 +1,18 @@
 ---
 type: concept
 description: How to test server-only Roblox logic deterministically when MCP only gives you client-side execute_luau — write a gated `.server.luau` driver
-updated: 2026-05-01
+updated: 2026-09-14
 ---
 
 # Server-Logic Test Harness
 
-**Files in the pattern:** `src/server/Dev/SimulateLoadoutCycling.server.luau` (the working example), `src/server/Dev/DevSmokeTestKillFeed.server.luau`, `src/server/Dev/DevAutoEquipTool.server.luau`, `src/server/Dev/BotSpawner.server.luau` (siblings using the same gating convention).
+**Files in the pattern:** `src/server/Dev/DevSmokeTestKillFeed.server.luau` (the one surviving example, gated on `GameConfig.DEV_SMOKE_KILLFEED`). `SimulateLoadoutCycling`, `DevAutoEquipTool` and `BotSpawner` — the original working examples — were deleted as dead dev tooling in refactor chunk 0 (`ba9891d`, 2026-09-08) along with their `GameConfig` flags.
+
+> **Status (2026-09):** mostly superseded. The reason this pattern existed — server-only logic is unreachable from client-context `execute_luau` — is now solved by the in-Studio harness in [[systems/Tests]]: `TestAutoRunner` is itself a server Script, so a suite module can `require(ServerScriptService.Server.*)` and drive `applyDamage`, `EnergyLedger`, `BlockShootValidation` or `SessionRegistry` directly, with results in `workspace.TestResult_*` attributes. The Hardening, Economy and Multiplayer suites all do exactly this. **Prefer writing a suite test.** Reach for a gated dev script only when the check is a one-off visual smoke (like the kill-feed script) or needs to run outside a test suite's lifecycle. The mechanics below still apply to that case.
 
 ## The problem
 
-Almost all the bugs that cost real time on this project live in the **server VM** — `applyDamage`, `LoadoutService`, `ScoreTracker`, `RespawnPedestalManager`. Their inputs are server-side: a Tool re-parented to `Backpack`, a `Humanoid:Died` event, a `BindableEvent:Fire`. Most of them are not directly user-facing — the user-facing UX is downstream, on the client.
+Almost all the bugs that cost real time on this project live in the **server VM** — `applyDamage`, `ScoreTracker`, `EnergyLedger`, `SessionRegistry` (and, when this page was written, the since-deleted `LoadoutService` and `RespawnPedestalManager`). Their inputs are server-side: a Tool re-parented to `Backpack`, a `Humanoid:Died` event, a `BindableEvent:Fire`. Most of them are not directly user-facing — the user-facing UX is downstream, on the client.
 
 The agent's MCP tooling only gives `execute_luau` that runs in **client / plugin context**. From there:
 
@@ -51,6 +53,7 @@ The result attribute is the source of truth — Studio's console truncates the t
 
 ## When NOT to use it
 
+- The check can be expressed as a `setup → run → verify → teardown` module. Put it in a suite under `src/shared/Tests/Suites/` instead — same server VM, no flag to flip, results in attributes, runs under `RunTests="all"` forever after. See [[systems/Tests]].
 - The bug is in client-only code (UI, input handling, animation playback, camera). Use `mcp__Roblox_Studio__execute_luau` directly — it runs in client context where the bug lives.
 - The bug genuinely requires two simultaneous network-replicating clients (ReplicateShot delivery, cross-VM `os.clock()` drift). The server-driven harness can't fake the wire layer; you need real two-client setup. See [[concepts/MultiplayerTestPattern]] for what the existing test suite does and doesn't cover.
 
@@ -60,14 +63,15 @@ The harness should be a top-level `.server.luau` that runs unconditionally at bo
 
 1. The gating flag is one place to flip; no second consumer to wire up.
 2. The harness self-cleans — when the flag is off it returns early at the top of the script.
-3. The pattern parallels `DevAutoEquipTool` / `DevSmokeTestKillFeed`, which are already in the repo and well-understood.
+3. The pattern parallels `DevSmokeTestKillFeed`, which is in the repo and well-understood.
 
-## Sibling pattern: kill-credit listener stays armed regardless of spawn flag
+## Sibling pattern (retired): kill-credit listener stays armed regardless of spawn flag
 
-`BotSpawner.server.luau` has its own variant — the `playerEliminatedEvent` listener is wired *outside* the `DEV_BOT_COUNT == 0` early-return, so test code can spawn synthetic bots and have their deaths route through the same kill-credit chain. If you build a future harness that depends on a server-side listener, follow the same shape: gate the *spawn / drive* logic, leave the *listener* always-on so harness code (and other future bot producers) can use it. See [[concepts/MultiplayerTestPattern]].
+`BotSpawner.server.luau` (deleted in chunk 0) had its own variant — the `playerEliminatedEvent` listener was wired *outside* the `DEV_BOT_COUNT == 0` early-return, so test code could spawn synthetic bots and have their deaths route through the same kill-credit chain. The lesson survives the script: if you build a harness that depends on a server-side listener, gate the *spawn / drive* logic and leave the *listener* always-on so harness code can use it. See [[concepts/MultiplayerTestPattern]] for why the synthetic-bot shape itself was retired.
 
 ## Related
 
+- [[systems/Tests]] — the in-Studio harness that now covers most of what this pattern was for
 - [[concepts/MultiplayerTestPattern]] — server-authoritative test suite this harness pattern complements
 - [[concepts/ValidateBeforeShip]] — when to use this pattern (always, for server-only fixes)
 - Memory `feedback_mcp_clone_replication.md` — the negative version: client-context probes can't validate server logic

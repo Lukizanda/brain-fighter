@@ -1,7 +1,7 @@
 ---
 type: concept
 description: How to write integration tests for server-authoritative multiplayer paths using the existing TestRunner harness + a synthetic enemy
-updated: 2026-05-01
+updated: 2026-09-14
 ---
 
 # Multiplayer Test Pattern
@@ -37,13 +37,25 @@ The autorunner waits up to 10s for at least one player; if you start the playtes
 
 ## How to write a multiplayer test
 
-Two test shapes are useful:
+Three test shapes are in use:
 
 ### Shape 1 — structural invariants (fast, cheap, catches placement bugs)
 
-Pure server-side asserts on the boot-time DataModel. No `setup`/`run`/`teardown`, just `verify`. Example: [`multiplayer_invariants.luau`](../../src/shared/Tests/Suites/Multiplayer/multiplayer_invariants.luau) — asserts `ShotReplication` LocalScript is parented to `StarterPlayerScripts` (would have caught the dead-in-ReplicatedStorage trap), all multiplayer remotes exist at expected paths, both team SpawnLocations exist when TDM is active.
+Pure server-side asserts on the boot-time DataModel. No `setup`/`run`/`teardown`, just `verify`. Example: [`multiplayer_invariants.luau`](../../src/shared/Tests/Suites/Multiplayer/multiplayer_invariants.luau) — asserts the GameMode remotes (`KillFeed`, `ScoreUpdate`, `GameStateChanged`) exist at their expected paths with the right class, the Health `PlayerDamaged` / `PlayerEliminated` BindableEvents exist, and at least one player is present for `ctx.player`.
+
+It used to also assert `ShotReplication` was parented to `StarterPlayerScripts` (the dead-in-ReplicatedStorage trap, see [[concepts/LocalScriptPlacement]]). That script was deliberately deleted in `6610291`, and the stale assertion was trimmed on 2026-09-08 (`f8d9dc1`) — the canonical example of the stale-assertion pitfall in [[systems/Tests]].
 
 These run in milliseconds and catch the kind of bug that ships unnoticed for the project's lifetime.
+
+### Shape 3 — session-scoped tests with one real player (chunk 8, 2026-09)
+
+Multiplayer-shaped bugs that are really "two sessions share a table" bugs do not need two clients. [[systems/GameMode]]'s `SessionRegistry` lets a test create a throwaway session/arena, move the single harness player into it with the real `transferPlayer`, assert, and move them back in `teardown`. Three tests use this:
+
+- `registry_views_agree` — `forPlayer` / `forArena` / `rosterOf` agree for every session after a transfer; the lobby queue flag is set in the lobby and cleared on transfer out.
+- `sessions_isolate_scores` — starting a round in a second session no longer zeroes the first session's `ScoreTracker` (the F12 bug).
+- `transfer_moves_roster_and_attributes` — a transfer moves both the roster entry and the `ArenaId` / `PlayerState` Player attributes, in both directions.
+
+The character genuinely pivots between arenas during these, so a following test in an `"all"` run inherits a player standing on a lobby pad, not wherever it left them.
 
 ### Shape 2 — server-authoritative path E2E (synthetic enemy) — retired
 
@@ -57,5 +69,7 @@ Historical: staged a `TargetDummy` clone with `BotTeam`/`BotDisplayName` attribu
 
 ## Related
 
-- [[concepts/LocalScriptPlacement]] — caught by the invariants test
+- [[systems/Tests]] — the harness itself: discovery rules, result attributes, suite table
+- [[concepts/ServerLogicTestHarness]] — the older gated-`.server.luau` alternative for server-only logic
+- [[concepts/LocalScriptPlacement]] — the class of bug Shape 1 catches
 - [[concepts/ClientServerPredictionParity]] — class of bug that needs a different test shape

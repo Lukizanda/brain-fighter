@@ -1,7 +1,7 @@
 ---
 type: system
 description: In-Studio test harness — TestRunner module + Suites/{NPC,Multiplayer,Phase3,Skills,Hardening,Economy,Unit}, one Suites/Unit wrapper per pure-Luau __tests module. MCP-driven via test-runner subagent.
-updated: 2026-09-08
+updated: 2026-09-14
 ---
 
 # Test System
@@ -23,7 +23,20 @@ src/shared/Tests/
       npc_deals_damage.luau
     Multiplayer/
       multiplayer_invariants.luau
-    Phase3/ · Skills/ · Hardening/ · Economy/
+      registry_views_agree.luau · sessions_isolate_scores.luau
+      transfer_moves_roster_and_attributes.luau
+    Phase3/
+      blockspawner_{fills_to_target,autorefills,bounds_check,respawn_delay}.luau
+      blockshoot_helpers.luau · blockshoot_remote_exists.luau · phase3_invariants.luau
+    Skills/
+      castaction_tests.luau · spellexecutor_tests.luau · skillinterrupt_smoke.luau
+      cast_rejected_before_drain.luau · predicted_run_writes_nothing.luau
+    Hardening/
+      blockshoot_payload_validation.luau · blockshoot_range_and_rate.luau
+      blockshoot_arena_match.luau · spellcast_payload_validation.luau
+    Economy/
+      ledger_prices_a_cast.luau · ledger_refuses_over_cap_memorize.luau
+      ledger_resets_on_round_start.luau
     Unit/
       wordbuffer_tests.luau · energyeconomy_tests.luau · energyreservoirs_tests.luau
       dictionary_tests.luau · spellregistry_tests.luau · memorizeaction_tests.luau
@@ -47,6 +60,14 @@ A child is only counted as a test if `require`ing it succeeds AND the result is 
 
 Because the autorunner only ever runs server-side, **any suite requiring `Players.LocalPlayer` cannot execute through it** — see `hud_tests` below.
 
+Timing: the autorunner waits up to `PLAYER_WAIT_TIMEOUT` (10s) for a player, then `STARTUP_DELAY_SECONDS` (3s) for world + NPC boot, then runs. Budget ~25s from play-start before reading results.
+
+## Test module shape
+
+`TestRunner.run` executes one module as `setup → run → verify → teardown`, sharing a `ctx` table (`ctx.player` is the first player). Every phase is optional: a module with only `verify` is a structural-invariant check; a module with only `run` passes unless `run` throws. Each phase runs under `pcall`, and `teardown` always runs. `TestRunner.runSuite` prints `[TEST PASS]` / `[TEST FAIL]` per test and `[SUITE DONE]` per suite; the autorunner adds `[AUTORUN START]` / `[AUTORUN DONE]` around the whole run.
+
+**Read results from attributes, not the console.** After each suite the autorunner writes `workspace.TestResult_<Suite>_<sanitised name>` (`"PASS"` or `"FAIL: <message>"`, names reduced to `[A-Za-z0-9_]`) and, at the end, `workspace.TestRunSummary` (`"N/M passed, F failed"`). Studio's console truncates the tail of long playtests; the attributes survive until play-stop.
+
 ## `__tests.luau` wiring — two idioms
 
 Every gameplay module with its own `src/shared/<Module>/__tests.luau` gets a thin wrapper ModuleScript under `Suites/Skills/` or `Suites/Unit/` with this shape:
@@ -68,7 +89,9 @@ Requiring any `__tests.luau` must be side-effect-free — the assertions only ru
 
 - **NPC suites** need a live, ticking `workspace.Patroller_1` with a real `NPCController` behind it — not just the raw rig Model. `NPCService.server.luau` boot-spawns one from `ServerStorage.AIWorldData` spawn points before `TestAutoRunner`'s startup delay elapses, which is the fixture in the common case. `Helpers/ensurePatroller.luau` is the fallback: if no `Patroller_1` exists, it clones `ServerStorage.AIWorldData.Rigs.Patroller`, constructs an `NPCController` directly (the same module `NPCService` uses — it's a requireable ModuleScript, not locked inside the Script), and ticks it on `Heartbeat` for the test's duration. `teardown` only tears down what it created; a boot-spawned `Patroller_1` is never touched, since it's shared state other systems (and other tests in the same `"all"` run) depend on.
 - **`combat_disengages` teardown restores the player to solid ground.** It deliberately teleports the player 80 studs from the NPC (`FAR_OFFSET`) to exercise the disengage transition, which can land them over open air and into `Workspace.Arena.DeathZone`. `teardown` calls `Helpers/restoreToSafeSpawn.luau` unconditionally so a following test doesn't inherit a mid-fall or mid-DeathZone-relocation character. `npc_deals_damage`'s `setup` additionally polls (bounded to 8s) for the player's Humanoid to hold `Health >= MaxHealth` for a continuous 1s window before doing anything else — belt-and-braces against any other test in the suite leaving the player unsettled, restarting the window on a mid-wait respawn (Humanoid identity change) and failing `setup` with a clear reason if it never stabilises.
-- **Hardening suite** drives `BlockShootValidation` / `SpellCastValidation` directly rather than firing the remotes, because the most important input — a table wearing a Model's property names — cannot be sent from a test that already runs on the server. These modules live under `ReplicatedStorage.Shared.Tests` but reach into `ServerScriptService.Server.*`, which is valid because `TestAutoRunner` is a server Script.
+- **Hardening suite** drives `BlockShootValidation` / `SpellCastValidation` directly rather than firing the remotes, because the most important input — a table wearing a Model's property names — cannot be sent from a test that already runs on the server. These modules live under `ReplicatedStorage.Shared.Tests` but reach into `ServerScriptService.Server.*`, which is valid because `TestAutoRunner` is a server Script. `blockshoot_arena_match` (chunk 9) additionally needs a live `BlockSpawner` pool to confirm spawned blocks carry their `ArenaId` attribute.
+- **Economy suite** drives `EnergyLedger` directly for the same reason — the payloads under test are ones a well-behaved client cannot send — and keys by UserId so a test can stand in for a player with no `Players` entry. `ledger_resets_on_round_start` is the exception: it fires the real round-start `BindableEvent`, because the missing wiring was the bug it guards.
+- **Multiplayer session tests** (chunk 8) work with exactly one real Player. `sessions_isolate_scores` and `transfer_moves_roster_and_attributes` create a throwaway session/arena, move the harness player through `SessionRegistry.transferPlayer`, and move them back in `teardown`. The transfer really pivots the character — that is the behaviour under test, so don't expect the player to stay put during an `"all"` run.
 - **`hud_tests` (Unit)** is VM-gated, not fixture-gated: `Hud/__tests.luau` requires `Players.LocalPlayer` and errors immediately on a server VM (see its own "Client only" header). Since there is no client-side autorunner, `Suites/Unit/hud_tests.luau` checks `RunService:IsServer()` and reports an explicit pass with a `"skipped — client-only ..."` message instead of a false `[TEST FAIL]` for a harness gap. On an actual client VM it runs the real `HudGate` suite.
 
 ## Suite table
@@ -76,19 +99,21 @@ Requiring any `__tests.luau` must be side-effect-free — the assertions only ru
 | Suite | Status | Covers |
 |---|---|---|
 | NPC | LIVE (fixture-gated via `ensurePatroller`) | Combat engage/disengage state transitions, NPC-deals-damage — [[systems/NPC]] |
-| Multiplayer | LIVE (1 test — `multiplayer_invariants`) | Boot-time structural invariants: GameMode remotes, PlayerDamaged/PlayerEliminated events |
+| Multiplayer | LIVE (4 tests) | `multiplayer_invariants` — boot-time structure: GameMode remotes, PlayerDamaged/PlayerEliminated events; `registry_views_agree`, `sessions_isolate_scores`, `transfer_moves_roster_and_attributes` — [[systems/GameMode]] SessionRegistry views, per-session ScoreTracker, roster + attribute transfer (chunk 8) |
 | Phase3 | LIVE (7 tests) | BlockSpawner pool/refill/bounds/respawn-delay, BlockShoot helpers/remote — [[systems/BlockShoot]] |
 | Skills | LIVE (5 tests) | SkillInterrupt lifecycle, SpellExecutor case table, CastAction scenarios, cast-rejection, predicted-vs-authoritative |
-| Hardening | LIVE (3 tests) | [[systems/BlockShoot]] § Trust model, [[systems/SpellCastService]] § Trust model |
-| Economy | LIVE (1 test) | Ledger pricing |
+| Hardening | LIVE (4 tests) | [[systems/BlockShoot]] § Trust model (payload, range/rate, arena match), [[systems/SpellCastService]] § Trust model |
+| Economy | LIVE (3 tests) | [[systems/EnergyEconomy]] ledger: prices a cast, refuses over-cap memorize, resets on round start (ENFORCE=true since chunk 6) |
 | Unit | LIVE (8 tests) | WordBuffer, EnergyEconomy, EnergyReservoirs, Dictionary, SpellRegistry, MemorizeAction, MindFullManager (all real runs) + Hud (server-VM skip, real on client) |
 | Melee | **deleted** (chunk 1, 2026-09-08) | Was: MeleeHitDetector sweep. Dead code — [[systems/Weapon]] melee path is unused; chunk 11 removes the modules |
+
+**34 tests total.** `RunTests="all"` last verified 34/34 on 2026-09-11 (chunk 10 playtest, see [[log]]). Any other total means a suite folder lost or gained a module — check for `[AUTORUN WARN] Skipped` lines first.
 
 Deleted alongside Melee: `Suites/Multiplayer/{drop_request_zone_gated,respawnzone_tracks_hrp_presence,applydamage_credits_bot_kill}.luau` (their C1/C2 deliverables and the bot-spawner they exercised are gone — see `wiki/design/refactor-plan-2026-09.md` Chunk 0/1). `Helpers/restoreToSafeSpawn.luau` was deleted in the same pass (its only caller at the time was `respawnzone_tracks_hrp_presence`) but recovered days later — see § Files above.
 
 ## Stale-assertion pitfall: check a test's claims against the code, not just its name
 
-A `RunTests="all"` failure is not automatically a live regression — a test's own assertion can go stale when the thing it checks for is deliberately deleted or extended elsewhere. Chunk 1 hit this three times, all resolved 2026-09-08 (all 28/28 now pass):
+A `RunTests="all"` failure is not automatically a live regression — a test's own assertion can go stale when the thing it checks for is deliberately deleted or extended elsewhere. Chunk 1 hit this three times, all resolved 2026-09-08 (28/28 at the time; chunks 6, 8 and 9 have since added six tests):
 
 - **`multiplayer_invariants`** asserted `ShotReplication.client.luau` exists in `StarterPlayerScripts`. That file was deleted on purpose in `6610291` (confirmed via `git show --stat 6610291`) along with the Weapon.Remotes files this suite had already stopped checking — the assertion just hadn't been trimmed with it. Deleted the check rather than "fixing" a placement bug that didn't exist.
 - **`npc_deals_damage`** intermittently read "no damage dealt" — not a stale assertion, but cross-test interference: see Fixture requirements above (`combat_disengages`'s DeathZone fall + the `waitForStableFullHealth` fix).
@@ -113,7 +138,11 @@ The subagent drives a real playtest via MCP, parses TestRunner output, reports p
 
 ## Cross-references
 
+- [[concepts/MultiplayerTestPattern]] — the test shapes this harness supports (structural invariants, server-module drivers, single-player session tests) and what still needs a real second client
+- [[concepts/ServerLogicTestHarness]] — the older gated-`.server.luau` driver pattern; mostly superseded by writing a suite here
 - Hardening suite covers [[systems/BlockShoot]] § Trust model and [[systems/SpellCastService]] § Trust model
+- Economy suite covers [[systems/EnergyEconomy]] § ledger
+- Multiplayer session tests cover [[systems/GameMode]] § SessionRegistry
 - NPC suites cover [[systems/NPC]]
 - [[systems/MemorizeAction]] — the invalid-word-clears-the-buffer behavior the Unit suite's `memorizeaction_tests` now asserts correctly
 - `wiki/design/refactor-plan-2026-09.md` Chunk 1 — the 2026-09-08 harness rewrite this page describes
