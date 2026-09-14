@@ -17,6 +17,7 @@ local NPCTypes = require(ReplicatedStorage.Shared.NPC.NPCTypes)
 
 local Perception = require(script.Parent.Perception)
 local StateMachine = require(script.Parent.StateMachine)
+local Actions = require(script.Parent.Actions)
 local PatrollerStates = require(script.Parent.States.PatrollerStates)
 
 type Blackboard = NPCTypes.Blackboard
@@ -221,8 +222,11 @@ function NPCController:destroy()
 		builder.cleanup(self._blackboard)
 	end
 
-	-- Let perception drop its throttle counter for this NPC
+	-- Let perception drop its throttle counter for this NPC, and Actions its
+	-- raycast params and any in-flight path request — both are keyed by the
+	-- blackboard, so leaving them behind pins the rig's whole model.
 	Perception.cleanup(self._blackboard)
+	Actions.cleanup(self._blackboard)
 
 	log:info("Destroyed controller for:", self._blackboard.npc and self._blackboard.npc.Name or "?")
 end

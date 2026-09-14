@@ -106,57 +106,148 @@ function Actions.MoveTo(bb: Blackboard, target: Vector3): ActionResult
 end
 
 -- ============================================================
+-- Path requests (asynchronous on purpose)
+-- ============================================================
+-- `PathfindingService:ComputeAsync` yields. Called straight from a state's
+-- update fn it parks the whole decision tick, and the next Heartbeat starts
+-- a second tick on a fresh thread while the first is still inside the
+-- compute. Two ticks then race over one blackboard, and a stale Patrol
+-- update issues `Humanoid:MoveTo` seconds after the machine entered Combat
+-- — the rig walks away from the player it is supposed to be shooting.
+-- So the compute runs on its own thread and the action reports Running
+-- until the result lands. Actions never yield their caller.
+local PathRequestStatus = {
+	Pending = "Pending",
+	Ready   = "Ready",
+	Failed  = "Failed",
+}
+
+type PathRequest = {
+	target: Vector3,
+	token: number,
+	status: string,
+	waypoints: { Vector3 }?,
+}
+
+-- Pathfinding agent envelope — the Patroller/Boss rigs are R15-sized.
+local AGENT_RADIUS = 2
+local AGENT_HEIGHT = 5
+-- A rig pathing somewhere unreachable retries every time its state re-runs.
+-- Warn at most this often per NPC so one stuck rig cannot flood the console
+-- (it used to bury whole test suites).
+local PATH_WARN_INTERVAL_SECONDS = 5
+
+local pathRequests: { [Blackboard]: PathRequest } = {}
+-- Monotonic per-NPC counter: a result whose token is stale lost the race to
+-- a newer request (or to the NPC being destroyed) and is dropped.
+local pathTokens: { [Blackboard]: number } = {}
+local pathWarnAt: { [Blackboard]: number } = {}
+
+local function warnThrottled(bb: Blackboard, ...: any)
+	local now = os.clock()
+	if now - (pathWarnAt[bb] or 0) < PATH_WARN_INTERVAL_SECONDS then
+		return
+	end
+	pathWarnAt[bb] = now
+	log:warn(...)
+end
+
+local function startPathRequest(bb: Blackboard, finalTarget: Vector3)
+	local token = (pathTokens[bb] or 0) + 1
+	pathTokens[bb] = token
+	pathRequests[bb] = {
+		target = finalTarget,
+		token = token,
+		status = PathRequestStatus.Pending,
+		waypoints = nil,
+	}
+
+	local origin = bb.humanoidRootPart.Position
+	task.spawn(function()
+		local path = PathfindingService:CreatePath({
+			AgentRadius = AGENT_RADIUS,
+			AgentHeight = AGENT_HEIGHT,
+			AgentCanJump = true,
+		})
+
+		local ok, err = pcall(function()
+			path:ComputeAsync(origin, finalTarget)
+		end)
+
+		-- Superseded while we were computing, or the NPC is gone.
+		local request = pathRequests[bb]
+		if not request or request.token ~= token then
+			return
+		end
+
+		if not ok then
+			warnThrottled(bb, "Path compute error:", err)
+			request.status = PathRequestStatus.Failed
+			return
+		end
+
+		if path.Status ~= Enum.PathStatus.Success then
+			warnThrottled(bb, "Path status:", tostring(path.Status), "for target", tostring(finalTarget))
+			request.status = PathRequestStatus.Failed
+			return
+		end
+
+		-- Convert PathWaypoint -> Vector3 list (we don't need the action enum)
+		local positions: { Vector3 } = {}
+		for _, wp in path:GetWaypoints() do
+			table.insert(positions, wp.Position)
+		end
+		if #positions == 0 then
+			request.status = PathRequestStatus.Failed
+			return
+		end
+
+		request.waypoints = positions
+		request.status = PathRequestStatus.Ready
+	end)
+end
+
+-- ============================================================
 -- MoveToWithPath: navigate to a position using PathfindingService
 -- Handles walls, terrain, and elevation changes via waypoints.
+-- Returns Running while a path is still being computed.
 -- ============================================================
 function Actions.MoveToWithPath(bb: Blackboard, finalTarget: Vector3): ActionResult
 	if not isAlive(bb) then
 		clearMoveState(bb)
+		pathRequests[bb] = nil
 		return NPCConstants.ActionResult.Failure
 	end
 
 	local hasPath = bb.currentPath ~= nil
 	local sameTarget = isSameTarget(bb.targetPos, finalTarget, NPCConstants.PATH_RECOMPUTE_DISTANCE)
 
-	-- Compute a new path if we don't have one or the target moved significantly
+	-- No usable path for this target: drive the request state machine.
 	if not (hasPath and sameTarget) then
-		local path = PathfindingService:CreatePath({
-			AgentRadius = 2,
-			AgentHeight = 5,
-			AgentCanJump = true,
-		})
+		local request = pathRequests[bb]
+		local requestMatches = request ~= nil
+			and isSameTarget(request.target, finalTarget, NPCConstants.PATH_RECOMPUTE_DISTANCE)
 
-		local ok, err = pcall(function()
-			path:ComputeAsync(bb.humanoidRootPart.Position, finalTarget)
-		end)
+		if not requestMatches then
+			startPathRequest(bb, finalTarget)
+			return NPCConstants.ActionResult.Running
+		end
 
-		if not ok then
-			log:warn("Path compute error:", err)
+		local pending = request :: PathRequest
+		if pending.status == PathRequestStatus.Pending then
+			return NPCConstants.ActionResult.Running
+		end
+
+		pathRequests[bb] = nil
+
+		if pending.status ~= PathRequestStatus.Ready or not pending.waypoints then
 			clearMoveState(bb)
 			return NPCConstants.ActionResult.Failure
 		end
 
-		if path.Status ~= Enum.PathStatus.Success then
-			log:warn("Path status:", tostring(path.Status), "for target", tostring(finalTarget))
-			clearMoveState(bb)
-			return NPCConstants.ActionResult.Failure
-		end
-
-		local waypoints = path:GetWaypoints()
-		if #waypoints == 0 then
-			clearMoveState(bb)
-			return NPCConstants.ActionResult.Failure
-		end
-
-		-- Convert PathWaypoint -> Vector3 list (we don't need the action enum)
-		local positions = {}
-		for _, wp in waypoints do
-			table.insert(positions, wp.Position)
-		end
-
-		bb.currentPath = positions
+		bb.currentPath = pending.waypoints
 		bb.currentWaypointIndex = 1
-		bb.targetPos = finalTarget
+		bb.targetPos = pending.target
 		bb.moveStartTime = os.clock()
 	end
 
@@ -200,6 +291,9 @@ function Actions.StopMoving(bb: Blackboard): ActionResult
 	-- Setting MoveTo to current position is the standard way to stop
 	bb.humanoid:MoveTo(bb.humanoidRootPart.Position)
 	clearMoveState(bb)
+	-- Drop any in-flight path too, or its result lands a tick later and
+	-- walks the rig off again after whoever called this asked it to stand.
+	pathRequests[bb] = nil
 	return NPCConstants.ActionResult.Success
 end
 
@@ -429,6 +523,9 @@ end
 -- Public: clear cached raycast params when an NPC is destroyed
 function Actions.cleanup(bb: Blackboard)
 	shootRaycastCache[bb] = nil
+	pathRequests[bb] = nil
+	pathTokens[bb] = nil
+	pathWarnAt[bb] = nil
 end
 
 return Actions

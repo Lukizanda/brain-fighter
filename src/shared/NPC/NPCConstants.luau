@@ -25,6 +25,12 @@ local NPCConstants = {
 	PATH_RECOMPUTE_DISTANCE = 4,      -- recompute path if target moved this far
 	WAYPOINT_REACHED_DISTANCE = 4,    -- studs from waypoint to consider arrived
 	MOVE_TIMEOUT_SECONDS = 8,         -- give up on a single MoveTo after this long
+	-- How far a patrol point may be from an NPC and still count as part of
+	-- its route. A route is local to where the rig lives: anything beyond
+	-- this sits in another part of the map (another arena, or the Test Area
+	-- while a harness fixture stands in the Lobby) and can only path-fail.
+	-- A rig with no local points holds its ground instead of walking off.
+	PATROL_ROUTE_MAX_RANGE = 200,     -- studs
 
 	-- ============================================================
 	-- Perception

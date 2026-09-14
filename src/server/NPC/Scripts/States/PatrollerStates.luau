@@ -49,11 +49,18 @@ local function getOrInitPatrolMemory(bb: Blackboard)
 		return mem
 	end
 
-	-- First-time setup for this NPC: read patrol point positions from WorldDataManager
+	-- First-time setup for this NPC: read patrol point positions from
+	-- WorldDataManager, keeping only the ones local to where this rig
+	-- stands (see NPCConstants.PATROL_ROUTE_MAX_RANGE). The snapshot is
+	-- world-wide; a rig that adopted all of it would spend its life
+	-- path-failing toward someone else's arena.
 	local snapshots = WorldDataManager.getPatrolPoints()
+	local npcPos = bb.humanoidRootPart.Position
 	local points: { PatrolPointData } = {}
 	for _, snapshot in snapshots do
-		table.insert(points, { name = snapshot.name, position = snapshot.position })
+		if (snapshot.position - npcPos).Magnitude <= NPCConstants.PATROL_ROUTE_MAX_RANGE then
+			table.insert(points, { name = snapshot.name, position = snapshot.position })
+		end
 	end
 
 	-- Sort by name for deterministic ordering (PatrolPoint_1, _2, _3, _4)
@@ -67,8 +74,8 @@ local function getOrInitPatrolMemory(bb: Blackboard)
 	}
 	patrolMemory[bb] = mem
 
-	log:info(string.format("%s: cached %d patrol points",
-		bb.npc.Name, #points))
+	log:info(string.format("%s: cached %d of %d patrol points within %d studs",
+		bb.npc.Name, #points, #snapshots, NPCConstants.PATROL_ROUTE_MAX_RANGE))
 
 	return mem
 end
