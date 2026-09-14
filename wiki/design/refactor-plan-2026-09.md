@@ -353,20 +353,31 @@ Divergences (2026-09-10):
 
 ## Chunk 10 — Presentation dedupe and layering
 
-Status: open
+Status: done — 2026-09-11 — <commit>
 Findings: F28, F29 (remaining), F33 (telegraph), F40, F45 (client controllers)
 Risk: M · Playtest: **yes** — freeze, burn, shield, charge orb each still render on a second client; boss windup disc renders · Depends on: chunk 7 · Blocked on: nothing
 
 Owns: new `src/shared/Vfx/CharacterAttributeWatcher.luau`, new `src/shared/Vfx/MotePath.luau`, `src/client/Vfx/{Freeze,Inferno,Shield,ChargeOrb}*Controller.client.luau`, `StatusVisuals/{ChargeOrbVfx,ShieldVfx}.luau` (inputs instead of registry reads), `CosmeticProjectile.luau:37-40`, `collectStream.luau:140-201`, `SkillVisuals.luau` (`spawnTelegraph`), `VfxBroadcast.luau` (telegraph kind), `BossStates.luau:176`, `client/BossWindupClient.client.luau` (delete), `BossWindupEvent` remote (delete).
 Must not touch: `VfxConfig` effect entries; server delivery logic.
 
-- [ ] Watcher extracted; four controllers become handler pairs with `disable()`/`destroy()`; decide and document whether Shield/Charge also watch tagged rigs.
-- [ ] `ChargeOrbVfx`/`ShieldVfx`/`CosmeticProjectile` take their gameplay inputs as parameters.
-- [ ] `MotePath` shared by `ChargeOrbVfx` and `collectStream`; jitter bands named.
-- [ ] `spawnTelegraph` replaces `BossWindupClient`.
+- [x] Watcher extracted (`CharacterAttributeWatcher`, with `enable()`/`disable()`/`destroy()`); the four controllers are handler pairs over it. **Decision: Freeze and Inferno watch tagged rigs; Shield and Charge watch players only** — the table is in [[systems/VisualEffects]] § "Who each status watches". Shield because the absorb pool is selfTarget-only and both shell tests scan players, so a bubble on a boss would deflect nothing; Charge because nothing writes the charge attributes on a rig and the boss windup now has `spawnTelegraph` (its old rationale for watching them).
+- [x] `ChargeOrbVfx` takes `ChargeInputs` (roster top tier + this colour's tier names) instead of requiring `SpellRegistry`; `ShieldVfx.update/start` take `diameterStuds`; `CosmeticProjectile` takes `drawAt` / `shellContactFor` / `rigWithin` — `WorldVfxController` wires all three, so the `Hittables` require moved to the caller rather than staying (the preferred resolution; the gate is clean).
+- [x] `MotePath` shared by `ChargeOrbVfx` and `collectStream`; jitter bands named (`BOW_*_FRACTION` in MotePath, `MOTE_RING_RADIUS_*_FRACTION` / `MOTE_SPAWN_RADIUS_*_FRACTION` at the callers).
+- [x] `spawnTelegraph` replaces `BossWindupClient`: `BossStates` → `SkillVisuals.spawnTelegraph` → `VfxBroadcast.telegraph` → `WorldVfxController`. Script and remote deleted; Rojo removed both Studio instances itself.
 
 Done when: the four status visuals and the telegraph render on a second client; `grep "require(.*Skills" src/shared/Vfx` returns only `SkillConstants`.
 Wiki: [[systems/VisualEffects]], [[systems/SkillPipeline]] (status visuals section).
+
+Divergences (2026-09-11):
+- **Two files outside `Owns:` changed, both forced by a signature change.** `SpellMenuGui.client.luau` builds `ChargeInputs` for the caster's own orb (3 lines + a comment; `ChargeOrbController` builds the same table for remote orbs), and `WorldVfxController.client.luau` gained the three seams `CosmeticProjectile` no longer reads for itself — `shieldedRoots` and the shell/proximity closures **moved** there from `CosmeticProjectile` rather than being duplicated. The brief named `WorldVfxController` as the expected home; `SpellMenuGui` is simply the other caller of `ChargeOrbVfx.start`. The ray-sphere maths stayed in `SkillBuffs.shellEntry`, shared with the authoritative block.
+- **`BossStates` lost its `BossEventsFolder` local too** (one line above the telegraph call) — the windup remote was its only user. The other three Boss remotes are reached directly by their own consumers.
+- **`Hittables.collect` is now called from a client script rather than a shared module**, which is where it already ran: `CosmeticProjectile` only ever executes on a client. Arena scoping and the per-arena frame cache are unchanged.
+- **The four controllers gained a `script.Destroying` teardown** calling `watcher:destroy()`. Rojo replaces these LocalScripts on every sync, and each replacement used to strand the previous copy's connections and leave its welded shards in the world.
+- **Verified, single client** (MCP playtest, lock `chunk-10`, one iteration): harness `all` **34/34**, `RunTests` cleared afterwards. Server wrote `_frozen`/`_burning`/`_shield=40` on the player; the **Client** datamodel then showed 15 `IceShard` welded to that rig, 16 Inferno instances inside it and 1 `SpellShieldBubble` — cleared to 0/0/0 with no strays anywhere in the world when the attributes were unset. Took the PvE pad (`PortalRequest(pad, "join")` — argument order is `(portal, action)`), boss spawned in `Default`, and the client rendered **both** telegraph styles off the new lane: `TelegraphChargeGlow` (3 → 5.4 studs in 0.35 s, opacity shimmering — the per-frame renderer is live) and `TelegraphAoeIndicator` at `0.25 × 44 × 44`, i.e. GroundSlam's 22-stud radius. A boss volley drew **11** `CosmeticProjectile` Parts on the client, so the three injected seams fly.
+- **Not verifiable single-client:** the charge orb. `ChargeOrbController` skips the local player by design and no longer watches rigs, so the only orb one client can draw for itself comes from `SpellMenuGui`'s press path. It is the first thing the two-client snippet checks.
+- The two-client check uses `nimbalyst-local/chunk10-client-visuals.lua` (gitignored): per-other-rig APPEAR/GONE counts for all four statuses plus telegraph receipts.
+- **Two-client check closed 2026-09-14** from the user's local-server paste (Player1 + Player2, both in Default). Each window saw the OTHER player's `chargeorb` APPEAR while a panel was held and GONE on release (blue and red), `shield` APPEAR on the other player (`_shield=40`), `burn` APPEAR/GONE on `Patroller_1` and on `Boss`, `freeze` APPEAR/GONE on `Patroller_1` and on `Boss`, and `TELEGRAPH TelegraphChargeGlow` appeared/gone on every boss windup in both windows. All five presentation lanes render on a second client.
+- **Harness on 2026-09-14 (parent, before commit):** full `all` run 33/34 and an NPC-only rerun 2/3, a different NPC test each time (`npc_deals_damage` "took no damage" then `combat_engages`), with the fixture rig flapping `Combat -> Idle -> Combat` mid-fight. Chunk 10 touches no NPC code (`Actions`/`Perception`/`StateMachine` unchanged; the tracer is still `laserBeamEffect`), every other suite was green both times, and the child's own run on 2026-09-11 was 34/34 — recorded as NPC-suite flakiness for chunk 11, not a chunk 10 regression.
 
 ---
 
@@ -388,6 +399,8 @@ Must not touch: `Hittables` (chunk 9); `applyDamage`.
 
 Done when: the playtest above; `src/shared/Weapon` is gone or contains only `Objects/`.
 Wiki: [[systems/Boss]], [[systems/NPC]], [[systems/Weapon]] (final REMOVED note).
+
+- Note (chunk 10 close-out, 2026-09-14): the NPC suite is flaky — in two consecutive harness runs a different NPC test failed each time (`npc_deals_damage` "Player took no damage", then `combat_engages`), with `Patroller_Fixture` logging `Combat -> Idle -> Combat` within a second and `Path status: NoPath` spam because the fixture rig stands in the Lobby while its cached patrol points are the arena's (243/273, 209, -129). When this chunk moves Perception/StateMachine/Actions, make the fixture rig's patrol points local (or give the fixture no patrol route) and look at the Combat→Idle transition condition; expect 34/34 twice in a row before closing.
 
 ---
 

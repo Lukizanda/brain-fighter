@@ -9,6 +9,8 @@
 --     the ground plane, with an optional cosmetic-effect overlay.
 --   spawnBarrier(footCFrame, opts)       — an anchored collidable slab
 --     that springs up out of the ground; the Stone Wall body.
+--   spawnTelegraph(style, rig, ...)      — the warning a rig draws while
+--     it winds an attack up: a pulsing ground disc or a swelling glow.
 --
 -- Lives next to SkillDelivery so handlers that need the same visual
 -- (aoe windup, projectile splash impact) share one source of truth
@@ -68,6 +70,64 @@ local SHOCKWAVE_Y_OFFSET        = -2
 -- Floor on how long a point-effect anchor lives. Covers the sound tail,
 -- which outlasts the particle burst for most entries.
 local POINT_ANCHOR_MIN_LIFETIME_SEC = 4
+
+----------------------------------------------------------------------
+-- Telegraph
+----------------------------------------------------------------------
+-- The windup warning, moved here from the deleted BossWindupClient and its
+-- private RemoteEvent (refactor chunk 10, audit F33). It was the last
+-- server-to-client effect with a lane of its own; it now describes itself
+-- through VfxBroadcast like every other cosmetic, and a client draws it.
+--
+-- Two styles, both keyed off how long the windup lasts, because the whole
+-- point of a telegraph is that it runs out when the attack lands:
+--
+--   aoe_indicator — a flat disc on the ground covering the danger zone,
+--                   pulsing faster as the window closes
+--   charge_glow   — a ball over the rig that swells as the attack builds,
+--                   for an attack with no ground footprint to show
+--
+-- Animated per frame rather than tweened: both accelerate, and no
+-- EasingStyle exposes "pulse faster toward the end" as a dial. Each runs on
+-- its own Heartbeat and drops it the moment its Part is gone, so a rig that
+-- dies mid-windup takes its warning with it.
+
+-- Fallback when the skill carries no radius — an `aoe_indicator` on a
+-- non-aoe delivery. Wide enough to read as a danger zone rather than as a
+-- decal on the boss's feet.
+local TELEGRAPH_DEFAULT_RADIUS_STUDS = 12
+
+-- Slack past the windup before Debris reclaims the Part, covering the frame
+-- the animation ends on.
+local TELEGRAPH_CLEANUP_GRACE_SEC = 0.1
+
+local TELEGRAPH_DISC_THICKNESS_STUDS = 0.25
+-- Sunk below the rig's root so the disc lies on the floor instead of
+-- cutting through its shins.
+local TELEGRAPH_DISC_Y_OFFSET = -2.5
+local TELEGRAPH_DISC_COLOR = Color3.fromRGB(255, 55, 0)
+local TELEGRAPH_DISC_TRANSPARENCY = 0.55
+
+-- The pulse: opacity swings by AMPLITUDE around BASE, at a frequency that
+-- climbs from START to START + GAIN across the window. Accelerating rather
+-- than steady is what reads as "now", and it is the cue a player dodges on.
+local TELEGRAPH_DISC_PULSE_BASE      = 0.45
+local TELEGRAPH_DISC_PULSE_AMPLITUDE = 0.3
+local TELEGRAPH_PULSE_FREQ_START     = 4
+local TELEGRAPH_PULSE_FREQ_GAIN      = 10
+
+local TELEGRAPH_GLOW_COLOR = Color3.fromRGB(255, 210, 0)
+local TELEGRAPH_GLOW_DIAMETER_MIN = 3
+local TELEGRAPH_GLOW_DIAMETER_MAX = 6
+local TELEGRAPH_GLOW_Y_OFFSET = 2
+-- Size wobble and opacity shimmer, both on their own clocks so the ball
+-- never looks like it is breathing on a metronome.
+local TELEGRAPH_GLOW_WOBBLE_STUDS    = 0.4
+local TELEGRAPH_GLOW_WOBBLE_FREQ     = 7
+local TELEGRAPH_GLOW_SHIMMER_BASE      = 0.25
+local TELEGRAPH_GLOW_SHIMMER_AMPLITUDE = 0.2
+local TELEGRAPH_GLOW_SHIMMER_FREQ      = 5
+local TELEGRAPH_GLOW_SPAWN_TRANSPARENCY = 0.35
 
 local BARRIER_DEFAULT_SIZE     = Vector3.new(16, 10, 2)
 local BARRIER_DEFAULT_COLOR    = Color3.fromRGB(120, 118, 110)
@@ -475,6 +535,152 @@ function SkillVisuals.spawnBarrier(footCFrame: CFrame, opts: BarrierOpts?): Base
 	end)
 
 	return barrier
+end
+
+----------------------------------------------------------------------
+-- Telegraph
+----------------------------------------------------------------------
+
+-- The rig's root, or nil if it has none — a rig can be destroyed between
+-- the server describing the telegraph and a client drawing it.
+local function telegraphRoot(rig: Model): BasePart?
+	local hrp = rig:FindFirstChild("HumanoidRootPart")
+	return if hrp and hrp:IsA("BasePart") then hrp :: BasePart else nil
+end
+
+local function renderAoeIndicator(rig: Model, durationSec: number, radiusStuds: number?)
+	local root = telegraphRoot(rig)
+	if not root then return end
+
+	local radius = radiusStuds or TELEGRAPH_DEFAULT_RADIUS_STUDS
+	local center = (root :: BasePart).Position
+
+	local disc = Instance.new("Part")
+	disc.Name         = "TelegraphAoeIndicator"
+	disc.Shape        = Enum.PartType.Cylinder
+	-- A Cylinder's length runs along its local X, so the diameter goes in Y
+	-- and Z and the rotation below lays it flat.
+	disc.Size         = Vector3.new(TELEGRAPH_DISC_THICKNESS_STUDS, radius * 2, radius * 2)
+	disc.CFrame       = CFrame.new(center.X, center.Y + TELEGRAPH_DISC_Y_OFFSET, center.Z)
+		* CFrame.Angles(0, 0, math.pi / 2)
+	-- Anchored and left where it was drawn: the danger zone is the ground
+	-- the attack will land on, not wherever the rig wanders to next.
+	disc.Anchored     = true
+	disc.CanCollide   = false
+	disc.CanQuery     = false
+	disc.CanTouch     = false
+	disc.CastShadow   = false
+	disc.Color        = TELEGRAPH_DISC_COLOR
+	disc.Material     = Enum.Material.Neon
+	disc.Transparency = TELEGRAPH_DISC_TRANSPARENCY
+	disc.Parent       = workspace
+	Debris:AddItem(disc, durationSec + TELEGRAPH_CLEANUP_GRACE_SEC)
+
+	local startTime = os.clock()
+	local conn: RBXScriptConnection? = nil
+	conn = RunService.Heartbeat:Connect(function()
+		if not disc.Parent then
+			if conn then conn:Disconnect() end
+			return
+		end
+		local elapsed = (os.clock() - startTime) / durationSec
+		if elapsed >= 1 then
+			if conn then conn:Disconnect() end
+			disc:Destroy()
+			return
+		end
+		local freq = TELEGRAPH_PULSE_FREQ_START + elapsed * TELEGRAPH_PULSE_FREQ_GAIN
+		disc.Transparency = TELEGRAPH_DISC_PULSE_BASE
+			+ TELEGRAPH_DISC_PULSE_AMPLITUDE * math.abs(math.sin(os.clock() * freq))
+	end)
+end
+
+local function renderChargeGlow(rig: Model, durationSec: number, _radiusStuds: number?)
+	local root = telegraphRoot(rig)
+	if not root then return end
+	local hrp = root :: BasePart
+
+	local glow = Instance.new("Part")
+	glow.Name         = "TelegraphChargeGlow"
+	glow.Shape        = Enum.PartType.Ball
+	glow.Size         = Vector3.one * TELEGRAPH_GLOW_DIAMETER_MIN
+	-- Anchored and CFrame-tracked rather than welded, unlike the charge orb
+	-- over a player's head: this one grows, and a weld would drag a Part
+	-- whose size is being rewritten every frame through the rig's assembly.
+	glow.Anchored     = true
+	glow.CanCollide   = false
+	glow.CanQuery     = false
+	glow.CanTouch     = false
+	glow.CastShadow   = false
+	glow.Material     = Enum.Material.Neon
+	glow.Color        = TELEGRAPH_GLOW_COLOR
+	glow.Transparency = TELEGRAPH_GLOW_SPAWN_TRANSPARENCY
+	glow.CFrame       = hrp.CFrame + Vector3.new(0, TELEGRAPH_GLOW_Y_OFFSET, 0)
+	glow.Parent       = workspace
+	Debris:AddItem(glow, durationSec + TELEGRAPH_CLEANUP_GRACE_SEC)
+
+	local growth = TELEGRAPH_GLOW_DIAMETER_MAX - TELEGRAPH_GLOW_DIAMETER_MIN
+	local startTime = os.clock()
+	local conn: RBXScriptConnection? = nil
+	conn = RunService.Heartbeat:Connect(function()
+		-- `hrp.Parent` as well as the glow's: the rig can be destroyed
+		-- mid-windup, and tracking a root that no longer exists leaves the
+		-- ball hanging in the air.
+		if not glow.Parent or not hrp.Parent then
+			if conn then conn:Disconnect() end
+			return
+		end
+		local elapsed = (os.clock() - startTime) / durationSec
+		if elapsed >= 1 then
+			if conn then conn:Disconnect() end
+			glow:Destroy()
+			return
+		end
+		glow.CFrame = hrp.CFrame + Vector3.new(0, TELEGRAPH_GLOW_Y_OFFSET, 0)
+		local diameter = TELEGRAPH_GLOW_DIAMETER_MIN
+			+ elapsed * growth
+			+ TELEGRAPH_GLOW_WOBBLE_STUDS * math.sin(os.clock() * TELEGRAPH_GLOW_WOBBLE_FREQ)
+		glow.Size         = Vector3.one * diameter
+		glow.Transparency = TELEGRAPH_GLOW_SHIMMER_BASE
+			+ TELEGRAPH_GLOW_SHIMMER_AMPLITUDE
+			* math.sin(os.clock() * TELEGRAPH_GLOW_SHIMMER_FREQ)
+	end)
+end
+
+type TelegraphRenderer = (rig: Model, durationSec: number, radiusStuds: number?) -> ()
+
+local TELEGRAPH_RENDERERS: { [string]: TelegraphRenderer } = {
+	aoe_indicator = renderAoeIndicator,
+	charge_glow   = renderChargeGlow,
+}
+
+-- The warning a rig shows while it winds an attack up.
+--
+-- `style` is the skill's `windupVfx`; an unknown one draws nothing rather
+-- than guessing, so a spec can name a style this build has not authored.
+-- `durationSec` is the whole window the player has to react in — for an aoe
+-- that is the rig's windup *plus* the delivery's own, which the caller adds
+-- up because only it knows the delivery. `radiusStuds` is the danger zone
+-- and is ignored by styles that don't draw one.
+--
+-- Routed like every other cosmetic here: described on the server, drawn on
+-- each client. The rig crosses the wire as an Instance, which is safe for
+-- exactly the reason `playOn` documents — a boss or NPC has existed for far
+-- longer than a frame.
+function SkillVisuals.spawnTelegraph(
+	style: string,
+	rig: Model,
+	durationSec: number,
+	radiusStuds: number?
+)
+	if RunService:IsServer() then
+		VfxBroadcast.telegraph(style, rig, durationSec, radiusStuds)
+		return
+	end
+
+	local render = TELEGRAPH_RENDERERS[style]
+	if not render then return end
+	render(rig, durationSec, radiusStuds)
 end
 
 return SkillVisuals

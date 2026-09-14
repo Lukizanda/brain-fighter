@@ -28,6 +28,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
 
 local Logger    = require(ReplicatedStorage.Shared.Core.Logger)
+local MotePath  = require(ReplicatedStorage.Shared.Vfx.MotePath)
 local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 
 local log = Logger.new("collectStream")
@@ -91,6 +92,11 @@ local MOTE_SIZE_STUDS = 0.45
 -- spawning at one point in its middle.
 local MOTE_SPAWN_RADIUS = 2.2
 
+-- Band that radius is jittered inside, so the motes fill the shell instead
+-- of sitting on its surface in a hollow sphere.
+local MOTE_SPAWN_RADIUS_MIN_FRACTION  = 0.4
+local MOTE_SPAWN_RADIUS_SPAN_FRACTION = 0.6
+
 -- Per-mote flight, as a fraction shaved off the ribbon's. The stagger is
 -- the single thing that most stops N identical parts reading as one rigid
 -- object.
@@ -123,22 +129,13 @@ local activeStreams = 0
 
 type Mote = {
 	part: BasePart,
-	control: Vector3,
-	origin: Vector3,
-	duration: number,
+	-- Shape of the flight: origin, bowed control point, and this mote's own
+	-- shortened duration. Shared with ChargeOrbVfx -- see MotePath.
+	path: MotePath.Path,
 	baseSize: number,
 }
 
 local CollectStream = {}
-
--- Quadratic Bézier. P2 is passed in per frame rather than baked, because
--- the collector is running — the same reason the payload carries a userId
--- instead of a position. A mote whose endpoint was fixed at spawn would
--- curve gracefully into empty ground.
-local function bezier(p0: Vector3, p1: Vector3, p2: Vector3, t: number): Vector3
-	local inv = 1 - t
-	return (p0 * (inv * inv)) + (p1 * (2 * inv * t)) + (p2 * (t * t))
-end
 
 -- How many motes this stream gets.
 --
@@ -157,18 +154,18 @@ local function moteCountFor(isLocalCollector: boolean): number
 	return math.floor(MOTE_COUNT_MAX - (MOTE_COUNT_MAX - MOTE_COUNT_MIN) * load + 0.5)
 end
 
--- A random point on a shell around the block, and a control point that
--- bows the path away from the straight line to the collector.
+-- A random point on a shell around the block, and the curved flight from
+-- there onto the collector. MotePath owns the curve (and the reason its
+-- endpoint is resolved per frame rather than baked at spawn: the collector
+-- is running, the same reason the payload carries a userId and not a
+-- position).
 local function buildMote(origin: Vector3, toward: Vector3, tint: Color3, parent: Instance): Mote
-	local dir = Vector3.new(
-		math.random() * 2 - 1,
-		math.random() * 2 - 1,
-		math.random() * 2 - 1
-	)
-	if dir.Magnitude < 0.01 then
-		dir = Vector3.yAxis
-	end
-	local spawnAt = origin + dir.Unit * (MOTE_SPAWN_RADIUS * (0.4 + math.random() * 0.6))
+	local spawnAt = origin
+		+ MotePath.randomDirection()
+		* (MOTE_SPAWN_RADIUS * MotePath.jitterFraction(
+			MOTE_SPAWN_RADIUS_MIN_FRACTION,
+			MOTE_SPAWN_RADIUS_SPAN_FRACTION
+		))
 
 	local part = Instance.new("Part")
 	part.Name         = "CollectMote"
@@ -184,22 +181,9 @@ local function buildMote(origin: Vector3, toward: Vector3, tint: Color3, parent:
 	part.Position     = spawnAt
 	part.Parent       = parent
 
-	-- Bow perpendicular to travel, in a random roll around that axis, so
-	-- the cloud spirals in instead of collapsing along one plane.
-	local travel = toward - spawnAt
-	local axis = if travel.Magnitude > 0.01 then travel.Unit else Vector3.yAxis
-	local perp = axis:Cross(Vector3.yAxis)
-	if perp.Magnitude < 0.01 then
-		perp = axis:Cross(Vector3.xAxis)
-	end
-	local roll = CFrame.fromAxisAngle(axis, math.random() * math.pi * 2)
-	local bow = (roll * perp.Unit) * (MOTE_CURVE_STUDS * (0.3 + math.random() * 0.7))
-
 	return {
 		part     = part,
-		origin   = spawnAt,
-		control  = spawnAt:Lerp(toward, 0.5) + bow,
-		duration = FLIGHT_SEC * (1 - math.random() * MOTE_FLIGHT_JITTER),
+		path     = MotePath.new(spawnAt, toward, MOTE_CURVE_STUDS, FLIGHT_SEC, MOTE_FLIGHT_JITTER),
 		baseSize = MOTE_SIZE_STUDS,
 	}
 end
@@ -356,10 +340,9 @@ function CollectStream.play(origin: Vector3, collectorUserId: number, color: Col
 			if part.Parent then
 				-- Per-mote clock, so the cloud lands staggered rather than
 				-- snapping out of existence together.
-				local mAlpha = math.min(elapsed / mote.duration, 1)
-				part.Position = bezier(mote.origin, mote.control, endPosition, mAlpha)
-				local scale = mote.baseSize * (1 - (1 - MOTE_END_SCALE) * mAlpha)
-				part.Size = Vector3.one * scale
+				local mAlpha = math.min(elapsed / mote.path.duration, 1)
+				part.Position = MotePath.positionAt(mote.path, endPosition, mAlpha)
+				part.Size = Vector3.one * MotePath.sizeAt(mote.baseSize, MOTE_END_SCALE, mAlpha)
 				if mAlpha >= 1 then
 					-- Arrived. Destroy on landing rather than at stream end,
 					-- so an early mote does not hang on the collector's chest

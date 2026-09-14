@@ -24,6 +24,8 @@
 --                                                    onto a moving player
 --   VfxBroadcast.projectile(payload)               — the seen copy of a
 --                                                    server-simulated shot
+--   VfxBroadcast.telegraph(style, rig, ...)        — a rig's windup
+--                                                    warning
 --
 -- Each takes an optional `drawnLocallyBy: number?` (a UserId): don't send
 -- this to that player, they already have it. Exactly one situation earns
@@ -281,6 +283,30 @@ function VfxBroadcast.projectile(payload: ProjectilePayload)
 		hasImpactCue     = payload.hasImpactCue,
 		source           = payload.source,
 		drawnLocallyBy   = payload.drawnLocallyBy,
+	})
+end
+
+-- The warning a rig draws while it winds an attack up — the boss's ground
+-- disc or swelling glow. See SkillVisuals.spawnTelegraph, which is the only
+-- caller and which owns both renderers.
+--
+-- `rig` crosses as an Instance, which is safe here for the same reason
+-- `playOn` documents: a boss or an NPC is long-lived, unlike a Part the
+-- server made this frame. It has to be the Instance rather than a position
+-- because `charge_glow` tracks the rig for the whole window.
+--
+-- No `drawnLocallyBy`: nothing predicts a telegraph. It is a warning *about*
+-- someone else's attack, so every client needs it, and the rig winding up is
+-- never a player.
+function VfxBroadcast.telegraph(style: string, rig: Model, durationSec: number, radiusStuds: number?)
+	local r = outbound("telegraph")
+	if not r then return end
+	r:FireAllClients({
+		kind        = "telegraph",
+		style       = style,
+		rig         = rig,
+		durationSec = durationSec,
+		radiusStuds = radiusStuds,
 	})
 end
 

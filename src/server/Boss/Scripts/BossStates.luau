@@ -30,8 +30,7 @@ local SkillDelivery    = require(ReplicatedStorage.Shared.Skills.SkillDelivery)
 local NPCTypes         = require(ReplicatedStorage.Shared.NPC.NPCTypes)
 local Logger           = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillTypes       = require(ReplicatedStorage.Shared.Skills.SkillTypes)
-
-local BossEventsFolder = ReplicatedStorage.Shared.Boss.BossEvents
+local SkillVisuals     = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 
 local Actions = require(ServerScriptService.Server.NPC.Scripts.Actions)
 
@@ -164,19 +163,20 @@ local AttackPrepState: StateDefinition = {
 			local skill: SkillTypes.SkillSpec? = bossbb.bossTypeSpec.skills[selectedAtk]
 			if skill then
 				if skill.windupVfx then
-					local windupEventInst = BossEventsFolder:FindFirstChild("BossWindupEvent")
-					if windupEventInst then
-						local totalDuration: number = bossbb.bossTypeSpec.attackWindupSec
-						local aoeRadius: number? = nil
-						if skill.delivery == "aoe" then
-							totalDuration = totalDuration + ((skill.deliveryParams.windupSec or 0) :: number)
-							aoeRadius = skill.deliveryParams.radius :: number
-						end
-						local windupEvent = windupEventInst :: RemoteEvent
-						windupEvent:FireAllClients(bossbb.npc, skill.windupVfx, totalDuration, aoeRadius)
-					else
-						log:warn("BossWindupEvent not in BossEvents — sync Rojo to enable windup VFX")
+					-- The whole window the player has to react in, which for an
+					-- aoe is this boss's windup plus the delivery's own: the
+					-- disc has to still be pulsing when the circle fires.
+					local totalDuration: number = bossbb.bossTypeSpec.attackWindupSec
+					local aoeRadius: number? = nil
+					if skill.delivery == "aoe" then
+						totalDuration = totalDuration + ((skill.deliveryParams.windupSec or 0) :: number)
+						aoeRadius = skill.deliveryParams.radius :: number
 					end
+					-- Described, not drawn: SkillVisuals broadcasts from the
+					-- server and every client renders its own (refactor chunk
+					-- 10 — this used to be a RemoteEvent of its own plus
+					-- BossWindupClient).
+					SkillVisuals.spawnTelegraph(skill.windupVfx, bossbb.npc, totalDuration, aoeRadius)
 				end
 
 				local track = bossbb.animations["windup_" .. selectedAtk]

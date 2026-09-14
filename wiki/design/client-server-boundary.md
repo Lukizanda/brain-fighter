@@ -1,7 +1,7 @@
 ---
 type: design
 description: Audit of which systems run gameplay code on both VMs, and the staged plan to replace the accidental client-side prediction in the Skills pipeline with an explicit authority / prediction / presentation split.
-updated: 2026-09-09
+updated: 2026-09-11
 ---
 
 # Client/Server Boundary
@@ -54,6 +54,8 @@ Evidence is from `require` graph traversal plus per-file guard inspection, not f
 | `Boss` | ❌ | ✅ only | ✅ yes | `server/Boss/*` |
 | `Vfx` (`VfxConfig`, `spawnEffect`, `StatusVisuals`) | ✅ draws | refuses | ✅ yes | `spawnEffect` refuses server-side by design |
 | `VfxBroadcastService` + `BroadcastSpellVfx` → `SpellVfxEvent` | fired by caster | relayed | ❌ **deleted 2026-09-08** | The client-trusted cosmetic relay the 2026-09 audit found (F6): the caster's client chose the impact target and effect ids, and it fired even when the server rejected the cast. Refactor chunk 7 (Q9(a)) deleted it outright. The authoritative run now raises the cast cue **and** the impact cues through `SkillVisuals` → `VfxBroadcast`, the cast cue with `drawnLocallyBy = ctx.predictedBy`; the caster's prediction layer draws the cast cue only and nothing at the target. `ProjectileVfxEvent` folded into `VfxBroadcast` as the `projectile` kind at the same time, so `WorldVfxEvent` is the one server→client lane. |
+
+| `BossWindupEvent` → `BossWindupClient` | ❌ | fired by boss AI | ❌ **deleted 2026-09-11** | A second server→client cosmetic lane of its own, with its own RemoteEvent and its own hand-built renderers, for one effect: the boss windup telegraph. Refactor chunk 10 folded it into `WorldVfxEvent` as the `telegraph` kind; `BossStates` now calls `SkillVisuals.spawnTelegraph`, which routes server→broadcast and client→draw like every other cosmetic primitive. `WorldVfxEvent` is again the one server→client VFX lane. |
 
 **Verdict: the duplication is confined to one chain — `CastAction → SpellExecutor → SkillDelivery → SkillEffects/SkillBuffs/SkillVisuals`.** Everything else the audit touched is either correctly server-only, correctly client-only, or a genuinely pure shared module. The suspected offenders (BlockShoot, the block-tap input path, BlockSpawner) all came back clean — BlockShoot in particular is the model the Skills chain should be measured against: shared code that reads and never writes.
 

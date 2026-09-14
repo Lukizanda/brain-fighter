@@ -19,13 +19,14 @@
 --
 -- Driven entirely by the `_shield` character attribute, from
 -- client/Vfx/ShieldVfxController. Nothing here reads or writes gameplay
--- state; SkillBuffs grants the pool and DamageModifierRegistry drains it.
+-- state — not even to size itself: SkillBuffs grants the pool,
+-- DamageModifierRegistry drains it, and the controller passes the shell
+-- diameter in.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService      = game:GetService("TweenService")
 
-local SkillBuffs  = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
 local VfxConfig   = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 local spawnEffect = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
@@ -37,10 +38,11 @@ local BREAK_EFFECT_ID = "shield_break"
 -- that lands on cast and the bubble it leaves behind are the same blue.
 local BUBBLE_COLOR = VfxConfig.COLORS.blue.glow
 
--- Geometry comes from SkillBuffs, not from this file: the sphere drawn
--- here is the same sphere SkillDelivery stops projectiles against, and a
--- local copy of the number would drift the moment one side was tuned.
-local BUBBLE_DIAMETER = SkillBuffs.SHELL_RADIUS_STUDS * 2
+-- Geometry is passed in, not read from here and not read from SkillBuffs
+-- either (refactor chunk 10): the sphere drawn here has to be the same
+-- sphere SkillDelivery stops projectiles against, and a local copy of that
+-- number would drift the moment one side was tuned. The caller owns the
+-- gameplay fact and hands it over — see `diameterStuds` on `update`.
 
 -- Opacity is the shield's health bar — the only readout the player gets
 -- for a pool that has no HUD element. A full shield is a solid shell, a
@@ -97,7 +99,10 @@ local ShieldVfx = {}
 
 -- Raise the bubble on `character`. No-op if one is already up — use
 -- `update` to re-tune an existing bubble to a new pool value.
-function ShieldVfx.start(character: Model, amount: number)
+--
+-- `diameterStuds` is the gameplay shell's diameter, supplied by the
+-- caller: this module draws the shield, it does not define it.
+function ShieldVfx.start(character: Model, amount: number, diameterStuds: number)
 	if _active[character] then return end
 
 	local root = resolveRoot(character)
@@ -136,7 +141,7 @@ function ShieldVfx.start(character: Model, amount: number)
 	TweenService:Create(
 		bubble,
 		TweenInfo.new(EXPAND_TIME, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-		{ Size = Vector3.new(BUBBLE_DIAMETER, BUBBLE_DIAMETER, BUBBLE_DIAMETER) }
+		{ Size = Vector3.new(diameterStuds, diameterStuds, diameterStuds) }
 	):Play()
 
 	_active[character] = { bubble = bubble, peak = amount, amount = amount }
@@ -144,10 +149,10 @@ end
 
 -- Re-tune an existing bubble to a new pool value: thinner as the pool
 -- drains, with a flare on any decrease. Raises the bubble if none is up.
-function ShieldVfx.update(character: Model, amount: number)
+function ShieldVfx.update(character: Model, amount: number, diameterStuds: number)
 	local entry = _active[character]
 	if not entry then
-		ShieldVfx.start(character, amount)
+		ShieldVfx.start(character, amount, diameterStuds)
 		return
 	end
 	if not entry.bubble.Parent then return end

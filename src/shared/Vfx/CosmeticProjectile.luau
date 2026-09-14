@@ -26,18 +26,19 @@
 -- Divergence is bounded and harmless by construction: if the client and
 -- server disagree about a block, the client loses a cosmetic and the
 -- server still decides who took damage.
+--
+-- Everything gameplay-shaped arrives as a function on LaunchParams rather
+-- than being read from the Skills layer here (refactor chunk 10): what a
+-- shield shell is, which rigs count as targets, and how an effect id
+-- becomes a burst. This module knows only geometry and Parts, which is
+-- what lets the Vfx layer stay independent of the Skills layer instead of
+-- the two requiring each other. `WorldVfxController` wires all three.
 ----------------------------------------------------------------------
 
 local Debris            = game:GetService("Debris")
-local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
 
-local HealthConstants = require(ReplicatedStorage.Shared.Health.HealthConstants)
-local SkillBuffs      = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
-local Arena           = require(ReplicatedStorage.Shared.GameMode.Arena)
-local Hittables       = require(ReplicatedStorage.Shared.Skills.Hittables)
-local SkillVisuals    = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 local VfxConfig       = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 local spawnEffect     = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
@@ -125,47 +126,29 @@ export type LaunchParams = {
 	-- test: the muzzle sits inside its own body, and without this every
 	-- shot would die on the shooter.
 	source: Instance?,
+
+	-- Plays a VfxConfig effect at a world point. Injected rather than
+	-- required, because the module that owns that routing (SkillVisuals)
+	-- sits in the Skills layer and this one must not depend on it. The
+	-- launcher is already on a client, so this is always the local draw.
+	drawAt: (position: Vector3, effectId: string) -> (),
+
+	-- Where this step first meets a shield shell, or nil if it doesn't.
+	-- Whose shells they are, how big they are, and the ray-sphere maths are
+	-- all the launcher's business — the shell this shot must die on is the
+	-- same sphere the *server* stops the authoritative shot against, so the
+	-- one copy of that test lives on the gameplay side of the seam. Nil
+	-- means "nothing in this game blocks" and the shot ignores shields.
+	shellContactFor: ((from: Vector3, step: Vector3, padding: number) -> Vector3?)?,
+
+	-- Is there a rig within `radius` of this point that this shot should
+	-- detonate on? Mirrors the server's proximity rule, using the launcher's
+	-- arena-scoped target list with the shooter already excluded. Only
+	-- consulted when `proximityRadius` is set.
+	rigWithin: ((point: Vector3, radius: number) -> boolean)?,
 }
 
 local CosmeticProjectile = {}
-
--- Every player currently carrying a live absorb pool. Players only,
--- deliberately: shields come from selfTarget spells, so no NPC or boss
--- can hold one today. If that changes, this and SkillDelivery's
--- `collectHittables` need to change together or the visual will stop
--- matching the block.
-local function shieldedRoots(source: Instance?): { BasePart }
-	local roots: { BasePart } = {}
-	for _, player in Players:GetPlayers() do
-		local character = player.Character
-		if not character or character == source then continue end
-		local pool = character:GetAttribute(HealthConstants.SHIELD_ATTRIBUTE)
-		if typeof(pool) ~= "number" or (pool :: number) <= 0 then continue end
-		local hrp = character:FindFirstChild("HumanoidRootPart")
-		if hrp and hrp:IsA("BasePart") then
-			table.insert(roots, hrp :: BasePart)
-		end
-	end
-	return roots
-end
-
--- Every live rig a shot can terminate on, scoped to the shooter's arena.
--- Was a hand-kept mirror of SkillDelivery's list, with a comment noting
--- the two had to agree or this copy would stop on rigs the authoritative
--- shot flies past. Both now read Hittables, so the proximity rule below
--- measures against exactly the set the server does. The caster is
--- filtered at the call site, exactly as the server does it.
---
--- This runs on a client, so the candidate players are everyone on the
--- server and Hittables keeps only those whose ArenaId matches the
--- shooter's. It frame-caches per arena for the reason SkillDelivery's copy
--- did: a Brain volley puts 30 cosmetics in the air at once.
-type Rig = Hittables.Hittable
-
-local function collectRigs(source: Instance?): { Rig }
-	local arenaId = Hittables.arenaOfSource(source) or Arena.DEFAULT_ID
-	return Hittables.collect(Players:GetPlayers(), arenaId)
-end
 
 -- The rig this ray stopped on, or nil for a wall or prop. Returns the Model
 -- that actually carries the Humanoid rather than the nearest Model ancestor
@@ -363,7 +346,7 @@ function CosmeticProjectile.launch(params: LaunchParams)
 	-- tie the sound's life to the shot's: a Sound is a *child* of its anchor,
 	-- so destroying the shot on impact destroys the sound mid-play.
 	if params.launchEffectId then
-		SkillVisuals.spawnEffectAtPoint(params.origin, params.launchEffectId)
+		params.drawAt(params.origin, params.launchEffectId)
 	end
 
 	if params.cosmeticEffectId then
@@ -395,6 +378,9 @@ function CosmeticProjectile.launch(params: LaunchParams)
 	local hasImpactCue: boolean = params.hasImpactCue == true
 	local proximityRadius: number = params.proximityRadius or 0
 	local consumeOnHit: boolean = params.consumeOnHit ~= false
+	-- Hoisted for the same narrowing reason as destroyEffectId above.
+	local shellContactFor = params.shellContactFor
+	local rigWithin = params.rigWithin
 	-- Mirrors SkillDelivery's `pierced` set, for the same reason: without it
 	-- a rig inside proximityRadius would be re-tested every frame the shot
 	-- overlaps it, and the shot would never get past its own filter update.
@@ -412,7 +398,7 @@ function CosmeticProjectile.launch(params: LaunchParams)
 			conn:Disconnect()
 			-- Spent in mid-air. Nothing else ever announces this one.
 			if destroyEffectId then
-				SkillVisuals.spawnEffectAtPoint(pos, destroyEffectId)
+				params.drawAt(pos, destroyEffectId)
 			end
 			retire()
 			return
@@ -432,21 +418,18 @@ function CosmeticProjectile.launch(params: LaunchParams)
 		-- math.huge, "nearest shell is no further than nearest wall" is
 		-- true when there is neither, and every shot deletes itself on
 		-- its first frame.
-		local shellContact: Vector3? = nil
-		local shellDist = math.huge
-		for _, root in shieldedRoots(params.source) do
-			local entry = SkillBuffs.shellEntry(pos, step, root.Position, shellPadding)
-			if entry and entry < shellDist then
-				shellDist    = entry
-				shellContact = pos + direction * entry
-			end
-		end
+		local shellContact: Vector3? = if shellContactFor
+			then shellContactFor(pos, step, shellPadding)
+			else nil
+		local shellDist = if shellContact
+			then ((shellContact :: Vector3) - pos).Magnitude
+			else math.huge
 
 		if shellContact and shellDist <= rayDist then
 			conn:Disconnect()
 			-- The spark is the whole point of predicting locally: it lands
 			-- on the bubble, on the frame the shot reaches it.
-			SkillVisuals.spawnEffectAtPoint(shellContact, SHIELD_BLOCK_EFFECT_ID)
+			params.drawAt(shellContact, SHIELD_BLOCK_EFFECT_ID)
 			retire()
 			return
 		end
@@ -469,7 +452,7 @@ function CosmeticProjectile.launch(params: LaunchParams)
 				-- a rig the server is already playing an impact burst on, so a
 				-- hit body doesn't get both cues while a wall still thuds.
 				if destroyEffectId and not (hasImpactCue and struckRig) then
-					SkillVisuals.spawnEffectAtPoint(rayHit.Position, destroyEffectId)
+					params.drawAt(rayHit.Position, destroyEffectId)
 				end
 				retire()
 				return
@@ -488,14 +471,11 @@ function CosmeticProjectile.launch(params: LaunchParams)
 		-- No effect is played: the server owns the impact burst for a rig
 		-- hit, and the shot reaching a body is the one death that is already
 		-- announced.
-		if proximityRadius > 0 and consumeOnHit then
-			for _, rig in collectRigs(params.source) do
-				if rig.model == params.source then continue end
-				if (rig.hrp.Position - pos).Magnitude <= proximityRadius then
-					conn:Disconnect()
-					retire()
-					return
-				end
+		if proximityRadius > 0 and consumeOnHit and rigWithin then
+			if rigWithin(pos, proximityRadius) then
+				conn:Disconnect()
+				retire()
+				return
 			end
 		end
 	end)

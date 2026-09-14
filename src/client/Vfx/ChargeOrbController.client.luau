@@ -3,56 +3,63 @@
 ----------------------------------------------------------------------
 -- ChargeOrbController
 ----------------------------------------------------------------------
--- Raises and drops the ChargeOrbVfx orb on every *other* character in
--- sight, driven purely by the `_chargeColor` / `_chargeTier` attributes.
+-- Raises and drops the ChargeOrbVfx orb on every *other* player, driven
+-- purely by the `_chargeColor` / `_chargeTier` attributes. The binding is
+-- CharacterAttributeWatcher's — see its header for why a replicated
+-- attribute is what makes "everyone sees your windup" nearly free. The orb
+-- is only worth building because everyone *does* see it: it is the PvP
+-- tell.
 --
--- Sibling of ShieldVfxController, and the same argument for being
--- attribute-driven: the character Model is server-owned, so a server
--- write replicates to every client with no fan-out RemoteEvent, and a
--- late joiner sees an already-charging player because the values are
--- simply there when they arrive. That is what makes "everyone sees your
--- windup" nearly free, and the orb is only worth building because
--- everyone *does* see it — it is the PvP tell.
+-- **The local player is deliberately skipped** (`includeLocalPlayer =
+-- false`). SpellMenuGui drives ChargeOrbVfx directly off the same gesture
+-- that fires the remote, so the caster's own orb appears on the press frame
+-- with zero RTT. Drawing it here as well would fight that: two writers for
+-- one orb, and the replicated one arrives a round trip late and stepped
+-- rather than smooth.
 --
--- **The local player is deliberately skipped.** SpellMenuGui drives
--- ChargeOrbVfx directly off the same gesture that fires the remote, so
--- the caster's own orb appears on the press frame with zero RTT. Drawing
--- it here as well would fight that: two writers for one orb, and the
--- replicated one arrives a round trip late and stepped rather than
--- smooth.
+-- **Players only, no tagged rigs** (refactor chunk 10's open question).
+-- The previous version watched every damageable rig on the theory that a
+-- boss windup could reuse this lane. It now has its own —
+-- `SkillVisuals.spawnTelegraph`, which this chunk added — and nothing
+-- writes the charge attributes on a boss or an NPC (ChargeStateService
+-- writes them for players, SpellMenuGui locally for the caster). Watching
+-- rigs was binding connections to rigs that could never light up, and if a
+-- boss ever does charge a spell the telegraph is the lane that should show
+-- it, because its duration is known server-side.
 --
--- Boss and NPC rigs are watched too (via SkillConstants.DAMAGEABLE_TAGS),
--- so a future boss windup can reuse this lane instead of
--- BossWindupClient's bespoke per-frame glow. Nothing writes those
--- attributes on a boss today; the watcher costs nothing until something
--- does.
+-- The gameplay facts the orb needs — the roster's top tier and this
+-- colour's spell names — are read here and passed in. ChargeOrbVfx no
+-- longer queries SpellRegistry itself.
 ----------------------------------------------------------------------
 
-local CollectionService = game:GetService("CollectionService")
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CharacterAttributeWatcher = require(ReplicatedStorage.Shared.Vfx.CharacterAttributeWatcher)
+local ChargeOrbVfx   = require(ReplicatedStorage.Shared.Vfx.StatusVisuals.ChargeOrbVfx)
 local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
-local ChargeOrbVfx   = require(ReplicatedStorage.Shared.Vfx.StatusVisuals.ChargeOrbVfx)
+local SpellRegistry  = require(ReplicatedStorage.Shared.SpellRegistry)
 
 local log = Logger.new("ChargeOrbController")
 
 local COLOR_ATTR = SkillConstants.CHARGE_COLOR_ATTR
 local TIER_ATTR  = SkillConstants.CHARGE_TIER_ATTR
 
-local localPlayer = Players.LocalPlayer
+-- A remote observer learns about discrete tier crossings only, so there is
+-- no progress to animate between them: inventing one would be animating a
+-- number nobody sent. The caster's own orb (SpellMenuGui) feeds a live
+-- alpha off the builder's hold clock instead.
+local OBSERVED_TIER_ALPHA = 0
 
--- One entry per character being watched, holding its connections and the
--- last colour we raised an orb for. The cached colour is the edge flag:
--- a tier write while the colour is unchanged must re-tune the existing
--- orb, not tear it down and build another.
-type Watch = {
-	connections: { RBXScriptConnection },
-	color: string?,
-}
+-- `atCeiling` is the caster's own affordability state and does not cross
+-- the wire; an observer never strains the orb.
+local OBSERVED_AT_CEILING = false
 
-local _watched: { [Model]: Watch } = {}
+-- The last colour an orb was raised for, per character. The edge flag: a
+-- tier write while the colour is unchanged must re-tune the existing orb,
+-- not tear it down and build another.
+local _orbColor: { [Model]: string } = {}
 
 local function readColor(character: Model): string?
 	local value = character:GetAttribute(COLOR_ATTR)
@@ -64,122 +71,93 @@ local function readTier(character: Model): number
 	return if typeof(value) == "number" then value :: number else 0
 end
 
-local function unwatch(character: Model)
-	local entry = _watched[character]
-	if entry then
-		_watched[character] = nil
-		for _, conn in entry.connections do
-			conn:Disconnect()
+-- The roster facts ChargeOrbVfx draws from. `pcall`ed because the colour
+-- arrives off a replicated attribute: the server only ever writes one of
+-- the three school names, but a surprise value should cost this orb its
+-- name label rather than throw inside a signal handler.
+--
+-- SpellMenuGui builds the same table for the caster's own orb, from the
+-- same two registry calls.
+local function chargeInputsFor(color: string): ChargeOrbVfx.ChargeInputs
+	local tierNames: { string } = {}
+	local ok, count = pcall(SpellRegistry.tierCount, color :: any)
+	if ok and typeof(count) == "number" then
+		for tier = 1, count :: number do
+			tierNames[tier] = SpellRegistry.getSpell(color :: any, tier).name
 		end
+	else
+		log:warnThrottled("bad_color", 5, string.format("no spells for charge colour %q", color))
 	end
-	ChargeOrbVfx.stop(character)
+	return { topTier = SpellRegistry.NUM_TIERS, tierNames = tierNames }
 end
 
-local function watch(character: Model)
-	if _watched[character] then return end
-	-- The local player owns their own orb. See the header.
-	if localPlayer and localPlayer.Character == character then return end
+local watcher = CharacterAttributeWatcher.new({
+	label              = "ChargeOrbController",
+	attributes         = { COLOR_ATTR, TIER_ATTR },
+	includeTaggedRigs  = false,
+	includeLocalPlayer = false,
 
-	local entry: Watch = { connections = {}, color = nil }
-	_watched[character] = entry
+	handlers = {
+		onRefresh = function(character: Model, _humanoid: Humanoid, _initial: boolean)
+			local color = readColor(character)
 
-	local function refresh()
-		local color = readColor(character)
+			if not color then
+				-- The charge ended. Which *way* it ended is carried by the tier
+				-- the server left behind on the same frame it cleared the
+				-- colour: a positive tier is a cast going out and gets the
+				-- release flash, zero is a cancel and collapses quietly.
+				-- Reading it after the colour has gone is safe because
+				-- ChargeStateService writes the tier first (see its `finish`).
+				if _orbColor[character] then
+					_orbColor[character] = nil
+					local tier = readTier(character)
+					if tier > 0 then
+						ChargeOrbVfx.release(character, tier)
+					else
+						ChargeOrbVfx.stop(character)
+					end
+				end
+				return
+			end
 
-		if not color then
-			-- The charge ended. Which *way* it ended is carried by the tier
-			-- the server left behind on the same frame it cleared the colour:
-			-- a positive tier is a cast going out and gets the release flash,
-			-- zero is a cancel and collapses quietly. Reading it after the
-			-- colour has gone is safe because ChargeStateService writes the
-			-- tier first (see its `finish`).
-			if entry.color then
-				entry.color = nil
-				if readTier(character) > 0 then
-					ChargeOrbVfx.release(character, readTier(character))
-				else
+			if _orbColor[character] ~= color then
+				-- A colour change mid-charge is not legal today (the builder
+				-- allows one press at a time), but tearing down and rebuilding
+				-- is the honest response if one ever arrives.
+				if _orbColor[character] then
 					ChargeOrbVfx.stop(character)
 				end
+				_orbColor[character] = color
+				ChargeOrbVfx.start(character, color, chargeInputsFor(color))
 			end
-			return
-		end
 
-		if entry.color ~= color then
-			-- A colour change mid-charge is not legal today (the builder
-			-- allows one press at a time), but tearing down and rebuilding is
-			-- the honest response if one ever arrives.
-			if entry.color then
-				ChargeOrbVfx.stop(character)
-			end
-			entry.color = color
-			ChargeOrbVfx.start(character, color)
-		end
+			ChargeOrbVfx.setTier(character, readTier(character), OBSERVED_TIER_ALPHA, OBSERVED_AT_CEILING)
+		end,
 
-		-- alpha stays 0 for a remote observer: this VM only ever learns about
-		-- discrete tier crossings, and inventing progress between them would
-		-- be an animation of a number nobody sent.
-		ChargeOrbVfx.setTier(character, readTier(character), 0, false)
-	end
-
-	table.insert(entry.connections, character:GetAttributeChangedSignal(COLOR_ATTR):Connect(refresh))
-	table.insert(entry.connections, character:GetAttributeChangedSignal(TIER_ATTR):Connect(refresh))
-
-	-- Cosmetic-only, so the orb can outlive its holder in ways the
-	-- attributes cannot: a character destroyed outright never fires an
-	-- attribute change. Both exits are covered.
-	table.insert(entry.connections, character.AncestryChanged:Connect(function()
-		if not character:IsDescendantOf(workspace) then
-			unwatch(character)
-		end
-	end))
-
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if humanoid then
-		table.insert(entry.connections, humanoid.Died:Connect(function()
+		-- Cosmetic-only, so the orb can outlive its holder in ways the
+		-- attributes cannot: a character destroyed outright never fires an
+		-- attribute change.
+		onDetach = function(character: Model, _humanoid: Humanoid)
+			_orbColor[character] = nil
 			ChargeOrbVfx.stop(character)
-		end))
-	end
+		end,
 
-	-- A late joiner's first sight of an already-charging player arrives as
-	-- an initial attribute value, not as a change signal.
-	refresh()
-end
+		onDied = function(character: Model, _humanoid: Humanoid)
+			_orbColor[character] = nil
+			ChargeOrbVfx.stop(character)
+		end,
+	},
+})
 
-local function bindPlayer(player: Player)
-	if player == localPlayer then return end
-	player.CharacterAdded:Connect(watch)
-	player.CharacterRemoving:Connect(unwatch)
-	if player.Character then
-		watch(player.Character)
-	end
-end
+watcher:enable()
 
-for _, player in Players:GetPlayers() do
-	bindPlayer(player)
-end
-Players.PlayerAdded:Connect(bindPlayer)
-Players.PlayerRemoving:Connect(function(player: Player)
-	if player.Character then
-		unwatch(player.Character)
-	end
+-- Rojo replaces this script on every sync; see FreezeVfxController.
+script.Destroying:Connect(function()
+	watcher:destroy()
+	table.clear(_orbColor)
 end)
 
-for _, tag in SkillConstants.DAMAGEABLE_TAGS do
-	for _, instance in CollectionService:GetTagged(tag) do
-		if instance:IsA("Model") then
-			watch(instance :: Model)
-		end
-	end
-	CollectionService:GetInstanceAddedSignal(tag):Connect(function(instance: Instance)
-		if instance:IsA("Model") then
-			watch(instance :: Model)
-		end
-	end)
-	CollectionService:GetInstanceRemovedSignal(tag):Connect(function(instance: Instance)
-		if instance:IsA("Model") then
-			unwatch(instance :: Model)
-		end
-	end)
-end
-
-log:info("ready")
+log:info(string.format("ready — watching %d character(s), local player excluded (%s)",
+	watcher:watchedCount(),
+	tostring(Players.LocalPlayer and Players.LocalPlayer.Name)
+))

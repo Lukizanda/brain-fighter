@@ -1,7 +1,7 @@
 ---
 type: system
 description: Phase 5.8 — hold-to-charge tier selection. Press a colour panel and the charge climbs through the tiers you can afford; release fires what you reached. Mana is reserved, never drained, until release, so cancelling is free. The panels are circles that fill from the centre with concentric tier rings, and a character orb makes the windup a PvP tell.
-updated: 2026-08-12
+updated: 2026-09-11
 ---
 
 # ChargeCast
@@ -145,13 +145,13 @@ client (charging) ──ChargeState remote──► ChargeStateService ──Set
 
 **Attribute write order on `end` is load-bearing.** `ChargeStateService` writes the final tier *first*, then clears the colour. `ChargeOrbController` reads the tier on the frame the colour clears to choose between the release flash (tier > 0, the spell went out) and a quiet collapse (tier 0, a cancel). Clearing the colour first would make every cast look like a cancel. A residual `_chargeTier` number stays on the character after a charge ends; it is meaningless while `_chargeColor` is nil and the next `start` overwrites it.
 
-`ChargeOrbController` also watches `SkillConstants.DAMAGEABLE_TAGS`, so a future boss windup can reuse this lane instead of `BossWindupClient`'s bespoke per-frame glow. Nothing writes those attributes on a boss today.
+`ChargeOrbController` watches **player characters only** since refactor chunk 10 (2026-09-11). It used to bind every `SkillConstants.DAMAGEABLE_TAGS` rig on the theory that a boss windup could reuse this lane; the boss windup now has its own (`SkillVisuals.spawnTelegraph`, a `telegraph` payload on `WorldVfxEvent`), and nothing writes the charge attributes on a rig, so the extra connections could never light up.
 
 ## The name label
 
 A `BillboardGui` over the orb naming the spell **this release would fire right now** — `Firebolt`, then `Fireball`, then `Volley` as the charge climbs. It pops in from zero scale on every crossing (`Back, Out`, which is the spring) and dissipates upward on release.
 
-This is where the spell name went when the panels became circles. Putting it on the orb rather than back on the HUD does two things the panel could not: it lands where the player is already looking mid-charge instead of in the corner they are pressing, and **an opponent reads it too**. That second one is free — `ChargeOrbVfx.setTier` resolves the name from the entry's own colour, and `ChargeOrbController` already drives `setTier` off the replicated attributes, so the remote path needed no new wiring at all.
+This is where the spell name went when the panels became circles. Putting it on the orb rather than back on the HUD does two things the panel could not: it lands where the player is already looking mid-charge instead of in the corner they are pressing, and **an opponent reads it too**. That second one is free — the name for each tier of the charging colour is handed to `ChargeOrbVfx.start` as part of `ChargeInputs` (chunk 10; it used to query `SpellRegistry` from inside the visual), and `ChargeOrbController` already drives `setTier` off the replicated attributes, so the remote path needed no new wiring at all.
 
 Four decisions worth keeping:
 

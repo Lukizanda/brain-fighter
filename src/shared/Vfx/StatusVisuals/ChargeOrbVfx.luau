@@ -48,8 +48,28 @@ local RunService        = game:GetService("RunService")
 local TweenService      = game:GetService("TweenService")
 
 local Logger        = require(ReplicatedStorage.Shared.Core.Logger)
-local SpellRegistry = require(ReplicatedStorage.Shared.SpellRegistry)
+local MotePath      = require(ReplicatedStorage.Shared.Vfx.MotePath)
 local VfxConfig     = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
+
+-- The gameplay facts this visual needs, handed over by whoever raises the
+-- orb (refactor chunk 10). Both used to be read straight out of
+-- SpellRegistry from in here, which put a presentation module in the
+-- business of querying the spell roster.
+--
+--   topTier   the *roster's* highest tier, not this colour's. The orb is
+--             scaled against it so a green T3 -- that school's maximum --
+--             is visibly smaller than a red T4: what an opponent needs to
+--             read off the orb is how much is coming, not how close the
+--             caster is to their own ceiling.
+--   tierNames the spell each tier of this colour would fire, indexed by
+--             tier. Shorter than `topTier` for a colour that tops out
+--             early, and a missing entry simply draws no label -- which is
+--             the behaviour the old `getSpell` guard existed to produce,
+--             now expressed by the data instead of by a pcall.
+export type ChargeInputs = {
+	topTier: number,
+	tierNames: { string },
+}
 
 local log = Logger.new("ChargeOrbVfx")
 
@@ -69,11 +89,11 @@ local VfxTemplates: Instance? = ReplicatedStorage:WaitForChild("VfxTemplates", 1
 local ORB_HEIGHT_STUDS = 2.6
 
 -- Diameter at T1 and at the top tier. The grow-with-charge shape (and the
--- sine wobble below) is lifted from BossWindupClient's `charge_glow`,
--- which is the look this promotes into a reusable module — a player
--- winding up should read as the same class of event as the boss doing it.
+-- sine wobble below) is the same look as the boss telegraph's
+-- `charge_glow` (SkillVisuals.spawnTelegraph) — a player winding up should
+-- read as the same class of event as the boss doing it.
 --
--- Scaled down from that script's 3→6 studs, because the boss's glow sits
+-- Scaled down from that glow's 3→6 studs, because the boss's glow sits
 -- on a rig several times a player's size and a 6-stud ball over an R15
 -- head is a beach ball that hides the player behind it.
 local ORB_DIAMETER_MIN = 1.4
@@ -121,6 +141,12 @@ local RELEASE_TIME = 0.16
 -- motes spawning next to their destination convey nothing.
 local MOTE_RING_RADIUS_STUDS = 7
 local MOTE_RING_DROP_STUDS = 3.5
+
+-- Band the ring radius is jittered inside, so motes are born on a rough
+-- annulus rather than on one exact circle -- a perfect ring reads as a
+-- spawn pattern instead of as mana in the air.
+local MOTE_RING_RADIUS_MIN_FRACTION  = 0.7
+local MOTE_RING_RADIUS_SPAN_FRACTION = 0.5
 
 local MOTE_SIZE_STUDS = 0.4
 local MOTE_END_SCALE = 0.2
@@ -198,10 +224,10 @@ local _liveMoteEmitters = 0
 
 type Mote = {
 	part: BasePart,
-	origin: Vector3,
-	control: Vector3,
+	-- Shape of the flight: origin, bowed control point, and this mote's own
+	-- shortened duration. Shared with collectStream -- see MotePath.
+	path: MotePath.Path,
 	elapsed: number,
-	duration: number,
 }
 
 type Entry = {
@@ -211,6 +237,8 @@ type Entry = {
 	haloBaseRate: number,
 	color: string,
 	tint: Color3,
+	topTier: number,
+	tierNames: { string },
 	tier: number,
 	-- 0–1 progress toward the next tier. The casting client feeds this live
 	-- off its own clock; a remote observer leaves it at 0 and lets the tier
@@ -248,12 +276,11 @@ end
 -- press has landed but the charge has not reached T1 yet, which draws the
 -- smallest orb there is rather than nothing — the player pressed, and the
 -- press should be visible.
-local function diameterFor(tier: number, alpha: number): number
-	-- Scaled against the roster's top tier rather than the colour's, so a
-	-- green T3 (that school's maximum) is visibly smaller than a red T4. The
-	-- orb is a PvP tell: what an opponent needs to read off it is how much
-	-- is coming, not how close to their own ceiling the caster is.
-	local topTier = math.max(SpellRegistry.NUM_TIERS, 2)
+local function diameterFor(rosterTopTier: number, tier: number, alpha: number): number
+	-- Floored at 2 so the ramp below cannot divide by zero, however odd the
+	-- roster handed over is. Why this is the roster's top tier and not the
+	-- colour's is on ChargeInputs.
+	local topTier = math.max(rosterTopTier, 2)
 	local reached = math.clamp(tier + alpha, 0, topTier)
 	local t = math.clamp((reached - 1) / (topTier - 1), 0, 1)
 	return ORB_DIAMETER_MIN + (ORB_DIAMETER_MAX - ORB_DIAMETER_MIN) * t
@@ -263,21 +290,13 @@ end
 -- Name label
 ----------------------------------------------------------------------
 
--- The spell this charge would fire right now, or nil below T1.
---
--- Bounded by `tierCount` rather than by `getSpell` alone: getSpell
--- validates the tier against the *roster* maximum of 4, and green tops
--- out at 3, so `getSpell("green", 4)` passes validation and hands back
--- nil. Reading `.name` off that is the crash this guard exists to avoid.
-local function spellNameFor(color: string, tier: number): string?
+-- The spell this charge would fire right now: nil below T1, and nil past
+-- the end of this colour's list. A colour that tops out at T3 has no
+-- fourth entry, so an orb that somehow reached T4 on it carries no name
+-- rather than a wrong one -- the case the old `getSpell` pcall guarded.
+local function spellNameFor(entry: Entry, tier: number): string?
 	if tier < 1 then return nil end
-	local okCount, count = pcall(SpellRegistry.tierCount, color :: any)
-	if not okCount or typeof(count) ~= "number" or tier > (count :: number) then
-		return nil
-	end
-	local okSpec, spec = pcall(SpellRegistry.getSpell, color :: any, tier)
-	if not okSpec or typeof(spec) ~= "table" then return nil end
-	return (spec :: SpellRegistry.Spec).name
+	return entry.tierNames[tier]
 end
 
 -- Parented to the head rather than to the orb, so the dissipate can
@@ -384,16 +403,12 @@ local function dissipateLabel(entry: Entry, rise: boolean)
 	end)
 end
 
-local function bezier(p0: Vector3, p1: Vector3, p2: Vector3, t: number): Vector3
-	local inv = 1 - t
-	return (p0 * (inv * inv)) + (p1 * (2 * inv * t)) + (p2 * (t * t))
-end
-
 local function spawnMote(entry: Entry, toward: Vector3)
 	if _liveMoteParts >= MOTE_PART_CAP then return end
 
 	local angle = math.random() * math.pi * 2
-	local radius = MOTE_RING_RADIUS_STUDS * (0.7 + math.random() * 0.5)
+	local radius = MOTE_RING_RADIUS_STUDS
+		* MotePath.jitterFraction(MOTE_RING_RADIUS_MIN_FRACTION, MOTE_RING_RADIUS_SPAN_FRACTION)
 	local spawnAt = toward
 		+ Vector3.new(math.cos(angle) * radius, -MOTE_RING_DROP_STUDS, math.sin(angle) * radius)
 
@@ -414,22 +429,11 @@ local function spawnMote(entry: Entry, toward: Vector3)
 	part.Position     = spawnAt
 	part.Parent       = workspace
 
-	local travel = toward - spawnAt
-	local axis = if travel.Magnitude > 0.01 then travel.Unit else Vector3.yAxis
-	local perp = axis:Cross(Vector3.yAxis)
-	if perp.Magnitude < 0.01 then
-		perp = axis:Cross(Vector3.xAxis)
-	end
-	local roll = CFrame.fromAxisAngle(axis, math.random() * math.pi * 2)
-	local bow = (roll * perp.Unit) * (MOTE_CURVE_STUDS * (0.3 + math.random() * 0.7))
-
 	_liveMoteParts += 1
 	table.insert(entry.motes, {
-		part     = part,
-		origin   = spawnAt,
-		control  = spawnAt:Lerp(toward, 0.5) + bow,
-		elapsed  = 0,
-		duration = MOTE_FLIGHT_SEC * (1 - math.random() * MOTE_FLIGHT_JITTER),
+		part    = part,
+		path    = MotePath.new(spawnAt, toward, MOTE_CURVE_STUDS, MOTE_FLIGHT_SEC, MOTE_FLIGHT_JITTER),
+		elapsed = 0,
 	})
 end
 
@@ -523,7 +527,7 @@ local function step(character: Model, entry: Entry, dt: number)
 	local target = head.Position + Vector3.new(0, ORB_HEIGHT_STUDS, 0)
 
 	if not entry.released then
-		local diameter = diameterFor(entry.tier, entry.alpha)
+		local diameter = diameterFor(entry.topTier, entry.tier, entry.alpha)
 		local freq = if entry.atCeiling then ORB_CEILING_WOBBLE_FREQ else ORB_WOBBLE_FREQ
 		local amp  = if entry.atCeiling then ORB_CEILING_WOBBLE_AMPLITUDE else ORB_WOBBLE_AMPLITUDE
 		local wobbled = diameter * (1 + amp * math.sin(entry.clock * freq))
@@ -568,9 +572,9 @@ local function step(character: Model, entry: Entry, dt: number)
 			continue
 		end
 		mote.elapsed += dt
-		local a = math.min(mote.elapsed / mote.duration, 1)
-		mote.part.Position = bezier(mote.origin, mote.control, target, a)
-		mote.part.Size = Vector3.one * (MOTE_SIZE_STUDS * (1 - (1 - MOTE_END_SCALE) * a))
+		local a = math.min(mote.elapsed / mote.path.duration, 1)
+		mote.part.Position = MotePath.positionAt(mote.path, target, a)
+		mote.part.Size = Vector3.one * MotePath.sizeAt(MOTE_SIZE_STUDS, MOTE_END_SCALE, a)
 		if a >= 1 then
 			destroyMote(entry, i)
 		end
@@ -578,8 +582,9 @@ local function step(character: Model, entry: Entry, dt: number)
 end
 
 -- Raise the orb on `character`. No-op if one is already up — use `setTier`
--- to re-tune an existing orb.
-function ChargeOrbVfx.start(character: Model, color: string)
+-- to re-tune an existing orb. `inputs` are the gameplay facts the drawing
+-- needs; see ChargeInputs.
+function ChargeOrbVfx.start(character: Model, color: string, inputs: ChargeInputs)
 	if RunService:IsServer() then
 		log:warnThrottled("server_call", 5, string.format(
 			"refused on the server — the halo and the mote flight render for nobody there. " ..
@@ -614,9 +619,10 @@ function ChargeOrbVfx.start(character: Model, color: string)
 	-- character, and an orb living in there would grow its own ice shell.
 	orb.Parent       = workspace
 
-	-- Welded rather than CFrame-tracked per Heartbeat. BossWindupClient does
-	-- the per-frame version and it is the more expensive half of that
-	-- script; a weld is one constraint and the engine moves it for free.
+	-- Welded rather than CFrame-tracked per Heartbeat: a weld is one
+	-- constraint and the engine moves it for free. The per-frame version is
+	-- what SkillVisuals' boss telegraph has to do, because its disc pulses
+	-- and grows against a clock the engine knows nothing about.
 	local weld = Instance.new("WeldConstraint")
 	weld.Part0  = orb
 	weld.Part1  = head
@@ -641,6 +647,8 @@ function ChargeOrbVfx.start(character: Model, color: string)
 		haloBaseRate = 0,
 		color        = color,
 		tint         = palette.glow,
+		topTier      = inputs.topTier,
+		tierNames    = inputs.tierNames,
 		tier         = 0,
 		alpha        = 0,
 		atCeiling    = false,
@@ -664,7 +672,7 @@ function ChargeOrbVfx.start(character: Model, color: string)
 	TweenService:Create(
 		orb,
 		TweenInfo.new(EXPAND_TIME, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-		{ Size = Vector3.one * diameterFor(0, 0) }
+		{ Size = Vector3.one * diameterFor(inputs.topTier, 0, 0) }
 	):Play()
 
 	_active[character] = entry
@@ -698,7 +706,7 @@ function ChargeOrbVfx.setTier(character: Model, tier: number, alpha: number?, at
 	-- ceiling mid-hold if the reservoir is spent elsewhere, which can drop
 	-- a live charge back below T1.
 	if not entry.released then
-		local name = spellNameFor(entry.color, entry.tier)
+		local name = spellNameFor(entry, entry.tier)
 		if name then
 			buildLabel(entry, character)
 			if name ~= entry.labelName then

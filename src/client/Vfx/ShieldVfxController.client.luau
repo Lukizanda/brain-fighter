@@ -8,117 +8,89 @@
 --
 -- Attribute-driven rather than called from SkillEffects.shield because
 -- the *grant* and the *drain* live in different systems: SkillBuffs adds
--- to the pool, and
--- DamageModifierRegistry.shieldModifier subtracts from it inside
--- applyDamage. A start-on-cast hook would have no matching stop-on-
--- absorb hook. The attribute is the one place both sides meet, so
--- watching it gets appear/thin-out/pop for free.
+-- to the pool, and DamageModifierRegistry.shieldModifier subtracts from
+-- it inside applyDamage. A start-on-cast hook would have no matching
+-- stop-on-absorb hook. The attribute is the one place both sides meet, so
+-- watching it gets appear/thin-out/pop for free. The binding itself is
+-- CharacterAttributeWatcher's — see its header.
 --
--- Replication does the multiplayer work: the authoritative pool is set
--- by the server (SpellCastService relay) on a replicated character
--- Model, so every client's copy of this script sees every player's
--- shield without a broadcast RemoteEvent. The casting client also writes
--- the attribute locally, which is what makes its own bubble appear on
--- the cast frame instead of after the round trip.
+-- **Players only, no tagged rigs** (refactor chunk 10's open question).
+-- The absorb pool is granted by selfTarget spells, so only a player can
+-- hold one; and the two places that test a shot against the shell —
+-- SkillDelivery on the server, CosmeticProjectile on the client — both
+-- scan players alone. A bubble on a boss would be a bubble nothing
+-- deflects against, which is worse than no bubble. If boss shields ever
+-- land, all three change together: flip `includeTaggedRigs` here, widen
+-- `Hittables`-based shell collection there.
+--
+-- This controller also owns the one gameplay number the drawing needs —
+-- the shell diameter. ShieldVfx no longer reads SkillBuffs itself, so the
+-- bubble and the sphere that actually stops projectiles cannot drift apart
+-- while leaving the Vfx layer independent of the Skills layer.
 ----------------------------------------------------------------------
 
-local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CharacterAttributeWatcher = require(ReplicatedStorage.Shared.Vfx.CharacterAttributeWatcher)
 local HealthConstants = require(ReplicatedStorage.Shared.Health.HealthConstants)
 local Logger          = require(ReplicatedStorage.Shared.Core.Logger)
 local ShieldVfx       = require(ReplicatedStorage.Shared.Vfx.StatusVisuals.ShieldVfx)
+local SkillBuffs      = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
 
 local log = Logger.new("ShieldVfxController")
 
 local SHIELD_ATTRIBUTE = HealthConstants.SHIELD_ATTRIBUTE
 
--- One entry per character currently being watched. Cleared on respawn,
--- on the player leaving, and on the character leaving the workspace.
-local _watched: { [Model]: { RBXScriptConnection } } = {}
+-- The gameplay shell, drawn at its true size. `SkillBuffs.SHELL_RADIUS_STUDS`
+-- is what SkillDelivery measures a deflection against.
+local SHELL_DIAMETER_STUDS = SkillBuffs.SHELL_RADIUS_STUDS * 2
 
 local function readPool(character: Model): number
 	local value = character:GetAttribute(SHIELD_ATTRIBUTE)
 	return if typeof(value) == "number" then value :: number else 0
 end
 
--- Separates the two ways a pool reaches zero. Damage draining it is a
--- break the player should see and hear; SkillBuffs clearing it on death
--- is bookkeeping, and popping a bubble over a corpse reads as a reward.
-local function isAlive(character: Model): boolean
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	return humanoid ~= nil and humanoid.Health > 0
-end
+local watcher = CharacterAttributeWatcher.new({
+	label              = "ShieldVfxController",
+	attributes         = { SHIELD_ATTRIBUTE },
+	includeTaggedRigs  = false,
+	includeLocalPlayer = true,
 
-local function unwatch(character: Model)
-	local conns = _watched[character]
-	if conns then
-		_watched[character] = nil
-		for _, conn in conns do
-			conn:Disconnect()
-		end
-	end
-	ShieldVfx.stop(character)
-end
+	handlers = {
+		onRefresh = function(character: Model, humanoid: Humanoid, _initial: boolean)
+			local pool = readPool(character)
+			if pool > 0 then
+				ShieldVfx.update(character, pool, SHELL_DIAMETER_STUDS)
+			elseif ShieldVfx.isActive(character) and humanoid.Health > 0 then
+				-- Separates the two ways a pool reaches zero. Damage draining
+				-- it is a break the player should see and hear; SkillBuffs
+				-- clearing it on death is bookkeeping, and popping a bubble
+				-- over a corpse reads as a reward.
+				ShieldVfx.shatter(character)
+			else
+				-- Nothing was up, or the holder is already dead — quiet teardown.
+				ShieldVfx.stop(character)
+			end
+		end,
 
-local function watch(character: Model)
-	if _watched[character] then return end
-
-	local conns: { RBXScriptConnection } = {}
-	_watched[character] = conns
-
-	local function refresh()
-		local pool = readPool(character)
-		if pool > 0 then
-			ShieldVfx.update(character, pool)
-		elseif ShieldVfx.isActive(character) and isAlive(character) then
-			ShieldVfx.shatter(character)
-		else
-			-- Nothing was up, or the holder is already dead — quiet teardown.
+		-- The bubble is cosmetic-only, so it can outlive its holder in ways
+		-- the pool itself cannot: SkillBuffs clears the attribute on death,
+		-- but a character destroyed outright never fires that change.
+		onDetach = function(character: Model, _humanoid: Humanoid)
 			ShieldVfx.stop(character)
-		end
-	end
+		end,
 
-	table.insert(conns, character:GetAttributeChangedSignal(SHIELD_ATTRIBUTE):Connect(refresh))
-
-	-- The bubble is cosmetic-only, so it can outlive its holder in ways
-	-- the pool itself can't: SkillBuffs clears the attribute on death,
-	-- but a character destroyed outright never fires that change. Both
-	-- exits are covered here.
-	table.insert(conns, character.AncestryChanged:Connect(function()
-		if not character:IsDescendantOf(workspace) then
-			unwatch(character)
-		end
-	end))
-
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if humanoid then
-		table.insert(conns, humanoid.Died:Connect(function()
+		onDied = function(character: Model, _humanoid: Humanoid)
 			ShieldVfx.stop(character)
-		end))
-	end
+		end,
+	},
+})
 
-	-- A late joiner's first sight of an already-shielded player arrives as
-	-- an initial attribute value, not as a change signal.
-	refresh()
-end
+watcher:enable()
 
-local function bindPlayer(player: Player)
-	player.CharacterAdded:Connect(watch)
-	player.CharacterRemoving:Connect(unwatch)
-	if player.Character then
-		watch(player.Character)
-	end
-end
-
-for _, player in Players:GetPlayers() do
-	bindPlayer(player)
-end
-Players.PlayerAdded:Connect(bindPlayer)
-Players.PlayerRemoving:Connect(function(player: Player)
-	if player.Character then
-		unwatch(player.Character)
-	end
+-- Rojo replaces this script on every sync; see FreezeVfxController.
+script.Destroying:Connect(function()
+	watcher:destroy()
 end)
 
 log:info("ready")

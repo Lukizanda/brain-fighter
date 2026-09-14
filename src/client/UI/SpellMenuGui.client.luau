@@ -73,6 +73,19 @@ end)
 -- whatever rig happens to be current when the release arrives.
 local chargingCharacter: Model? = nil
 
+-- The roster facts the orb draws from: the top tier it scales against, and
+-- the spell each of this colour's tiers would fire, for the name label.
+-- ChargeOrbVfx takes them as inputs rather than querying SpellRegistry
+-- itself (refactor chunk 10); ChargeOrbController builds the same table for
+-- the orbs it draws over other players.
+local function chargeInputsFor(color: string): ChargeOrbVfx.ChargeInputs
+	local tierNames: { string } = {}
+	for tier = 1, SpellRegistry.tierCount(color :: SpellRegistry.Color) do
+		tierNames[tier] = SpellRegistry.getSpell(color :: SpellRegistry.Color, tier).name
+	end
+	return { topTier = SpellRegistry.NUM_TIERS, tierNames = tierNames }
+end
+
 -- Highest tier this colour can pay for right now. The builder stops the
 -- charge here; this side needs it too, to tell the orb when it has topped
 -- out so it strains instead of growing.
@@ -108,7 +121,7 @@ menu.chargeStarted:Connect(function(color: string)
 		return
 	end
 	chargingCharacter = character
-	ChargeOrbVfx.start(character, color)
+	ChargeOrbVfx.start(character, color, chargeInputsFor(color))
 	chargeStateRemote:FireServer("start", color, 0)
 end)
 
