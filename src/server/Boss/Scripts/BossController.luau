@@ -20,9 +20,11 @@ local BossTypes  = require(ReplicatedStorage.Shared.Boss.BossTypes)
 local NPCTypes   = require(ReplicatedStorage.Shared.NPC.NPCTypes)
 local Logger     = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillTypes = require(ReplicatedStorage.Shared.Skills.SkillTypes)
+local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
 
-local Perception   = require(ServerScriptService.Server.NPC.Scripts.Perception)
-local StateMachine = require(ServerScriptService.Server.NPC.Scripts.StateMachine)
+local Actions      = require(ServerScriptService.Server.AI.Scripts.Actions)
+local Perception   = require(ServerScriptService.Server.AI.Scripts.Perception)
+local StateMachine = require(ServerScriptService.Server.AI.Scripts.StateMachine)
 
 local BossStates      = require(script.Parent.BossStates)
 local BossPhaseManager = require(script.Parent.BossPhaseManager)
@@ -32,6 +34,14 @@ type BossTypeSpec         = BossTypes.BossTypeSpec
 type NPCBlackboard        = NPCTypes.Blackboard
 type StateMachineInstance = StateMachine.StateMachineInstance
 type PhaseManagerInstance = BossPhaseManager.BossPhaseManagerInstance
+
+-- The generic AI layer (Perception, StateMachine, the state fns) is typed
+-- against NPCTypes.Blackboard. A BossBlackboard is a structural superset
+-- of it (see BossTypes), so this narrowing is safe — and writing it once
+-- here keeps the cast out of the three call sites that need it.
+local function asNPC(bb: BB): NPCBlackboard
+	return (bb :: any) :: NPCBlackboard
+end
 
 local log = Logger.new("BossController")
 
@@ -137,7 +147,7 @@ function BossController.new(
 	-- Run Idle.onEnter so the boss stops moving on spawn
 	local idleState = states[BossStates.State.Idle]
 	if idleState and idleState.onEnter then
-		idleState.onEnter((bb :: any) :: NPCBlackboard)
+		idleState.onEnter(asNPC(bb))
 	end
 
 	boss:SetAttribute("CurrentState", BossStates.State.Idle)
@@ -166,7 +176,7 @@ function BossController:tick(_dt: number)
 	end
 
 	-- 1. Perception: find nearest player, LOS check
-	Perception.update((bb :: any) :: NPCBlackboard)
+	Perception.update(asNPC(bb))
 
 	-- 2. Phase check: update HP thresholds
 	local phaseChanged = self._phaseManager:update()
@@ -175,7 +185,18 @@ function BossController:tick(_dt: number)
 		local newSpec  = self._phaseManager:getCurrentPhaseSpec()
 		bb.currentPhaseIndex = newIndex
 		bb.currentPhaseSpec  = newSpec
-		bb.humanoid.WalkSpeed = newSpec.walkSpeed
+		-- The phase owns the boss's *base* speed. It only writes WalkSpeed
+		-- itself when nothing else is holding the rig: a freeze pins
+		-- WalkSpeed to 0 for its duration and restores this attribute when
+		-- it lifts, so writing WalkSpeed here would thaw the boss early and
+		-- then be undone with the previous phase's number.
+		local character = bb.humanoid.Parent
+		if character then
+			character:SetAttribute(SkillConstants.BASE_WALK_SPEED_ATTRIBUTE, newSpec.walkSpeed)
+			if not character:GetAttribute(SkillConstants.FROZEN_ATTRIBUTE) then
+				bb.humanoid.WalkSpeed = newSpec.walkSpeed
+			end
+		end
 
 		if self._onPhaseChanged then
 			self._onPhaseChanged(newIndex, newSpec)
@@ -183,7 +204,7 @@ function BossController:tick(_dt: number)
 	end
 
 	-- 3. Decision: advance state machine
-	self._decision:tick((bb :: any) :: NPCBlackboard)
+	self._decision:tick(asNPC(bb))
 end
 
 -- ---------------------------------------------------------------
@@ -193,7 +214,8 @@ function BossController:destroy()
 	if not self._alive then return end
 	self._alive = false
 
-	Perception.cleanup((self._blackboard :: any) :: NPCBlackboard)
+	Perception.cleanup(asNPC(self._blackboard))
+	Actions.cleanup(asNPC(self._blackboard))
 
 	log:info("BossController destroyed")
 end

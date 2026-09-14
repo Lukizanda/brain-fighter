@@ -621,7 +621,7 @@ Every new method that creates Instances or Tweens must:
 |---|---|---|
 | `point` | `VfxBroadcast.playAt` | `SkillVisuals.spawnEffectAtPoint` — throwaway anchor at a Vector3 |
 | `attached` | `VfxBroadcast.playOn` | `spawnEffect` on an already-replicated Part/Attachment (a rig's HRP) |
-| `beam` | `VfxBroadcast.beam` | `laserBeamEffect` + a named Sound on a replicated parent (uncalled today) |
+| `beam` | `VfxBroadcast.beam` | `laserBeamEffect` + a named Sound on a replicated parent. Called by NPC `Actions.Shoot` since chunk 11 — before that the server drew the tracer itself |
 | `collect` | `VfxBroadcast.collect` | `collectStream.play` onto a UserId (block-pop mana stream) |
 | `shockwave` | `VfxBroadcast.shockwave` | `SkillVisuals.spawnShockwave` ground ring + optional burst |
 | `projectile` | `VfxBroadcast.projectile` | `CosmeticProjectile.launch` — the seen copy of the invisible server shot |

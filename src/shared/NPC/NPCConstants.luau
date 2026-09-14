@@ -33,6 +33,18 @@ local NPCConstants = {
 	PATROL_ROUTE_MAX_RANGE = 200,     -- studs
 
 	-- ============================================================
+	-- Facing (Actions.FaceTarget — AlignOrientation on the rig's HRP)
+	-- ============================================================
+	-- Half a circle per second: fast enough to feel responsive, slow
+	-- enough to read as a turn rather than a snap. Fed to the constraint
+	-- as MaxAngularVelocity, so the solver enforces it.
+	FACE_TURN_RATE_DEGREES = 180,
+	-- How hard the constraint pulls toward the goal orientation. High
+	-- enough that the rig reaches the turn rate immediately; the rate,
+	-- not this, is what shapes the turn.
+	FACE_RESPONSIVENESS = 50,
+
+	-- ============================================================
 	-- Perception
 	-- ============================================================
 	DETECTION_RANGE = 50,             -- studs — max distance to notice a player

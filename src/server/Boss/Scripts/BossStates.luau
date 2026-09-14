@@ -7,9 +7,11 @@
 -- PatrollerStates pattern: build() returns (states, transitions)
 -- for StateMachine.new().
 --
--- Boss-specific blackboard fields are accessed via (bb :: any) since
--- StateMachine types the bb parameter as NPCTypes.Blackboard.
--- This matches the existing codebase pattern (see Actions.luau).
+-- StateMachine types every state fn's parameter as NPCTypes.Blackboard,
+-- but a boss rig's blackboard is always a BossBlackboard — a structural
+-- superset (see BossTypes). `bossOf` is the single place that widening is
+-- written down; everything past it reads typed fields rather than the
+-- untyped `(bb :: any).whatever` this file used to be built from.
 --
 -- State diagram:
 --   Idle ──(player detected)──────────────────► Patrol
@@ -25,6 +27,7 @@
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+local BossConstants    = require(ReplicatedStorage.Shared.Boss.BossConstants)
 local BossTypes        = require(ReplicatedStorage.Shared.Boss.BossTypes)
 local SkillDelivery    = require(ReplicatedStorage.Shared.Skills.SkillDelivery)
 local NPCTypes         = require(ReplicatedStorage.Shared.NPC.NPCTypes)
@@ -32,7 +35,7 @@ local Logger           = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillTypes       = require(ReplicatedStorage.Shared.Skills.SkillTypes)
 local SkillVisuals     = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 
-local Actions = require(ServerScriptService.Server.NPC.Scripts.Actions)
+local Actions = require(ServerScriptService.Server.AI.Scripts.Actions)
 
 type BB              = BossTypes.BossBlackboard
 type Blackboard      = NPCTypes.Blackboard
@@ -58,31 +61,27 @@ local S = BossStates.State
 -- Helpers
 -- ---------------------------------------------------------------
 
--- Degrees per second the boss rotates toward its target during windup.
--- 180 = half-circle per second; fast enough to feel responsive but visibly smooth.
-local FACE_TURN_RATE = 180
+-- The boss blackboard behind the generic one the state machine hands us.
+-- Safe by construction: BossController is the only thing that builds
+-- these states, and it only ever ticks them with a BossBlackboard.
+local function bossOf(bb: Blackboard): BB
+	return (bb :: any) :: BB
+end
 
--- Smoothly rotates the boss HRP toward the target on the Y axis.
--- Uses os.clock() internally so it works without dt from the state machine.
+
+-- Turns the boss toward its target on the Y axis.
+--
+-- This used to lerp `humanoidRootPart.CFrame` by hand, which is the one
+-- thing the project rule forbids: the physics solver reasserts its own
+-- transform on the next step and the boss shudders through every windup.
+-- `Actions.FaceTarget` owns an AlignOrientation on the rig instead, at
+-- NPCConstants.FACE_TURN_RATE_DEGREES — the same authored half-circle per
+-- second the hand-rolled lerp was aiming for. Any state that stops facing
+-- calls `Actions.ReleaseFacing` so the Humanoid steers the walk again.
 local function faceTarget(bb: Blackboard)
-	local bbany = bb :: any
-	local targetRootPart = bbany.targetRootPart
+	local targetRootPart = bb.targetRootPart
 	if not targetRootPart or not targetRootPart.Parent then return end
-
-	local now = os.clock()
-	local dt  = now - ((bbany._faceLastTime or now) :: number)
-	bbany._faceLastTime = now
-
-	local npcPos    = bb.humanoidRootPart.Position
-	local targetPos = (targetRootPart :: BasePart).Position
-	local lookTarget = Vector3.new(targetPos.X, npcPos.Y, targetPos.Z)
-	if (lookTarget - npcPos).Magnitude < 0.5 then return end
-
-	local currentCFrame = bb.humanoidRootPart.CFrame
-	local desiredCFrame = CFrame.lookAt(npcPos, lookTarget)
-	-- alpha scales with dt so turn speed is frame-rate-independent
-	local alpha = math.min(1, dt * (FACE_TURN_RATE / 90))
-	bb.humanoidRootPart.CFrame = currentCFrame:Lerp(desiredCFrame, alpha)
+	Actions.FaceTarget(bb, targetRootPart.Position)
 end
 
 
@@ -98,7 +97,7 @@ local IdleState: StateDefinition = {
 	end,
 
 	update = function(bb)
-		if (bb :: any).bossTypeSpec and (bb :: any).bossTypeSpec.continuousFacing then
+		if bossOf(bb).bossTypeSpec.continuousFacing then
 			faceTarget(bb)
 		end
 	end,
@@ -111,15 +110,17 @@ local PatrolState: StateDefinition = {
 		-- Clear stale path so MoveToWithPath recomputes toward the player.
 		bb.currentPath = nil
 		bb.targetPos   = nil
+		-- Chasing: the Humanoid turns the boss along its path from here.
+		Actions.ReleaseFacing(bb)
 	end,
 
 	update = function(bb)
-		local targetRootPart: any = (bb :: any).targetRootPart
+		local targetRootPart = bb.targetRootPart
 		if not targetRootPart or not targetRootPart.Parent then
 			return
 		end
 		-- Chase the player using pathfinding
-		Actions.MoveToWithPath(bb, (targetRootPart :: BasePart).Position)
+		Actions.MoveToWithPath(bb, targetRootPart.Position)
 	end,
 }
 
@@ -127,39 +128,35 @@ local AttackPrepState: StateDefinition = {
 	name = S.AttackPrep,
 
 	onEnter = function(bb)
-		local bbany = bb :: any
-		bbany.attackWindupStart = os.clock()
-		bbany.attackComplete    = false
+		local bossbb = bossOf(bb)
+		bossbb.attackWindupStart = os.clock()
+		bossbb.attackComplete    = false
 
 		-- Pick a random attack from the current phase's available set,
 		-- excluding any skill whose minRange exceeds the current distance.
-		local phaseSpec = bbany.currentPhaseSpec
-		local bossbbPrep = bbany :: BB
+		local phaseSpec = bossbb.currentPhaseSpec
 		local dist = bb.distanceToNearest
 		local candidates: { string } = {}
 		if phaseSpec then
 			for _, attackName in phaseSpec.availableAttacks do
-				local skill: SkillTypes.SkillSpec? = bossbbPrep.bossTypeSpec.skills[attackName]
+				local skill: SkillTypes.SkillSpec? = bossbb.bossTypeSpec.skills[attackName]
 				if skill and (not skill.minRange or dist <= skill.minRange) then
 					table.insert(candidates, attackName)
 				end
 			end
 		end
 		if #candidates > 0 then
-			bbany.selectedAttack = candidates[math.random(1, #candidates)]
+			bossbb.selectedAttack = candidates[math.random(1, #candidates)]
 		else
 			-- No eligible attack at this range — skip
-			bbany.selectedAttack = nil
+			bossbb.selectedAttack = nil
 		end
 
 		Actions.StopMoving(bb)
-		-- Reset face timer so the first faceTarget call computes dt=0 (no stale jump)
-		bbany._faceLastTime = nil
 
 		-- Broadcast telegraph VFX to all clients and play windup animation
-		local selectedAtk: string? = bbany.selectedAttack
+		local selectedAtk: string? = bossbb.selectedAttack
 		if selectedAtk then
-			local bossbb = bbany :: BB
 			local skill: SkillTypes.SkillSpec? = bossbb.bossTypeSpec.skills[selectedAtk]
 			if skill then
 				if skill.windupVfx then
@@ -190,7 +187,7 @@ local AttackPrepState: StateDefinition = {
 		end
 
 		log:info(string.format("%s: AttackPrep → will use '%s'",
-			bb.npc.Name, tostring((bbany :: any).selectedAttack)))
+			bb.npc.Name, tostring(bossbb.selectedAttack)))
 	end,
 
 	update = function(bb)
@@ -203,20 +200,19 @@ local AttackState: StateDefinition = {
 	name = S.Attack,
 
 	onEnter = function(bb)
-		local bbany  = bb :: any
-		local bossbb = bbany :: BB
-		bbany.attackComplete = false
+		local bossbb = bossOf(bb)
+		bossbb.attackComplete = false
 
-		local attack: string? = bbany.selectedAttack
+		local attack: string? = bossbb.selectedAttack
 		if not attack then
-			bbany.attackComplete = true
+			bossbb.attackComplete = true
 			return
 		end
 
 		local skill = bossbb.bossTypeSpec.skills[attack]
 		if not skill then
 			log:warn("Unknown attack:", attack, "— skipping")
-			bbany.attackComplete = true
+			bossbb.attackComplete = true
 			return
 		end
 
@@ -229,14 +225,14 @@ local AttackState: StateDefinition = {
 
 		local hrp    = bossbb.humanoidRootPart
 		local ctx: SkillTypes.DeliveryCtx = {
-			origin     = CFrame.new(hrp.Position + Vector3.new(0, 2, 0)),
+			origin     = CFrame.new(hrp.Position + Vector3.new(0, BossConstants.ATTACK_ORIGIN_HEIGHT, 0)),
 			target     = bossbb.targetRootPart,
 			aoeCenter  = hrp.Position,
 			source     = bossbb.npc,
 			-- Boss fire is server-only; no client predicts it.
 			mode       = "authoritative",
 			onComplete = function()
-				bbany.attackComplete = true
+				bossbb.attackComplete = true
 			end,
 		}
 		SkillDelivery.deliver(skill, ctx)
@@ -244,7 +240,7 @@ local AttackState: StateDefinition = {
 
 	update = function(bb)
 		-- SkillDelivery handlers are async; attackComplete is set via ctx.onComplete.
-		if (bb :: any).bossTypeSpec and (bb :: any).bossTypeSpec.continuousFacing then
+		if bossOf(bb).bossTypeSpec.continuousFacing then
 			faceTarget(bb)
 		end
 	end,
@@ -254,13 +250,13 @@ local CooldownState: StateDefinition = {
 	name = S.Cooldown,
 
 	onEnter = function(bb)
-		(bb :: any).cooldownStart = os.clock()
+		bossOf(bb).cooldownStart = os.clock()
 		Actions.StopMoving(bb)
 	end,
 
 	update = function(bb)
 		-- Wait; transitions check the timer.
-		if (bb :: any).bossTypeSpec and (bb :: any).bossTypeSpec.continuousFacing then
+		if bossOf(bb).bossTypeSpec.continuousFacing then
 			faceTarget(bb)
 		end
 	end,
@@ -271,29 +267,26 @@ local CooldownState: StateDefinition = {
 -- ---------------------------------------------------------------
 
 local function cooldownElapsed(bb: Blackboard): boolean
-	local bbany   = bb :: any
-	local elapsed = os.clock() - (bbany.cooldownStart or 0)
-	local spec    = bbany.currentPhaseSpec
-	local cooldown = spec and spec.attackCooldown or 4
+	local bossbb  = bossOf(bb)
+	local elapsed = os.clock() - bossbb.cooldownStart
+	local spec    = bossbb.currentPhaseSpec
+	local cooldown = if spec then spec.attackCooldown else BossConstants.DEFAULT_ATTACK_COOLDOWN_SEC
 	return elapsed >= cooldown
 end
 
 local function playerInRange(bb: Blackboard): boolean
-	local bossbb = (bb :: any) :: BB
 	return bb.nearestPlayer ~= nil
-		and bb.distanceToNearest <= bossbb.bossTypeSpec.detectionRange
+		and bb.distanceToNearest <= bossOf(bb).bossTypeSpec.detectionRange
 end
 
 local function playerInAttackRange(bb: Blackboard): boolean
-	local bossbb = (bb :: any) :: BB
 	return bb.nearestPlayer ~= nil
-		and bb.distanceToNearest <= bossbb.bossTypeSpec.attackRange
+		and bb.distanceToNearest <= bossOf(bb).bossTypeSpec.attackRange
 end
 
 local function windupElapsed(bb: Blackboard): boolean
-	local bbany = bb :: any
-	local start = bbany.attackWindupStart
-	local bossbb = bbany :: BB
+	local bossbb = bossOf(bb)
+	local start = bossbb.attackWindupStart
 	return start ~= nil and (os.clock() - start) >= bossbb.bossTypeSpec.attackWindupSec
 end
 
@@ -322,7 +315,7 @@ function BossStates.build()
 			{ to = S.Attack, condition = windupElapsed },
 		},
 		[S.Attack] = {
-			{ to = S.Cooldown, condition = function(bb) return (bb :: any).attackComplete == true end },
+			{ to = S.Cooldown, condition = function(bb) return bossOf(bb).attackComplete end },
 		},
 		[S.Cooldown] = {
 			{

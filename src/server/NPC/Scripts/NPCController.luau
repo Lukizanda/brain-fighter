@@ -11,13 +11,16 @@
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local NPCTypes = require(ReplicatedStorage.Shared.NPC.NPCTypes)
 
-local Perception = require(script.Parent.Perception)
-local StateMachine = require(script.Parent.StateMachine)
-local Actions = require(script.Parent.Actions)
+-- The generic AI layer (shared with the boss) lives in server/AI; only
+-- the Patroller-specific states below stay under NPC.
+local Actions = require(ServerScriptService.Server.AI.Scripts.Actions)
+local Perception = require(ServerScriptService.Server.AI.Scripts.Perception)
+local StateMachine = require(ServerScriptService.Server.AI.Scripts.StateMachine)
 local PatrollerStates = require(script.Parent.States.PatrollerStates)
 
 type Blackboard = NPCTypes.Blackboard

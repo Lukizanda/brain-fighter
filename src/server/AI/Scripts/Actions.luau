@@ -22,9 +22,7 @@ local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local NPCConstants = require(ReplicatedStorage.Shared.NPC.NPCConstants)
 local NPCTypes = require(ReplicatedStorage.Shared.NPC.NPCTypes)
 local DamageTypes = require(ReplicatedStorage.Shared.Health.DamageTypes)
-local laserBeamEffect = require(ReplicatedStorage.Shared.Weapon.Scripts.Effects.laserBeamEffect)
-local MeleeConstants = require(ReplicatedStorage.Shared.Weapon.Melee.MeleeConstants)
-local MeleeHitDetector = require(ReplicatedStorage.Shared.Weapon.Melee.MeleeHitDetector)
+local VfxBroadcast = require(ReplicatedStorage.Shared.Vfx.VfxBroadcast)
 
 -- HealthService exports applyDamage.process() for server-originated damage
 -- (NPC shots don't go through the player RemoteEvent validation path)
@@ -280,6 +278,126 @@ function Actions.MoveToWithPath(bb: Blackboard, finalTarget: Vector3): ActionRes
 end
 
 -- ============================================================
+-- Facing: who owns the rig's orientation
+-- ============================================================
+-- Turning a rig by writing HumanoidRootPart.CFrame fights the physics
+-- solver — the write lands, the solver reasserts its own transform on the
+-- next step, and the rig shudders instead of turning. Orientation is
+-- owned by an AlignOrientation constraint with the Humanoid's AutoRotate
+-- switched off, so exactly one thing is steering at a time.
+--
+-- AutoRotate comes back on in ReleaseFacing, because a walking rig still
+-- needs the Humanoid to point it along its path: a boss chasing a player
+-- with the constraint left on would slide sideways the whole way.
+local FACE_ATTACHMENT_NAME = "AIFacing"
+local FACE_ALIGN_NAME      = "AIFacingAlign"
+-- Standing on top of the target: any look vector is arbitrary, so hold.
+local FACE_MIN_DISTANCE = 0.5
+local FACE_MAX_TORQUE   = math.huge
+
+type FacingState = {
+	align: AlignOrientation,
+	attachment: Attachment,
+	autoRotateWasOn: boolean,
+}
+
+local facingState: { [Blackboard]: FacingState } = {}
+
+-- The rig's facing constraint, built on first use. Returns nil if the rig
+-- has no root part to hang it off (destroyed mid-tick).
+local function getFacing(bb: Blackboard): FacingState?
+	local existing = facingState[bb]
+	if existing and existing.align.Parent then
+		return existing
+	end
+
+	local hrp = bb.humanoidRootPart
+	if not hrp or not hrp.Parent then
+		return nil
+	end
+
+	local attachment = Instance.new("Attachment")
+	attachment.Name = FACE_ATTACHMENT_NAME
+	attachment.Parent = hrp
+
+	local align = Instance.new("AlignOrientation")
+	align.Name               = FACE_ALIGN_NAME
+	align.Mode               = Enum.OrientationAlignmentMode.OneAttachment
+	align.Attachment0        = attachment
+	align.RigidityEnabled    = false
+	align.MaxTorque          = FACE_MAX_TORQUE
+	-- The authored turn rate, enforced by the solver rather than by a
+	-- per-frame lerp we compute ourselves.
+	align.MaxAngularVelocity = math.rad(NPCConstants.FACE_TURN_RATE_DEGREES)
+	align.Responsiveness     = NPCConstants.FACE_RESPONSIVENESS
+	align.Enabled            = false
+	align.Parent             = hrp
+
+	local state: FacingState = {
+		align = align,
+		attachment = attachment,
+		autoRotateWasOn = bb.humanoid.AutoRotate,
+	}
+	facingState[bb] = state
+	return state
+end
+
+-- ============================================================
+-- FaceTarget: turn the rig toward a world position
+-- ============================================================
+-- Flattened to the XZ plane so the body yaws without pitching. Idempotent
+-- — call it every tick for as long as the rig should be facing something,
+-- and ReleaseFacing when it shouldn't.
+function Actions.FaceTarget(bb: Blackboard, targetPosition: Vector3): ActionResult
+	if not isAlive(bb) then
+		return NPCConstants.ActionResult.Failure
+	end
+
+	local npcPos = bb.humanoidRootPart.Position
+	local lookTarget = Vector3.new(targetPosition.X, npcPos.Y, targetPosition.Z)
+	if (lookTarget - npcPos).Magnitude < FACE_MIN_DISTANCE then
+		return NPCConstants.ActionResult.Running
+	end
+
+	local state = getFacing(bb)
+	if not state then
+		return NPCConstants.ActionResult.Failure
+	end
+
+	if not state.align.Enabled then
+		-- Take ownership of the rig's orientation for as long as we hold it.
+		state.autoRotateWasOn = bb.humanoid.AutoRotate
+		bb.humanoid.AutoRotate = false
+		state.align.Enabled = true
+	end
+
+	-- Rotation only: subtracting the position leaves the orientation the
+	-- constraint reads, with no positional component to fight over.
+	state.align.CFrame = CFrame.lookAt(npcPos, lookTarget) - npcPos
+	return NPCConstants.ActionResult.Success
+end
+
+-- ============================================================
+-- ReleaseFacing: hand orientation back to the Humanoid
+-- ============================================================
+-- Safe to call when nothing was ever engaged, so states can release
+-- unconditionally on exit.
+function Actions.ReleaseFacing(bb: Blackboard): ActionResult
+	local state = facingState[bb]
+	if not state then
+		return NPCConstants.ActionResult.Success
+	end
+
+	if state.align.Parent then
+		state.align.Enabled = false
+	end
+	if bb.humanoid and bb.humanoid.Parent then
+		bb.humanoid.AutoRotate = state.autoRotateWasOn
+	end
+	return NPCConstants.ActionResult.Success
+end
+
+-- ============================================================
 -- StopMoving: cancel any in-progress movement
 -- ============================================================
 function Actions.StopMoving(bb: Blackboard): ActionResult
@@ -422,10 +540,11 @@ function Actions.Shoot(bb: Blackboard): ActionResult
 		beamEnd = aimOrigin + rayVec
 	end
 
-	-- Draw the laser beam from the weapon muzzle to the hit/end point
-	pcall(function()
-		laserBeamEffect(visualOrigin, beamEnd)
-	end)
+	-- Draw the laser beam from the weapon muzzle to the hit/end point.
+	-- The server has no screen: drawing it here would parent a Part nobody
+	-- asked any client to render. VfxBroadcast hands the two positions to
+	-- every client and WorldVfxController draws the tracer on each one.
+	VfxBroadcast.beam(visualOrigin, beamEnd)
 
 	if not hitInstance then
 		return NPCConstants.ActionResult.Success
@@ -453,79 +572,19 @@ function Actions.Shoot(bb: Blackboard): ActionResult
 	return NPCConstants.ActionResult.Success
 end
 
--- ============================================================
--- Actions.MeleeAttack (framework — not yet wired into any archetype)
--- ============================================================
--- Performs a single melee swing: cooldown check, hit detection via
--- the shared MeleeHitDetector, damage via applyDamage.
---
--- Reads the NPC's melee params from the archetype blackboard entry
--- `meleeAttack` (see NPCTypes). Returns Success when a swing landed,
--- Failure when the swing missed or cooldown wasn't ready.
---
--- Intended to be called from a future Combat sub-state (e.g. "Melee")
--- inside PatrollerStates or a new archetype. Kept minimal on purpose —
--- when we wire the first melee archetype we can add pursuit/facing.
--- ============================================================
-
-local MELEE_COOLDOWN_DEFAULT = 1.0
-local MELEE_REACH_DEFAULT = 6
-local MELEE_WIDTH_DEFAULT = 5
-local MELEE_HEIGHT_DEFAULT = 5
-local MELEE_DAMAGE_DEFAULT = 15
-
-function Actions.MeleeAttack(bb: Blackboard): ActionResult
-	if not bb.humanoidRootPart or not bb.npc then
-		return NPCConstants.ActionResult.Failure
-	end
-
-	local params = (bb :: any).meleeAttack or {}
-	local cooldown = params.cooldownSeconds or MELEE_COOLDOWN_DEFAULT
-	local now = os.clock()
-	local last = (bb :: any).lastMeleeTime or 0
-	if now - last < cooldown then
-		return NPCConstants.ActionResult.Failure
-	end
-
-	local sweepParams = {
-		originCFrame = bb.humanoidRootPart.CFrame,
-		reach = params.reach or MELEE_REACH_DEFAULT,
-		width = params.width or MELEE_WIDTH_DEFAULT,
-		height = params.height or MELEE_HEIGHT_DEFAULT,
-		attackerCharacter = bb.npc,
-		hitMode = params.hitMode or MeleeConstants.HitMode.Single,
-	}
-	local hits = MeleeHitDetector.sweep(sweepParams);
-	(bb :: any).lastMeleeTime = now
-
-	if #hits == 0 then
-		return NPCConstants.ActionResult.Failure
-	end
-
-	local damage = params.damage or MELEE_DAMAGE_DEFAULT
-	for _, hit in hits do
-		applyDamage.process({
-			sourcePlayer = nil, -- NPC-originated damage
-			targetHumanoid = hit.humanoid,
-			baseDamage = damage,
-			damageType = DamageTypes.DamageType.Melee,
-			hitZone = DamageTypes.HitZone.Torso,
-			sourceWeapon = bb.weapon,
-			cause = npcCause(bb),
-			timestamp = now,
-		})
-	end
-
-	log:info(string.format("%s: MeleeAttack hit %d target(s)", bb.npc.Name, #hits))
-	return NPCConstants.ActionResult.Success
-end
-
 -- Public: clear cached raycast params when an NPC is destroyed
 function Actions.cleanup(bb: Blackboard)
 	shootRaycastCache[bb] = nil
 	pathRequests[bb] = nil
 	pathTokens[bb] = nil
 	pathWarnAt[bb] = nil
+
+	local facing = facingState[bb]
+	if facing then
+		facingState[bb] = nil
+		facing.align:Destroy()
+		facing.attachment:Destroy()
+	end
 end
 
 return Actions

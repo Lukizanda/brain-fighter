@@ -39,6 +39,23 @@ local FROZEN_ATTRIBUTE = "_frozen"
 -- value is simply there when they arrive.
 local BURNING_ATTRIBUTE = "_burning"
 
+-- The speed a rig walks at when nothing is holding it still: what its
+-- spawner authored, kept current by whatever owns that number afterwards
+-- (BossController rewrites it on every phase change).
+--
+-- It exists because `Humanoid.WalkSpeed` has two writers with different
+-- lifetimes. A freeze pins WalkSpeed to 0 and has to put something back
+-- when it lifts; saving the value it found is only right if nothing else
+-- changed the rig's speed meanwhile. A boss that changes phase mid-freeze
+-- did exactly that, and the old freeze restored the previous phase's
+-- speed — permanently, since nothing writes WalkSpeed again until the
+-- next phase. So the base is published on the character Model and the
+-- freeze restores *that*, read at restore time rather than at cast time.
+--
+-- Absent on player characters, which have no spawner authoring a speed.
+-- The freeze falls back to the WalkSpeed it found for those.
+local BASE_WALK_SPEED_ATTRIBUTE = "BaseWalkSpeed"
+
 -- The colour and tier of a spell currently being charged, set on the
 -- caster's character Model while a colour panel is held and cleared on
 -- release. `server/SpellCast/ChargeStateService` writes them from the
@@ -141,6 +158,7 @@ local DEFAULT_KNOCKUP_FORCE = 50
 return {
 	FROZEN_ATTRIBUTE   = FROZEN_ATTRIBUTE,
 	BURNING_ATTRIBUTE  = BURNING_ATTRIBUTE,
+	BASE_WALK_SPEED_ATTRIBUTE = BASE_WALK_SPEED_ATTRIBUTE,
 	CHARGE_COLOR_ATTR  = CHARGE_COLOR_ATTR,
 	CHARGE_TIER_ATTR   = CHARGE_TIER_ATTR,
 	DAMAGEABLE_TAGS    = DAMAGEABLE_TAGS,

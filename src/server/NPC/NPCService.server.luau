@@ -32,6 +32,7 @@ local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local NPCConstants = require(ReplicatedStorage.Shared.NPC.NPCConstants)
 local NPCTypes = require(ReplicatedStorage.Shared.NPC.NPCTypes)
 local Patroller = require(ReplicatedStorage.Shared.NPC.Archetypes.Patroller)
+local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
 
 local scriptsFolder = script.Parent.Scripts
 local NPCController = require(scriptsFolder.NPCController)
@@ -184,6 +185,9 @@ local function spawnNPCAtPosition(
 	local humanoid = npc:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		humanoid.WalkSpeed = archetype.walkSpeed
+		-- Published for status effects that pin WalkSpeed and have to put
+		-- the authored value back (see SkillConstants).
+		npc:SetAttribute(SkillConstants.BASE_WALK_SPEED_ATTRIBUTE, archetype.walkSpeed)
 	else
 		log:warn("Template has no Humanoid:", archetype.templateName)
 	end

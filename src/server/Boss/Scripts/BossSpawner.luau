@@ -20,13 +20,14 @@ local ServerStorage     = game:GetService("ServerStorage")
 
 local BossTypes = require(ReplicatedStorage.Shared.Boss.BossTypes)
 local Logger    = require(ReplicatedStorage.Shared.Core.Logger)
+local BossConstants = require(ReplicatedStorage.Shared.Boss.BossConstants)
+local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
 
 type BossTypeSpec = BossTypes.BossTypeSpec
 
 local log = Logger.new("BossSpawner")
 
 local BOSS_TAG       = "Boss"
-local SPAWN_Y_OFFSET = 12   -- studs above BossPoint surface; boss falls to ground on spawn
 
 local BossSpawner = {}
 
@@ -77,10 +78,10 @@ end
 -- ---------------------------------------------------------------
 local function addBillboard(boss: Model)
 	local anchor = boss:FindFirstChild("Head")
-	local offset = Vector3.new(0, 5, 0)
+	local offset = BossConstants.LABEL_OFFSET_HEAD
 	if not anchor or not anchor:IsA("BasePart") then
 		anchor = boss:FindFirstChild("HumanoidRootPart")
-		offset = Vector3.new(0, 9, 0)
+		offset = BossConstants.LABEL_OFFSET_ROOT
 	end
 	if not anchor or not anchor:IsA("BasePart") then
 		return
@@ -146,6 +147,9 @@ function BossSpawner.spawn(bossPoint: BasePart, typeSpec: BossTypeSpec): Model?
 	humanoid.MaxHealth           = typeSpec.maxHealth
 	humanoid.Health              = typeSpec.maxHealth
 	humanoid.WalkSpeed           = phase1.walkSpeed
+	-- Publish the authored speed so a status effect that pins WalkSpeed has
+	-- something to put back. BossController keeps it current across phases.
+	boss:SetAttribute(SkillConstants.BASE_WALK_SPEED_ATTRIBUTE, phase1.walkSpeed)
 	humanoid.JumpPower           = 0
 	humanoid.BreakJointsOnDeath  = false
 
@@ -213,7 +217,7 @@ function BossSpawner.spawn(bossPoint: BasePart, typeSpec: BossTypeSpec): Model?
 	CollectionService:AddTag(boss, BOSS_TAG)
 
 	-- ── Position above BossPoint ────────────────────────────────
-	local spawnY = bossPoint.Position.Y + bossPoint.Size.Y / 2 + SPAWN_Y_OFFSET
+	local spawnY = bossPoint.Position.Y + bossPoint.Size.Y / 2 + BossConstants.SPAWN_Y_OFFSET
 	boss:PivotTo(CFrame.new(bossPoint.Position.X, spawnY, bossPoint.Position.Z))
 	boss.Parent = workspace
 

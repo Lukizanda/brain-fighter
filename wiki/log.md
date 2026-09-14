@@ -1799,10 +1799,55 @@ Pages touched: [[systems/VisualEffects]] (new § "Who each status watches", new 
 
 ## [2026-09-14] ingest | Test-harness wiki pages brought back in line with the tree
 
-The three testing pages had drifted since the 2026-09 refactor. [[systems/Tests]] listed the Multiplayer suite as one test and Hardening/Economy as 3/1; the tree has 4/4/3 (chunks 6, 8, 9 added `ledger_*`, `registry_views_agree`, `sessions_isolate_scores`, `transfer_moves_roster_and_attributes`, `blockshoot_arena_match`). Added the full per-suite file list, a "Test module shape" section (lifecycle, console markers, `TestResult_*` / `TestRunSummary` attributes, 10s + 3s boot timing), fixture notes for the Economy and session tests, and the 34-test total (last verified 34/34 on 2026-09-11). [[concepts/MultiplayerTestPattern]] still described `multiplayer_invariants` as asserting `ShotReplication` placement and TDM spawns — it now checks GameMode remotes and Health events only (the stale assertion was trimmed in `f8d9dc1`); added Shape 3 for the single-player `SessionRegistry` tests. [[concepts/ServerLogicTestHarness]] named `SimulateLoadoutCycling`, `DevAutoEquipTool` and `BotSpawner` as the working examples; all three were deleted in chunk 0 (`ba9891d`), leaving `DevSmokeTestKillFeed`. Marked the pattern mostly superseded — the autorunner is a server Script, so a suite module drives server modules directly — and pointed to writing a suite test first. Index line for Tests still said "NPC/Melee"; fixed.
+The three testing pages had drifted since the 2026-09 refactor. [[systems/Tests]] listed the Multiplayer suite as one test and Hardening/Economy as 3/1; the tree has 4/4/3 (chunks 6, 8, 9 added `ledger_*`, `registry_views_agree`, `sessions_isolate_scores`, `transfer_moves_roster_and_attributes`, `blockshoot_arena_match`). Added the full per-suite file list, a "Test module shape" section (lifecycle, console markers, `TestResult_*` / `TestRunSummary` attributes, 10s + 3s boot timing), fixture notes for the Economy and session tests, and the 34-test total (last verified 34/34 on 2026-09-11). [[concepts/MultiplayerTestPattern]] still described `multiplayer_invariants` as asserting `ShotReplication` placement and TDM spawns — it now checks GameMode remotes and Health events only (the stale assertion was trimmed in `f8d9dc1`); added Shape 3 for the single-player `SessionRegistry` tests. [[concepts/ServerLogicTestHarness]] named `SimulateLoadoutCycling`, `DevAutoEquipTool` and `BotSpawner` as the working examples; all three were deleted in chunk 0 (`ba9891d`), leaving `DevSmokeTestKillFeed`. Marked the pattern mostly superseded — the autorunner is a server Script, so a suite module drives server modules directly — and pointed to writing a suite test first. Index line for Tests still said "NPC/Melee"; fixed. Follow-up the same day: added a § "Pipeline at a glance" Mermaid flowchart to [[systems/Tests]] (drive → boot → run → report → read back, stacked top-to-bottom so it stays legible at page width; render-checked headless) and a § Glossary (Studio terms such as workspace attribute, DataModel, server/client VM; harness terms such as suite, test module, `ctx`, wrapper, result attributes).
 
 Not touched: [[systems/LetterBlaster]] line 43 and [[design/tap-to-pop]] still describe `DevAutoEquipTool` / `DEV_AUTO_EQUIP_TOOL` as if present (deleted in chunk 0). Left for a LetterBlaster-page pass.
 
 ## [2026-09-14] ingest | Refactor chunk 10 closed — two-client visuals check
 
 The last gate for chunk 10 (`b77ec1c`) was the user's 2-player local-server run with both players in the Default arena and `nimbalyst-local/chunk10-client-visuals.lua` pasted into each window. Each client reported the OTHER player's charge orb APPEAR while a panel was held and GONE on release, the other player's shield bubble APPEAR, burn and freeze APPEAR/GONE on `Patroller_1` and on `Boss`, and `TelegraphChargeGlow` appear/gone on every boss windup. All five presentation lanes render on a second client. The parent's pre-commit harness runs (33/34, then NPC-only 2/3, a different NPC test each time) are NPC-suite flakiness — the fixture rig flaps `Combat -> Idle -> Combat` and path-fails toward the arena's patrol points from the Lobby — and are noted under plan chunk 11, which owns the AI files. Pages: design/refactor-plan-2026-09 § Chunk 10 (status + divergences), § Chunk 11 (note).
+
+## [2026-09-14] ingest | Refactor chunk 11 — boss ownership, the AI layer moves, the melee stack finally goes
+
+Two commits. `53a43d5` first, on its own, so the harness could be trusted for
+the rest: the NPC suite's flakiness was not the fixture but the decision tick.
+`PathfindingService:ComputeAsync` yields, so calling it from a state's `update`
+parked the whole tick and the next Heartbeat started a second one on a fresh
+thread — two ticks racing over one blackboard, with a stale Patrol update
+issuing `Humanoid:MoveTo` seconds after the machine had entered Combat and
+walking the rig out of the fight. Path computes now run on their own thread and
+the action reports Running until the result lands. A patrol route is also local
+to the rig now (`NPCConstants.PATROL_ROUTE_MAX_RANGE`), so the Lobby fixture
+stops path-failing at the arena's points every frame — which is what used to
+truncate the whole test log out of the console. NPC suite 3/3 twice in a row,
+then 34/34 on the full run.
+
+The refactor commit: `Perception`, `StateMachine` and `Actions` moved from
+`server/NPC/Scripts` to `server/AI/Scripts`, which is what they always were —
+the boss ticks all three. `States/` stayed under `NPC/`, being archetype
+behaviour rather than the generic layer. Both the boss's CFrame lerp and the
+Patroller's CFrame snap are gone, replaced by one `Actions.FaceTarget` that
+owns an `AlignOrientation` per rig and switches `AutoRotate` off only for as
+long as it holds it. `laserBeamEffect` moved to `shared/Vfx` and the NPC tracer
+now goes over `VfxBroadcast.beam` to a client draw that already existed —
+verified with the NPC in Combat for 361/361 frames while the Server datamodel
+held 0 beams and the Client drew 13. `Actions.MeleeAttack` and
+`Weapon/Melee/*` are deleted; `src/shared/Weapon` holds no Luau at all now,
+only the two `ignoreUnknownInstances` metas that keep Rojo off the Studio-side
+`Objects` and `ViewModels`. Freeze restores `BaseWalkSpeed` read at restore
+time, so a boss whose phase changed mid-freeze thaws at the new phase's speed
+(checked live: 6 → 0, base bumped to 10 while frozen, lifted to 10).
+
+Two things worth knowing. Every shipped boss type has exactly one phase and
+`BossPhaseManager` scans from index 2, so the phase-change race F5 describes is
+latent, not live — the mid-freeze base bump stood in for a transition that
+cannot currently happen. And the before/after yaw sampling did not reproduce
+F5's turn jitter on the server (4.63 vs 5.87 degrees max per frame); the
+constraint is right by the ownership rule, but if the jitter is real it is a
+client-side artifact of replicating those CFrame writes.
+
+Studio: empty `Weapon.Scripts` / `Weapon.Melee` folder shells were pruned by
+hand under a ChangeHistoryService waypoint — **the `.rbxl` needs saving**.
+Pages: [[systems/NPC]], [[systems/Boss]], [[systems/Weapon]] (final REMOVED
+note), [[systems/Health]], [[systems/VisualEffects]], [[systems/LetterBlaster]],
+[[index]], design/refactor-plan-2026-09 § Chunk 11 (done + divergences).

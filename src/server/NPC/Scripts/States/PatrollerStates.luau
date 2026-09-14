@@ -17,7 +17,7 @@ local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local NPCConstants = require(ReplicatedStorage.Shared.NPC.NPCConstants)
 local NPCTypes = require(ReplicatedStorage.Shared.NPC.NPCTypes)
 
-local Actions = require(script.Parent.Parent.Actions)
+local Actions = require(ServerScriptService.Server.AI.Scripts.Actions)
 
 -- AIWorldData — authoritative source for patrol point positions
 local WorldDataManager = require(ServerScriptService.Server.AI.Scripts.WorldDataManager)
@@ -214,16 +214,15 @@ local CombatState: StateDefinition = {
 		if aim and aim.IsPlaying then
 			aim:Stop(0.2)
 		end
+		-- Hand orientation back so the rig turns along its path again.
+		Actions.ReleaseFacing(bb)
 	end,
 
 	update = function(bb)
-		-- Face the target each tick (simple yaw alignment via CFrame)
+		-- Face the target each tick. Actions owns the constraint that does
+		-- the turning; nothing here touches the root part's CFrame.
 		if bb.targetRootPart and bb.targetRootPart.Parent then
-			local npcPos = bb.humanoidRootPart.Position
-			local targetPos = bb.targetRootPart.Position
-			-- Flatten to XZ so we don't pitch the whole body
-			local lookTarget = Vector3.new(targetPos.X, npcPos.Y, targetPos.Z)
-			bb.humanoidRootPart.CFrame = CFrame.lookAt(npcPos, lookTarget)
+			Actions.FaceTarget(bb, bb.targetRootPart.Position)
 		end
 
 		-- Fire — Actions.Shoot handles rate-of-fire throttling internally

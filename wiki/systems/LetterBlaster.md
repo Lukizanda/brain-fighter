@@ -65,7 +65,7 @@ All of it deleted. The replacement is smaller than what it replaced.
   blocks).
 - The **fizzle cue**, now a client-local Sound built from `VfxConfig.SFX.fizzle`
   like every other refusal in the HUD — which resolved the duplicated asset id.
-- `laserBeamEffect`, still used by NPC `Actions.luau`.
+- `laserBeamEffect` (now `src/shared/Vfx/laserBeamEffect.luau`), drawn on the client off `VfxBroadcast.beam` — the NPC tracer's path since chunk 11.
 
 ## Notes worth keeping
 

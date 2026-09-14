@@ -1,12 +1,18 @@
 ---
 type: system
-description: Weapon system (REMOVED 2026-06-22, commit 6610291) — firearm/melee TPS stack deleted; only MeleeHitDetector, MeleeConstants, and laserBeamEffect survive as NPC-facing utilities. Retained as historical record.
-updated: 2026-07-15
+description: Weapon system (REMOVED 2026-06-22, commit 6610291; last Luau removed 2026-09-14, refactor chunk 11) — firearm/melee TPS stack deleted. No code remains under src/shared/Weapon; the folder survives only as a Studio-side container for Objects (LaserBeam, impact parts) and ViewModels. Retained as historical record.
+updated: 2026-09-14
 ---
 
 # Weapon System
 
-> **REMOVED 2026-06-22 (commit `6610291`).** The TPS weapon stack this page describes — firearm controllers, weapon templates (Pistol/Rifle/Sword/LaserPistol), the shared state machine, AimAssist, WeaponRolodex, and player-melee swing — was deleted, not gated. Brain Fighter is a spelling-combat game (the [[systems/LetterBlaster]] Spelling Staff is the only Tool). **Only three former Weapon files survive, kept for NPC combat, not player weapons:** `MeleeHitDetector` + `MeleeConstants` (NPC attacks) and `laserBeamEffect` (LetterBlaster + NPC ranged). This page is retained for historical context — do not wire new gameplay against anything below.
+> **REMOVED 2026-06-22 (commit `6610291`).** The TPS weapon stack this page describes — firearm controllers, weapon templates (Pistol/Rifle/Sword/LaserPistol), the shared state machine, AimAssist, WeaponRolodex, and player-melee swing — was deleted, not gated. Brain Fighter is a spelling-combat game (the [[systems/LetterBlaster]] Spelling Staff is the only Tool). This page is retained for historical context — do not wire new gameplay against anything below.
+>
+> **Final removal 2026-09-14 (refactor chunk 11).** The three files that had outlived the stack are gone too:
+> - `MeleeHitDetector`, `MeleeConstants`, `MeleeTypes` — **deleted**. Their only caller was `Actions.MeleeAttack`, a framework hook no archetype ever wired up, deleted in the same commit. The melee suite that covered them went in chunk 1.
+> - `laserBeamEffect` — **moved** to `src/shared/Vfx/laserBeamEffect.luau`. It is a VFX primitive and belongs with the other ones; the NPC tracer now reaches it the way every other cosmetic does, via `VfxBroadcast.beam` → `WorldVfxController` (`Actions.Shoot` used to call it on the server, where there is no screen).
+>
+> **`src/shared/Weapon/` now holds no Luau at all** — just `init.meta.json` and `Objects/init.meta.json`, both `ignoreUnknownInstances` Folders. They exist to keep Rojo from deleting the Studio-side instances that are still live: `Objects.LaserBeam` (cloned by `laserBeamEffect`), `Objects.CharacterImpact` / `Objects.EnvironmentImpact`, and `ViewModels`. Note `Shared.Weapon.Templates` does **not** exist — `NPCService.equipWeapon` still indexes it, which is a latent error for any archetype that sets `weaponTemplateName` (all ship with `nil`).
 
 Weapons are Tools. Each Tool template has a per-weapon controller LocalScript that drives a generic state machine. Hit detection and damage application are split between client and server with different authority models per weapon type.
 
@@ -20,7 +26,7 @@ src/shared/Weapon/
     FirearmController.luau     — single attribute-driven controller for all firearms (Phase B1, 2026-05-01)
     WeaponAnimationController.luau  — animation track management
     WeaponTouchInputController/ — touch input (mobile)
-    Effects/                   — impactEffect, laserBeamEffect (visual)
+    Effects/                   — impactEffect, laserBeamEffect (visual; laserBeamEffect moved to shared/Vfx in 2026-09)
     Utility/                   — castRays, getRayDirections, drawRayResults, sound helpers, canPlayerDamageHumanoid
   Melee/
     MeleeConstants.luau        — reach, sanity multipliers, claim limits

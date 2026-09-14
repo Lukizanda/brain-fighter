@@ -24,7 +24,7 @@ Start here. See [[WIKI]] for conventions and operations.
 
 ## Systems
 
-- [[systems/Weapon]] — **REMOVED (commit 6610291)**; historical record of the deleted TPS firearm/melee stack. Only MeleeHitDetector/MeleeConstants/laserBeamEffect survive (NPC-facing)
+- [[systems/Weapon]] — **REMOVED (commit 6610291)**; historical record of the deleted TPS firearm/melee stack. No Luau left under src/shared/Weapon as of chunk 11 (melee deleted, laserBeamEffect moved to shared/Vfx)
 - [[systems/Health]] — damage types, hit zones, modifiers, HealthService, DeathHandler
 - [[systems/Character]] — **mostly REMOVED (commit 6610291)**; Camera/Locomotion controllers deleted, only DashController + CharacterSystemsLoader survive
 - [[systems/NPC]] — Perception → StateMachine → Actions, Patroller archetype, WorldDataManager

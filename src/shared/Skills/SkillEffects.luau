@@ -89,6 +89,19 @@ local function setFrozenFlag(h: Humanoid, frozen: boolean)
 	character:SetAttribute(SkillConstants.FROZEN_ATTRIBUTE, if frozen then true else nil)
 end
 
+-- The speed this rig should walk at right now, published by whoever owns
+-- that number (see SkillConstants.BASE_WALK_SPEED_ATTRIBUTE). Read at
+-- restore time, not at cast time: a boss that changed phase while frozen
+-- gets the new phase's speed back, not the one it had when it froze.
+-- Players carry no such attribute, so this returns nil for them and the
+-- caller falls back to the speed the freeze found.
+local function baseWalkSpeedOf(h: Humanoid): number?
+	local character = h.Parent
+	if not character then return nil end
+	local authored = character:GetAttribute(SkillConstants.BASE_WALK_SPEED_ATTRIBUTE)
+	return if type(authored) == "number" then authored else nil
+end
+
 -- Single teardown path for a freeze: timer expiry passes
 -- restoreSpeed=true, death/removal passes false (no point writing
 -- WalkSpeed on a dead or destroyed humanoid).
@@ -100,7 +113,7 @@ local function purgeFreeze(h: Humanoid, restoreSpeed: boolean)
 		conn:Disconnect()
 	end
 	if restoreSpeed and h.Parent then
-		h.WalkSpeed = state.originalSpeed
+		h.WalkSpeed = baseWalkSpeedOf(h) or state.originalSpeed
 	end
 	setFrozenFlag(h, false)
 	SkillInterrupt.unsilence(h)
@@ -223,7 +236,8 @@ SkillEffects.handlers = {
 				end)
 			end
 		else
-			state = { originalSpeed = h.WalkSpeed, restoreAt = now + duration, conns = {} }
+			-- Fallback only — purgeFreeze prefers the live base attribute.
+			state = { originalSpeed = baseWalkSpeedOf(h) or h.WalkSpeed, restoreAt = now + duration, conns = {} }
 			_freezeState[h] = state
 			h.WalkSpeed = 0
 			-- One-shot death/removal cleanup: the timer paths above never

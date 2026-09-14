@@ -48,6 +48,7 @@ export type BossBlackboard = {
 	canSeeTarget: boolean,
 	targetHumanoid: Humanoid?,
 	targetRootPart: BasePart?,
+	perceptionRange: number?,
 	currentState: string,
 	targetPos: Vector3?,
 	currentPath: { Vector3 }?,

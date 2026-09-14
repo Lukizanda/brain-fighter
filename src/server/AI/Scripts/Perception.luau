@@ -98,7 +98,7 @@ function Perception.update(bb: Blackboard)
 		local hrp = hittable.hrp
 
 		local distance = (hrp.Position - npcPos).Magnitude
-		local perceptionRange = (bb :: any).perceptionRange or NPCConstants.DETECTION_RANGE
+		local perceptionRange = bb.perceptionRange or NPCConstants.DETECTION_RANGE
 		if distance < nearestDistance and distance <= perceptionRange then
 			nearestDistance = distance
 			nearestPlayer = player

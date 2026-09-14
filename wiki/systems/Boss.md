@@ -1,7 +1,7 @@
 ---
 type: system
 description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. One boss cycle per arena session, started on RoundStarted and stopped on RoundEnded; HUD remotes, perception and skill targets are all scoped to the BossPoint's arena (Phase 6 stage 3 + refactor chunk 9).
-updated: 2026-09-10
+updated: 2026-09-14
 ---
 
 # Boss
@@ -18,6 +18,7 @@ Supersedes [[systems/BossAdapter]] (Phase 3 static Model). The `src/server/BossA
 |---|---|
 | `src/shared/Boss/BossConfig.luau` | `BOSS_TYPES` registry + `DEFAULT_TYPE`; per-type vitals, phases, and per-skill params |
 | `src/shared/Boss/BossTypes.luau` | `BossBlackboard` + `BossTypeSpec` types; `rigName` and `hipHeight` optional fields |
+| `src/shared/Boss/BossConstants.luau` | Boss *behaviour* numbers that hold for every boss — spawn drop height, HP-label offsets, attack origin height, the cooldown fallback. The per-type numbers stay in `BossConfig` (chunk 11) |
 | `src/shared/Boss/BossEvents/BossHealthChanged.model.json` | RemoteEvent — fires `(currentHP, maxHP, phaseIndex)` on HP change (throttled 0.1s). Scoped to the BossPoint's arena roster, not `FireAllClients` — see § Broadcast audience |
 | `src/shared/Boss/BossEvents/BossPhaseChanged.model.json` | RemoteEvent — fires `phaseIndex` (0 = defeated/no boss). Same scoping |
 | `src/shared/Boss/BossEvents/BossPartDestroyed.model.json` | RemoteEvent — scaffold for future destructible-part system |
@@ -28,7 +29,7 @@ Supersedes [[systems/BossAdapter]] (Phase 3 static Model). The `src/server/BossA
 |---|---|
 | `src/server/Boss/BossService.server.luau` | Top-level lifecycle: spawn, Heartbeat tick loop, death, respawn |
 | `src/server/Boss/Scripts/BossSpawner.luau` | Builds the Boss Model; resolves rig by `typeSpec.rigName` (default: Patroller); applies scale, `hipHeight` override, phase coloring |
-| `src/server/Boss/Scripts/BossController.luau` | Per-boss orchestrator: StateMachine + Perception + BossPhaseManager |
+| `src/server/Boss/Scripts/BossController.luau` | Per-boss orchestrator: StateMachine + Perception + BossPhaseManager. Owns `BaseWalkSpeed` across phase changes |
 | `src/server/Boss/Scripts/BossStates.luau` | Five state definitions passed to `StateMachine.new()`; Attack dispatches via `SkillDelivery.deliver` |
 | `src/server/Boss/Scripts/BossPhaseManager.luau` | Monitors HP thresholds; fires `onPhaseChanged` callback on transition |
 | `src/shared/Skills/SkillDelivery.luau` | Delivery handlers (`instant`, `projectile`, `aoe`, `world_spawn`) — boss and player spells share this |
@@ -101,7 +102,11 @@ Cooldown ──(timer + player out of range)─→ Patrol
 Cooldown ──(timer + no player)───────────→ Idle
 ```
 
-**Facing behavior:** `AttackPrep` always smoothly rotates the boss toward its target (180 °/s lerp, frame-rate-independent). When `BossTypeSpec.continuousFacing = true`, the same smooth rotation runs in Idle, Attack, and Cooldown as well. Patrol is excluded — the Humanoid pathfinding system owns facing during movement. The turn rate constant (`FACE_TURN_RATE`) lives at the top of `BossStates.luau`.
+**Facing behavior:** `AttackPrep` always rotates the boss toward its target. When `BossTypeSpec.continuousFacing = true`, the same rotation runs in Idle, Attack, and Cooldown as well. Patrol is excluded — the Humanoid owns facing while the boss walks, and `PatrolState.onEnter` calls `Actions.ReleaseFacing` to hand it back.
+
+Since refactor chunk 11 (2026-09-14) the turning is done by an **`AlignOrientation` on the boss HRP**, not by writing `HumanoidRootPart.CFrame`. The old code lerped the CFrame every tick, which is the case the project rule exists for: the physics solver reasserts its own transform on the next step, so the boss shuddered through every windup instead of turning (audit finding F5). `Actions.FaceTarget` builds the constraint, switches `Humanoid.AutoRotate` off for as long as it holds the rig, and feeds it the goal orientation; the authored 180 °/s survives as the constraint's `MaxAngularVelocity`, read from `NPCConstants.FACE_TURN_RATE_DEGREES`. One owner per property: while the constraint is enabled nothing else steers the boss.
+
+**Walk speed across a phase change.** `BossSpawner` publishes phase 1's `walkSpeed` on the Model as `SkillConstants.BASE_WALK_SPEED_ATTRIBUTE` (`BaseWalkSpeed`), and `BossController` rewrites it on every phase transition. The phase only writes `Humanoid.WalkSpeed` itself when the rig is **not** frozen, because a freeze pins WalkSpeed to 0 and owns it until it lifts. `SkillEffects.purgeFreeze` then restores the *attribute*, read at restore time — so a boss that changes phase mid-freeze thaws at the new phase's speed. Before chunk 11 the phase change thawed the boss early and the freeze put the previous phase's speed back permanently, since nothing writes WalkSpeed again until the next transition.
 
 **Key BossBlackboard fields** (beyond NPCTypes.Blackboard):
 
@@ -196,7 +201,7 @@ One boss cycle per arena session. `BossService` listens to the GameMode
 - `disable()` / `enable()` pause and resume every live cycle's tick;
   `destroy()` is bound to `game:BindToClose`.
 
-**Why the stamp matters.** The boss shares the NPC system's `Perception`, which
+**Why the stamp matters.** The boss shares the generic AI layer's `Perception` (`server/AI/Scripts`, chunk 11), which
 now scans `Hittables.collect(BroadcastAudience.forArena(id), id)` with the id
 read off the rig's own `ArenaId` attribute — so a boss in arena A never sees
 arena B's players, and never sees a hub player at all (nothing hostile carries
@@ -258,7 +263,7 @@ Add a new boss type by adding another entry to `BOSS_TYPES`; switch the active b
 
 ## See also
 
-- [[systems/NPC]] — shared StateMachine, Perception, Actions modules reused verbatim
+- [[systems/NPC]] — the shared StateMachine, Perception and Actions layer, in `server/AI/Scripts` since chunk 11 and reused verbatim by the boss
 - [[systems/HUD]] — HudLayoutManager region system; BossHudGui deliberately sits outside it with its own ScreenGui
 - [[systems/SpellExecutor]] — effect runner; damages Boss Humanoid directly
 - [[systems/Health]] — applyDamage pipeline; boss receives firearm hits the same as any NPC

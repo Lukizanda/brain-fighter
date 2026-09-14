@@ -25,7 +25,7 @@ Refactor chunk 4 ([[design/refactor-plan-2026-09]]; audit findings F1, F2, F34) 
 | Player spells (`SpellCastService` → `SpellExecutor` → `SkillDelivery` → `SkillEffects`) | the caster | skill name (`Firebolt`, `Inferno`, …) |
 | Boss skills (`BossStates` → `SkillDelivery` → `SkillEffects`) | nil | skill name (`GroundSlam`, `FireballVolley`) |
 | `DeathZoneService` | nil | `death_zone` (`HealthConstants.INSTANT_KILL_DAMAGE`, so it kills through any shield or armor) |
-| NPC melee (`MeleeHitDetector`) | nil | none yet — an NPC kill still reads "Unknown"; noted under chunk 9 of the refactor plan |
+| NPC melee | — | **removed** in chunk 11; `Actions.MeleeAttack` and the `MeleeHitDetector` modules are deleted, and no archetype ever called them. NPC shots carry `cause = <Archetype>` (chunk 9) |
 
 ## PvP gate (2026-09-08)
 

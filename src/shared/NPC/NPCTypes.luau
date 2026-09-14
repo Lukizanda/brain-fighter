@@ -31,6 +31,10 @@ export type Blackboard = {
 	canSeeTarget: boolean,
 	targetHumanoid: Humanoid?, -- cached humanoid of nearestPlayer's character
 	targetRootPart: BasePart?, -- cached HRP of nearestPlayer's character (for raycasting)
+	-- How far this rig notices players from, when it wants something other
+	-- than NPCConstants.DETECTION_RANGE. The boss sets it from its type
+	-- spec; Patrollers leave it nil and take the default.
+	perceptionRange: number?,
 
 	-- Decision output (written by Decision layer, read by Action layer)
 	currentState: string,

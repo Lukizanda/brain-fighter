@@ -34,7 +34,7 @@ local SkillBuffs      = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
 local SkillVisuals    = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 local VfxConfig       = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 local collectStream   = require(ReplicatedStorage.Shared.Vfx.collectStream)
-local laserBeamEffect = require(ReplicatedStorage.Shared.Weapon.Scripts.Effects.laserBeamEffect)
+local laserBeamEffect = require(ReplicatedStorage.Shared.Vfx.laserBeamEffect)
 local spawnEffect     = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
 local log         = Logger.new("WorldVfxController")
