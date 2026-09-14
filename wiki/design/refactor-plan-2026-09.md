@@ -383,7 +383,7 @@ Divergences (2026-09-11):
 
 ## Chunk 11 — Boss ownership
 
-Status: done — 2026-09-14 — 53a43d5 (flake) + refactor commit below
+Status: done — 2026-09-14 — 53a43d5 (NPC-suite flake) + 75969d7 (refactor)
 Findings: F5, F11, F33 (AI folder), F35 (laser + melee), F39
 Risk: M · Playtest: **yes** — freeze the boss across a phase change and confirm the restored speed is the new phase's; boss turns without jitter; NPC tracer visible · Depends on: chunk 9 · Blocked on: nothing
 
