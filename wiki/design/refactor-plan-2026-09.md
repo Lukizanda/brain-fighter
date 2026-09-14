@@ -353,7 +353,7 @@ Divergences (2026-09-10):
 
 ## Chunk 10 — Presentation dedupe and layering
 
-Status: done — 2026-09-11 — <commit>
+Status: done — 2026-09-14 — b77ec1c (code 2026-09-11; two-client visuals check closed 2026-09-14, see divergences)
 Findings: F28, F29 (remaining), F33 (telegraph), F40, F45 (client controllers)
 Risk: M · Playtest: **yes** — freeze, burn, shield, charge orb each still render on a second client; boss windup disc renders · Depends on: chunk 7 · Blocked on: nothing
 
