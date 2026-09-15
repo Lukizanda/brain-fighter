@@ -16,7 +16,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
+local HudConstants = require(ReplicatedStorage.Shared.Hud.HudConstants)
 local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
+local HudLayoutManager = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
+local DeathScreenBuilder = require(ReplicatedStorage.Shared.Hud.DeathScreenBuilder)
 
 local log = Logger.new("DeathScreen")
 
@@ -34,12 +37,9 @@ gameStateChangedRemote.OnClientEvent:Connect(function(state)
 	currentRespawnTime = state.respawnTime or currentRespawnTime
 end)
 
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "DeathScreenGui"
-screenGui.ResetOnSpawn = false
-screenGui.DisplayOrder = 30 -- above damage flash
-screenGui.IgnoreGuiInset = true
-screenGui.Parent = player:WaitForChild("PlayerGui")
+local handle = DeathScreenBuilder.build()
+handle.screenGui.DisplayOrder = HudConstants.LAYERS.Modal -- above damage flash
+handle.screenGui.Parent = player:WaitForChild("PlayerGui")
 
 -- Round and competition chrome: no meaning in the hub.
 --
@@ -49,61 +49,15 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 -- true -> false transition whenever the gate has already forced it false —
 -- no changed signal fires, so the gate keeps `ownerWants = true` and
 -- reveals the overlay to a living player on the next arena entry.
-HudGate.bindScreenGui(screenGui, HudGate.Policy.ArenaOnly)
-
-local overlay = Instance.new("Frame")
-overlay.Size = UDim2.new(1, 0, 1, 0)
-overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-overlay.BackgroundTransparency = 0.4
-overlay.BorderSizePixel = 0
-overlay.Visible = false
-overlay.Parent = screenGui
-
-local countdown = Instance.new("TextLabel")
-countdown.Size = UDim2.new(0, 300, 0, 50)
-countdown.Position = UDim2.new(0.5, -150, 0.4, 0)
-countdown.BackgroundTransparency = 1
-countdown.TextColor3 = Color3.fromRGB(255, 255, 255)
-countdown.Font = Enum.Font.GothamBold
-countdown.TextSize = 24
-countdown.Text = "Eliminated"
-countdown.Parent = overlay
-
-local deathTime: number? = nil
-local countdownTask: thread? = nil
-
-local function hide()
-	overlay.Visible = false
-	deathTime = nil
-	if countdownTask then
-		task.cancel(countdownTask)
-		countdownTask = nil
-	end
-end
-
-local function show()
-	overlay.Visible = true
-	deathTime = os.clock()
-
-	local respawnTime = currentRespawnTime
-
-	countdownTask = task.spawn(function()
-		local remaining = respawnTime
-		while remaining > 0 and overlay.Visible do
-			countdown.Text = string.format("Respawning in %d...", math.ceil(remaining))
-			task.wait(0.1)
-			remaining = respawnTime - (os.clock() - (deathTime :: number))
-		end
-		if overlay.Visible then
-			countdown.Text = "Respawning..."
-		end
-	end)
-end
+HudGate.bindScreenGui(handle.screenGui, HudGate.Policy.ArenaOnly)
+HudLayoutManager:attachScale(handle.screenGui)
 
 local function bindCharacter(character: Model)
-	hide()
+	handle:hide()
 	local humanoid = character:WaitForChild("Humanoid") :: Humanoid
-	humanoid.Died:Connect(show)
+	humanoid.Died:Connect(function()
+		handle:show(currentRespawnTime)
+	end)
 end
 
 if player.Character then
