@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-09-08
+updated: 2026-09-15
 ---
 
 # Build Plan
@@ -334,7 +334,7 @@ Hence the gate column: stages 1–5 are safe against the current trust model (Pv
 
 ## Phase 7 — Structural refactor (from the 2026-09 audit)
 
-Added 2026-09-08 from [[design/system-audit-2026-09]]. Full tickable plan with owns / must-not-touch / done condition / risk / playtest / dependencies per chunk in [[design/refactor-plan-2026-09]] — sessions claim a chunk there, tick its items and record the commit. Nothing has started.
+Added 2026-09-08 from [[design/system-audit-2026-09]]. Full tickable plan with owns / must-not-touch / done condition / risk / playtest / dependencies per chunk in [[design/refactor-plan-2026-09]] — sessions claim a chunk there, tick its items and record the commit. **Done 2026-09-15** — all twelve chunks landed between 2026-09-08 and 2026-09-15; the plan page's per-chunk notes and § Divergence log hold what differed.
 
 **Why a phase and not a backlog:** two of the chunks are hard prerequisites for Phase 6 — a spell kill never fires `PlayerEliminated` (chunk 4), so stage 6 duels cannot credit a win, and `ScoreTracker`/spawn threat/boss targeting are still server-wide (chunks 8–9), so stage 5 cannot run a round in one arena without zeroing the other's. The rest is sequenced in front of them so the risky work lands on a harness that can catch a regression.
 
@@ -356,9 +356,11 @@ Added 2026-09-08 from [[design/system-audit-2026-09]]. Full tickable plan with o
 
 **Milestone:** `grep -rn "\.Health\s*=" src` hits `applyDamage` only; two sessions with disjoint rosters run rounds without touching each other's scores, spawns or targets; every `__tests.luau` is reachable from the autorunner; the boundary page lists no client-trusted gameplay remote.
 
-**Decisions:** Q1–Q11 answered 2026-09-08 (recommended option on every one); recorded in [[design/refactor-plan-2026-09]] § Decisions. No chunk is blocked on input. Next action is chunk 0.
+**Decisions:** Q1–Q11 answered 2026-09-08 (recommended option on every one); recorded in [[design/refactor-plan-2026-09]] § Decisions. No chunk is blocked on input. All chunks done as of 2026-09-15; remaining loose ends live on the plan page (chunk 9's two-arena client check, `RoundTimerGui` unported, tracker BRA.21 settings surface). Phase 6 stages 5 and 6 are unblocked.
 
 ## Plan changelog
+
+- **2026-09-15**: Phase 7 done — chunk 12 (HUD ports, settings cut) closed with the user's 720p check; chunks 4 and 8–9 landed earlier, so the Phase 6 stage 5/6 gates are open.
 
 - **2026-09-08**: Phase 7 added — structural refactor from [[design/system-audit-2026-09]]. The audit re-verified the June, UI and boundary audits against `src/`: the Skills leak, BossAdapter, template stack, Skills tests and boundary stages 1–6 are closed; the split-brain damage path is not, and it has become the blocker for Phase 6 stage 6 (a spell kill fires no `PlayerEliminated`, so nothing credits a duel). Stage 5 is likewise blocked on the server-wide `ScoreTracker`/spawn threat/boss targeting that Phase 6 stages 1–4 consciously deferred — the audit's position is that these are prerequisites of stage 5, not part of it. Twelve one-session chunks, cheap de-risking work in front of the four authority/session chunks; eleven questions for the user, recorded on the audit page.
 

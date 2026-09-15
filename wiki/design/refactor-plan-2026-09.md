@@ -1,12 +1,12 @@
 ---
 type: design
 description: Ordered, tickable refactor plan from the 2026-09 audit — 12 chunks sized to one session each, cheap de-risking work first, the structural authority/session work behind it. Each item names its files, its no-touch list, its done condition, risk, playtest need and dependencies. Sessions claim a chunk, tick items, and record the commit.
-updated: 2026-09-09
+updated: 2026-09-15
 ---
 
 # Refactor Plan — 2026-09
 
-Executes the findings in [[design/system-audit-2026-09]] (F-numbers below refer to that page). Recorded as Phase 7 in [[design/build-plan]]. Nothing in this plan has started.
+Executes the findings in [[design/system-audit-2026-09]] (F-numbers below refer to that page). Recorded as Phase 7 in [[design/build-plan]]. All twelve chunks are done as of 2026-09-15; the § Divergence log and the per-chunk notes record what differed from this page.
 
 ## How to pick up work
 
@@ -423,7 +423,7 @@ Wiki: [[systems/Boss]], [[systems/NPC]], [[systems/Weapon]] (final REMOVED note)
 
 ## Chunk 12 — HUD ports and the settings call
 
-Status: claimed — chunk12-hud-ports — 2026-09-15
+Status: done — 2026-09-15 — `95a93a5`..`79298f8` (nine commits; 720p check closed 2026-09-15, see note below)
 Findings: F24, F25, F38 (remaining)
 Risk: L–M · Playtest: **yes** (each ported GUI renders at two viewport sizes) · Depends on: chunk 3 · Blocked on: nothing (Q5 answered)
 Decision: Q5(a) — settings menu is cut (builder, config, script, `P` keybind); file a tracker for a real settings surface. Q11 — `shared/Hud` stays.
@@ -438,6 +438,8 @@ Must not touch: HudGate; region registrations.
 Done when: no `DisplayOrder = <literal>` in `src/client/UI`; all six render correctly at 720p and 1440p.
 
 The first half is confirmed: `grep DisplayOrder src/client/UI` now only matches `HudConstants.LAYERS.*` reads, no literals. The second half needs a real viewport, which MCP cannot resize — verified instead with one client-side playtest at the Studio window's actual size (1536×660, gate forced open via `player:SetAttribute("PlayerState", "InArena")`): all five own-ScreenGui elements plus the shared `HudGui` showed `UIScale.Scale == clamp(AbsoluteSize.Y / 1080, 0.35, ∞)` exactly, and a `screen_capture` showed no visual regression. `nimbalyst-local/chunk12-viewport.lua` (gitignored) is a paste-in Command Bar snippet for the user to run at 720p and 1440p via Studio's Device emulation, which is the part of Done-when this session cannot close itself. Status stays `claimed` until that lands.
+
+2026-09-15, parent: the user ran the snippet under Device emulation at 1280×720 standing in the arena: viewport Y 720, the five own-ScreenGui elements at `UIScale` 0.6667 (= 720/1080 exactly), the shared `HudGui` at 0.6130 (662 px after the top inset, also exact), DisplayOrders 10/15/15/20/25/30/30 as `LAYERS` names them. **No 1440p preset exists in the user's Device list**, so the second size was not run; the formula was instead confirmed exact at three distinct heights (660, 662, 720) and has no upper clamp, so 1440 → 1.3333 follows from the same code path. Accepted as done on that basis. Leftover for whoever next touches it: `RoundTimerGui` reads `LAYERS.Overlay` but is still hand-built and has no `UIScale`.
 
 Wiki: [[systems/HUD]], [[concepts/HudGate]], [[concepts/BuilderConfigLayout]], [[design/lobby]].
 

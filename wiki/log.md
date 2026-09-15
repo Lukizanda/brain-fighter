@@ -1882,3 +1882,16 @@ pending when this entry was written.
 
 Pages: [[systems/HUD]], [[concepts/HudGate]], [[concepts/BuilderConfigLayout]],
 [[design/lobby]], design/refactor-plan-2026-09 § Chunk 12 (done + divergences).
+
+## [2026-09-15] ingest | Refactor plan 2026-09 closed — chunk 12's 720p check
+
+The user ran `nimbalyst-local/chunk12-viewport.lua` at 1280×720 in the arena:
+the five own-ScreenGui HUD elements sat at `UIScale` 0.6667 (720/1080) and the
+shared `HudGui` at 0.6130 (662 px after the inset), both exact, with
+DisplayOrders reading from `HudConstants.LAYERS`. No 1440p preset exists in
+the Device list, so that size was not run; three exact heights and an
+unclamped formula were accepted instead. Chunk 12 is done, which closes every
+chunk of [[design/refactor-plan-2026-09]] and Phase 7 of [[design/build-plan]].
+Plan page header and `updated:` bumped; build-plan Phase 7 marked done.
+Still open from the plan: chunk 9's two-arena client check (user skipped),
+`RoundTimerGui` unported, tracker BRA.21 for a settings surface.
