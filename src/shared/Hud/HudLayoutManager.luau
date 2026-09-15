@@ -28,7 +28,7 @@ function HudLayoutManager:_init()
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "HudGui"
 	screenGui.ResetOnSpawn = false
-	screenGui.DisplayOrder = HudConstants.HUD_DISPLAY_ORDER
+	screenGui.DisplayOrder = HudConstants.LAYERS.Hud
 	screenGui.IgnoreGuiInset = false
 	screenGui.Parent = player.PlayerGui
 	self._screenGui = screenGui
@@ -70,6 +70,12 @@ function HudLayoutManager:_init()
 	log:info("Initialized with " .. tostring(#self:_getRegionNames()) .. " regions")
 end
 
+-- The one formula for viewport-driven scale, shared by the HudGui's own
+-- UIScale and every UIScale handed out via `attachScale`.
+function HudLayoutManager:_scaleFor(absoluteHeight: number): number
+	return math.max(absoluteHeight / HudConstants.REFERENCE_HEIGHT, HudConstants.MIN_SCALE)
+end
+
 function HudLayoutManager:_updateScale()
 	local gui = self._screenGui
 	if not gui then
@@ -77,9 +83,29 @@ function HudLayoutManager:_updateScale()
 	end
 
 	if self._uiScale then
-		local scale = gui.AbsoluteSize.Y / HudConstants.REFERENCE_HEIGHT
-		self._uiScale.Scale = math.max(scale, HudConstants.MIN_SCALE)
+		self._uiScale.Scale = self:_scaleFor(gui.AbsoluteSize.Y)
 	end
+end
+
+-- For the own-ScreenGui HUD elements (BossHudGui, DeathScreenGui, etc.):
+-- creates a UIScale on `screenGui` and keeps it stepping with the same
+-- viewport formula the shared HudGui uses, so there is still one owner of
+-- the scale math even though these elements bypass the region system.
+function HudLayoutManager:attachScale(screenGui: ScreenGui): UIScale
+	local uiScale = Instance.new("UIScale")
+	uiScale.Parent = screenGui
+
+	local function refresh()
+		uiScale.Scale = self:_scaleFor(screenGui.AbsoluteSize.Y)
+	end
+	refresh()
+
+	local connection = screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(refresh)
+	screenGui.Destroying:Connect(function()
+		connection:Disconnect()
+	end)
+
+	return uiScale
 end
 
 function HudLayoutManager:getRegion(regionName: string): Frame

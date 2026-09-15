@@ -423,7 +423,7 @@ Wiki: [[systems/Boss]], [[systems/NPC]], [[systems/Weapon]] (final REMOVED note)
 
 ## Chunk 12 — HUD ports and the settings call
 
-Status: open
+Status: claimed — chunk12-hud-ports — 2026-09-15
 Findings: F24, F25, F38 (remaining)
 Risk: L–M · Playtest: **yes** (each ported GUI renders at two viewport sizes) · Depends on: chunk 3 · Blocked on: nothing (Q5 answered)
 Decision: Q5(a) — settings menu is cut (builder, config, script, `P` keybind); file a tracker for a real settings surface. Q11 — `shared/Hud` stays.

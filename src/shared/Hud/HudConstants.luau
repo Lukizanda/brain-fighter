@@ -70,7 +70,18 @@ local HudConstants = {
 	-- _updateScale() in HudLayoutManager derives Scale = viewportY / REFERENCE_HEIGHT.
 	REFERENCE_HEIGHT = 1080,
 	MIN_SCALE = 0.35,
-	HUD_DISPLAY_ORDER = 10,
+	-- DisplayOrder tiers for every ScreenGui in the HUD, named for what sits
+	-- there rather than the number itself. The shared HudGui (regions) sits
+	-- at Hud; own-ScreenGui elements pick the tier that matches their place
+	-- in the stack — refactor chunk 12 replaced the per-file literals with
+	-- these.
+	LAYERS = {
+		Hud = 10,        -- HudLayoutManager's shared HudGui (regions)
+		Overlay = 15,    -- BossHudGui, RoundTimerGui
+		Feedback = 20,   -- DamageFeedbackGui
+		Scoreboard = 25, -- ScoreboardGui
+		Modal = 30,      -- GameStateGui, DeathScreenGui
+	},
 }
 
 return HudConstants

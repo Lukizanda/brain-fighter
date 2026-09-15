@@ -15,6 +15,7 @@ local Players = game:GetService("Players")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
+local HudConstants = require(ReplicatedStorage.Shared.Hud.HudConstants)
 local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
 
 local log = Logger.new("RoundTimerGui")
@@ -29,7 +30,7 @@ local RoundState = GameModeConstants.RoundState
 ----------------------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "RoundTimerGui"
-screenGui.DisplayOrder = 15
+screenGui.DisplayOrder = HudConstants.LAYERS.Overlay
 screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = player:WaitForChild("PlayerGui")
