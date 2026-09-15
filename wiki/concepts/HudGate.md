@@ -1,7 +1,7 @@
 ---
 type: concept
 description: How HUD elements are suppressed by player state (lobby vs arena). A declared policy per element, enforced by a required argument on register — because the failure mode is silent leakage, not an error.
-updated: 2026-09-08
+updated: 2026-09-15
 ---
 
 # HudGate
@@ -43,9 +43,12 @@ thing that determines where a gate can even be applied:
 |---|---|---|
 | `HudLayoutManager:register` into a region frame | 7 scripts, **9 elements** (`GameplayHudGui` registers three) | `element.Visible` |
 | Own `ScreenGui` parented to `PlayerGui` | 6 — `BossHudGui`, `DamageFeedbackGui`, `DeathScreenGui`, `GameStateGui`, `RoundTimerGui`, `ScoreboardGui` | `screenGui.Enabled` |
-| Builder handle straight to `PlayerGui` | 1 — `SettingsMenuGui` | n/a, policy is `Always` |
 
-So a required argument on `register` alone would cover **9 of 16** gate points.
+> `SettingsMenuGui` used to be a third row here (a Builder handle parented
+> straight to `PlayerGui`, policy `Always`) but was cut in refactor chunk 12
+> (F25) — it wrote attributes nothing read. See [[design/refactor-plan-2026-09]].
+
+So a required argument on `register` alone would cover **9 of 15**.
 The other half needs a second entry point. This is not two idioms — it is one
 idiom (*declare a policy*) with two adapters, because two attachment styles
 already exist in the codebase.
@@ -195,7 +198,6 @@ registers **three** elements and they do not agree.
 | `SpellMenuGui` | `Always` | you cannot cast at the dummy without it |
 | `MindFullIndicatorGui` | `Always` | part of the memorize loop |
 | `DashButtonGui` | `Always` | movement is not mode-specific |
-| `SettingsMenuGui` | `Always` | per [[design/lobby]] |
 | `BuffTrayGui` | `Always` | self-buff spells are castable in the lobby. Moot today — the tray is unwired and awaiting a BuffAdapter (the `_G.PlayerHud.BuffTray` handle it used to publish was deleted in refactor chunk 3; nothing had ever read it) |
 | `BossHudGui` | `ArenaOnly` | own ScreenGui, gated via `.Enabled` |
 | `DamageFeedbackGui` | `ArenaOnly` | fires on damage *taken*; nothing in the lobby damages you |

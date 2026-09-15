@@ -1851,3 +1851,34 @@ hand under a ChangeHistoryService waypoint — **the `.rbxl` needs saving**.
 Pages: [[systems/NPC]], [[systems/Boss]], [[systems/Weapon]] (final REMOVED
 note), [[systems/Health]], [[systems/VisualEffects]], [[systems/LetterBlaster]],
 [[index]], design/refactor-plan-2026-09 § Chunk 11 (done + divergences).
+
+## [2026-09-15] ingest | Chunk 12 — HUD ports + settings cut
+
+`DeathScreenGui`, `DamageFeedbackGui`, `GameStateGui`, `ScoreboardGui`,
+`BossHudGui` and `KillFeedGui` were hand-built inline (F24); each now has a
+`<Name>Builder.luau` / `<Name>Config.luau` pair in `src/shared/Hud/`, same
+split as the rest of the HUD. `HudConstants.LAYERS` replaces the five
+per-file `DisplayOrder` literals (and the unread `HUD_DISPLAY_ORDER`) with
+named tiers (`Hud`/`Overlay`/`Feedback`/`Scoreboard`/`Modal`);
+`HudLayoutManager:attachScale` gives each own-ScreenGui element a `UIScale`
+driven by the same `viewportY / REFERENCE_HEIGHT` formula the shared `HudGui`
+uses, so none of them ignore `HudConstants.REFERENCE_HEIGHT` any more.
+`RoundTimerGui` was not ported (still hand-built) but its literal
+`DisplayOrder` was switched to `LAYERS.Overlay` too, since the chunk's
+done-condition was "no literal `DisplayOrder` left in `src/client/UI`".
+
+Settings menu cut per Q5(a)/F25: `SettingsMenuGui.client.luau`,
+`SettingsMenuBuilder.luau`, `SettingsMenuConfig.luau` and the `P` keybind are
+deleted — the menu wrote `Settings_*` attributes nothing read, and its
+intended crosshair consumer (`ReticleBuilder`) was already dead code. Tracker
+BRA.21 (local key, no team on this workspace) tracks a real settings surface
+for later.
+
+Verification: harness `RunTests=all` and a client-side playtest checking
+each ported element's `UIScale.Scale` against the viewport formula — see the
+chunk's session report for the actual numbers. Two-viewport (720p/1440p)
+confirmation via Studio Device emulation is user-driven and was still
+pending when this entry was written.
+
+Pages: [[systems/HUD]], [[concepts/HudGate]], [[concepts/BuilderConfigLayout]],
+[[design/lobby]], design/refactor-plan-2026-09 § Chunk 12 (done + divergences).

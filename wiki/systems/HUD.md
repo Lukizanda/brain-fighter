@@ -1,7 +1,7 @@
 ---
 type: system
-description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, reticle, settings menu, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu as circular hold-to-charge panels with concentric tier rings, MemorizeButton, MindFullIndicator), and the mobile DashButton. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291.)
-updated: 2026-09-08
+description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu as circular hold-to-charge panels with concentric tier rings, MemorizeButton, MindFullIndicator), the mobile DashButton, and the six own-ScreenGui elements (DeathScreen, DamageFeedback, GameState, Scoreboard, BossHud, KillFeed). (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291. SettingsMenu cut 2026-09-15, refactor chunk 12.)
+updated: 2026-09-15
 ---
 
 # HUD System
@@ -47,7 +47,6 @@ flowchart LR
     BTG["BuffTrayGui (scaffold)"]:::coord
     RTG["RoundTimerGui<br/>(gated ROUND_TIMER_ENABLED)"]:::coord
     BHG["BossHudGui<br/>(own ScreenGui)"]:::modal
-    SMGUI["SettingsMenuGui<br/>(modal overlay)"]:::modal
     SBG["ScoreboardGui<br/>(Tab modal)"]:::modal
     GSG["GameStateGui<br/>(end-of-round modal)"]:::modal
     DSG["DeathScreenGui"]:::modal
@@ -62,7 +61,12 @@ flowchart LR
     MFB["MindFullIndicatorBuilder"]:::builder
     DBB["DashButtonBuilder"]:::builder
     BTB["BuffTrayBuilder"]:::builder
-    STB["SettingsMenuBuilder<br/>(⚠ reads Players.LocalPlayer — NIM-19)"]:::builder
+    DSB["DeathScreenBuilder"]:::builder
+    DAFB["DamageFeedbackBuilder"]:::builder
+    GSB["GameStateBuilder"]:::builder
+    SCB["ScoreboardBuilder"]:::builder
+    BHB["BossHudBuilder"]:::builder
+    KFB["KillFeedBuilder"]:::builder
   end
 
   %% --- coordinator → builder ---
@@ -71,7 +75,12 @@ flowchart LR
   DBG --> DBB
   MFI --> MFB
   BTG --> BTB
-  SMGUI --> STB
+  DSG --> DSB
+  DFG --> DAFB
+  GSG --> GSB
+  SBG --> SCB
+  BHG --> BHB
+  KFG --> KFB
 
   %% --- coordinator → HudLayoutManager region ---
   GHUD -- "register(BottomCenter, ×3)" --> BC
@@ -84,7 +93,6 @@ flowchart LR
 
   %% --- modal / own-ScreenGui (bypass HudLayoutManager) ---
   BHG -.->|own ScreenGui| HM
-  SMGUI -.->|own ScreenGui| HM
   SBG -.->|own ScreenGui| HM
   GSG -.->|own ScreenGui| HM
   DSG -.->|own ScreenGui| HM
@@ -104,8 +112,8 @@ Legend: blue = Coordinator LocalScript, orange = pure-module Builder, green = ga
 ## Single-ownership invariants (Phase 4.8 audit)
 
 - `GameplayHudGui` is the **sole BottomCenter coordinator**. (The former `LoadoutDropClient` toast stack that shared BottomCenter was removed with the Loadout system in commit `6610291`.)
-- Every Builder in `src/shared/Hud/` exposes `:destroy()` (12/12). Health adapter connections are tracked inline in `GameplayHudGui` (`healthConnections` table, cleared on respawn).
-- All Builders are pure modules except `SettingsMenuBuilder` (reads `Players.LocalPlayer` — tracked in NIM-19).
+- Every Builder in `src/shared/Hud/` exposes `:destroy()`. Health adapter connections are tracked inline in `GameplayHudGui` (`healthConnections` table, cleared on respawn).
+- All Builders are pure modules — no client globals, no self-parenting. (`SettingsMenuBuilder` was the one exception; cut in refactor chunk 12 along with the rest of the settings menu.)
 - Detailed findings: [[design/ui-architecture-review]].
 - **A gated element never writes its own gated property** — see
   [[concepts/HudGate]] § Owners never write the gated property. Added as
@@ -153,6 +161,23 @@ was also switched to `AutomaticSize.XY` with a zero authored size —
 the kill feed down even with no buffs active. An empty tray now measures
 0 × 0 and the feed does not move.
 
+## Own-ScreenGui elements ported to Builder+Config (2026-09-15, refactor chunk 12)
+
+`DeathScreenGui`, `DamageFeedbackGui`, `GameStateGui`, `ScoreboardGui`, `BossHudGui` and `KillFeedGui` used to build their DOM by hand inline in the coordinator LocalScript (F24). Each now has a `<Name>Builder.luau` / `<Name>Config.luau` pair in `src/shared/Hud/`, same split as every other HUD element: the Builder returns a handle of setter methods (`show`/`hide`/`setScores`/`addEntry`/…), the coordinator owns remote wiring and calls the handle, the Config holds every color/size/font literal that used to be inline.
+
+Two things changed that are specific to this batch, because five of the six (all but `KillFeedGui`) parent their own `ScreenGui` instead of registering into a `HudLayoutManager` region:
+
+- **`DisplayOrder` literals → `HudConstants.LAYERS`.** The five per-file numbers (15/20/25/30, with two files sharing 15 and two sharing 30) are now named tiers — `Overlay` (`BossHudGui`), `Feedback` (`DamageFeedbackGui`), `Scoreboard` (`ScoreboardGui`), `Modal` (`GameStateGui`, `DeathScreenGui`) — alongside the shared `HudGui`'s own `Hud` tier. `RoundTimerGui` (not ported this chunk, still hand-built) also switched its literal to `LAYERS.Overlay` since it shared the same visual tier and the chunk's done-condition was "no literal `DisplayOrder` left in `src/client/UI`".
+- **No `UIScale` → `HudLayoutManager:attachScale(screenGui)`.** These five ScreenGuis never scaled with `HudConstants.REFERENCE_HEIGHT` the way region-registered elements do (`HudLayoutManager` only ever built one `UIScale`, on its own `HudGui`). `attachScale` creates a second `UIScale` on the caller's `ScreenGui` and keeps it driven by the same `viewportY / REFERENCE_HEIGHT` formula — one formula, two `UIScale` instances, still one owner (`HudLayoutManager`).
+
+`KillFeedGui` was ported for the same reason (F24 named all six) but was never own-ScreenGui — it registers a `Frame` into `HudLayoutManager`'s `TopRight` region and already inherited the shared `HudGui`'s `UIScale`. Its port is a straight Builder+Config extraction with no `DisplayOrder` or scale changes.
+
+The gate-owner rule is unaffected: `DeathScreenGui`'s `DeathScreenBuilder` still drives `overlay.Visible` from `show`/`hide`, never the `ScreenGui.Enabled` that `HudGate.bindScreenGui` owns (see [[concepts/HudGate]] § Owners never write the gated property) — that split just moved from the old inline script into the Builder's closure.
+
+## Settings menu — CUT (2026-09-15, refactor chunk 12, F25/Q5(a))
+
+`SettingsMenuGui.client.luau`, `SettingsMenuBuilder.luau` and `SettingsMenuConfig.luau` are deleted, along with the `P` keybind. The menu wrote `Settings_*` player attributes (sensitivity, FOV, crosshair color, aim assist) that nothing ever read — the intended crosshair consumer, `ReticleBuilder`, has zero requirers and was already dead code (see § Reticle / TouchControl below). Tracker BRA.21 (local key) tracks building a real settings surface when one is needed.
+
 ## Team-score gate — REMOVED (2026-09-08, refactor chunk 0)
 
 `src/client/UI/TeamScoreGui.client.luau` used to be a top-of-script bail when `GameConfig.TEAMS_ENABLED` is false — the LocalScript still auto-ran on join but exited before building the container or hooking remotes. Deleted as dead code: `TEAMS_ENABLED` has read `false` since the Archon team/PvP template was cut in `6610291`, and `GameConfig`'s comment now says flipping it no longer restores anything (the mode files are gone). `KillFeedGui` still displays NPC kills unaffected; its team-tinted name colours fall back to `NEUTRAL_NAME_COLOR` since every player is team-less.
@@ -167,8 +192,19 @@ src/shared/Hud/
   AttributeBarConfig.luau
   BuffTrayBuilder.luau            — top-right buff icons (scaffold)
   BuffIconConfig.luau
-  SettingsMenuBuilder.luau
-  SettingsMenuConfig.luau
+  -- Own-ScreenGui elements (refactor chunk 12):
+  DeathScreenBuilder.luau         — death overlay + respawn countdown
+  DeathScreenConfig.luau
+  DamageFeedbackBuilder.luau      — full-screen damage flash
+  DamageFeedbackConfig.luau
+  GameStateBuilder.luau           — end-of-round results overlay (winner + top players)
+  GameStateConfig.luau
+  ScoreboardBuilder.luau          — Tab-to-open scoreboard
+  ScoreboardConfig.luau
+  BossHudBuilder.luau             — boss health bar + phase label
+  BossHudConfig.luau
+  KillFeedBuilder.luau            — top-right kill feed strip (registers into TopRight, not own ScreenGui)
+  KillFeedConfig.luau
   -- Phase 4 gameplay widgets:
   BufferDisplayBuilder.luau       — letter-tile row from WordBuffer.tiles()
   BufferDisplayConfig.luau
@@ -187,9 +223,8 @@ src/shared/Hud/
 src/client/UI/
   GameplayHudGui.client.luau      — BottomCenter coordinator: single LAYOUT table owns tile/health/ABSORB
                                     stacking order; also owns CharacterAdded → adapter wiring
-  DamageFeedbackGui.client.luau   — directional damage indicators
-  DeathScreenGui.client.luau      — death overlay
-  SettingsMenuGui.client.luau     — settings menu mount
+  DamageFeedbackGui.client.luau   — directional damage indicators; own ScreenGui at HudConstants.LAYERS.Feedback
+  DeathScreenGui.client.luau      — death overlay; own ScreenGui at HudConstants.LAYERS.Modal
   SpellMenuGui.client.luau        — BottomRight; consumes the builder's charge signals, drives the local
                                     charge orb + the ChargeState relay, forwards castRequested to
                                     client/SpellCastController (RequestCast BindableFunction) and plays
@@ -198,8 +233,11 @@ src/client/UI/
                                     SpellCastServer relay left the HUD in refactor chunk 7 (audit F21)
   DashButtonGui.client.luau       — BottomRight vertical column (touch-only); tap → DashApi.requestDash()
   MindFullIndicatorGui.client.luau — TopCenter; shows/hides on mindFull/mindFreed
-  BossHudGui.client.luau          — own ScreenGui (IgnoreGuiInset=true, y=8); boss health bar + phase label; hidden until a boss spawns
-  RoundTimerGui.client.luau       — TopCenter; round state + formatted timer; gated behind GameConfig.ROUND_TIMER_ENABLED (currently false)
+  BossHudGui.client.luau          — own ScreenGui (IgnoreGuiInset=true, LAYERS.Overlay); boss health bar + phase label; hidden until a boss spawns
+  RoundTimerGui.client.luau       — TopCenter; round state + formatted timer; gated behind GameConfig.ROUND_TIMER_ENABLED (currently false); own ScreenGui at HudConstants.LAYERS.Overlay (not ported to Builder+Config this chunk)
+  GameStateGui.client.luau        — own ScreenGui at HudConstants.LAYERS.Modal; end-of-round results overlay
+  ScoreboardGui.client.luau       — own ScreenGui at HudConstants.LAYERS.Scoreboard; Y toggles the Tab-style panel
+  KillFeedGui.client.luau         — TopRight coordinator; forwards KillFeed remote entries to KillFeedBuilder
 ```
 
 ## Phase 4 gameplay widgets

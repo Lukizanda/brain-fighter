@@ -431,12 +431,15 @@ Decision: Q5(a) — settings menu is cut (builder, config, script, `P` keybind);
 Owns: `src/client/UI/{DeathScreenGui,DamageFeedbackGui,GameStateGui,ScoreboardGui,BossHudGui,KillFeedGui}.client.luau` + new Builder/Config pairs; `SettingsMenu*` (delete per Q5(a)); `HudConstants.LAYERS`.
 Must not touch: HudGate; region registrations.
 
-- [ ] Delete `SettingsMenuGui.client.luau`, `SettingsMenuBuilder.luau`, `SettingsMenuConfig.luau` and the `P` keybind; file a `task` tracker for a future settings surface.
-- [ ] `HudConstants.LAYERS`; each self-owned ScreenGui reads it and gets a `UIScale` from `HudLayoutManager`.
-- [ ] Port the six GUIs to Builder+Config, one per commit.
+- [x] Delete `SettingsMenuGui.client.luau`, `SettingsMenuBuilder.luau`, `SettingsMenuConfig.luau` and the `P` keybind; file a `task` tracker for a future settings surface. (`d1c5fc7`; tracker BRA.21, local key — this workspace has no team, so no shared issue key was issued.)
+- [x] `HudConstants.LAYERS`; each self-owned ScreenGui reads it and gets a `UIScale` from `HudLayoutManager`. (`95a93a5`)
+- [x] Port the six GUIs to Builder+Config, one per commit. (`e9ced84` DamageFeedbackGui, `a04d36d` DeathScreenGui, `fab03bf` BossHudGui, `4a68c8b` ScoreboardGui, `a884f2e` GameStateGui, `3d4fe8b` KillFeedGui)
 
 Done when: no `DisplayOrder = <literal>` in `src/client/UI`; all six render correctly at 720p and 1440p.
-Wiki: [[systems/HUD]].
+
+The first half is confirmed: `grep DisplayOrder src/client/UI` now only matches `HudConstants.LAYERS.*` reads, no literals. The second half needs a real viewport, which MCP cannot resize — verified instead with one client-side playtest at the Studio window's actual size (1536×660, gate forced open via `player:SetAttribute("PlayerState", "InArena")`): all five own-ScreenGui elements plus the shared `HudGui` showed `UIScale.Scale == clamp(AbsoluteSize.Y / 1080, 0.35, ∞)` exactly, and a `screen_capture` showed no visual regression. `nimbalyst-local/chunk12-viewport.lua` (gitignored) is a paste-in Command Bar snippet for the user to run at 720p and 1440p via Studio's Device emulation, which is the part of Done-when this session cannot close itself. Status stays `claimed` until that lands.
+
+Wiki: [[systems/HUD]], [[concepts/HudGate]], [[concepts/BuilderConfigLayout]], [[design/lobby]].
 
 ---
 

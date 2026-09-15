@@ -115,7 +115,7 @@ core verb touches; what hides is round and competition chrome:
   `KillFeedGui`, `ScoreboardGui`, `RoundTimerGui`, `GameStateGui`,
   `DeathScreenGui`, `TeamScoreGui`
 - **Live in lobby:** letter tiles, `MemorizeButton`, `SpellMenuGui`,
-  `MindFullIndicatorGui`, `BuffTrayGui`, `DashButtonGui`, `SettingsMenuGui`
+  `MindFullIndicatorGui`, `BuffTrayGui`, `DashButtonGui`
 - `BlockTapController` — live in the lobby; lobby blocks need no special case
 
 The mechanism is [[concepts/HudGate]]: a declared policy per element, made a
@@ -126,7 +126,9 @@ registering, and are gated on `.Enabled` through the same policy table.
 ## In the lobby for v1
 
 - **Tutorial entry** — [[systems/Tutorial]] (Phase 5.3) gets a natural front door.
-- **Settings access** — `SettingsMenuGui` exists; surface it.
+- **Settings access** — cut in refactor chunk 12 (F25): `SettingsMenuGui` wrote
+  attributes nothing read. [[design/refactor-plan-2026-09]] filed a tracker
+  item (BRA.21) for a real settings surface when one is needed.
 - **Practice blocks + a target dummy** — the lobby teaches the **whole** loop:
   tap a block, buffer letters, memorize for real energy, cast at a dummy. The
   earlier "buffer but grant no energy" plan taught the setup without the payoff,

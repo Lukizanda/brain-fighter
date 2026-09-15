@@ -1,7 +1,7 @@
 ---
 type: concept
 description: HUD architecture — Builder constructs, Config tunes, LayoutManager places. No .rbxmx GUI templates checked into the repo.
-updated: 2026-06-05
+updated: 2026-09-15
 ---
 
 # Builder + Config + LayoutManager
@@ -40,7 +40,9 @@ Builder output (AttributeBar instance from AttributeBarBuilder)
 - BufferDisplay, MemorizeButton, SpellMenu, MindFullIndicator, DashButton (Phase 4 gameplay widgets)
 - BuffTray
 - TouchControl (mobile)
-- SettingsMenu
+- DeathScreen, DamageFeedback, GameState, Scoreboard, BossHud, KillFeed —
+  the six own-ScreenGui elements ported to this pattern in refactor chunk 12
+  (see [[systems/HUD]])
 
 ## Anti-pattern: don't check in `.rbxmx` GUI templates
 
