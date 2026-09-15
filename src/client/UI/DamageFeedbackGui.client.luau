@@ -10,44 +10,28 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local HudConstants = require(ReplicatedStorage.Shared.Hud.HudConstants)
 local HudGate = require(ReplicatedStorage.Shared.Hud.HudGate)
+local HudLayoutManager = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
+local DamageFeedbackBuilder = require(ReplicatedStorage.Shared.Hud.DamageFeedbackBuilder)
 
 local log = Logger.new("DamageFeedback")
 
 local player = Players.LocalPlayer
 local damageFeedbackRemote = ReplicatedStorage.Shared.Health.Remotes.DamageFeedback
 
-local FLASH_IN = TweenInfo.new(0, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-local FLASH_OUT = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "DamageFeedbackGui"
-screenGui.ResetOnSpawn = false
-screenGui.DisplayOrder = 20 -- above attribute bars, below death screen
-screenGui.IgnoreGuiInset = true
-screenGui.Parent = player:WaitForChild("PlayerGui")
+local handle = DamageFeedbackBuilder.build()
+handle.screenGui.DisplayOrder = HudConstants.LAYERS.Feedback -- above attribute bars, below death screen
+handle.screenGui.Parent = player:WaitForChild("PlayerGui")
 
 -- Round and competition chrome: no meaning in the hub.
-HudGate.bindScreenGui(screenGui, HudGate.Policy.ArenaOnly)
-
-local overlay = Instance.new("Frame")
-overlay.Name = "Overlay"
-overlay.Size = UDim2.new(1, 0, 1, 0)
-overlay.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
-overlay.BackgroundTransparency = 1
-overlay.BorderSizePixel = 0
-overlay.Active = false
-overlay.Parent = screenGui
+HudGate.bindScreenGui(handle.screenGui, HudGate.Policy.ArenaOnly)
+HudLayoutManager:attachScale(handle.screenGui)
 
 damageFeedbackRemote.OnClientEvent:Connect(function(data: { [string]: any })
-	-- Snap to visible, then fade. Intensity scales with damage so big hits feel bigger.
-	local intensity = math.clamp((data.finalDamage or 0) / 50, 0.2, 0.6)
-	TweenService:Create(overlay, FLASH_IN, { BackgroundTransparency = 1 - intensity }):Play()
-	task.wait(0.05)
-	TweenService:Create(overlay, FLASH_OUT, { BackgroundTransparency = 1 }):Play()
+	handle:flash(data.finalDamage or 0)
 
 	log:info(string.format("Took %d %s damage%s",
 		data.finalDamage or 0,
