@@ -45,6 +45,11 @@ export type Dependencies = {
 	roundEndedEvent: BindableEvent,
 	modeDefinition: any, -- GameModeDefinition table
 	onRoundEnd: ((winnerId: number?, winnerName: string?) -> ())?,
+	-- Fired once the PostRound wait has run its course while the session
+	-- is still live, with the roster as it stands. SessionRegistry uses it
+	-- to send a finished round's players home (Phase 6 stage 5); this
+	-- file stays ignorant of what "home" is.
+	onIntermissionEnd: ((roster: { Player }) -> ())?,
 }
 
 local RoundManager = {}
@@ -253,7 +258,7 @@ function RoundManager:_activeRound(generation: number): number?
 	-- Reset this session's scores and notify. Only this roster's scores
 	-- are in the tracker, so another arena's round is untouched.
 	self._scoreTracker:reset()
-	self._refs.modeDefinition.onRoundStart()
+	self._refs.modeDefinition.onRoundStart(self.arenaId)
 	-- The roster rides along for the same reason the score reset is per
 	-- session: a round belongs to this arena, not to the server.
 	-- EconomyService zeroes each member's energy ledger off this, mirroring
@@ -284,7 +289,7 @@ function RoundManager:_activeRound(generation: number): number?
 
 		-- Check win condition each tick, against this session's scores only.
 		local scores = self._scoreTracker:getAllScores()
-		local shouldEnd, winnerId = self._refs.modeDefinition.checkWinCondition(scores)
+		local shouldEnd, winnerId = self._refs.modeDefinition.checkWinCondition(scores, self.arenaId)
 		if shouldEnd then
 			log:info(string.format("[%s] Win condition met! Winner: %s",
 				self.arenaId,
@@ -311,7 +316,7 @@ function RoundManager:_postRound(generation: number, winnerId: number?, winnerNa
 	self._currentState = RoundState.PostRound
 	self._timeRemaining = GameModeConstants.INTERMISSION_DURATION
 
-	self._refs.modeDefinition.onRoundEnd()
+	self._refs.modeDefinition.onRoundEnd(self.arenaId)
 	self._refs.roundEndedEvent:Fire(winnerId, winnerName, self.arenaId)
 
 	log:info(string.format("[%s] Round over! Winner: %s. Intermission: %ds",
@@ -358,6 +363,14 @@ function RoundManager:_roundLoop(generation: number)
 		end
 
 		self:_postRound(generation, winnerId, winnerName)
+		if not self:_isLive(generation) then break end
+
+		-- The intermission ran out rather than being halted. Whoever owns
+		-- the session decides where these players go before the loop
+		-- returns to WaitingForPlayers.
+		if self._refs.onIntermissionEnd then
+			self._refs.onIntermissionEnd(self:getPlayers())
+		end
 	end
 
 	log:info(string.format("[%s] Round loop stopped", self.arenaId))

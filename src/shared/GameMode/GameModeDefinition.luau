@@ -14,6 +14,11 @@
 -- timer, the pre-round countdown — is a field of `getConfig()` (refactor
 -- chunk 8, Q7). Two sessions can run different rules on one server, so a
 -- server-wide boolean could only ever be right for one of them.
+--
+-- The round callbacks carry the session's arena id (Phase 6 stage 5). One
+-- mode table serves every session running that mode, so a mode with any
+-- per-round state — PvEBoss remembers whose boss has fallen — needs the
+-- id to key it. Modes without such state may ignore the argument.
 ----------------------------------------------------------------------
 
 export type PlayerScore = { kills: number, deaths: number, assists: number }
@@ -73,20 +78,23 @@ export type GameModeDefinition = {
 	onPlayerKill: (killer: Player?, victim: Player, cause: string) -> number,
 
 	-- Called each tick to check if the round should end.
-	-- Receives the session's current scores, keyed by Player.
-	-- Returns (shouldEnd, winnerUserId).
-	checkWinCondition: (scores: Scores) -> (boolean, number?),
+	-- Receives the session's current scores, keyed by Player, and the
+	-- session's arena id. Returns (shouldEnd, winnerUserId); a nil winner
+	-- with shouldEnd = true is a round that ended with nobody credited
+	-- (a co-op objective, an emptied roster).
+	checkWinCondition: (scores: Scores, arenaId: string) -> (boolean, number?),
 
 	-- Determines the round leader on time-out. Returns the leading
 	-- user id, or nil for a tie / no kills. RoundManager calls this when
 	-- the timer expires before a score-limit win.
 	getRoundLeader: (scores: Scores) -> number?,
 
-	-- Called when a new round starts. Mode-specific setup (e.g., place flags for CTF).
-	onRoundStart: () -> (),
+	-- Called when a new round starts in the named arena. Mode-specific
+	-- setup (e.g., place flags for CTF).
+	onRoundStart: (arenaId: string) -> (),
 
-	-- Called when a round ends. Mode-specific cleanup.
-	onRoundEnd: () -> (),
+	-- Called when a round ends in the named arena. Mode-specific cleanup.
+	onRoundEnd: (arenaId: string) -> (),
 }
 
 return nil

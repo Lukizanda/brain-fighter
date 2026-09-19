@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-09-09
+updated: 2026-09-19
 ---
 
 # Wiki Index
@@ -30,8 +30,8 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/NPC]] — Perception → StateMachine → Actions, Patroller archetype, WorldDataManager
 - [[systems/HUD]] — Builder + Config + LayoutManager pattern, attribute bars, Phase 4 gameplay widgets (WeaponRolodex + LoadoutDropClient removed in 6610291)
 - [[systems/Loadout]] — **REMOVED (commit 6610291)**; pedestal pickup / RespawnPedestalManager / drop remote all deleted
-- [[systems/GameMode]] — **sessions**: `SessionRegistry` module owns the session tables (chunk 8, 2026-09-09); `RoundManager.new(deps)` per arena with its own roster, per-roster broadcast and its own `ScoreTracker`; `SpawnManager` per arena scored against the roster; `allowsPvP` / `timeLimit` / `countdownSec` on the mode config, no global round or team flags; FFA/TDM/TeamService deleted (6610291). Registered modes: Lobby + NoOp. Page rewritten (Phase 6 stage 7)
-- [[systems/Tests]] — in-Studio harness: TestRunner + `TestAutoRunner` (`workspace.RunTests`), 7 suites / 34 tests (NPC, Multiplayer, Phase3, Skills, Hardening, Economy, Unit), results in `TestResult_*` attributes; MCP-driven via `/run-tests`
+- [[systems/GameMode]] — **sessions**: `SessionRegistry` module owns the session tables (chunk 8, 2026-09-09); `RoundManager.new(deps)` per arena with its own roster, per-roster broadcast and its own `ScoreTracker`; `SpawnManager` per arena scored against the roster; `allowsPvP` / `timeLimit` / `countdownSec` on the mode config, no global round or team flags; FFA/TDM/TeamService deleted (6610291). Registered modes: **PvEBoss** (default, runs the shipped arena — co-op, 300 s clock, ends on `BossDefeated`, roster sent home after the intermission; Phase 6 stage 5, 2026-09-19) + Lobby + NoOp. Page rewritten (Phase 6 stage 7)
+- [[systems/Tests]] — in-Studio harness: TestRunner + `TestAutoRunner` (`workspace.RunTests`), 7 suites / 37 tests (NPC, Multiplayer, Phase3, Skills, Hardening, Economy, Unit), results in `TestResult_*` attributes; MCP-driven via `/run-tests`
 - [[systems/EnergyEconomy]] — Phase 1 pure-Luau module: word → per-color mana (Scrabble values × length tiers, floor-reconciled color splits)
 - [[systems/EnergyReservoirs]] — Phase 1 pure-Luau state container: three per-color energy bars, cap 60, `.changed(color)` BindableEvent signal
 - [[systems/Dictionary]] — Phase 1 pure-Luau word lookup; case-insensitive `isWord` plus wildcard-aware `resolve`/`isSpellable`, ~79.9k words (SCOWL 60 + geographic/playtest supplements); 26 per-letter sub-modules background-preloaded at game start

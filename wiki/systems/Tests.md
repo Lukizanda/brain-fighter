@@ -1,12 +1,76 @@
 ---
 type: system
 description: In-Studio test harness — TestRunner module + Suites/{NPC,Multiplayer,Phase3,Skills,Hardening,Economy,Unit}, one Suites/Unit wrapper per pure-Luau __tests module. MCP-driven via test-runner subagent.
-updated: 2026-09-14
+updated: 2026-09-19
 ---
 
 # Test System
 
 Lightweight in-Studio test harness for gameplay systems. Tests run inside Studio (not as unit tests outside the engine) so they can exercise real Humanoid / Tool / Animation behavior — including the pure-Luau modules, which could run standalone but are wired in here anyway so one `RunTests="all"` catches everything.
+
+## Pipeline at a glance
+
+```mermaid
+flowchart TB
+  classDef driver fill:#1e3a5f,stroke:#5a9fd4,color:#fff
+  classDef boot fill:#3a2f1e,stroke:#d4a05a,color:#fff
+  classDef run fill:#1e3a1e,stroke:#5fd45a,color:#fff
+  classDef out fill:#3a1e3a,stroke:#d45ad4,color:#fff
+  classDef warn fill:#3a1e1e,stroke:#d45a5a,color:#fff
+
+  subgraph DRV["1 · Drive — agent, edit-time MCP"]
+    direction LR
+    CMD["/run-tests<br/>test-runner subagent"]:::driver
+    SET["execute_luau<br/>workspace.RunTests = &quot;NPC&quot; or &quot;all&quot;"]:::driver
+    PLAY["start_stop_play(true)"]:::driver
+    CMD --> SET --> PLAY
+  end
+
+  subgraph BOOT["2 · Boot — TestAutoRunner.server.luau on the server VM"]
+    direction LR
+    READ{"RunTests<br/>set?"}:::boot
+    NOOP["return<br/>no suites run"]:::boot
+    WAIT["wait ≤10s for a player<br/>then 3s startup delay"]:::boot
+    PICK["resolve Suites/&lt;name&gt;<br/>or every Folder for &quot;all&quot;"]:::boot
+    COLLECT["collectTestsInFolder<br/>require each ModuleScript"]:::boot
+    SKIP["[AUTORUN WARN] Skipped<br/>not a table with .name"]:::warn
+    READ -- no --> NOOP
+    READ -- yes --> WAIT --> PICK --> COLLECT
+    COLLECT -. bad shape .-> SKIP
+  end
+
+  subgraph RUN["3 · Run — TestRunner.runSuite, then TestRunner.run per module (each phase pcall'd)"]
+    direction LR
+    SETUP["setup(ctx)"]:::run
+    DO["run(ctx)"]:::run
+    VERIFY["verify(ctx)<br/>→ ok, message"]:::run
+    TEAR["teardown(ctx)<br/>always runs"]:::run
+    WRAP["Unit/Skills wrappers call<br/>&lt;Module&gt;/__tests.run() or .runAll()"]:::run
+    SETUP --> DO --> VERIFY --> TEAR
+    DO -. thin wrapper .-> WRAP
+  end
+
+  subgraph OUT["4 · Report"]
+    direction LR
+    CON["console markers<br/>[TEST PASS] / [TEST FAIL] · [SUITE DONE] · [AUTORUN DONE]<br/>truncates on long runs — don't rely on it"]:::warn
+    ATTR["workspace attributes — the source of truth<br/>TestResult_&lt;Suite&gt;_&lt;name&gt; = PASS / FAIL: msg<br/>TestRunSummary = N/M passed, F failed"]:::out
+  end
+
+  subgraph BACK["5 · Read back — agent"]
+    direction LR
+    GET["execute_luau reads<br/>TestRunSummary + TestResult_*"]:::driver
+    STOP["start_stop_play(false)"]:::driver
+    CLR["RunTests = nil<br/>it persists in the .rbxl otherwise"]:::warn
+    GET --> STOP --> CLR
+  end
+
+  DRV --> BOOT
+  BOOT --> RUN
+  RUN --> OUT
+  OUT ==> BACK
+```
+
+Read the diagram top to bottom. The agent side (blue) only touches one attribute and the play button; everything in the middle runs on the server VM, which is why a suite can `require` server modules directly but can never see `Players.LocalPlayer`. The result path to trust is the thick edge: attributes, not the console. Unfamiliar terms (workspace attribute, VM, `ctx`, wrapper…) are defined in § Glossary at the bottom of the page.
 
 ## Files
 
@@ -23,6 +87,9 @@ src/shared/Tests/
       npc_deals_damage.luau
     Multiplayer/
       multiplayer_invariants.luau
+      pve_intermission_returns_roster_to_lobby.luau
+      pve_round_ends_on_boss_defeated.luau
+      pve_round_ends_on_empty_roster.luau
       registry_views_agree.luau · sessions_isolate_scores.luau
       transfer_moves_roster_and_attributes.luau
     Phase3/
@@ -99,7 +166,7 @@ Requiring any `__tests.luau` must be side-effect-free — the assertions only ru
 | Suite | Status | Covers |
 |---|---|---|
 | NPC | LIVE (fixture-gated via `ensurePatroller`) | Combat engage/disengage state transitions, NPC-deals-damage — [[systems/NPC]] |
-| Multiplayer | LIVE (4 tests) | `multiplayer_invariants` — boot-time structure: GameMode remotes, PlayerDamaged/PlayerEliminated events; `registry_views_agree`, `sessions_isolate_scores`, `transfer_moves_roster_and_attributes` — [[systems/GameMode]] SessionRegistry views, per-session ScoreTracker, roster + attribute transfer (chunk 8) |
+| Multiplayer | LIVE (7 tests) | `multiplayer_invariants` — boot-time structure: GameMode remotes, PlayerDamaged/PlayerEliminated events; `registry_views_agree`, `sessions_isolate_scores`, `transfer_moves_roster_and_attributes` — [[systems/GameMode]] SessionRegistry views, per-session ScoreTracker, roster + attribute transfer (chunk 8); `pve_round_ends_on_boss_defeated`, `pve_round_ends_on_empty_roster`, `pve_intermission_returns_roster_to_lobby` — Phase 6 stage 5: the `BossDefeated` objective, the emptied-roster end, and the intermission → lobby hook, all through the real round loop (the last one waits out the real 10 s intermission, ~16 s) |
 | Phase3 | LIVE (7 tests) | BlockSpawner pool/refill/bounds/respawn-delay, BlockShoot helpers/remote — [[systems/BlockShoot]] |
 | Skills | LIVE (5 tests) | SkillInterrupt lifecycle, SpellExecutor case table, CastAction scenarios, cast-rejection, predicted-vs-authoritative |
 | Hardening | LIVE (4 tests) | [[systems/BlockShoot]] § Trust model (payload, range/rate, arena match), [[systems/SpellCastService]] § Trust model |
@@ -107,7 +174,7 @@ Requiring any `__tests.luau` must be side-effect-free — the assertions only ru
 | Unit | LIVE (8 tests) | WordBuffer, EnergyEconomy, EnergyReservoirs, Dictionary, SpellRegistry, MemorizeAction, MindFullManager (all real runs) + Hud (server-VM skip, real on client) |
 | Melee | **deleted** (chunk 1, 2026-09-08) | Was: MeleeHitDetector sweep. Dead code — [[systems/Weapon]] melee path is unused; chunk 11 removes the modules |
 
-**34 tests total.** `RunTests="all"` last verified 34/34 on 2026-09-11 (chunk 10 playtest, see [[log]]). Any other total means a suite folder lost or gained a module — check for `[AUTORUN WARN] Skipped` lines first.
+**37 tests total.** `RunTests="all"` last verified 34/34 on 2026-09-11 (chunk 10 playtest, see [[log]]); the three `pve_*` tests added 2026-09-19 have run as `RunTests="Multiplayer"` (7/7), not yet inside an `"all"` run. Any other total means a suite folder lost or gained a module — check for `[AUTORUN WARN] Skipped` lines first.
 
 Deleted alongside Melee: `Suites/Multiplayer/{drop_request_zone_gated,respawnzone_tracks_hrp_presence,applydamage_credits_bot_kill}.luau` (their C1/C2 deliverables and the bot-spawner they exercised are gone — see `wiki/design/refactor-plan-2026-09.md` Chunk 0/1). `Helpers/restoreToSafeSpawn.luau` was deleted in the same pass (its only caller at the time was `respawnzone_tracks_hrp_presence`) but recovered days later — see § Files above.
 
@@ -135,6 +202,47 @@ The subagent drives a real playtest via MCP, parses TestRunner output, reports p
 - Tests that require player input (e.g. firearm fire) cannot be MCP-driven — those are documented as "manual playtest" in their respective status pages.
 - Cross-VM time uses `workspace:GetServerTimeNow()`, not `os.clock()` (different per VM). See `feedback_cross_process_testing.md`.
 - `__tests.luau` files may change their **return shape** freely (wrap in a function, expose `.run`/`.runAll`) without it counting as touching "the module under test" — the assertions inside are still off-limits unless they're demonstrably stale against documented behavior (see the MemorizeAction case in `wiki/design/refactor-plan-2026-09.md` Chunk 1).
+
+## Glossary
+
+Terms used on this page and in the diagram, for readers who don't live in Roblox Studio every day.
+
+**Studio vocabulary**
+
+- **Instance** — any object in the Roblox scene tree (a Part, a Script, a Folder, the Workspace itself). Everything the harness touches is an instance.
+- **Attribute** — a small named value (string, number, bool, Vector3…) stored *on* an instance, separate from its built-in properties. Set with `instance:SetAttribute("Name", value)`, read with `GetAttribute("Name")`. Any script, and any MCP probe, can read or write them.
+- **Workspace attribute** — an attribute stored on the `Workspace` instance specifically. The harness uses Workspace because it is one well-known object that both the server-side autorunner and the agent's MCP probe can reach without searching. They act as a mailbox: the agent leaves `RunTests` before play starts; the autorunner leaves `TestResult_*` and `TestRunSummary` when it finishes. **Attributes are saved into the place file** (`.rbxl`), so anything left set persists into the next session — that is why `RunTests` has to be cleared after every run, while the result attributes vanish on their own when play stops (they were only ever written on the playtest copy of the DataModel).
+- **DataModel** — the whole scene tree rooted at `game`. Studio holds one at edit time; pressing Play spins up a *copy* (the server DataModel) plus a client DataModel per player. Edits to the play copies are discarded when play stops.
+- **Edit time vs playtest** — edit time is Studio with nothing running; a playtest is what Play/F5 starts. The agent sets `RunTests` at edit time so the value is present in the copy that the playtest boots from.
+- **Server VM / client VM** — the two Luau virtual machines a playtest runs. Server `Script`s run in the server VM (no screen, no `Players.LocalPlayer`, full access to `ServerScriptService`); `LocalScript`s run in each client VM (has the local player, cannot see server-only services). `ModuleScript`s run in whichever VM `require`s them. The autorunner is a server Script, so every suite runs in the server VM.
+- **Script / LocalScript / ModuleScript** — the three script classes. On disk: `.server.luau` → Script, `.client.luau` → LocalScript, no suffix → ModuleScript (a library that returns a value when required).
+- **`require`** — loads a ModuleScript and returns whatever it returns (usually a table). The autorunner `require`s each suite file to get its test table.
+- **`pcall`** — "protected call": runs a function and returns `ok, resultOrError` instead of crashing. `TestRunner` wraps every phase in `pcall` so one throwing test can't take the suite down.
+- **BindableEvent / RemoteEvent** — server-internal signal / client↔server signal. Invariants tests check the important ones exist; the Economy suite fires a real BindableEvent to prove wiring.
+- **`.rbxl`** — the saved place file. Rojo keeps *scripts* in sync from disk, but attributes and other non-script state live only in the `.rbxl`.
+- **Rojo** — syncs `src/` on disk into Studio. A test file you write on disk appears in Studio only after Rojo syncs it.
+
+**Harness vocabulary**
+
+- **MCP** — the Model Context Protocol bridge the agent uses to talk to Studio: `execute_luau` (run a snippet in Studio's edit-time context), `start_stop_play`, `get_console_output`, screenshots.
+- **`execute_luau`** — runs a Luau snippet inside Studio at edit time (plugin/client context). It can set and read Workspace attributes, but it cannot `require` server-only modules — which is the whole reason server logic is tested through the autorunner rather than probed directly.
+- **`/run-tests` / test-runner subagent** — the user-facing entry point and the agent that drives the five steps in the diagram.
+- **`RunTests`** — the Workspace attribute that names which suite to run (`"NPC"`, `"Economy"`, … or `"all"`). Unset or empty means the autorunner does nothing.
+- **`TestAutoRunner`** — `src/server/Tests/TestAutoRunner.server.luau`, the server Script that reads `RunTests` at boot, discovers suite modules, runs them through `TestRunner`, and writes results out.
+- **`TestRunner`** — `src/shared/Tests/TestRunner.luau`, the generic runner: `run(module)` executes one test through its four phases; `runSuite(name, modules)` runs a list and prints the summary markers.
+- **Suite** — one folder under `src/shared/Tests/Suites/`, run as a unit. The folder name is what `RunTests` refers to.
+- **Test module** — one ModuleScript in a suite folder returning `{ name = "...", setup?, run?, verify?, teardown? }`. Anything else is skipped with an `[AUTORUN WARN]`.
+- **Phases: `setup` → `run` → `verify` → `teardown`** — optional functions on a test module. `setup` stages fixtures, `run` performs the action, `verify` returns `ok, message`, `teardown` cleans up and always runs. A module with only `verify` is a structural-invariant check; one with only `run` passes unless `run` throws.
+- **`ctx`** — the table passed to every phase of one test, for handing state from `setup` to `verify`. `ctx.player` is pre-filled with the first player.
+- **Fixture** — the world state a test needs to exist before it runs (a live Patroller, a BlockSpawner pool, a throwaway session). See § Fixture requirements.
+- **Structural invariant** — a `verify`-only test asserting the boot-time DataModel is shaped correctly (remotes exist, events exist, scripts are where they belong). Catches placement bugs in milliseconds.
+- **`__tests.luau`** — a module's own self-test file living next to it (`src/shared/<Module>/__tests.luau`). Not a test module by itself; a thin **wrapper** in `Suites/Unit/` or `Suites/Skills/` adapts it so the autorunner can run it. See § `__tests.luau` wiring.
+- **Wrapper** — that thin adapter: a test module whose `run` just calls the `__tests` file's `.run()` (throw-on-fail idiom) or whose `run`+`verify` handle a `.runAll()` `(passed, failed)` tuple.
+- **Console markers** — the bracketed prefixes the runner prints: `[AUTORUN START]`, `[TEST PASS]`, `[TEST FAIL]`, `[SUITE DONE]`, `[AUTORUN DONE]`, `[AUTORUN WARN]`. Useful for a quick read of the Output window, but the console truncates long playtests, so they are not the result of record.
+- **`TestResult_<Suite>_<name>`** — one Workspace attribute per test, written by the autorunner: `"PASS"` or `"FAIL: <message>"`. The test name is sanitised to `[A-Za-z0-9_]` because attribute names allow nothing else.
+- **`TestRunSummary`** — one Workspace attribute for the whole run: `"N/M passed, F failed"`.
+- **Stale assertion** — a test that fails because the thing it checks for was deliberately removed or changed, not because of a regression. See § Stale-assertion pitfall.
+- **Playtest lock** — `nimbalyst-local/playtest.lock.json`, taken before any playtest so two agent sessions don't start Play on the same Studio at once. See `CLAUDE.md` § Playtest Lock.
 
 ## Cross-references
 

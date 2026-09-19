@@ -26,6 +26,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
+local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
 local Lobby = require(ReplicatedStorage.Shared.Lobby)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
@@ -178,6 +179,16 @@ local function onJoin(player: Player, portal: BasePart)
 	targetArenaId = type(targetArenaId) == "string" and targetArenaId or ""
 
 	if targetArenaId ~= "" then
+		-- A round in its intermission is about to send everyone home; a
+		-- transfer now would land and bounce (Phase 6 stage 5, decision 5).
+		-- Refused rather than queued — holding the player and flushing on
+		-- the next WaitingForPlayers is stage 6's queue work.
+		local target = SessionRegistry.forArena(targetArenaId)
+		if target and target:getState() == GameModeConstants.RoundState.PostRound then
+			refuse(player, portal, targetArenaId .. " is between rounds")
+			return
+		end
+
 		-- A slot exists. Transfer, and let SessionRegistry clear the queue
 		-- flag as part of the move.
 		local ok = SessionRegistry.transferPlayer(player, targetArenaId)

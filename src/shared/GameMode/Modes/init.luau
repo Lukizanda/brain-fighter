@@ -12,6 +12,13 @@
 ----------------------------------------------------------------------
 
 local Modes = {
+	-- The shipped arena's mode: co-op boss fight with a clock, back to the
+	-- hub when it ends (Phase 6 stage 5). Also the default, so a place file
+	-- with no "ActiveGameMode" attribute boots into the fight.
+	PvEBoss = require(script.PvEBoss),
+	-- Idle arena: a round that never ends and nothing scores. Selectable
+	-- through "ActiveGameMode" and used by the Multiplayer suite's
+	-- throwaway sessions.
 	NoOp = require(script.NoOpMode),
 	-- The hub. Never resolved through the "ActiveGameMode" attribute —
 	-- GameModeService requires it directly for the lobby session, because
@@ -21,7 +28,7 @@ local Modes = {
 	Lobby = require(script.LobbyMode),
 }
 
-local DEFAULT_MODE = "NoOp"
+local DEFAULT_MODE = "PvEBoss"
 
 local Registry = {}
 

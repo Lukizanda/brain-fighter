@@ -1895,3 +1895,44 @@ chunk of [[design/refactor-plan-2026-09]] and Phase 7 of [[design/build-plan]].
 Plan page header and `updated:` bumped; build-plan Phase 7 marked done.
 Still open from the plan: chunk 9's two-arena client check (user skipped),
 `RoundTimerGui` unported, tracker BRA.21 for a settings surface.
+
+## [2026-09-19] ingest | Phase 6 stage 5 — PvE boss mode
+
+The shipped arena runs a round with a beginning and an end. `Modes/PvEBoss`
+is the registry default and what `Workspace.ActiveGameMode` now names (it
+said `TeamDeathmatch`, stale since `6610291`, and had been falling back to
+No-Op all along). Taking the PvE portal starts a 5 s countdown, then a 300 s
+round; players keep respawning, there is no wipe rule, and the clock is the
+fail state. The objective is not a player kill: `BossService` fires a new
+server-side `BossDefeated(arenaId)` Bindable from its Died handler, beside
+the Boss RemoteEvents so the mode module — in ReplicatedStorage like its
+siblings — never reaches into ServerScriptService. Mode callbacks
+(`onRoundStart` / `onRoundEnd` / `checkWinCondition`) now carry the arena
+id, because one mode table serves every session running it and PvEBoss
+keeps `defeated[arenaId]`. An empty score table also ends the round, which
+closes the stage-4a trap (a session left empty stayed Active) where 4a said
+it belonged. Going home is `RoundManager.onIntermissionEnd` → the registry's
+`sendRosterHome`; RoundManager still knows nothing about lobbies.
+`LobbyService` refuses a portal join while the target is in PostRound.
+
+Verification: Multiplayer suite 7/7 with three new `pve_*` tests (defeat,
+emptied roster, intermission → lobby — the last through a real transfer and
+the real 10 s intermission). One playtest of the full loop, read from both
+VMs: `Transferred Lobby → Default` → `Countdown: 5 seconds` → `Round
+started! Timer: 300s` → Boss spawned with `ArenaId=Default` → client
+`RoundTimerGui` reading 4:45 → server-side `Humanoid.Health = 0` →
+`Boss defeated — respawning in 5 s` / `Win condition met! Winner: none` /
+`NPC set torn down` / `Boss cycle stopped` (no second spawn) → client card
+`ROUND OVER / No winner / Next round in 7...` → `Transferred Default →
+Lobby`, `PlayerState=InLobby`, BossHud/GameState/RoundTimer ScreenGuis
+disabled by HudGate.
+
+Worth knowing: the round-over card reads "No winner" for a boss kill — the
+payload has no outcome field; "BOSS DEFEATED" is a small follow-up on
+`GameStateChanged`, not done here. The `refuse()` path only logs on the
+server, so a player refused during an intermission gets no message; that
+rides with stage 6's queue work. The `.rbxl` needs saving (`ActiveGameMode`
+changed with no undo waypoint available).
+
+Pages: [[design/lobby]] (§ Stage 5 detail + stage row), [[design/build-plan]],
+[[systems/GameMode]], [[systems/Boss]], [[systems/Tests]], [[index]].

@@ -62,6 +62,10 @@ local SessionRegistry = require(ServerScriptService.Server.GameMode.Scripts.Sess
 local bossEvents        = ReplicatedStorage.Shared.Boss.BossEvents
 local BossHealthChanged = bossEvents.BossHealthChanged :: RemoteEvent
 local BossPhaseChanged  = bossEvents.BossPhaseChanged  :: RemoteEvent
+-- Server-side fact for the game mode: this arena's boss died. PvEBoss
+-- ends its round on it (Phase 6 stage 5). Fired after the client
+-- sentinels so the HUD and the mode see the same event order.
+local BossDefeated      = bossEvents.BossDefeated      :: BindableEvent
 
 local gameModeEvents    = ServerScriptService.Server.GameMode.Events
 local roundStartedEvent = gameModeEvents.RoundStarted :: BindableEvent
@@ -209,7 +213,11 @@ local function startBossCycle(cycle: Cycle)
 		local deathAudience = bossAudience()
 		BroadcastAudience.fire(BossHealthChanged, deathAudience, 0, humanoid.MaxHealth, PHASE_DEFEATED)
 		BroadcastAudience.fire(BossPhaseChanged, deathAudience, PHASE_DEFEATED)
+		BossDefeated:Fire(arenaId)
 
+		-- The respawn below is what an idle (NoOp) arena wants. A PvEBoss
+		-- arena's round ends on the Fire above within one RoundManager tick,
+		-- and its RoundEnded reaches stopArena, which cancels this timer.
 		log:info(string.format("[%s] Boss defeated — respawning in %d s", arenaId, typeSpec.respawnDelaySec))
 
 		-- Brief pause for death effect visibility, then destroy model

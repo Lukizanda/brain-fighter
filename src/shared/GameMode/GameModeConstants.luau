@@ -7,6 +7,16 @@ local GameModeConstants = {
 	INTERMISSION_DURATION = 10, -- seconds between rounds
 
 	----------------------------------------------------------------------
+	-- PvE boss round (Modes/PvEBoss, Phase 6 stage 5)
+	----------------------------------------------------------------------
+	-- The fail state: the round ends with no winner when this runs out.
+	-- Players keep respawning until then — there is no wipe rule.
+	PVE_ROUND_TIME_LIMIT_SEC = 300,
+	-- Short on purpose: long enough for a group taking the portal together
+	-- to land together, short enough that a lone player is not waiting.
+	PVE_COUNTDOWN_SEC = 5,
+
+	----------------------------------------------------------------------
 	-- Respawn
 	----------------------------------------------------------------------
 	-- Player auto-respawn delay (Step 5 tuning: was 5; 3-4s is arena-feel, 5

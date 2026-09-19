@@ -98,6 +98,38 @@ local function publishPlayerState(player: Player)
 	player:SetAttribute(Arena.STATE_ATTRIBUTE, state)
 end
 
+-- Where a finished round's players go (Phase 6 stage 5). Registered on
+-- every session this module creates; only a session whose round actually
+-- ends ever fires it — the lobby never runs one and NoOp's never ends.
+--
+-- A roster member the registry maps elsewhere (the Multiplayer suite adds
+-- the harness player to a throwaway session's roster without moving them)
+-- is dropped from the roster instead of transferred, so the next round in
+-- that arena starts from an empty roster either way.
+local function sendRosterHome(arenaId: string, roster: { Player })
+	if arenaId == Arena.LOBBY_ID then
+		return
+	end
+	local session = sessions[arenaId]
+	if not session then
+		return
+	end
+	if not sessions[Arena.LOBBY_ID] then
+		log:warn(string.format("[%s] Round over but there is no %s session to send %d players to",
+			arenaId, Arena.LOBBY_ID, #roster))
+		return
+	end
+
+	for _, player in roster do
+		if playerSessions[player] == session then
+			SessionRegistry.transferPlayer(player, Arena.LOBBY_ID)
+		else
+			session:removePlayer(player)
+		end
+	end
+	log:info(string.format("[%s] Intermission over — %d players sent to %s", arenaId, #roster, Arena.LOBBY_ID))
+end
+
 ----------------------------------------------------------------------
 -- Boot
 ----------------------------------------------------------------------
@@ -156,6 +188,9 @@ function SessionRegistry.create(arenaId: string, modeDefinition: any): Session
 		roundStartedEvent = dependencies.roundStartedEvent,
 		roundEndedEvent = dependencies.roundEndedEvent,
 		modeDefinition = modeDefinition,
+		onIntermissionEnd = function(roster: { Player })
+			sendRosterHome(arenaId, roster)
+		end,
 	})
 
 	SpawnManager.registerArena(arenaId, modeDefinition.getConfig().spawnTag)

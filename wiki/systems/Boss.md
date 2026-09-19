@@ -1,7 +1,7 @@
 ---
 type: system
 description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. One boss cycle per arena session, started on RoundStarted and stopped on RoundEnded; HUD remotes, perception and skill targets are all scoped to the BossPoint's arena (Phase 6 stage 3 + refactor chunk 9).
-updated: 2026-09-14
+updated: 2026-09-19
 ---
 
 # Boss
@@ -22,6 +22,7 @@ Supersedes [[systems/BossAdapter]] (Phase 3 static Model). The `src/server/BossA
 | `src/shared/Boss/BossEvents/BossHealthChanged.model.json` | RemoteEvent — fires `(currentHP, maxHP, phaseIndex)` on HP change (throttled 0.1s). Scoped to the BossPoint's arena roster, not `FireAllClients` — see § Broadcast audience |
 | `src/shared/Boss/BossEvents/BossPhaseChanged.model.json` | RemoteEvent — fires `phaseIndex` (0 = defeated/no boss). Same scoping |
 | `src/shared/Boss/BossEvents/BossPartDestroyed.model.json` | RemoteEvent — scaffold for future destructible-part system |
+| `src/shared/Boss/BossEvents/BossDefeated.model.json` | **BindableEvent** (server-only, Phase 6 stage 5) — fires `arenaId` from the Died handler after the two client sentinels. `Modes/PvEBoss` ends its round on it; lives beside the remotes so the mode module never reaches into `ServerScriptService` |
 
 ### Server (ServerScriptService)
 
@@ -229,8 +230,8 @@ No changes needed in other systems:
 3. `BossController.new(boss, onPhaseChanged)` wires Perception + StateMachine + BossPhaseManager.
 4. `RunService.Heartbeat` drives `controller:tick(dt)` each frame.
 5. `humanoid.HealthChanged` fires `BossHealthChanged` (throttled 0.1 s).
-6. `humanoid.Died` → disconnect Heartbeat, destroy controller, fire defeat events (phaseIndex=0), destroy Model after 1 s, respawn after `BossConfig.RESPAWN_DELAY_SEC` (5 s).
-7. The arena's `RoundEnded` → the cycle stops (pending respawn cancelled, defeat sentinel fired, Model destroyed); the next `RoundStarted` begins a fresh one.
+6. `humanoid.Died` → disconnect Heartbeat, destroy controller, fire defeat events (phaseIndex=0) to the roster and `BossDefeated(arenaId)` to the server, destroy Model after 1 s, schedule a respawn after `typeSpec.respawnDelaySec` (5 s).
+7. The arena's `RoundEnded` → the cycle stops (pending respawn cancelled, defeat sentinel fired, Model destroyed); the next `RoundStarted` begins a fresh one. In a `PvEBoss` arena the round ends on step 6's Bindable within one RoundManager tick, so `RoundEnded` cancels the respawn before it fires — verified 2026-09-19 (`Boss defeated — respawning in 5 s` followed by `Boss cycle stopped`, no second spawn). The 5 s vs 1 s margin is the only thing keeping that ordering; revisit if `respawnDelaySec` ever drops near 1 s.
 
 ## Key Tuning (BossConfig.BOSS_TYPES.Brain)
 
@@ -259,7 +260,7 @@ Add a new boss type by adding another entry to `BOSS_TYPES`; switch the active b
 - **Destructible parts** — `destroyedParts` blackboard field is the scaffold; no health pools yet.
 - **Multi-phase behavior** — add entries to `BossConfig.BOSS_TYPES[<name>].phases`; BossPhaseManager and BossController handle the rest without code changes.
 - **Additional attacks** — `LetterThrow`, `SummonMinions` planned; add a new entry to `BOSS_TYPES[<name>].skills` (referencing an existing `delivery` handler in [[systems/SkillPipeline|SkillDelivery]] or adding a new one) and list it in the relevant `PhaseSpec.availableAttacks`.
-- **Round integration** — wire `BossPhaseChanged(0)` into [[systems/GameMode]] RoundManager for level-completion detection.
+- ~~**Round integration** — wire `BossPhaseChanged(0)` into [[systems/GameMode]] RoundManager for level-completion detection.~~ Done 2026-09-19 (Phase 6 stage 5) as a separate server-side `BossDefeated` Bindable rather than by reusing the client sentinel — see § Files.
 
 ## See also
 

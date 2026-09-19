@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phase 6 plan (2026-08-20) — a welcome lobby and PvE/PvP mode selection. The finding is that mode choice is a session-container problem, not a menu problem; GameModeService and RoundManager are server-wide singletons. Decision = hub place with in-place arena zones, co-op queued PvE, 1v1 queued duels on a pad pool. Records what PvP needs that the lobby does not provide.
-updated: 2026-09-10
+updated: 2026-09-19
 ---
 
 # Lobby & Mode Selection
@@ -209,7 +209,7 @@ leave it.
 | 2 | ✅ **Done 2026-08-20.** `ArenaId` attribute on `BlockSpawnVolume`; `BlockSpawner.new(opts)` is one pool per arena with `:disable()`/`:destroy()`, and `BlockSpawnerService` groups the tagged volumes by id. `SpawnManager` resolves per arena via `registerArena` + `getBestSpawn(player, arenaId)`. New shared `GameMode/Arena.luau` holds the `ArenaId` / `Default` / `SpawnTags` vocabulary. **The subtle part was density:** `count = density × volume / 1000` summed *every* tagged volume, which is the right answer for one arena and the wrong one for two — verified per-arena with two probe pools resolving to 10 and 5 rather than 15 each. **Absent `ArenaId` resolves to `Default`**, because the shipped arena's eight volumes are tagged but unattributed and requiring the attribute would have emptied it silently. The three new spawn tags are declared but nothing carries them yet. | — |
 | 3 | ✅ **Done 2026-08-20.** All nine HUD sites route through a new `shared/GameMode/BroadcastAudience.luau` — a late-binding pointer at `GameModeService`'s session tables, resolved per fire. `ScoreTracker` and `BossService` both needed it because neither *holds* a roster the way `RoundManager` does. **The boss judgement call:** rather than thread a session through `BossService` (a refactor stage 5 immediately redoes), it resolves `Arena.idOf(BossPoint)` — one attribute read per boss cycle, roster resolved per fire. Fallback on an unresolved lookup is *everyone* (pre-stage-3 behaviour) plus a throttled warn, never an empty audience. **Deliberately incomplete:** ScoreTracker's scores are still server-wide, so another arena's names still appear on the scoreboard — only the audience moved, since the payload shape is frozen for `ScoreboardGui`/`KillFeedGui`. VFX lane untouched as planned. **Not fully verified:** the two-session disjoint-roster test did not run (MCP `start_stop_play` wedged); single-session boot is clean. | Before stage 6 |
 | 4 | **Hub greybox + player state.** Lobby arena slot with its own session, `transferPlayer`, hub greybox, two portals, practice blocks, `InLobby/Queued/InArena` and the HUD suppression table above. Lands as 4a/4b/4c — see § Stage 4 detail. | — |
-| 5 | **PvE mode.** `Modes/PvEBoss.luau` — co-op, `minPlayers = 1`, objective win condition, boss arena slot. Queue → round → back to lobby. *Prerequisites landed 2026-09-09 (refactor chunk 8): `SessionRegistry` module, per-session `ScoreTracker`, roster-scored spawns.* | — |
+| 5 | ✅ **Done 2026-09-19.** `Modes/PvEBoss.luau` runs the shipped `Default` arena (registry default + `ActiveGameMode`): 5 s countdown, 300 s clock, ends on the new `BossDefeated(arenaId)` Bindable or an emptied roster, no winner credited. Mode callbacks carry the arena id; `RoundManager.onIntermissionEnd` → `SessionRegistry.sendRosterHome`; `LobbyService` refuses joins during PostRound. Verified: Multiplayer suite 7/7 (three new `pve_*` tests) and one playtest — portal → countdown → boss stamped `Default` → `RoundTimerGui` at 4:45 → server-side kill → `Win condition met` → NPC set + boss cycle torn down (no respawn) → 10 s → `Transferred Default → Lobby`, `PlayerState=InLobby`, combat HUD disabled. See § Stage 5 detail. | — |
 | 6 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `allowsPvP = true` on its config, `timeLimit` + `countdownSec` set on its config (the global flags are gone). | **After Phase 5.4** |
 | 7 | **Wiki + tests.** ✅ *GameMode page rewritten 2026-09-09 (chunk 8) off its NoOp-only record; session lifecycle tests landed as `Suites/Multiplayer/{sessions_isolate_scores, transfer_moves_roster_and_attributes, registry_views_agree}`.* Still open: `wiki/systems/Lobby.md`. | — |
 
@@ -480,6 +480,139 @@ never a server log. Two playtests maximum before escalating.
   (refactor chunk 8): one tracker per session, broadcasting to its own members.
 - **Tutorial entry.** Wall space is left for it; [[systems/Tutorial]] is 5.3.
 - **The progression board.** Blocked on Phase 5.5 persistence.
+
+## Stage 5 detail
+
+*Planned 2026-09-16, after Phase 7 closed.* Stage 5 turns the shipped arena
+from an idle No-Op round into a co-op boss fight with a beginning and an end:
+portal → countdown → boss → defeat or timeout → back to the hub. Almost all
+of it is server-side wiring over pieces that already exist; the mode file
+itself is small.
+
+### Decision 1 — the PvE arena is the shipped `Default` slot
+
+The PvE portal already carries `TargetArenaId = Default`; the `BossPoint`,
+the eight `BlockSpawnVolume`s and the `FFASpawn` pads all resolve to `Default`
+through the unstamped-means-Default reading in `Arena.idOf`. Authoring a
+second arena would be a Studio afternoon for no design payoff until a second
+concurrent PvE slot is wanted, which nothing asks for yet. So `Default` *runs*
+`PvEBoss`: the `ActiveGameMode` attribute is set to `PvEBoss` and the
+registry's `DEFAULT_MODE` moves with it, so a fresh `.rbxl` without the
+attribute still boots into the fight. `NoOp` stays registered — the three
+Multiplayer suite tests build their own `TEST_ARENA` sessions on it and the
+attribute can still select it for an idle server.
+
+The cost is a name: the PvE arena is called `Default`. `Arena.SpawnTags.PvEArena`
+stays declared and unused; the mode's `spawnTag` is `Arena.SpawnTags.Default`
+because that is the tag the scene carries. Renaming is a Studio change the
+day a second slot exists, not a code change now.
+
+### Decision 2 — the objective is a Boss-domain signal, and modes learn their arena
+
+`GameModeDefinition` is kill-centric: `checkWinCondition(scores)` sees only a
+score table. A boss dying is not a player kill and must not be modelled as one
+(build-plan Phase 6 § Interface change). Two small changes:
+
+- **`BossDefeated` BindableEvent** in `shared/Boss/BossEvents/` beside the
+  three RemoteEvents, fired by `BossService` from the `Died` handler with the
+  arena id. Boss owns the fact that a boss died; the mode only listens. It
+  lives in the shared folder so the mode module — which sits in
+  `ReplicatedStorage` like its siblings — never reaches into
+  `ServerScriptService`. A server-fired Bindable is inaudible to clients,
+  which is fine: the HUD already gets the phase-0 sentinel.
+- **Mode callbacks gain the arena id.** `onRoundStart(arenaId)`,
+  `onRoundEnd(arenaId)` and `checkWinCondition(scores, arenaId)`. One mode
+  table serves every session running that mode, so without the id a mode
+  cannot keep per-session state. `Lobby` and `NoOp` ignore the extra argument.
+
+`PvEBoss` keeps `defeated[arenaId]`, cleared on `onRoundStart`, set by the
+Bindable, read by `checkWinCondition`. It also returns "end" when the score
+table is empty — the roster left — which is the stage-4a trap ("a session
+left empty mid-round stays Active") closed where 4a said it belonged: in the
+mode's win condition. `getRoundLeader` returns nil: co-op has no leader.
+
+Timing: `BossService` schedules a respawn `respawnDelaySec` (5 s) after death;
+`RoundManager` polls the win condition every second and `RoundEnded` cancels
+the pending respawn through `stopArena`. Four seconds of margin, no new
+coupling. If `respawnDelaySec` ever drops near 1 s this needs revisiting.
+
+### Decision 3 — the fail state is the clock, not a wipe
+
+Players keep respawning after `respawnTime` as they do today; there is no
+team-wipe rule. Instead `PvEBoss` sets a finite `timeLimit`
+(`GameModeConstants.PVE_ROUND_TIME_LIMIT_SEC`) and a short `countdownSec`
+(`PVE_COUNTDOWN_SEC`) so a group taking the portal together lands together.
+Timeout → `getRoundLeader` → nil → round over with no winner. This is the
+first mode with a `timeLimit` since the global flag was cut, so
+`RoundTimerGui` goes live for the first time; it is the one HUD element still
+hand-built (chunk 12 loose end) and this stage is where any drift shows.
+
+A wipe rule can be added later as a second reason for `checkWinCondition` to
+say "end"; nothing here precludes it.
+
+### Decision 4 — "back to the lobby" is a session-registry hook, not mode code
+
+`RoundManager` deliberately knows nothing about lobbies (stage 4a), and a mode
+should not be transferring players. `SessionRegistry.create` already builds
+each `RoundManager`'s dependency table; it gains an `onIntermissionEnd`
+callback that `RoundManager` fires once the PostRound wait finishes while the
+session is still live. The registry's callback transfers every roster member
+to `Arena.LOBBY_ID`. The lobby never runs a round and `NoOp`'s never ends, so
+neither ever fires it; only modes with a finite round do. The loop then
+re-enters `_waitForPlayers` with an empty roster, the boss is already gone
+(torn down on `RoundEnded`), and the next portal join starts a clean round.
+
+### Decision 5 — drop-in co-op, closed during the intermission
+
+A player taking the PvE portal while the round is `Active` transfers
+immediately and joins the fight in progress — that is what "a lone player
+never waits" costs, and it is what makes co-op free. The one bad window is
+`PostRound`: a transfer there lands in an arena about to bounce everyone
+home. `LobbyService.onJoin` refuses while the target session is `PostRound`,
+through the existing `refuse()` path — which today only logs on the server;
+the panel gives no reason. Surfacing it, and holding the player in the
+portal queue to flush on the next `WaitingForPlayers`, is stage 6 work,
+where queues have to become real anyway.
+
+### What the player sees
+
+Countdown banner, then `RoundTimerGui` counting down, boss health bar, and on
+defeat or timeout the `GameStateGui` round-over card. That card reads
+"No winner" for a boss kill because the payload has no outcome field — the
+honest copy is "BOSS DEFEATED" / "TIME'S UP", and it is a small follow-up on
+`GameStateChanged` + `GameStateConfig`, not part of this stage.
+
+### Sub-stages
+
+*Status (2026-09-19): 5a–5c done and verified — suite 7/7, one playtest of the
+full portal → boss → lobby loop. See the stage row above for the observations.
+Studio: `Workspace.ActiveGameMode` was `TeamDeathmatch` (stale since `6610291`)
+and is now `PvEBoss`; no undo waypoint was available from the MCP context, and
+the `.rbxl` needs saving.*
+
+**5a — mode + interface (server only).** `Modes/PvEBoss.luau`, the two PvE
+constants, the arena-id argument on the three callbacks, `BossDefeated` event
++ `BossService` fire, `onIntermissionEnd` hook and the registry's transfer
+callback, `LobbyService` PostRound refusal, `DEFAULT_MODE` flip. Tests in
+`Suites/Multiplayer/`: `pve_round_ends_on_boss_defeated`,
+`pve_round_ends_on_empty_roster`, `pve_intermission_returns_roster_to_lobby`.
+
+**5b — Studio + playtest.** `ActiveGameMode = PvEBoss` on Workspace (under a
+waypoint; the `.rbxl` needs saving). One playtest: lobby → portal → countdown
+→ boss spawns with `ArenaId=Default` → `RoundTimerGui` visible → (defeat via
+the harness or timeout) → `RoundEnded` → transferred to `Lobby`, `PlayerState`
+back to `InLobby`, combat HUD gone.
+
+**5c — wiki.** [[systems/GameMode]] modes table, [[systems/Boss]] lifecycle +
+the "Round integration" future-work item closes, this page's stage row,
+build-plan, `log.md`.
+
+### Deliberately not in stage 5
+
+- Portal queue flushing (stage 6).
+- Team-wipe fail state.
+- Outcome copy on the round-over card.
+- A second PvE arena slot, or renaming `Default`.
 
 ## Milestone
 

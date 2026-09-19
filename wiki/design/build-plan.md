@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-09-15
+updated: 2026-09-19
 ---
 
 # Build Plan
@@ -314,7 +314,7 @@ Added 2026-08-20. Full plan in [[design/lobby]]. Prompted by the decision to add
 | 2 | **Arena binding.** `ArenaId` on `BlockSpawnVolume` + per-arena block pools; `LobbySpawn` / `PvEArenaSpawn` / `PvPArenaSpawn` tags. `SpawnManager.filterSpawnsForPlayer` already resolves by tag, so this is data. | — |
 | 3 | **Broadcast audience** *(added 2026-08-20)*. Nine HUD sites: `ScoreTracker`'s `ScoreUpdate` ×1 + `KillFeed` ×2, `BossService`'s `BossPhaseChanged` ×3 + `BossHealthChanged` ×3. Copy stage 1's roster pattern. VFX lane (8 sites) out of scope — see [[design/lobby]] § Broadcast audience. | Before stage 6 |
 | 4 | **Hub greybox + player state.** Lobby zone, two portals, practice blocks, `InLobby/Queued/InArena` and the HUD suppression table. Still `NoOp` behind the portals. | — |
-| 5 | **PvE mode.** `Modes/PvEBoss.luau` — co-op, objective win condition, boss arena slot. | — |
+| 5 | ✅ **Done 2026-09-19.** `Modes/PvEBoss.luau` runs the shipped `Default` arena — co-op, 5 s countdown, 300 s clock as the fail state, ends on a new server-side `BossDefeated(arenaId)` Bindable or an emptied roster, roster transferred home after the intermission through a `RoundManager.onIntermissionEnd` hook owned by `SessionRegistry`. Mode callbacks now carry the arena id. Verified by suite (7/7) and one playtest of the full loop; details in [[design/lobby]] § Stage 5 detail. | — |
 | 6 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `allowsPvP = true` on its config, timer + countdown back on. | **After 5.4** |
 | 7 | **Wiki + tests.** `wiki/systems/Lobby.md`, rewrite the NoOp-only [[systems/GameMode]] record, session lifecycle tests. | — |
 
@@ -359,6 +359,8 @@ Added 2026-09-08 from [[design/system-audit-2026-09]]. Full tickable plan with o
 **Decisions:** Q1–Q11 answered 2026-09-08 (recommended option on every one); recorded in [[design/refactor-plan-2026-09]] § Decisions. No chunk is blocked on input. All chunks done as of 2026-09-15; remaining loose ends live on the plan page (chunk 9's two-arena client check, `RoundTimerGui` unported, tracker BRA.21 settings surface). Phase 6 stages 5 and 6 are unblocked.
 
 ## Plan changelog
+
+- **2026-09-19**: Phase 6 stage 5 done — the PvE boss mode. Four calls made with the user: the PvE arena is the shipped `Default` slot (no new geometry until a second slot is wanted); the objective is a Boss-domain Bindable, not a player kill; the fail state is a clock with respawns, not a wipe; back-to-lobby is a session-registry hook, not mode code. Stage 6 (duels) is next and still gated on Phase 5.4's affordability check being judged good enough for a 1v1.
 
 - **2026-09-15**: Phase 7 done — chunk 12 (HUD ports, settings cut) closed with the user's 720p check; chunks 4 and 8–9 landed earlier, so the Phase 6 stage 5/6 gates are open.
 
