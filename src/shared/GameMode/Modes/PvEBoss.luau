@@ -23,7 +23,9 @@
 --   - An empty score table — the roster left mid-round — also ends the
 --     round, closing the stage-4a trap ("a session left empty stays
 --     Active") in the one place stage 4a said it belonged.
---   - `getRoundLeader` returns nil: co-op has no leader. `onPlayerKill`
+--   - `getRoundLeader` returns nil: co-op has no leader. The outcome ids
+--     (`BossDefeated` / `BossSurvived` / `Abandoned`) ride the PostRound
+--     payload so the round-over card can say what happened. `onPlayerKill`
 --     returns 0: PvP is off, so a player death here is the boss's or the
 --     environment's, and neither scores.
 ----------------------------------------------------------------------
@@ -32,6 +34,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
 local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
+
+local RoundOutcome = GameModeConstants.RoundOutcome
 
 -- Server-fired BindableEvent beside the Boss RemoteEvents. Inaudible to
 -- clients, which is fine — they already get the phase-0 sentinel.
@@ -76,20 +80,21 @@ function PvEBoss.onPlayerKill(_killer: Player?, _victim: Player, _cause: string)
 	return 0
 end
 
-function PvEBoss.checkWinCondition(scores: { [Player]: any }, arenaId: string): (boolean, number?)
+function PvEBoss.checkWinCondition(scores: { [Player]: any }, arenaId: string): (boolean, number?, string?)
 	if defeated[arenaId] then
-		return true, nil
+		return true, nil, RoundOutcome.BossDefeated
 	end
 	-- Nobody left to fight: the tracker's membership follows the roster
 	-- exactly, so an empty table means an empty arena.
 	if next(scores) == nil then
-		return true, nil
+		return true, nil, RoundOutcome.Abandoned
 	end
-	return false, nil
+	return false, nil, nil
 end
 
-function PvEBoss.getRoundLeader(_scores: { [Player]: any }): number?
-	return nil
+-- The clock ran out: co-op has no leader, and the boss is still up.
+function PvEBoss.getRoundLeader(_scores: { [Player]: any }, _arenaId: string): (number?, string?)
+	return nil, RoundOutcome.BossSurvived
 end
 
 function PvEBoss.onRoundStart(arenaId: string)

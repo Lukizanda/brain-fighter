@@ -1,6 +1,6 @@
 ---
 type: design
-description: Phase 6 plan (2026-08-20) — a welcome lobby and PvE/PvP mode selection. The finding is that mode choice is a session-container problem, not a menu problem; GameModeService and RoundManager are server-wide singletons. Decision = hub place with in-place arena zones, co-op queued PvE, 1v1 queued duels on a pad pool. Records what PvP needs that the lobby does not provide.
+description: Phase 6 plan (2026-08-20) — a welcome lobby and PvE/PvP mode selection. The finding is that mode choice is a session-container problem, not a menu problem; GameModeService and RoundManager are server-wide singletons. Decision = hub place with in-place arena zones, co-op queued PvE, 1v1 queued duels on a pad pool. Records what PvP needs that the lobby does not provide. Stage 6 (duels) shipped 2026-09-19.
 updated: 2026-09-19
 ---
 
@@ -151,12 +151,14 @@ be mistaken for shipping PvP.
 |---|---|
 | ~~**Spell damage does not respect the PvP gate**~~ | **Closed 2026-09-08** (refactor chunk 4). Every spell now goes through `applyDamage.process`, and the gate is `allowsPvP` on the mode config, resolved through the victim's session — see § PvP gate below. |
 | ~~**Client-trusted affordability**~~ | **Closed 2026-09-08** (refactor chunk 6). `EnergyLedger.checkCast` prices every cast from validated memorizes, the ledger resets per round, and `EconomyConstants.ENFORCE = true` refuses casts a player provably never earned — see [[systems/SpellCastService]] § Validated memorize. |
-| **Round timer / countdown off** | `ROUND_TIMER_ENABLED` and `ROUND_COUNTDOWN_ENABLED` are both `false`. A duel with no clock does not end. |
+| ~~**Round timer / countdown off**~~ | **Closed 2026-09-09 / 2026-09-19.** Refactor chunk 8 moved both onto the mode config (`timeLimit`, `countdownSec`); `PvPDuel` sets both (stage 6). |
 | **Contested blocks** | Closed by Phase 5.7 stage 4 — noted here because it was PvP-only and unreachable in solo play, which is the class of bug this phase will keep finding. |
 
 **Sequencing consequence:** Phase 6 stages 1–5 (container + arenas + broadcast +
 hub + PvE) are safe to build against the current trust model, because PvE co-op
 cheating is self-cheating. Stage 6 (duels) should land **after** Phase 5.4.
+*(Gate judged met on 2026-09-19: validated memorize with `ENFORCE = true` is the
+affordability check a 1v1 needs. Stage 6 shipped the same day.)*
 
 ## PvP gate (2026-09-08)
 
@@ -210,7 +212,7 @@ leave it.
 | 3 | ✅ **Done 2026-08-20.** All nine HUD sites route through a new `shared/GameMode/BroadcastAudience.luau` — a late-binding pointer at `GameModeService`'s session tables, resolved per fire. `ScoreTracker` and `BossService` both needed it because neither *holds* a roster the way `RoundManager` does. **The boss judgement call:** rather than thread a session through `BossService` (a refactor stage 5 immediately redoes), it resolves `Arena.idOf(BossPoint)` — one attribute read per boss cycle, roster resolved per fire. Fallback on an unresolved lookup is *everyone* (pre-stage-3 behaviour) plus a throttled warn, never an empty audience. **Deliberately incomplete:** ScoreTracker's scores are still server-wide, so another arena's names still appear on the scoreboard — only the audience moved, since the payload shape is frozen for `ScoreboardGui`/`KillFeedGui`. VFX lane untouched as planned. **Not fully verified:** the two-session disjoint-roster test did not run (MCP `start_stop_play` wedged); single-session boot is clean. | Before stage 6 |
 | 4 | **Hub greybox + player state.** Lobby arena slot with its own session, `transferPlayer`, hub greybox, two portals, practice blocks, `InLobby/Queued/InArena` and the HUD suppression table above. Lands as 4a/4b/4c — see § Stage 4 detail. | — |
 | 5 | ✅ **Done 2026-09-19.** `Modes/PvEBoss.luau` runs the shipped `Default` arena (registry default + `ActiveGameMode`): 5 s countdown, 300 s clock, ends on the new `BossDefeated(arenaId)` Bindable or an emptied roster, no winner credited. Mode callbacks carry the arena id; `RoundManager.onIntermissionEnd` → `SessionRegistry.sendRosterHome`; `LobbyService` refuses joins during PostRound. Verified: Multiplayer suite 7/7 (three new `pve_*` tests) and one playtest — portal → countdown → boss stamped `Default` → `RoundTimerGui` at 4:45 → server-side kill → `Win condition met` → NPC set + boss cycle torn down (no respawn) → 10 s → `Transferred Default → Lobby`, `PlayerState=InLobby`, combat HUD disabled. See § Stage 5 detail. | — |
-| 6 | **PvP duel.** `Modes/PvPDuel.luau` — exactly 2, pad pool, `allowsPvP = true` on its config, `timeLimit` + `countdownSec` set on its config (the global flags are gone). | **After Phase 5.4** |
+| 6 | ✅ **Done 2026-09-19.** `Modes/PvPDuel.luau` on two scene-authored pads (`ArenaSlot` tag + `ArenaId`/`Mode` attributes → sessions at boot): exactly two (`minPlayers = maxPlayers = 2`, a capped round fills before it starts), `allowsPvP = true`, kill limit and clock as Workspace tunables (`DuelKillLimit`, `DuelTimeLimitMin`, fallback 3 / 3 min), leaving is a forfeit. The portal queue is real: `TargetMode` pool portals, intake only when a pad can start, 1 s flush; stage 5's PostRound refusal became a queue. Outcome ids on `RoundEnded` and the PostRound payload drive the card copy (`BOSS DEFEATED`, `OPPONENT LEFT`, …); `RoundTimerGui` ported; round-start heal. Gate judged met by the user: validated memorize with `ENFORCE = true`. See § Stage 6 detail. | — |
 | 7 | **Wiki + tests.** ✅ *GameMode page rewritten 2026-09-09 (chunk 8) off its NoOp-only record; session lifecycle tests landed as `Suites/Multiplayer/{sessions_isolate_scores, transfer_moves_roster_and_attributes, registry_views_agree}`.* Still open: `wiki/systems/Lobby.md`. | — |
 
 *Stage numbering changed 2026-08-20: broadcast audience inserted as the new stage
@@ -614,6 +616,158 @@ build-plan, `log.md`.
 - Outcome copy on the round-over card.
 - A second PvE arena slot, or renaming `Default`.
 
+## Stage 6 detail
+
+*Planned and shipped 2026-09-19, the day after stage 5.* Stage 6 turns the PvP
+portal's honest-but-empty queue into duels: two authored pads, a mode that
+needs exactly two, a queue that fills a pad only when it can start it, and a
+round-over card that finally says what happened. Three calls were the user's
+(decisions 4, 5 and the round-start heal); the rest fell out of the session
+model stages 1–5 built.
+
+### Decision 1 — duel pads are scene-authored slots
+
+`Arena.SLOT_TAG = "ArenaSlot"`. A Model carrying that tag plus `ArenaId` and
+`Mode` (a key from `Modes/init.luau`) attributes gets a session at boot:
+`GameModeService.createSceneSlots` walks the tag and calls
+`SessionRegistry.create` for each, after the code-created Lobby and Default
+sessions. The mode lookup is `Registry.find`, which is strict — an unknown key
+warns and creates nothing, because a pad silently running the boss fight
+would be worse than a pad that does not exist.
+
+`Workspace.DuelPads/{Duel1,Duel2}` are the two pads, 80 × 80 greybox at
+`x ≈ −1000` (west of the hub, out of sign range): floor, low walls, corner
+pillars, two `PvPArenaSpawn` pads at opposite ends, a `BlockSpawnVolume` (a
+duel is still a spelling fight — 5 blocks each), a `DeathZone` under the
+floor, and a `LobbyReturnPad` portal on the north side with a neon marker.
+Every part carries `ArenaId`. Authored via MCP under a `ChangeHistoryService`
+waypoint that, as in stage 5, returned nil from the bridge — so no undo, and
+the `.rbxl` needs saving. Lobby and Default stay code-created: whether they
+exist is not configurable.
+
+The payoff of stages 2, 9 and 11 showed here: block pools, the boss and NPC
+sets are all scene-gated (a tagged volume, a `BossPoint`, patrol markers in
+the arena), so the pads got letter blocks and nothing else with no code.
+
+### Decision 2 — roster bounds live on the mode config, and a capped round fills before it starts
+
+`ModeConfig.minPlayers?` (absent → `MIN_PLAYERS`) and `maxPlayers?` (absent →
+unbounded). `RoundManager.minPlayers()` replaces the global gate in
+`_waitForPlayers`, and the loop re-checks it after the countdown — a
+duellist stepping back onto the return pad during the 5 s would otherwise
+have handed the other a win on the first Active tick; instead the session
+logs "Roster fell to 1 during the countdown — back to waiting".
+
+`RoundManager.freeSeats()` is the one rule the queue asks: `PostRound` → 0
+(about to bounce everyone home, stage 5 decision 5); no `maxPlayers` →
+unbounded (drop-in co-op); capped and `WaitingForPlayers` → the empty seats;
+capped and running → 0. That last case is the sentence in bold: nobody lands
+in a duel already under way.
+
+### Decision 3 — one queue, two portal shapes
+
+A portal with `TargetArenaId` names one session; a portal with the new
+`TargetMode` attribute (`Lobby.Attributes.TargetMode`, `"PvPDuel"` on the
+duel pad) names every session running that mode — `candidateSessions`,
+sorted fullest-first so a pad someone left during its countdown is topped up
+before a fresh one opens. Both shapes go through the same queue: Join
+enqueues, the portal is flushed at once, and a 1 s heartbeat
+(`Lobby.QUEUE_FLUSH_SEC`) keeps flushing, because sessions open on their own
+clock and nothing in `RoundManager` announces it server-side.
+
+The intake rule is `intake(session, waiting)`: the session's free seats, but
+only when the queue can bring it to its minimum. Two seats and one player
+waiting is zero — the wait is better spent in the hub with the practice
+blocks than alone on an empty pad, and it is what makes "a group taking the
+portal together lands together" true for duels. The boss portal falls out of
+the same rule: `minPlayers` 1, unbounded seats, so anyone moves the moment
+the arena is not between rounds. Stage 5's `PostRound` *refusal* is gone —
+the player queues and flushes on the next `WaitingForPlayers`, which is
+exactly the follow-up decision 5 named.
+
+`Capacity` is now published by `LobbyService` rather than authored: the sum
+of `maxPlayers` across the portal's sessions when every one is capped
+(`0/4 in` for two pads), 0 — uncapped — otherwise. `Occupancy` is the roster
+count across them.
+
+### Decision 4 — leaving is a forfeit (user, 2026-09-19)
+
+`PvPDuel.checkWinCondition`: a kill at the limit → that player, `ScoreLimit`;
+a roster below `DUEL_PLAYERS` → the survivor, `Forfeit`; an empty roster →
+nobody, `Abandoned`. The return pad and a disconnect are the same event to
+the score table, so one rule answers both of this page's open questions and
+frees the pad within a second. On the clock, `getRoundLeader` credits the
+kill leader (`TimeUp`) or nobody (`Draw`), including at zero kills.
+
+Rejected: voiding the round (a duel nobody can lose), and holding the
+survivor on the pad for a new opponent (more queue code, and a half-empty pad
+blocks the pool).
+
+### Decision 5 — the kill limit and the clock are designer tunables (user)
+
+`workspace.DuelKillLimit` and `workspace.DuelTimeLimitMin`, read by
+`PvPDuel.getConfig()` with `DUEL_KILL_LIMIT = 3` and `DUEL_TIME_LIMIT_MIN = 3`
+as fallbacks when the attribute is absent or not a positive number — the
+`ActiveGameMode` mechanism again. The limit is snapshotted per arena on
+`onRoundStart`, so retuning mid-duel changes the next duel, not the one being
+fought. Both attributes are set on the place at their defaults.
+
+### Decision 6 — the round says why it ended
+
+`GameModeConstants.RoundOutcome` ids: `BossDefeated`, `BossSurvived`,
+`ScoreLimit`, `Forfeit`, `TimeUp`, `Draw`, `Abandoned`.
+`checkWinCondition` gained a third return and `getRoundLeader` became
+`(scores, arenaId) → (leaderId?, outcome?)`; `RoundManager` substitutes
+`TimeUp` for a nil time-out outcome, fires `RoundEnded(winnerId, winnerName,
+arenaId, outcome)` and puts `outcome` on the PostRound payload. `PvEBoss`
+reports `BossDefeated` / `Abandoned` / `BossSurvived`.
+
+Client side, `Hud/RoundOutcomeCopy` is the one place the ids become words —
+"BOSS DEFEATED" / "The boss is down", "OPPONENT LEFT" / "Winner: X", "TIME'S
+UP" / "Draw" — shared by `GameStateBuilder.setOutcome` (replacing
+`setWinner`) and the timer strip, so the two surfaces cannot drift. This
+closed stage 5's "No winner after a boss kill" follow-up.
+
+`RoundTimerGui` was ported to `RoundTimerBuilder` + `RoundTimerConfig` in
+the same commit — the last hand-built HUD element from refactor chunk 12 —
+and now attaches the HUD scale like its five siblings.
+
+### Also — full health on round start (user)
+
+`HealthService` listens to `RoundStarted` and heals every living roster
+member to `MaxHealth` through `applyDamage.heal` with cause `round_start`,
+so `Humanoid.Health` keeps its one writer. Every mode, not just duels: a
+duellist arriving at 30 HP from a previous round would fight at a
+disadvantage nobody chose, and a boss party deserves the same start. Dead
+members are skipped — the respawn owner is about to hand them a body.
+
+### Verification
+
+Multiplayer suite 10/10 — `duel_win_condition`, `duel_waits_for_two` and
+`scene_slots_have_sessions` new. One playtest, read from the client VM where
+it counts: boot created `Duel1`/`Duel2` sessions (`need 2`, 2 spawn points
+and 5 blocks each, no boss, no NPCs); Join on the duel pad → `PlayerState =
+Queued`, sign `0/4 in - 1 waiting`, panel `Leave queue`, player still in the
+hub; cancel → `InLobby`, `Waiting = 0`; the boss portal → transferred at
+once through the same queue path (`took Boss Fight -> Default`), 70 → 100 HP
+at round start (`Environment healed … cause=round_start`), the ported strip
+at `4:59`; a server-side boss kill → card `BOSS DEFEATED` / `The boss is
+down` / `Next round in 3...`, strip matching; intermission → `Transferred
+Default → Lobby`, both ScreenGuis gated off, sign back to `0 inside`. The
+1v1 itself needs two clients and is user-driven — the snippet and the log
+lines to expect are in `nimbalyst-local/stage6-duel-two-client.md`.
+
+### Deliberately not in stage 6
+
+- **Spectating** for waiting duellists.
+- **A refusal reason on the panel.** With `PostRound` now queueing, the
+  remaining refusals (range, wrong arena, unknown portal) are all cases the
+  client already declines to offer.
+- **`wiki/systems/Lobby.md`** — still stage 7.
+- **The charge-tier hold check** (Q4(a), 2026-09-08) was explicitly deferred
+  "until duels are actually playable". They are now; it is the next
+  trust-model item to re-judge, and it belongs to [[systems/SpellCastService]].
+
 ## Milestone
 
 Two clients join, land in the lobby with no combat HUD, pop a practice block,
@@ -623,10 +777,12 @@ and the server never had more than one session per slot.
 
 ## Open questions
 
-- **Does leaving mid-round forfeit?** A duel where quitting is free is a duel
-  nobody loses.
-- **What happens to a duel when one player disconnects?** Award, void, or
-  re-queue the survivor.
+- ~~**Does leaving mid-round forfeit?**~~ *Resolved 2026-09-19 (user): yes —
+  the survivor is credited (`Forfeit`) the tick the roster drops below two.
+  See § Stage 6 detail, decision 4.*
+- ~~**What happens to a duel when one player disconnects?**~~ *Resolved
+  2026-09-19: the same rule — a disconnect and the return pad are the same
+  event to the score table.*
 - **Spectating.** Free tension-builder for waiting duellists, or a whole feature.
   Not scoped here.
 *(Resolved 2026-09-07 — lobby energy carryover. Answer: reset at round start,

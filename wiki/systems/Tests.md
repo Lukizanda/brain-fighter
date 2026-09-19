@@ -86,11 +86,12 @@ src/shared/Tests/
       combat_disengages.luau
       npc_deals_damage.luau
     Multiplayer/
+      duel_waits_for_two.luau · duel_win_condition.luau
       multiplayer_invariants.luau
       pve_intermission_returns_roster_to_lobby.luau
       pve_round_ends_on_boss_defeated.luau
       pve_round_ends_on_empty_roster.luau
-      registry_views_agree.luau · sessions_isolate_scores.luau
+      registry_views_agree.luau · scene_slots_have_sessions.luau · sessions_isolate_scores.luau
       transfer_moves_roster_and_attributes.luau
     Phase3/
       blockspawner_{fills_to_target,autorefills,bounds_check,respawn_delay}.luau
@@ -166,7 +167,7 @@ Requiring any `__tests.luau` must be side-effect-free — the assertions only ru
 | Suite | Status | Covers |
 |---|---|---|
 | NPC | LIVE (fixture-gated via `ensurePatroller`) | Combat engage/disengage state transitions, NPC-deals-damage — [[systems/NPC]] |
-| Multiplayer | LIVE (7 tests) | `multiplayer_invariants` — boot-time structure: GameMode remotes, PlayerDamaged/PlayerEliminated events; `registry_views_agree`, `sessions_isolate_scores`, `transfer_moves_roster_and_attributes` — [[systems/GameMode]] SessionRegistry views, per-session ScoreTracker, roster + attribute transfer (chunk 8); `pve_round_ends_on_boss_defeated`, `pve_round_ends_on_empty_roster`, `pve_intermission_returns_roster_to_lobby` — Phase 6 stage 5: the `BossDefeated` objective, the emptied-roster end, and the intermission → lobby hook, all through the real round loop (the last one waits out the real 10 s intermission, ~16 s) |
+| Multiplayer | LIVE (10 tests) | `multiplayer_invariants` — boot-time structure: GameMode remotes, PlayerDamaged/PlayerEliminated events; `registry_views_agree`, `sessions_isolate_scores`, `transfer_moves_roster_and_attributes` — [[systems/GameMode]] SessionRegistry views, per-session ScoreTracker, roster + attribute transfer (chunk 8); `pve_round_ends_on_boss_defeated`, `pve_round_ends_on_empty_roster`, `pve_intermission_returns_roster_to_lobby` — Phase 6 stage 5: the `BossDefeated` objective, the emptied-roster end, and the intermission → lobby hook, all through the real round loop (the last one waits out the real 10 s intermission, ~16 s); `duel_win_condition` (pure: kill limit / forfeit / abandoned / leader / draw and their outcome ids), `duel_waits_for_two` (a PvPDuel session with one member stays in WaitingForPlayers past its countdown and reports one free seat), `scene_slots_have_sessions` (every `ArenaSlot` in the scene has a session running its `Mode`, PvP pads come in twos, pool portals name a known mode) — Phase 6 stage 6 |
 | Phase3 | LIVE (7 tests) | BlockSpawner pool/refill/bounds/respawn-delay, BlockShoot helpers/remote — [[systems/BlockShoot]] |
 | Skills | LIVE (5 tests) | SkillInterrupt lifecycle, SpellExecutor case table, CastAction scenarios, cast-rejection, predicted-vs-authoritative |
 | Hardening | LIVE (4 tests) | [[systems/BlockShoot]] § Trust model (payload, range/rate, arena match), [[systems/SpellCastService]] § Trust model |
@@ -174,7 +175,7 @@ Requiring any `__tests.luau` must be side-effect-free — the assertions only ru
 | Unit | LIVE (8 tests) | WordBuffer, EnergyEconomy, EnergyReservoirs, Dictionary, SpellRegistry, MemorizeAction, MindFullManager (all real runs) + Hud (server-VM skip, real on client) |
 | Melee | **deleted** (chunk 1, 2026-09-08) | Was: MeleeHitDetector sweep. Dead code — [[systems/Weapon]] melee path is unused; chunk 11 removes the modules |
 
-**37 tests total.** `RunTests="all"` last verified 34/34 on 2026-09-11 (chunk 10 playtest, see [[log]]); the three `pve_*` tests added 2026-09-19 have run as `RunTests="Multiplayer"` (7/7), not yet inside an `"all"` run. Any other total means a suite folder lost or gained a module — check for `[AUTORUN WARN] Skipped` lines first.
+**40 tests total.** `RunTests="all"` last verified 34/34 on 2026-09-11 (chunk 10 playtest, see [[log]]); the three `pve_*` and three stage-6 tests added 2026-09-19 have run as `RunTests="Multiplayer"` (10/10), not yet inside an `"all"` run. Any other total means a suite folder lost or gained a module — check for `[AUTORUN WARN] Skipped` lines first.
 
 Deleted alongside Melee: `Suites/Multiplayer/{drop_request_zone_gated,respawnzone_tracks_hrp_presence,applydamage_credits_bot_kill}.luau` (their C1/C2 deliverables and the bot-spawner they exercised are gone — see `wiki/design/refactor-plan-2026-09.md` Chunk 0/1). `Helpers/restoreToSafeSpawn.luau` was deleted in the same pass (its only caller at the time was `respawnzone_tracks_hrp_presence`) but recovered days later — see § Files above.
 

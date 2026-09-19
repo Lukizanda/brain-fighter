@@ -24,6 +24,11 @@ Lobby.Attributes = {
 	-- Arena id this portal sends you to. Empty string means "queue only,
 	-- no slot exists yet" — the PvP portal until stage 6 authors pads.
 	TargetArenaId = "TargetArenaId",
+	-- For a portal with no TargetArenaId: the mode key (Modes/init.luau)
+	-- whose sessions this portal fills — "PvPDuel" for the duel pads. The
+	-- queue holds until one of those sessions has room and enough are
+	-- waiting to start it (Phase 6 stage 6).
+	TargetMode = "TargetMode",
 	-- Player-facing name, drawn on the sign and the panel.
 	ModeLabel = "ModeLabel",
 	-- Published by LobbyService, read by the sign.
@@ -48,6 +53,12 @@ Lobby.SERVER_RANGE_STUDS = 34
 -- A transfer moves a character and re-picks a spawn; letting it run at
 -- click speed is a physics problem, not a fairness one.
 Lobby.REQUEST_COOLDOWN_SEC = 1
+
+-- How often LobbyService retries moving queued players into a session
+-- that has since opened up (a duel pad whose round ended, the boss arena
+-- leaving its intermission). Once a second is plenty for a queue a few
+-- players long, and it is the same cadence the round loop ticks at.
+Lobby.QUEUE_FLUSH_SEC = 1
 
 -- Studs above the pad centre for the floating sign.
 Lobby.SIGN_HEIGHT_STUDS = 16

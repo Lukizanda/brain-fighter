@@ -1936,3 +1936,7 @@ changed with no undo waypoint available).
 
 Pages: [[design/lobby]] (§ Stage 5 detail + stage row), [[design/build-plan]],
 [[systems/GameMode]], [[systems/Boss]], [[systems/Tests]], [[index]].
+
+## [2026-09-19] ingest | Phase 6 stage 6 — PvP duel
+
+`Modes/PvPDuel.luau` on two scene-authored duel pads (`Workspace.DuelPads/{Duel1,Duel2}`, `ArenaSlot` tag + `ArenaId`/`Mode` → `GameModeService.createSceneSlots`). `ModeConfig.minPlayers`/`maxPlayers`, `RoundManager.minPlayers()`/`freeSeats()` (a capped round fills before it starts) and a post-countdown roster re-check; `LobbyService` queue made real — `TargetMode` pool portals, intake only when a pad can start, 1 s flush, PvE PostRound refusal → queue, published `Capacity`. `RoundOutcome` ids on `checkWinCondition`/`getRoundLeader`/`RoundEnded`/the PostRound payload, `Hud/RoundOutcomeCopy`, `GameStateBuilder.setOutcome`, `RoundTimerGui` ported to Builder+Config; `HealthService` round-start heal via `applyDamage.heal`. User calls: forfeit = survivor wins; `DuelKillLimit`/`DuelTimeLimitMin` Workspace tunables; heal every mode. Multiplayer suite 10/10, one client-verified playtest (queue → cancel → boss round at full HP → `BOSS DEFEATED` card → lobby). Pages: design/lobby (§ Stage 6 detail, open questions resolved), design/build-plan, systems/GameMode, systems/HUD, systems/Health, systems/Tests, index. The `.rbxl` holds the pads and both attributes and needs saving.

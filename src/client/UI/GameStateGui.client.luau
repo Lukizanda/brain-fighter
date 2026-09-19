@@ -4,7 +4,7 @@
 -- Shows overlay screens for round state transitions:
 --   - "Waiting for players" message
 --   - Countdown overlay
---   - End-of-round results (winner + top players)
+--   - End-of-round results (outcome title, winner + top players)
 -- Listens to GameStateChanged and ScoreUpdate RemoteEvents.
 ----------------------------------------------------------------------
 
@@ -45,7 +45,7 @@ gameStateChangedRemote.OnClientEvent:Connect(function(state)
 	local roundState = state.roundState
 
 	if roundState == RoundState.PostRound then
-		handle:setWinner(state.winnerName)
+		handle:setOutcome(state.outcome, state.winnerName)
 		handle:setNextRoundText("Next round in " .. math.ceil(state.timeRemaining or 0) .. "...")
 		handle:show()
 

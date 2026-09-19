@@ -24,6 +24,41 @@ local playerEliminatedEvent = healthEvents.PlayerEliminated
 -- server get different answers. A player with no session yet gets false.
 local SessionRegistry = require(ServerScriptService.Server.GameMode.Scripts.SessionRegistry)
 
+-- A round going Active in some arena, with its roster (Phase 6 stage 6).
+local roundStartedEvent = ServerScriptService.Server.GameMode.Events.RoundStarted :: BindableEvent
+
+-- Every roster member goes Active at full health. A duellist arriving
+-- from a previous round at 30 HP would otherwise fight at a disadvantage
+-- nobody chose, and a boss party deserves the same start. Through
+-- `applyDamage.heal`, so `Humanoid.Health` keeps its one writer. A dead
+-- member is skipped: the respawn owner (GameModeService) is about to hand
+-- them a fresh character anyway.
+local function healRosterOnRoundStart(roster: { Player }?, arenaId: any)
+	if type(roster) ~= "table" then
+		return
+	end
+	local healed = 0
+	for _, player in roster do
+		local character = player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if humanoid and humanoid.Health > 0 and humanoid.Health < humanoid.MaxHealth then
+			local result = applyDamage.heal({
+				sourcePlayer = nil,
+				targetHumanoid = humanoid,
+				amount = humanoid.MaxHealth,
+				cause = DamageTypes.Cause.RoundStart,
+			})
+			if result and result.healed > 0 then
+				healed += 1
+			end
+		end
+	end
+	if healed > 0 then
+		log:info(string.format("[%s] Round start — %d of %d roster members healed to full",
+			tostring(arenaId), healed, #roster))
+	end
+end
+
 local function initializeCharacterHealth(character: Model)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then
@@ -87,6 +122,9 @@ local function initialize()
 	-- than required upward from SkillEffects, so ReplicatedStorage never
 	-- reaches into ServerScriptService and the client build has no sink.
 	SkillEffects.setDamageSink(applyDamage)
+
+	-- Full health on every round start, for every mode.
+	roundStartedEvent.Event:Connect(healRosterOnRoundStart)
 
 	-- Initialize players
 	for _, player in Players:GetPlayers() do

@@ -59,6 +59,16 @@ export type ModeConfig = {
 	-- by their opponent while a lobby player on the same server is not.
 	-- Optional; absent means false.
 	allowsPvP: boolean?,
+
+	-- Roster size the round waits for before its countdown. Absent means
+	-- `GameModeConstants.MIN_PLAYERS`. A duel says 2.
+	minPlayers: number?,
+
+	-- Roster cap. Absent means unbounded — a co-op round that anyone may
+	-- drop into. A capped round **fills before it starts**: RoundManager
+	-- reports free seats only while WaitingForPlayers, so nobody lands in
+	-- a duel in progress (Phase 6 stage 6).
+	maxPlayers: number?,
 }
 
 export type GameModeDefinition = {
@@ -79,15 +89,18 @@ export type GameModeDefinition = {
 
 	-- Called each tick to check if the round should end.
 	-- Receives the session's current scores, keyed by Player, and the
-	-- session's arena id. Returns (shouldEnd, winnerUserId); a nil winner
-	-- with shouldEnd = true is a round that ended with nobody credited
-	-- (a co-op objective, an emptied roster).
-	checkWinCondition: (scores: Scores, arenaId: string) -> (boolean, number?),
+	-- session's arena id. Returns (shouldEnd, winnerUserId, outcome); a nil
+	-- winner with shouldEnd = true is a round that ended with nobody
+	-- credited (a co-op objective, an emptied roster). `outcome` is one of
+	-- `GameModeConstants.RoundOutcome` and names *why* for the round-over
+	-- card; nil is allowed and reads as a plain "round over".
+	checkWinCondition: (scores: Scores, arenaId: string) -> (boolean, number?, string?),
 
-	-- Determines the round leader on time-out. Returns the leading
-	-- user id, or nil for a tie / no kills. RoundManager calls this when
-	-- the timer expires before a score-limit win.
-	getRoundLeader: (scores: Scores) -> number?,
+	-- Determines the round leader on time-out. Returns the leading user
+	-- id (nil for a tie / no kills) and the outcome id. RoundManager calls
+	-- this when the timer expires before the win condition fires, and
+	-- substitutes `RoundOutcome.TimeUp` for a nil outcome.
+	getRoundLeader: (scores: Scores, arenaId: string) -> (number?, string?),
 
 	-- Called when a new round starts in the named arena. Mode-specific
 	-- setup (e.g., place flags for CTF).

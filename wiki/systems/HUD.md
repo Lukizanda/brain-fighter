@@ -1,7 +1,7 @@
 ---
 type: system
-description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu as circular hold-to-charge panels with concentric tier rings, MemorizeButton, MindFullIndicator), the mobile DashButton, and the six own-ScreenGui elements (DeathScreen, DamageFeedback, GameState, Scoreboard, BossHud, KillFeed). (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291. SettingsMenu cut 2026-09-15, refactor chunk 12.)
-updated: 2026-09-15
+description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu as circular hold-to-charge panels with concentric tier rings, MemorizeButton, MindFullIndicator), the mobile DashButton, and the seven own-ScreenGui elements (DeathScreen, DamageFeedback, GameState, Scoreboard, BossHud, KillFeed, RoundTimer — the last ported 2026-09-19). Round-over copy comes from the payload's outcome id via RoundOutcomeCopy. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291. SettingsMenu cut 2026-09-15, refactor chunk 12.)
+updated: 2026-09-19
 ---
 
 # HUD System
@@ -45,7 +45,7 @@ flowchart LR
     MFI["MindFullIndicatorGui"]:::coord
     KFG["KillFeedGui"]:::coord
     BTG["BuffTrayGui (scaffold)"]:::coord
-    RTG["RoundTimerGui<br/>(gated ROUND_TIMER_ENABLED)"]:::coord
+    RTG["RoundTimerGui<br/>(shown when the payload has timeLimit)"]:::coord
     BHG["BossHudGui<br/>(own ScreenGui)"]:::modal
     SBG["ScoreboardGui<br/>(Tab modal)"]:::modal
     GSG["GameStateGui<br/>(end-of-round modal)"]:::modal
@@ -67,6 +67,7 @@ flowchart LR
     SCB["ScoreboardBuilder"]:::builder
     BHB["BossHudBuilder"]:::builder
     KFB["KillFeedBuilder"]:::builder
+    RTB["RoundTimerBuilder"]:::builder
   end
 
   %% --- coordinator → builder ---
@@ -172,6 +173,10 @@ Two things changed that are specific to this batch, because five of the six (all
 
 `KillFeedGui` was ported for the same reason (F24 named all six) but was never own-ScreenGui — it registers a `Frame` into `HudLayoutManager`'s `TopRight` region and already inherited the shared `HudGui`'s `UIScale`. Its port is a straight Builder+Config extraction with no `DisplayOrder` or scale changes.
 
+**`RoundTimerGui` followed on 2026-09-19 (Phase 6 stage 6)** — `RoundTimerBuilder` / `RoundTimerConfig`, a handle of `setVisible` / `showWaiting` / `showCountdown` / `showActive` / `showPostRound`, and `attachScale` like its siblings. Nothing in `src/client/UI` builds its DOM by hand any more.
+
+**Round-over copy is keyed by outcome, not by winner presence.** The PostRound payload carries `outcome` (a `GameModeConstants.RoundOutcome` id — see [[systems/GameMode]]). `Hud/RoundOutcomeCopy` is the one table that turns it into words: title (`BOSS DEFEATED`, `OPPONENT LEFT`, `DUEL OVER`, `TIME'S UP`) and the no-winner line (`The boss is down`, `The boss survives`, `Draw`). `GameStateBuilder.setOutcome(outcome, winnerName)` replaced `setWinner`, and `RoundTimerBuilder.showPostRound` reads the same module, so the card and the strip cannot disagree. Before this a boss kill read "No winner".
+
 The gate-owner rule is unaffected: `DeathScreenGui`'s `DeathScreenBuilder` still drives `overlay.Visible` from `show`/`hide`, never the `ScreenGui.Enabled` that `HudGate.bindScreenGui` owns (see [[concepts/HudGate]] § Owners never write the gated property) — that split just moved from the old inline script into the Builder's closure.
 
 ## Settings menu — CUT (2026-09-15, refactor chunk 12, F25/Q5(a))
@@ -197,8 +202,11 @@ src/shared/Hud/
   DeathScreenConfig.luau
   DamageFeedbackBuilder.luau      — full-screen damage flash
   DamageFeedbackConfig.luau
-  GameStateBuilder.luau           — end-of-round results overlay (winner + top players)
+  GameStateBuilder.luau           — end-of-round results overlay (outcome title + winner line + top players)
   GameStateConfig.luau
+  RoundTimerBuilder.luau          — top-centre round state / timer strip (stage 6 port)
+  RoundTimerConfig.luau
+  RoundOutcomeCopy.luau           — RoundOutcome id → card title / no-winner line; shared by GameState + RoundTimer builders
   ScoreboardBuilder.luau          — Tab-to-open scoreboard
   ScoreboardConfig.luau
   BossHudBuilder.luau             — boss health bar + phase label
@@ -234,7 +242,7 @@ src/client/UI/
   DashButtonGui.client.luau       — BottomRight vertical column (touch-only); tap → DashApi.requestDash()
   MindFullIndicatorGui.client.luau — TopCenter; shows/hides on mindFull/mindFreed
   BossHudGui.client.luau          — own ScreenGui (IgnoreGuiInset=true, LAYERS.Overlay); boss health bar + phase label; hidden until a boss spawns
-  RoundTimerGui.client.luau       — TopCenter; round state + formatted timer; gated behind GameConfig.ROUND_TIMER_ENABLED (currently false); own ScreenGui at HudConstants.LAYERS.Overlay (not ported to Builder+Config this chunk)
+  RoundTimerGui.client.luau       — coordinator for RoundTimerBuilder; own ScreenGui at HudConstants.LAYERS.Overlay; strip visible only while the payload carries timeLimit
   GameStateGui.client.luau        — own ScreenGui at HudConstants.LAYERS.Modal; end-of-round results overlay
   ScoreboardGui.client.luau       — own ScreenGui at HudConstants.LAYERS.Scoreboard; Y toggles the Tab-style panel
   KillFeedGui.client.luau         — TopRight coordinator; forwards KillFeed remote entries to KillFeedBuilder

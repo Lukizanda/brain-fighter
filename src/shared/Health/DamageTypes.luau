@@ -21,6 +21,9 @@ DamageTypes.HitZone = {
 -- SkillDelivery. The kill feed prints the cause verbatim.
 DamageTypes.Cause = {
 	DeathZone = "death_zone",
+	-- HealthService's round-start heal (Phase 6 stage 6): every roster
+	-- member goes Active at full health.
+	RoundStart = "round_start",
 	Unknown = "Unknown",
 }
 

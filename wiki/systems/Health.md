@@ -1,7 +1,7 @@
 ---
 type: system
 description: Damage pipeline — one path. applyDamage.process / applyDamage.heal are the only Humanoid.Health writers; spells reach them through the DamageSink HealthService injects into SkillEffects; every request carries a cause id the kill feed credits; PvP is allowsPvP on the victim's mode, resolved through their session.
-updated: 2026-09-09
+updated: 2026-09-19
 ---
 
 # Health System
@@ -37,13 +37,17 @@ Whether player A may damage player B is a property of **the mode B is playing un
 
 `GameConfig.PLAYER_VS_PLAYER_ENABLED` was deleted with this (chunk 4); `TEAMS_ENABLED` and the round flags went in chunk 8. This gate is the only player-vs-player filter left in `applyDamage` — the team friendly-fire branch is gone with the teams. See [[design/lobby]] § PvP gate.
 
+## Round-start heal (2026-09-19)
+
+`HealthService` listens to the GameMode `RoundStarted(roster, arenaId)` Bindable and heals every living roster member to `MaxHealth` through `applyDamage.heal` with cause `DamageTypes.Cause.RoundStart` (`"round_start"`), logging `[arena] Round start — N of M roster members healed to full` when anyone needed it. Phase 6 stage 6, user decision: a duellist arriving at 30 HP from a previous round would fight at a disadvantage nobody chose, and a boss party deserves the same start — so it applies to every mode, not just duels. Dead members are skipped; the respawn owner (GameModeService) is about to hand them a fresh body. `Humanoid.Health` still has exactly one writer.
+
 ## Files
 
 - `src/shared/Health/DamageTypes.luau` — `DamageRequest`/`DamageResult` (with `cause`), `HealRequest`/`HealResult`, `DamageSink`, the `DamageType`, `HitZone` and `Cause` enums
 - `src/shared/Health/DamageModifierRegistry.luau` — pluggable damage modifiers (headshot, armor, shield)
 - `src/shared/Health/HealthConstants.luau` — magic-number-free constants (incl. `INSTANT_KILL_DAMAGE`)
 - `src/shared/Health/getHitZone.luau` — head/torso/limb classification from hit position
-- `src/server/Health/Scripts/HealthService/init.server.luau` — spawn-init health, respawn gate, wires `applyDamage` and injects it into `SkillEffects`
+- `src/server/Health/Scripts/HealthService/init.server.luau` — spawn-init health, round-start heal, wires `applyDamage` and injects it into `SkillEffects`
 - `src/server/Health/Scripts/HealthService/applyDamage.luau` — `process(...)` and `heal(...)`, the only `Health` writers
 - `src/server/Health/Scripts/DeathHandler.server.luau` — Damageable death cleanup + respawn
 - `src/server/Arena/DeathZoneService.server.luau` — lethal fall volumes, through `applyDamage` with `cause = death_zone`

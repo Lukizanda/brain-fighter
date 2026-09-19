@@ -16,7 +16,8 @@ local GameStateConfig = {
 	CENTER_PADDING = UDim.new(0, 20),
 	CENTER_LIST_PADDING = UDim.new(0, 8),
 
-	ROUND_OVER_TEXT = "ROUND OVER",
+	-- Title and winner-line copy live in Hud/RoundOutcomeCopy, shared with
+	-- the timer strip, keyed by the payload's outcome id.
 	ROUND_OVER_COLOR = Color3.fromRGB(255, 200, 50),
 	ROUND_OVER_TEXT_SIZE = 24,
 
@@ -42,8 +43,6 @@ local GameStateConfig = {
 
 	NEXT_ROUND_TEXT_COLOR = Color3.fromRGB(180, 180, 190),
 	NEXT_ROUND_TEXT_SIZE = 14,
-
-	NO_WINNER_TEXT = "No winner",
 }
 
 return GameStateConfig

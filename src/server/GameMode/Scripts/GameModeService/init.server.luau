@@ -19,6 +19,7 @@
 -- damage pipeline — listens to events only.
 ----------------------------------------------------------------------
 
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -69,6 +70,45 @@ local playerDamagedEvent = healthEvents.PlayerDamaged
 ----------------------------------------------------------------------
 local requestedModeKey = workspace:GetAttribute(ACTIVE_MODE_ATTRIBUTE)
 local activeMode, resolvedModeKey = GameModes.get(requestedModeKey)
+
+----------------------------------------------------------------------
+-- Scene-authored slots (Phase 6 stage 6)
+----------------------------------------------------------------------
+-- Every `ArenaSlot`-tagged instance in the workspace names an arena and
+-- the mode it runs. The duel pads are these: geometry plus a tag plus two
+-- attributes, no code per pad. The lobby and the shipped Default arena
+-- stay code-created above — whether they exist is not configurable.
+
+local function createSceneSlots(): number
+	local created = 0
+	for _, slot in CollectionService:GetTagged(Arena.SLOT_TAG) do
+		if not slot:IsDescendantOf(workspace) then
+			continue
+		end
+		local arenaId = slot:GetAttribute(Arena.ID_ATTRIBUTE)
+		local modeKey = slot:GetAttribute(Arena.MODE_ATTRIBUTE)
+		if type(arenaId) ~= "string" or arenaId == "" then
+			log:warn(string.format("%s is tagged %s but has no %s attribute — no session created",
+				slot:GetFullName(), Arena.SLOT_TAG, Arena.ID_ATTRIBUTE))
+			continue
+		end
+		if SessionRegistry.forArena(arenaId) then
+			log:warn(string.format("%s names arena %s, which already has a session — skipped",
+				slot:GetFullName(), arenaId))
+			continue
+		end
+		local mode, resolvedKey = GameModes.find(modeKey)
+		if not mode then
+			log:warn(string.format("%s (arena %s) names unknown mode %s — no session created",
+				slot:GetFullName(), arenaId, tostring(modeKey)))
+			continue
+		end
+		SessionRegistry.create(arenaId, mode)
+		created += 1
+		log:info(string.format("Scene slot %s → session %s running %s", slot:GetFullName(), arenaId, resolvedKey))
+	end
+	return created
+end
 
 ----------------------------------------------------------------------
 -- Player lifecycle
@@ -234,6 +274,9 @@ local function initialize()
 	-- The lobby first, because it is the one players join.
 	SessionRegistry.create(Arena.LOBBY_ID, LobbyMode)
 	SessionRegistry.create(Arena.DEFAULT_ID, activeMode)
+	-- Then whatever the scene declares: the duel pads.
+	local slotCount = createSceneSlots()
+	log:info(string.format("%d scene slot(s) created", slotCount))
 
 	-- Wire up player events
 	for _, player in Players:GetPlayers() do

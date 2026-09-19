@@ -36,6 +36,7 @@ local ScoreTracker = require(script.Parent.ScoreTracker)
 local log = Logger.new("RoundManager")
 
 local RoundState = GameModeConstants.RoundState
+local RoundOutcome = GameModeConstants.RoundOutcome
 
 export type Dependencies = {
 	-- Identifies the arena slot this session runs in.
@@ -165,7 +166,7 @@ end
 -- State broadcast
 ----------------------------------------------------------------------
 
-function RoundManager:_broadcastState(winnerId: number?, winnerName: string?)
+function RoundManager:_broadcastState(winnerId: number?, winnerName: string?, outcome: string?)
 	if self._destroyed then
 		return
 	end
@@ -185,6 +186,9 @@ function RoundManager:_broadcastState(winnerId: number?, winnerName: string?)
 		timeLimit = config.timeLimit,
 		winnerId = winnerId,
 		winnerName = winnerName,
+		-- Why the round ended (GameModeConstants.RoundOutcome), PostRound
+		-- only. The round-over card turns it into copy.
+		outcome = outcome,
 		-- DeathScreenGui reads this instead of keeping its own copy of the
 		-- mode's respawn delay (see chunk 2 — one RESPAWN_TIME).
 		respawnTime = config.respawnTime,
@@ -208,13 +212,13 @@ end
 function RoundManager:_waitForPlayers(generation: number)
 	self._currentState = RoundState.WaitingForPlayers
 	log:info(string.format("[%s] Waiting for players... (need %d)",
-		self.arenaId, GameModeConstants.MIN_PLAYERS))
+		self.arenaId, self:minPlayers()))
 	self:_broadcastState()
 
 	while self:_isLive(generation) do
 		-- Roster count, not the server population: another session's players
 		-- must not be able to start this one's round.
-		if self:getPlayerCount() >= GameModeConstants.MIN_PLAYERS then
+		if self:getPlayerCount() >= self:minPlayers() then
 			return
 		end
 		self:_broadcastState()
@@ -246,8 +250,8 @@ function RoundManager:_countdown(generation: number)
 	self:_broadcastState()
 end
 
--- Returns the winning user id, or nil for none.
-function RoundManager:_activeRound(generation: number): number?
+-- Returns the winning user id (nil for none) and the outcome id.
+function RoundManager:_activeRound(generation: number): (number?, string?)
 	self._currentState = RoundState.Active
 	local config = self._refs.modeDefinition.getConfig()
 	-- Absent means unlimited: the round runs until the score limit is hit
@@ -289,12 +293,13 @@ function RoundManager:_activeRound(generation: number): number?
 
 		-- Check win condition each tick, against this session's scores only.
 		local scores = self._scoreTracker:getAllScores()
-		local shouldEnd, winnerId = self._refs.modeDefinition.checkWinCondition(scores, self.arenaId)
+		local shouldEnd, winnerId, outcome = self._refs.modeDefinition.checkWinCondition(scores, self.arenaId)
 		if shouldEnd then
-			log:info(string.format("[%s] Win condition met! Winner: %s",
+			log:info(string.format("[%s] Win condition met! Winner: %s (%s)",
 				self.arenaId,
-				winnerId and ("UserId=" .. winnerId) or "none"))
-			return winnerId
+				winnerId and ("UserId=" .. winnerId) or "none",
+				tostring(outcome)))
+			return winnerId, outcome
 		end
 
 		-- Broadcast time update every second
@@ -304,34 +309,35 @@ function RoundManager:_activeRound(generation: number): number?
 	-- Halted mid-round rather than reaching the time limit — there is no
 	-- winner to resolve, and the caller is about to break out anyway.
 	if not self:_isLive(generation) then
-		return nil
+		return nil, nil
 	end
 
-	-- Time ran out — ask the mode who's leading.
+	-- Time ran out — ask the mode who's leading, and what to call it.
 	local scores = self._scoreTracker:getAllScores()
-	return self._refs.modeDefinition.getRoundLeader(scores)
+	local leaderId, outcome = self._refs.modeDefinition.getRoundLeader(scores, self.arenaId)
+	return leaderId, outcome or RoundOutcome.TimeUp
 end
 
-function RoundManager:_postRound(generation: number, winnerId: number?, winnerName: string?)
+function RoundManager:_postRound(generation: number, winnerId: number?, winnerName: string?, outcome: string?)
 	self._currentState = RoundState.PostRound
 	self._timeRemaining = GameModeConstants.INTERMISSION_DURATION
 
 	self._refs.modeDefinition.onRoundEnd(self.arenaId)
-	self._refs.roundEndedEvent:Fire(winnerId, winnerName, self.arenaId)
+	self._refs.roundEndedEvent:Fire(winnerId, winnerName, self.arenaId, outcome)
 
-	log:info(string.format("[%s] Round over! Winner: %s. Intermission: %ds",
-		self.arenaId, winnerName or "none", self._timeRemaining))
+	log:info(string.format("[%s] Round over! Winner: %s (%s). Intermission: %ds",
+		self.arenaId, winnerName or "none", tostring(outcome), self._timeRemaining))
 
 	if self._refs.onRoundEnd then
 		self._refs.onRoundEnd(winnerId, winnerName)
 	end
 
-	self:_broadcastState(winnerId, winnerName)
+	self:_broadcastState(winnerId, winnerName, outcome)
 
 	while self:_isLive(generation) and self._timeRemaining > 0 do
 		task.wait(1)
 		self._timeRemaining -= 1
-		self:_broadcastState(winnerId, winnerName)
+		self:_broadcastState(winnerId, winnerName, outcome)
 	end
 end
 
@@ -347,7 +353,17 @@ function RoundManager:_roundLoop(generation: number)
 		self:_countdown(generation)
 		if not self:_isLive(generation) then break end
 
-		local winnerId = self:_activeRound(generation)
+		-- Somebody left during the countdown (a duellist stepping back onto
+		-- the return pad, a disconnect). Going Active short-handed would end
+		-- the round on its first tick with a winner who never fought; wait
+		-- for the roster to fill again instead.
+		if self:getPlayerCount() < self:minPlayers() then
+			log:info(string.format("[%s] Roster fell to %d during the countdown — back to waiting",
+				self.arenaId, self:getPlayerCount()))
+			continue
+		end
+
+		local winnerId, outcome = self:_activeRound(generation)
 		if not self:_isLive(generation) then break end
 
 		-- Resolve the winner's display name. Scans the roster: a winner of
@@ -362,7 +378,7 @@ function RoundManager:_roundLoop(generation: number)
 			end
 		end
 
-		self:_postRound(generation, winnerId, winnerName)
+		self:_postRound(generation, winnerId, winnerName, outcome)
 		if not self:_isLive(generation) then break end
 
 		-- The intermission ran out rather than being halted. Whoever owns
@@ -402,6 +418,37 @@ end
 
 function RoundManager:isActive(): boolean
 	return self._currentState == RoundState.Active
+end
+
+-- Roster size the round waits for. From the mode config; absent means
+-- the global MIN_PLAYERS (1 — a lone player never waits).
+function RoundManager:minPlayers(): number
+	local configured: number? = self._refs.modeDefinition.getConfig().minPlayers
+	return configured or GameModeConstants.MIN_PLAYERS
+end
+
+-- How many more players this session will take right now. What
+-- LobbyService asks before moving anyone out of a portal queue.
+--
+--   PostRound            → 0. The intermission is about to send everyone
+--                          home; a transfer now would land and bounce.
+--   no maxPlayers        → unbounded. Drop-in co-op: join the fight in
+--                          progress (Phase 6 stage 5, decision 5).
+--   maxPlayers, Waiting  → the empty seats.
+--   maxPlayers, running  → 0. A capped round fills before it starts, so
+--                          nobody lands in a duel already under way.
+function RoundManager:freeSeats(): number
+	if self._destroyed or self._currentState == RoundState.PostRound then
+		return 0
+	end
+	local maxPlayers: number? = self._refs.modeDefinition.getConfig().maxPlayers
+	if not maxPlayers then
+		return math.huge
+	end
+	if self._currentState ~= RoundState.WaitingForPlayers then
+		return 0
+	end
+	return math.max(0, maxPlayers - self:getPlayerCount())
 end
 
 function RoundManager:start()

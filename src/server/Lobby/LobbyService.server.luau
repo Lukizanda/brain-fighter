@@ -5,6 +5,7 @@
 -- occupancy/queue numbers the signs read.
 --
 -- Phase 6 stage 4c — see `wiki/design/lobby.md` § Mode selection UX.
+-- Stage 6 made the queue real — § Stage 6 detail.
 --
 -- **The client decides nothing.** The panel sends "this player pressed
 -- Join on that portal" and this file re-derives everything else: that the
@@ -13,11 +14,16 @@
 -- anyone teleport into a duel pad from the far side of the hub.
 --
 -- Two portal shapes exist and the difference is one attribute:
---   - `TargetArenaId` names a live session  -> transfer immediately.
---   - `TargetArenaId` is empty              -> hold in a queue.
--- The PvP portal is the second until stage 6 authors duel pads. It is a
--- real queue with a real answer, not a stub: the sign reads
--- `0/2 duelling - 1 waiting` because that is true.
+--   - `TargetArenaId` names one session   -> the boss arena.
+--   - `TargetMode` names a mode key       -> every session running it:
+--                                            the pool of duel pads.
+-- Both go through the same queue. Pressing Join puts you in the portal's
+-- queue and the queue is flushed at once and then once a second: a
+-- session takes players when it has free seats (`RoundManager.freeSeats`)
+-- and the queue can bring it up to its minimum. So the boss arena takes
+-- anyone the moment it is not between rounds, and a duel pad takes two
+-- at a time — one player waiting for a duel stays in the hub with the
+-- practice blocks rather than standing alone on an empty pad.
 ----------------------------------------------------------------------
 
 local CollectionService = game:GetService("CollectionService")
@@ -26,7 +32,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
-local GameModeConstants = require(ReplicatedStorage.Shared.GameMode.GameModeConstants)
+local GameModes = require(ReplicatedStorage.Shared.GameMode.Modes)
 local Lobby = require(ReplicatedStorage.Shared.Lobby)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
@@ -39,13 +45,16 @@ local portalRequestRemote = ReplicatedStorage.Shared.Lobby.Remotes.PortalRequest
 -- when a handler is unbound.
 local SessionRegistry = require(ServerScriptService.Server.GameMode.Scripts.SessionRegistry)
 
+type Session = SessionRegistry.Session
+
 local ATTR = Lobby.Attributes
 
 ----------------------------------------------------------------------
 -- Queues
 ----------------------------------------------------------------------
--- Keyed by the portal part, not by an arena id: a queueing portal has no
--- arena to key on yet, which is the whole reason it queues.
+-- Keyed by the portal part, not by an arena id: a pool portal has no
+-- single arena to key on, and the boss portal's queue only exists while
+-- its arena is between rounds.
 
 local queues: { [BasePart]: { Player } } = {}
 local lastRequestAt: { [Player]: number } = {}
@@ -73,17 +82,125 @@ local function removeFromQueue(portal: BasePart, player: Player): boolean
 	return true
 end
 
+local function isQueuedAnywhere(player: Player): boolean
+	for _, queue in queues do
+		if table.find(queue, player) then
+			return true
+		end
+	end
+	return false
+end
+
+-- The `Queued` half of PlayerState follows queue membership; the registry
+-- cannot derive it from a roster, so this file tells it.
+local function syncQueuedFlag(player: Player)
+	if player.Parent then
+		SessionRegistry.setQueued(player, isQueuedAnywhere(player))
+	end
+end
+
 -- Drop players who left, or who are no longer in the lobby to wait in it.
 local function pruneQueue(portal: BasePart)
 	local queue = queueFor(portal)
 	for i = #queue, 1, -1 do
 		local player = queue[i]
+		local home = SessionRegistry.forPlayer(player)
 		local stillWaiting = player.Parent ~= nil
-			and player:GetAttribute(Arena.ID_ATTRIBUTE) == Arena.LOBBY_ID
+			and home ~= nil
+			and not SessionRegistry.runsRounds(home:getMode())
 		if not stillWaiting then
 			table.remove(queue, i)
 		end
 	end
+end
+
+----------------------------------------------------------------------
+-- Destinations
+----------------------------------------------------------------------
+
+local function stringAttribute(portal: BasePart, name: string): string
+	local value = portal:GetAttribute(name)
+	return if type(value) == "string" then value else ""
+end
+
+-- The sessions a portal can send you to. Sorted fullest-first so a pad
+-- already holding one player (somebody left during its countdown) is
+-- topped up before a fresh pad is opened, then by arena id so the order
+-- is stable.
+local function candidateSessions(portal: BasePart): { Session }
+	local targetArenaId = stringAttribute(portal, ATTR.TargetArenaId)
+	if targetArenaId ~= "" then
+		local session = SessionRegistry.forArena(targetArenaId)
+		return if session then { session } else {}
+	end
+
+	local mode = GameModes.find(stringAttribute(portal, ATTR.TargetMode))
+	if not mode then
+		return {}
+	end
+
+	local candidates: { Session } = {}
+	for _, session in SessionRegistry.all() do
+		if session:getMode() == mode then
+			table.insert(candidates, session)
+		end
+	end
+	table.sort(candidates, function(a: Session, b: Session): boolean
+		local countA, countB = a:getPlayerCount(), b:getPlayerCount()
+		if countA ~= countB then
+			return countA > countB
+		end
+		return a:getArenaId() < b:getArenaId()
+	end)
+	return candidates
+end
+
+-- How many of `waiting` queued players a session takes this instant: its
+-- free seats, but only when the queue can bring it up to its minimum.
+-- Two seats and one player waiting is zero — the wait is better spent
+-- in the hub than alone on the pad.
+local function intake(session: Session, waiting: number): number
+	local seats = session:freeSeats()
+	if seats <= 0 or waiting <= 0 then
+		return 0
+	end
+	local needed = math.max(0, session:minPlayers() - session:getPlayerCount())
+	if waiting < needed then
+		return 0
+	end
+	return math.min(seats, waiting)
+end
+
+-- Move everyone the portal's sessions will take right now, in queue
+-- order. Returns how many moved.
+local function flushPortal(portal: BasePart): number
+	pruneQueue(portal)
+	local queue = queueFor(portal)
+	local moved = 0
+
+	for _, session in candidateSessions(portal) do
+		local take = intake(session, #queue)
+		for _ = 1, take do
+			local player = table.remove(queue, 1)
+			if not player then
+				break
+			end
+			if SessionRegistry.transferPlayer(player, session:getArenaId()) then
+				moved += 1
+				log:info(string.format("%s took %s -> %s", player.Name,
+					stringAttribute(portal, ATTR.ModeLabel), session:getArenaId()))
+			else
+				-- transferPlayer already said why. They are out of the
+				-- queue; make PlayerState agree.
+				syncQueuedFlag(player)
+			end
+		end
+		if #queue == 0 then
+			break
+		end
+	end
+
+	return moved
 end
 
 ----------------------------------------------------------------------
@@ -93,32 +210,46 @@ end
 -- remote: attributes replicate on their own, so the sign has no
 -- subscription to manage and a late-joining client reads current numbers
 -- the moment it asks.
-
-local function occupancyOf(targetArenaId: string): number
-	if targetArenaId == "" then
-		return 0
-	end
-	local count = 0
-	for _, player in Players:GetPlayers() do
-		if player:GetAttribute(Arena.ID_ATTRIBUTE) == targetArenaId then
-			count += 1
-		end
-	end
-	return count
-end
+--
+-- Occupancy is the roster count across the portal's sessions; Capacity
+-- is their combined `maxPlayers` when every one of them is capped (two
+-- duel pads read `0/4 in`) and 0 — uncapped — otherwise.
 
 local function publishCounts(portal: BasePart)
 	pruneQueue(portal)
-	local targetArenaId = portal:GetAttribute(ATTR.TargetArenaId)
-	portal:SetAttribute(ATTR.Occupancy, occupancyOf(type(targetArenaId) == "string" and targetArenaId or ""))
+
+	local candidates = candidateSessions(portal)
+	local occupancy = 0
+	local capacity = 0
+	local allCapped = #candidates > 0
+	for _, session in candidates do
+		occupancy += session:getPlayerCount()
+		local maxPlayers: number? = session:getMode().getConfig().maxPlayers
+		if maxPlayers then
+			capacity += maxPlayers
+		else
+			allCapped = false
+		end
+	end
+
+	portal:SetAttribute(ATTR.Occupancy, occupancy)
+	portal:SetAttribute(ATTR.Capacity, if allCapped then capacity else 0)
 	portal:SetAttribute(ATTR.Waiting, #queueFor(portal))
 end
 
-local function publishAll()
+local function livePortals(): { BasePart }
+	local portals: { BasePart } = {}
 	for _, portal in CollectionService:GetTagged(Lobby.PORTAL_TAG) do
 		if portal:IsA("BasePart") and portal:IsDescendantOf(workspace) then
-			publishCounts(portal)
+			table.insert(portals, portal)
 		end
+	end
+	return portals
+end
+
+local function publishAll()
+	for _, portal in livePortals() do
+		publishCounts(portal)
 	end
 end
 
@@ -160,7 +291,7 @@ local function validate(player: Player, portal: any): BasePart?
 	end
 
 	-- The portal has to be in the arena the player is standing in. This is
-	-- what stops a lobby player reaching the arena's return pad and a
+	-- what stops a lobby player reaching an arena's return pad and a
 	-- player in an arena reaching the hub's portals.
 	if Arena.idOf(portal) ~= player:GetAttribute(Arena.ID_ATTRIBUTE) then
 		refuse(player, portal, "portal belongs to another arena")
@@ -175,60 +306,36 @@ end
 ----------------------------------------------------------------------
 
 local function onJoin(player: Player, portal: BasePart)
-	local targetArenaId = portal:GetAttribute(ATTR.TargetArenaId)
-	targetArenaId = type(targetArenaId) == "string" and targetArenaId or ""
-
-	if targetArenaId ~= "" then
-		-- A round in its intermission is about to send everyone home; a
-		-- transfer now would land and bounce (Phase 6 stage 5, decision 5).
-		-- Refused rather than queued — holding the player and flushing on
-		-- the next WaitingForPlayers is stage 6's queue work.
-		local target = SessionRegistry.forArena(targetArenaId)
-		if target and target:getState() == GameModeConstants.RoundState.PostRound then
-			refuse(player, portal, targetArenaId .. " is between rounds")
-			return
-		end
-
-		-- A slot exists. Transfer, and let SessionRegistry clear the queue
-		-- flag as part of the move.
-		local ok = SessionRegistry.transferPlayer(player, targetArenaId)
-		if not ok then
-			refuse(player, portal, "transfer to " .. targetArenaId .. " refused")
-			return
-		end
-		removeFromQueue(portal, player)
-		log:info(string.format("%s took %s -> %s", player.Name,
-			tostring(portal:GetAttribute(ATTR.ModeLabel)), targetArenaId))
-		return
-	end
-
-	-- No slot yet. Hold them, and say so.
 	if positionInQueue(portal, player) then
 		return -- already waiting; pressing Join again is not a second place
 	end
+	if #candidateSessions(portal) == 0 then
+		refuse(player, portal, string.format("no session for TargetArenaId=%q / TargetMode=%q",
+			stringAttribute(portal, ATTR.TargetArenaId), stringAttribute(portal, ATTR.TargetMode)))
+		return
+	end
+
 	table.insert(queueFor(portal), player)
 	SessionRegistry.setQueued(player, true)
-	log:info(string.format("%s queued for %s (position %d)", player.Name,
-		tostring(portal:GetAttribute(ATTR.ModeLabel)), #queueFor(portal)))
+
+	-- Usually this is the whole story: the boss arena takes you now, or a
+	-- second duellist completes a pad. Otherwise the heartbeat keeps trying.
+	flushPortal(portal)
+
+	local position = positionInQueue(portal, player)
+	if position then
+		log:info(string.format("%s queued for %s (position %d)", player.Name,
+			stringAttribute(portal, ATTR.ModeLabel), position))
+	end
 end
 
 local function onCancel(player: Player, portal: BasePart)
 	if not removeFromQueue(portal, player) then
 		return
 	end
-	-- Only clear the flag if they are not waiting on some other portal.
-	local stillQueued = false
-	for other, queue in queues do
-		if other ~= portal and table.find(queue, player) then
-			stillQueued = true
-			break
-		end
-	end
-	if not stillQueued then
-		SessionRegistry.setQueued(player, false)
-	end
+	syncQueuedFlag(player)
 	log:info(string.format("%s left the queue for %s", player.Name,
-		tostring(portal:GetAttribute(ATTR.ModeLabel))))
+		stringAttribute(portal, ATTR.ModeLabel)))
 end
 
 portalRequestRemote.OnServerEvent:Connect(function(player: Player, portal: any, action: any)
@@ -257,6 +364,27 @@ portalRequestRemote.OnServerEvent:Connect(function(player: Player, portal: any, 
 end)
 
 ----------------------------------------------------------------------
+-- Heartbeat
+----------------------------------------------------------------------
+-- Sessions open up on their own clock — a duel pad's intermission ends,
+-- the boss arena leaves PostRound — and nothing in RoundManager announces
+-- it server-side. Retrying the queues once a second is the honest answer
+-- for a queue a few players long, and it keeps the signs' occupancy
+-- current as rounds send people home.
+
+task.spawn(function()
+	while true do
+		task.wait(Lobby.QUEUE_FLUSH_SEC)
+		for portal in queues do
+			if portal:IsDescendantOf(workspace) then
+				flushPortal(portal)
+			end
+		end
+		publishAll()
+	end
+end)
+
+----------------------------------------------------------------------
 -- Initialize
 ----------------------------------------------------------------------
 
@@ -268,21 +396,7 @@ Players.PlayerRemoving:Connect(function(player: Player)
 	publishAll()
 end)
 
--- Occupancy changes whenever anybody's arena changes, which is exactly
--- when SessionRegistry republishes their attributes.
-Players.PlayerAdded:Connect(function(player: Player)
-	player:GetAttributeChangedSignal(Arena.ID_ATTRIBUTE):Connect(publishAll)
-end)
-for _, player in Players:GetPlayers() do
-	player:GetAttributeChangedSignal(Arena.ID_ATTRIBUTE):Connect(publishAll)
-end
-
 publishAll()
 
-local portalCount = 0
-for _, portal in CollectionService:GetTagged(Lobby.PORTAL_TAG) do
-	if portal:IsA("BasePart") and portal:IsDescendantOf(workspace) then
-		portalCount += 1
-	end
-end
-log:info(string.format("ready — %d portal(s), range %d studs", portalCount, Lobby.SERVER_RANGE_STUDS))
+log:info(string.format("ready — %d portal(s), range %d studs, queue flush every %ds",
+	#livePortals(), Lobby.SERVER_RANGE_STUDS, Lobby.QUEUE_FLUSH_SEC))

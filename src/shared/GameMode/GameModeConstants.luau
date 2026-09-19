@@ -17,6 +17,22 @@ local GameModeConstants = {
 	PVE_COUNTDOWN_SEC = 5,
 
 	----------------------------------------------------------------------
+	-- Duel (Modes/PvPDuel, Phase 6 stage 6)
+	----------------------------------------------------------------------
+	-- A duel is exactly this many: the session waits for them and takes no
+	-- more, and a roster that drops below it mid-round is a forfeit.
+	DUEL_PLAYERS = 2,
+	-- Designer tunables. PvPDuel reads these Workspace attributes on every
+	-- round start and falls back to the constants when they are absent or
+	-- not a positive number — same mechanism as "ActiveGameMode".
+	DUEL_KILL_LIMIT_ATTRIBUTE = "DuelKillLimit",
+	DUEL_KILL_LIMIT = 3,
+	DUEL_TIME_LIMIT_ATTRIBUTE = "DuelTimeLimitMin",
+	DUEL_TIME_LIMIT_MIN = 3,
+	DUEL_COUNTDOWN_SEC = 5,
+	SECONDS_PER_MINUTE = 60,
+
+	----------------------------------------------------------------------
 	-- Respawn
 	----------------------------------------------------------------------
 	-- Player auto-respawn delay (Step 5 tuning: was 5; 3-4s is arena-feel, 5
@@ -48,6 +64,23 @@ local GameModeConstants = {
 		Countdown = "Countdown",
 		Active = "Active",
 		PostRound = "PostRound",
+	},
+
+	----------------------------------------------------------------------
+	-- Round outcomes
+	----------------------------------------------------------------------
+	-- Why a round ended, as the mode reports it from `checkWinCondition` /
+	-- `getRoundLeader`. Rides on `RoundEnded` and the PostRound payload so
+	-- the round-over card can say "BOSS DEFEATED" instead of "No winner".
+	-- Ids, not copy: the words live in `Hud/RoundOutcomeCopy`.
+	RoundOutcome = {
+		BossDefeated = "BossDefeated", -- PvE objective met
+		BossSurvived = "BossSurvived", -- PvE clock ran out
+		ScoreLimit = "ScoreLimit", -- a duellist hit the kill limit
+		Forfeit = "Forfeit", -- the other duellist left mid-round
+		TimeUp = "TimeUp", -- clock ran out, kill leader credited
+		Draw = "Draw", -- clock ran out, kills level
+		Abandoned = "Abandoned", -- the roster emptied; nobody is left to read it
 	},
 
 }

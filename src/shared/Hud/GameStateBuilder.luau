@@ -10,6 +10,7 @@
 local TweenService = game:GetService("TweenService")
 
 local GameStateConfig = require(script.Parent.GameStateConfig)
+local RoundOutcomeCopy = require(script.Parent.RoundOutcomeCopy)
 
 export type ScoreEntry = {
 	kills: number,
@@ -23,7 +24,10 @@ export type GameState = {
 	isShown: (self: GameState) -> boolean,
 	show: (self: GameState) -> (),
 	hide: (self: GameState) -> (),
-	setWinner: (self: GameState, winnerName: string?) -> (),
+	-- Title + winner line from the payload's outcome id and winner name
+	-- (see Hud/RoundOutcomeCopy): "BOSS DEFEATED" / "The boss is down",
+	-- "DUEL OVER" / "Winner: X", and so on.
+	setOutcome: (self: GameState, outcome: string?, winnerName: string?) -> (),
 	setNextRoundText: (self: GameState, text: string) -> (),
 	setScores: (self: GameState, scores: { [number]: ScoreEntry }, localUserId: number) -> (),
 	destroy: (self: GameState) -> (),
@@ -73,7 +77,7 @@ function GameStateBuilder.build(): GameState
 	local roundOverLabel = Instance.new("TextLabel")
 	roundOverLabel.Size = UDim2.new(1, 0, 0, 30)
 	roundOverLabel.BackgroundTransparency = 1
-	roundOverLabel.Text = GameStateConfig.ROUND_OVER_TEXT
+	roundOverLabel.Text = RoundOutcomeCopy.DEFAULT_TITLE
 	roundOverLabel.TextColor3 = GameStateConfig.ROUND_OVER_COLOR
 	roundOverLabel.TextSize = GameStateConfig.ROUND_OVER_TEXT_SIZE
 	roundOverLabel.Font = Enum.Font.GothamBold
@@ -191,8 +195,9 @@ function GameStateBuilder.build(): GameState
 			tween.Completed:Wait()
 			overlay.Visible = false
 		end,
-		setWinner = function(_self, winnerName: string?)
-			winnerLabel.Text = winnerName and ("Winner: " .. winnerName) or GameStateConfig.NO_WINNER_TEXT
+		setOutcome = function(_self, outcome: string?, winnerName: string?)
+			roundOverLabel.Text = RoundOutcomeCopy.titleFor(outcome)
+			winnerLabel.Text = RoundOutcomeCopy.winnerLineFor(outcome, winnerName)
 		end,
 		setNextRoundText = function(_self, text: string)
 			nextRoundLabel.Text = text

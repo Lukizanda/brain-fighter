@@ -54,6 +54,15 @@ Arena.PlayerState = {
 -- whether it is asked of a spawn pad or of a person.
 Arena.STATE_ATTRIBUTE = "PlayerState"
 
+-- Scene-authored arena slots (Phase 6 stage 6). A Model or Part carrying
+-- this tag plus an `ArenaId` and a `Mode` attribute (a key from
+-- `Modes/init.luau`) gets a session created for it by GameModeService at
+-- boot, so adding a duel pad is Studio work: geometry, the tag, two
+-- attributes. The lobby and the shipped Default arena are not slots — they
+-- are created in code because whether they exist is not configurable.
+Arena.SLOT_TAG = "ArenaSlot"
+Arena.MODE_ATTRIBUTE = "Mode"
+
 -- Authoring vocabulary for spawn pads. A mode definition names one of these
 -- in its `spawnTag`, and `SpawnManager` resolves the pads carrying it that
 -- also belong to the session's arena. Declared ahead of the geometry
