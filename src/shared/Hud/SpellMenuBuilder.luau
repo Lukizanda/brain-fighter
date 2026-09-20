@@ -61,6 +61,10 @@ local TweenService      = game:GetService("TweenService")
 local UserInputService  = game:GetService("UserInputService")
 
 local Defaults      = require(ReplicatedStorage.Shared.Hud.SpellMenuConfig)
+local Colors        = require(ReplicatedStorage.Shared.Core.Colors)
+
+-- The disc base is the palette tint pulled toward this.
+local BLACK = Color3.new(0, 0, 0)
 local SpellRegistry = require(ReplicatedStorage.Shared.SpellRegistry)
 
 export type Snapshot = { red: number, green: number, blue: number }
@@ -74,6 +78,7 @@ export type Handle = {
 	chargeCancelled: RBXScriptSignal,
 	setReservoirs: (self: Handle, snapshot: Snapshot) -> (),
 	setChargeAffordability: (self: Handle, color: string, maxTier: number) -> (),
+	repaint: (self: Handle) -> (),
 	playAffordBounce: (self: Handle, color: string) -> (),
 	playFiredFlash: (self: Handle, color: string) -> (),
 	destroy: (self: Handle) -> (),
@@ -218,7 +223,6 @@ function SpellMenuBuilder.build(): Handle
 	local readyGlows: { [string]: ReadyGlow }     = {}
 	local rings: { [string]: { TierRing } }       = {}
 	local numerals: { [string]: TextLabel }       = {}
-	local litColors: { [string]: Color3 }         = {}
 	local glowColors: { [string]: Color3 }        = {}
 
 	local currentEnergy: { [string]: number } = { red = 0, green = 0, blue = 0 }
@@ -239,13 +243,23 @@ function SpellMenuBuilder.build(): Handle
 	-- T1 cast is drained toward grey; the moment T1 becomes affordable it
 	-- snaps back to full colour. Both read litColors, which the build loop
 	-- below fills in, so these must not be called before it runs.
+	-- Disc colours come off the active palette at the moment they are
+	-- asked for, so `repaint` after a palette switch needs no cache.
+	local function bgFor(color: string): Color3
+		return Colors.tint(color):Lerp(BLACK, Defaults.DISC_TINT_DARKEN)
+	end
+
+	local function litFor(color: string): Color3
+		return lightenColor(bgFor(color), Defaults.LIT_LIGHTEN)
+	end
+
 	local function discColorFor(color: string, canCast: boolean): Color3
-		local lit = litColors[color]
+		local lit = litFor(color)
 		return if canCast then lit else lit:Lerp(Defaults.DESATURATED_GREY, Defaults.DESATURATED_BLEND)
 	end
 
 	local function baseColorFor(color: string, canCast: boolean): Color3
-		local bg = Defaults.COLORS[color].bg
+		local bg = bgFor(color)
 		return if canCast then bg else bg:Lerp(Defaults.DESATURATED_GREY, Defaults.DESATURATED_BLEND)
 	end
 
@@ -260,12 +274,11 @@ function SpellMenuBuilder.build(): Handle
 
 	for i, color in COLOR_ORDER do
 		local spec = Defaults.COLORS[color]
-		local bgColor = spec.bg
+		local bgColor = bgFor(color)
 		-- BackgroundColor3 carries the whole hue now; the gradient below is
 		-- a neutral ramp over it. See SpellMenuConfig.FILL_GRADIENT_* for
 		-- why the colour had to come out of the ColorSequence.
-		local litColor = lightenColor(bgColor, 55)
-		litColors[color] = litColor
+		local litColor = litFor(color)
 
 		-- Outer panel — transparent square container; the circles inside it
 		-- are all centred on it.
@@ -865,6 +878,31 @@ function SpellMenuBuilder.build(): Handle
 	------------------------------------------------------------------
 	-- Public API
 	------------------------------------------------------------------
+
+	-- Re-apply the disc colours from the active palette, keeping each
+	-- colour's castable/drained state. Called by SpellMenuGui on
+	-- Colors.paletteChanged; no tween — the switch should read as a
+	-- change of ink, not an event.
+	function handle:repaint()
+		for _, color in COLOR_ORDER do
+			local canCast = wasAffordable[color] == true
+			fillDiscs[color].BackgroundColor3 = discColorFor(color, canCast)
+			fillBases[color].BackgroundColor3 = baseColorFor(color, canCast)
+
+			-- The ready halo and its motes were lit from the build-time
+			-- tint; re-ink them so a lit panel does not keep the old hue.
+			local bgColor = bgFor(color)
+			local glowColor = lightenColor(bgColor, Defaults.READY_GLOW_LIGHTEN)
+			glowColors[color] = glowColor
+			local parts = readyGlows[color]
+			parts.glowStroke.Color = glowColor
+			parts.bloomStroke.Color = glowColor
+			local moteColor = lightenColor(bgColor, Defaults.READY_MOTE_LIGHTEN)
+			for _, mote in parts.motes do
+				mote.frame.BackgroundColor3 = moteColor
+			end
+		end
+	end
 
 	function handle:setChargeAffordability(color: string, maxTier: number)
 		chargeCeiling[color] = math.clamp(maxTier, 0, SpellRegistry.tierCount(color :: SpellRegistry.Color))

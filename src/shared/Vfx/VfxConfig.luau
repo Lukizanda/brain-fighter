@@ -1634,6 +1634,10 @@ VfxConfig.PERF = {
 	reducedFpsCap    = 45,
 	restoredFpsCap   = 55,
 	fpsMeasureDurSec = 2,
+	-- Multiplier on every burst's emitCount when the player has chosen
+	-- Reduced effects (Settings). Lights and screen impact are skipped
+	-- outright; particles are thinned, not removed, so a cast still lands.
+	reducedVfxEmitScale = 0.5,
 }
 
 function VfxConfig.resolveCastId(color: string, tier: number): string

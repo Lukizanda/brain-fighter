@@ -28,6 +28,7 @@ local SoundService      = game:GetService("SoundService")
 local Logger            = require(ReplicatedStorage.Shared.Core.Logger)
 local HudLayoutManager  = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
 local SpellMenuBuilder  = require(ReplicatedStorage.Shared.Hud.SpellMenuBuilder)
+local Colors            = require(ReplicatedStorage.Shared.Core.Colors)
 local SpellRegistry     = require(ReplicatedStorage.Shared.SpellRegistry)
 local VfxConfig         = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 local ChargeOrbVfx      = require(ReplicatedStorage.Shared.Vfx.StatusVisuals.ChargeOrbVfx)
@@ -53,6 +54,10 @@ fizzleSound.Parent        = SoundService
 local player = Players.LocalPlayer
 local session = PlayerSession.get()
 local menu = SpellMenuBuilder.build()
+-- A palette switch re-inks the discs in place.
+Colors.paletteChanged:Connect(function()
+	menu:repaint()
+end)
 
 menu.gui.LayoutOrder = 1
 HudLayoutManager:register("BottomRight", menu.gui, HudGate.Policy.Always)

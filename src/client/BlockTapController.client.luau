@@ -27,6 +27,7 @@ local UserInputService  = game:GetService("UserInputService")
 local BlockShoot     = require(ReplicatedStorage.Shared.BlockShoot)
 local BlockTapConfig = require(ReplicatedStorage.Shared.BlockShoot.BlockTapConfig)
 local LetterBlocks   = require(ReplicatedStorage.Shared.LetterBlocks)
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 local Logger         = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillVisuals   = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
 local VfxConfig      = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
@@ -248,7 +249,7 @@ local function showHover(block: Model, ready: boolean, color: string?)
 		-- Fill carries the block's colour, outline does not — see the note
 		-- in BlockTapConfig. An outline in the block's own tint is
 		-- invisible against the block.
-		local tint = (color and LetterBlocks.COLOR_TINTS[color]) or BlockTapConfig.HOVER_DENIED_COLOR
+		local tint = (color and Colors.tint(color)) or BlockTapConfig.HOVER_DENIED_COLOR
 		hoverHighlight.FillColor            = tint
 		hoverHighlight.OutlineColor         = BlockTapConfig.HOVER_READY_OUTLINE_COLOR
 		hoverHighlight.FillTransparency     = BlockTapConfig.HOVER_READY_FILL_TRANSPARENCY

@@ -1,7 +1,7 @@
 ---
 type: system
 description: Floating letter-block prefab — the in-world entity the player shoots to spell words. Spawn API, color tints, CollectionService tag for the animator, and the spawn-in intro.
-updated: 2026-08-20
+updated: 2026-09-20
 ---
 
 # LetterBlock
@@ -65,10 +65,12 @@ Yaw advances at exactly **6°/s**, matching `ROTATION_DEGREES_PER_SECOND`. Y bob
 | `.TAG` | `string` | `"LetterBlock"` — the CollectionService tag the animator listens for. |
 | `.LETTER_ATTRIBUTE` | `string` | `"Block.Letter"`. |
 | `.COLOR_ATTRIBUTE` | `string` | `"Block.Color"`. |
-| `.COLOR_TINTS` | `{[color]: Color3}` | red `#dc2626`, green `#16a34a`, blue `#2563eb`, wild `#eab308`. |
+| `.COLOR_TINTS` | `{[color]: Color3}` | Alias of `Colors.PALETTES.default` since 2026-09-20 — red `#dc2626`, green `#16a34a`, blue `#2563eb`, wild `#eab308`. Server-side readers only; `applyVisualState` draws through `Colors.tint`, which follows the player's palette on the client ([[systems/Settings]]). |
 | `.Template` | `Instance` | The Template Model under the module script. |
 
 ## Color tints
+
+> **2026-09-20:** the tints moved to `Colors.PALETTES` so the block faces, buffer tiles and spell-menu discs share one table, switchable to a colour-blind-safe (Okabe–Ito) palette from the settings panel. `applyVisualState` reads `Colors.tint(color)`; `SettingsController` re-applies it to every tagged block on a switch, and to blocks arriving later while a non-default palette is active. Everything below about *value* vs *hue* still holds for both palettes. See [[systems/Settings]] § Letter palette.
 
 The three reservoir values used everywhere color is rendered in the game, plus gold for the wildcard:
 

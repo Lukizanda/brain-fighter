@@ -19,6 +19,8 @@
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
@@ -378,7 +380,7 @@ function BufferDisplayBuilder.build(options: BuildOptions?): Handle
 			local cell = cells[i]
 			local label = labels[i]
 			if tile then
-				local tileColor = Defaults.TILE_COLORS[tile.color] or Defaults.TILE_COLORS.blue
+				local tileColor = Colors.tint(tile.color)
 				cell.BackgroundColor3 = tileColor
 				cell.BackgroundTransparency = Defaults.TILE_TRANSPARENCY
 				-- Wildcard tiles hold "*" but render as "★".

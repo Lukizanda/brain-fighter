@@ -21,7 +21,7 @@ search. The first sentence has to carry the premise on its own.
 > Shoot letter blocks, spell words, cast the spell. Fight the boss with
 > friends or duel 1v1 — the better speller wins.
 
-### Long (≤ 1000 chars) — variant A, verb-first
+### Long (≤ 1000 chars) — variant A, verb-first ✅ **chosen (user, 2026-09-20)**
 
 > **Spell it to cast it.**
 >
@@ -37,7 +37,7 @@ search. The first sentence has to carry the premise on its own.
 > Practice in the hub, then walk through a portal. No menus, no loadouts, no
 > pay-to-win: your vocabulary is the weapon.
 
-### Long — variant B, hook-first
+### Long — variant B, hook-first (not chosen; first line available as a thumbnail caption)
 
 > **Your vocabulary is the weapon.**
 >
@@ -52,7 +52,7 @@ search. The first sentence has to carry the premise on its own.
 >
 > Made for players who like words as much as winning.
 
-Pick one; the other's first line can become a thumbnail caption.
+Variant A is the one to paste. "Your vocabulary is the weapon" from B is free for thumbnail 2's caption.
 
 ## Icon (512 × 512)
 
@@ -99,7 +99,7 @@ reads as a link.
 
 ## Checklist
 
-- [ ] Description variant chosen, pasted, saved
+- [x] Description variant chosen (A) · [ ] pasted, saved
 - [ ] Icon captured or generated, 512 × 512, uploaded
 - [ ] Thumbnails 1–3 captured from a client, 1920 × 1080, uploaded with captions
 - [ ] Genre set (Fighting or Shooter — Roblox has no "word game")

@@ -1,7 +1,7 @@
 ---
 type: system
 description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu as circular hold-to-charge panels with concentric tier rings, MemorizeButton, MindFullIndicator), the mobile DashButton, and the seven own-ScreenGui elements (DeathScreen, DamageFeedback, GameState, Scoreboard, BossHud, KillFeed, RoundTimer — the last ported 2026-09-19). Round-over copy comes from the payload's outcome id via RoundOutcomeCopy. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291. SettingsMenu cut 2026-09-15, refactor chunk 12.)
-updated: 2026-09-19
+updated: 2026-09-20
 ---
 
 # HUD System
@@ -179,6 +179,10 @@ Two things changed that are specific to this batch, because five of the six (all
 
 The gate-owner rule is unaffected: `DeathScreenGui`'s `DeathScreenBuilder` still drives `overlay.Visible` from `show`/`hide`, never the `ScreenGui.Enabled` that `HudGate.bindScreenGui` owns (see [[concepts/HudGate]] § Owners never write the gated property) — that split just moved from the old inline script into the Builder's closure.
 
+## Settings — REBUILT (2026-09-20, BRA.21)
+
+A new surface, not the old one restored: `SettingsGui` (gear button in the `TopRight` stack + a panel at `LAYERS.Modal`, both **`LobbyOnly`** — the first users of that policy), `SettingsBuilder` + `SettingsConfig`, three settings that each have a reader (SFX volume via a `SoundGroup`, Reduced effects read by `spawnEffect`/`ScreenImpact`, letter palette through `Colors.tint`). Own page: [[systems/Settings]]. The cut below is the history.
+
 ## Settings menu — CUT (2026-09-15, refactor chunk 12, F25/Q5(a))
 
 `SettingsMenuGui.client.luau`, `SettingsMenuBuilder.luau` and `SettingsMenuConfig.luau` are deleted, along with the `P` keybind. The menu wrote `Settings_*` player attributes (sensitivity, FOV, crosshair color, aim assist) that nothing ever read — the intended crosshair consumer, `ReticleBuilder`, has zero requirers and was already dead code (see § Reticle / TouchControl below). Tracker BRA.21 (local key) tracks building a real settings surface when one is needed.
@@ -197,6 +201,8 @@ src/shared/Hud/
   AttributeBarConfig.luau
   BuffTrayBuilder.luau            — top-right buff icons (scaffold)
   BuffIconConfig.luau
+  SettingsBuilder.luau            — settings panel + gear button (2026-09-20, LobbyOnly)
+  SettingsConfig.luau
   -- Own-ScreenGui elements (refactor chunk 12):
   DeathScreenBuilder.luau         — death overlay + respawn countdown
   DeathScreenConfig.luau

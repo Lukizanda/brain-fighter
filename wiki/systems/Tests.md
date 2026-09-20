@@ -1,7 +1,7 @@
 ---
 type: system
 description: In-Studio test harness — TestRunner module + Suites/{NPC,Multiplayer,Phase3,Skills,Hardening,Economy,Unit}, one Suites/Unit wrapper per pure-Luau __tests module. MCP-driven via test-runner subagent.
-updated: 2026-09-19
+updated: 2026-09-20
 ---
 
 # Test System
@@ -108,7 +108,7 @@ src/shared/Tests/
     Unit/
       wordbuffer_tests.luau · energyeconomy_tests.luau · energyreservoirs_tests.luau
       dictionary_tests.luau · spellregistry_tests.luau · memorizeaction_tests.luau
-      mindfullmanager_tests.luau · hud_tests.luau
+      mindfullmanager_tests.luau · hud_tests.luau · settings_tests.luau
 
 src/server/Tests/
   TestAutoRunner.server.luau    — invoked at boot when a workspace flag is set, runs a named suite, prints results

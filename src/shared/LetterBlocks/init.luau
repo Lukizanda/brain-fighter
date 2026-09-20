@@ -12,6 +12,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 local EnergyEconomy = require(ReplicatedStorage.Shared.EnergyEconomy)
 local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
@@ -24,12 +25,13 @@ local COLOR_ATTRIBUTE = "Block.Color"
 -- Gold marks the wildcard block. It sits alongside the three reservoir
 -- colors deliberately: a player scanning the arena should be able to
 -- pick a ★ out of a field of red/green/blue at a glance.
-local COLOR_TINTS: { [string]: Color3 } = {
-	red = Color3.fromHex("#dc2626"),
-	green = Color3.fromHex("#16a34a"),
-	blue = Color3.fromHex("#2563eb"),
-	[Wildcard.COLOR] = Color3.fromHex("#eab308"),
-}
+--
+-- The tints themselves live in `Colors` (2026-09-20): one palette table
+-- shared with the buffer tiles and the spell menu, switchable client-side
+-- to a colour-blind-safe set. This alias is the *default* palette — what
+-- the server paints at spawn and what server-side readers (the collect
+-- stream's colour) should use. A client draws through `Colors.tint`.
+local COLOR_TINTS: { [string]: Color3 } = Colors.PALETTES[Colors.Palette.Default]
 
 local DEFAULT_LETTER = "A"
 local DEFAULT_COLOR = "red"
@@ -341,7 +343,7 @@ local function applyVisualState(block: Model)
 		return
 	end
 
-	local tint = COLOR_TINTS[color] or COLOR_TINTS[DEFAULT_COLOR]
+	local tint = Colors.tint(color)
 	cube.Color = tint
 
 	local scale = block:GetScale()

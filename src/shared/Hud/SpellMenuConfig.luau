@@ -28,12 +28,21 @@ local SpellMenuConfig = {
 	-- rectangle with a single edit if the circles do not work out.
 	PANEL_CORNER_RADIUS = UDim.new(0.5, 0),
 
-	-- Per-color panel backgrounds
+	-- Per-color panel labels. The disc *colour* is no longer authored here:
+	-- it is `Colors.tint(color)` darkened by DISC_TINT_DARKEN, so the menu
+	-- follows the same palette as the blocks and the buffer tiles and a
+	-- palette switch repaints it live (2026-09-20).
 	COLORS = {
-		red   = { bg = Color3.fromRGB(180, 55, 55),  label = ""   },
-		green = { bg = Color3.fromRGB(50, 155, 65),  label = "" },
-		blue  = { bg = Color3.fromRGB(55, 105, 195), label = ""  },
-	} :: { [Colors.SpellColor]: { bg: Color3, label: string } },
+		red   = { label = ""   },
+		green = { label = "" },
+		blue  = { label = ""  },
+	} :: { [Colors.SpellColor]: { label: string } },
+	-- How far the palette tint is pulled toward black for the disc base.
+	-- The old literals (180,55,55 etc.) sat about this far below the block
+	-- tints; keeping the ratio keeps the menu reading as the darker cousin.
+	DISC_TINT_DARKEN = 0.18,
+	-- Lightening applied to the base to get the "lit" (castable) colour.
+	LIT_LIGHTEN = 55,
 
 	-- Fill: dim base layer (always-visible "empty" disc) and the animated
 	-- disc that grows out of the centre.

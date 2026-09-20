@@ -1,7 +1,7 @@
 ---
 type: concept
 description: How HUD elements are suppressed by player state (lobby vs arena). A declared policy per element, enforced by a required argument on register — because the failure mode is silent leakage, not an error.
-updated: 2026-09-15
+updated: 2026-09-20
 ---
 
 # HudGate
@@ -76,7 +76,7 @@ never asks a three-way question, which keeps policies to:
 |---|---|
 | `Always` | visible in lobby and arena |
 | `ArenaOnly` | hidden unless `InArena` |
-| `LobbyOnly` | hidden when `InArena` — the portal panel and queue counts |
+| `LobbyOnly` | hidden when `InArena` — the settings gear and panel (2026-09-20); *not* the portal panel, see Triage |
 
 **Two adapters, one policy table:**
 
@@ -202,7 +202,7 @@ registers **three** elements and they do not agree.
 | `BossHudGui` | `ArenaOnly` | own ScreenGui, gated via `.Enabled` |
 | `DamageFeedbackGui` | `ArenaOnly` | fires on damage *taken*; nothing in the lobby damages you |
 | `KillFeedGui`, `ScoreboardGui`, `RoundTimerGui`, `GameStateGui`, `DeathScreenGui`, `TeamScoreGui` | `ArenaOnly` | round and competition surfaces with no lobby meaning |
-| portal confirm panel | `Always` | **corrected on implementation.** `LobbyOnly` stops being right the moment the arena contains a portal, and stage 4b put a return pad there. Proximity decides whether the panel is on screen; the arena check decides which portals are near you. `LobbyOnly` currently has no users. |
+| portal confirm panel | `Always` | **corrected on implementation.** `LobbyOnly` stops being right the moment the arena contains a portal, and stage 4b put a return pad there. Proximity decides whether the panel is on screen; the arena check decides which portals are near you. `LobbyOnly` had no users until the settings surface (2026-09-20): `SettingsGui`'s gear button (region `TopRight`) and its panel (own ScreenGui) are both `LobbyOnly` — settings live on the hub wall, and the gate closing on arena entry is also what closes an open panel. |
 
 `TeamScoreGui` is additionally suppressed at boot by `TEAMS_ENABLED`; the
 policy is what it gets when teams return.

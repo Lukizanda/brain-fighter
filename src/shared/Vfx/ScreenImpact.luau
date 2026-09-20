@@ -32,6 +32,7 @@ local RunService        = game:GetService("RunService")
 local TweenService      = game:GetService("TweenService")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local Settings = require(ReplicatedStorage.Shared.Settings)
 
 local log = Logger.new("ScreenImpact")
 
@@ -110,6 +111,11 @@ function ScreenImpact.play(profile: Profile, intensity: number)
 		return
 	end
 	if intensity < MIN_INTENSITY then return end
+	-- Reduced effects (Settings): the whole point of this lane is motion
+	-- and flash on the viewer's screen, which is exactly what that
+	-- preference asks to be spared. Nothing is scaled; it is skipped.
+	local holder = Settings.localHolderIfAny()
+	if holder and Settings.read(holder, Settings.Keys.ReducedVfx) == true then return end
 
 	local scale = math.clamp(intensity, 0, 1)
 	_generation += 1

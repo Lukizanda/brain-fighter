@@ -23,6 +23,7 @@ local RunService        = game:GetService("RunService")
 local TweenService      = game:GetService("TweenService")
 
 local Logger    = require(ReplicatedStorage.Shared.Core.Logger)
+local Settings  = require(ReplicatedStorage.Shared.Settings)
 local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 
 local log = Logger.new("spawnEffect")
@@ -129,6 +130,14 @@ local function spawnLight(
 	Debris:AddItem(light, spec.durationSec + 0.1)
 end
 
+-- The viewer's Reduced-effects preference. Read per call rather than
+-- cached: the panel flips it live, and a burst is cheap next to a
+-- subscription this module would then have to own.
+local function isReducedVfx(): boolean
+	local holder = Settings.localHolderIfAny()
+	return holder ~= nil and Settings.read(holder, Settings.Keys.ReducedVfx) == true
+end
+
 local function spawnEffect(effectSpec: VfxConfig.EffectSpec, anchorPart: BasePart | Attachment)
 	-- Hard stop on the server, and loudly.
 	--
@@ -165,7 +174,8 @@ local function spawnEffect(effectSpec: VfxConfig.EffectSpec, anchorPart: BasePar
 	-- `PERF.allowLights` is the honoured switch: WorldVfxController drops it
 	-- when the frame budget slips, and a burst that ignored it would be the
 	-- one thing still adding dynamic lights on a machine already struggling.
-	if effectSpec.light and VfxConfig.PERF.allowLights then
+	local reduced = isReducedVfx()
+	if effectSpec.light and VfxConfig.PERF.allowLights and not reduced then
 		spawnLight(effectSpec.light, anchorPart)
 	end
 
@@ -194,8 +204,12 @@ local function spawnEffect(effectSpec: VfxConfig.EffectSpec, anchorPart: BasePar
 		emitter.Parent = att
 
 		if emitterSpec.emitCount then
+			local count = emitterSpec.emitCount
+			if reduced then
+				count = math.max(1, math.floor(count * VfxConfig.PERF.reducedVfxEmitScale))
+			end
 			emitter.Enabled = false
-			emitter:Emit(emitterSpec.emitCount)
+			emitter:Emit(count)
 			Debris:AddItem(emitter, effectSpec.totalDurationSec)
 		elseif emitterSpec.durationSec then
 			emitter.Enabled = true

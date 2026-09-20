@@ -187,7 +187,8 @@ The three stubs resolved into two real effects and one deletion — `wall` had n
 |---|---|
 | **Tuning passes** | Energy curve, spawn density, tier thresholds. |
 | **UI review leftovers** | R-5..R-9 from [[design/ui-architecture-review]] (2 Medium / 3 Low). |
-| **Tier 3 debt (opportunistic)** | Color type dedup ×4, Skills/Vfx magic-number extraction — as polish touches each area. |
+| **Tier 3 debt (opportunistic)** | ~~Color type dedup ×4~~ (closed 2026-09-20 — one palette table in `Colors`, see below), Skills/Vfx magic-number extraction — as polish touches each area. |
+| **Settings surface** | ✅ **2026-09-20** (BRA.21, user call: build all three). SFX volume, Reduced effects, letter palette with an Okabe–Ito high-contrast option. [[systems/Settings]]. Persistence waits for 5.5. |
 | **Tutorial** | Guided first-play sequence per [[systems/Tutorial]] (shoot → buffer → memorize → cast → boss hit). |
 
 ## Phase 5.4 — Release gate: public soft launch
@@ -360,6 +361,7 @@ Added 2026-09-08 from [[design/system-audit-2026-09]]. Full tickable plan with o
 
 ## Plan changelog
 
+- **2026-09-20** (later): **Settings surface built** (BRA.21) — the user chose to build all three rather than defer: SFX volume through one `SoundGroup` every Sound is routed into, Reduced effects read at draw time by `spawnEffect` and `ScreenImpact`, and a letter palette that also closed the "colour type dedup ×4" debt (blocks, buffer tiles, spell-menu discs all draw through `Colors.tint`; Okabe–Ito high-contrast option). Gear + panel are `LobbyOnly`, the first users of that policy. Pure `Settings` module with a Unit suite; verified client-side in one playtest. Filed under Phase 5.3. [[systems/Settings]].
 - **2026-09-20**: Phase 6 stage 7 done and **Phase 6 closed** — [[systems/Lobby]] written; the rest of stage 7 had landed with chunk 8. Same day: [[design/arena-instancing]] records the decision to stay single-server with fixed pads; [[design/game-page]] drafts the 5.4 store assets; the BRA.20 wiki lint re-ran (60 pages, 0 orphans, 0 real broken links; 3 live-page stale citations fixed, 9 `updated:` bumps, the 12 audit drifts cross-checked — all closed by Phase 7 except #11, which is code). BRA.21 (settings surface) re-judged: nothing reads a setting today; scope recorded on the tracker, not built.
 - **2026-09-19**: Phase 6 stage 6 done — the PvP duel, gated on Phase 5.4's affordability check and judged by the user to be met by validated memorize with `ENFORCE = true`. Three user calls: leaving mid-duel is a forfeit (the survivor wins), the kill limit and clock are designer tunables on the Workspace, and every round starts at full health. Duel pads are scene-authored slots, so a third pad is Studio work. Loose ends left from Phase 7: chunk 9's two-arena client check, BRA.20 wiki lint, BRA.21 settings surface — `RoundTimerGui` is no longer one of them. Next: Phase 5.4's remaining release-gate items (game page assets, analytics, rollout), the `wiki/systems/Lobby.md` page (stage 7), and the charge-tier hold check (Q4(a)) now that duels are playable.
 - **2026-09-19**: Phase 6 stage 5 done — the PvE boss mode. Four calls made with the user: the PvE arena is the shipped `Default` slot (no new geometry until a second slot is wanted); the objective is a Boss-domain Bindable, not a player kill; the fail state is a clock with respawns, not a wipe; back-to-lobby is a session-registry hook, not mode code. Stage 6 (duels) is next and still gated on Phase 5.4's affordability check being judged good enough for a 1v1.

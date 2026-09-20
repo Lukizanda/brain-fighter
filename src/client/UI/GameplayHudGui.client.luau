@@ -13,6 +13,7 @@ local SoundService      = game:GetService("SoundService")
 local Logger                = require(ReplicatedStorage.Shared.Core.Logger)
 local HudLayoutManager      = require(ReplicatedStorage.Shared.Hud.HudLayoutManager)
 local BufferDisplayBuilder  = require(ReplicatedStorage.Shared.Hud.BufferDisplayBuilder)
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 local AttributeBarBuilder   = require(ReplicatedStorage.Shared.Hud.AttributeBarBuilder)
 local MemorizeButtonBuilder = require(ReplicatedStorage.Shared.Hud.MemorizeButtonBuilder)
 local Dictionary            = require(ReplicatedStorage.Shared.Dictionary)
@@ -104,6 +105,10 @@ end
 onBufferChanged()
 
 session.wordBuffer.changed:Connect(onBufferChanged)
+-- A palette switch repaints the tiles in place: same letters, new colours.
+Colors.paletteChanged:Connect(function()
+	onBufferChanged()
+end)
 
 btn.activated:Connect(function()
 	local result = EconomyReport.memorize(session)
