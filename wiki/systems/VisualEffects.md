@@ -2,7 +2,7 @@
 type: system
 description: Visual effects — particle effects for spell casts/impacts (the caster's client predicts the cast cue off SpellResolved; the authoritative run broadcasts cast + impact cues over the one VfxBroadcast → WorldVfxEvent lane), projectile bodies and trails, persistent status visuals (shield / freeze / burn / charge orb) bound by one shared CharacterAttributeWatcher, boss windup telegraphs, UI feedback animations, and per-color theming. Core, PERF guardrails and the block-pop collect stream are all shipped.
 status: implemented
-updated: 2026-09-11
+updated: 2026-09-14
 ---
 
 # Visual Effects

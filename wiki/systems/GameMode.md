@@ -1,7 +1,7 @@
 ---
 type: system
-description: Game mode framework — SessionRegistry (the session tables, as a module) over per-session RoundManager instances that each own a ScoreTracker; per-arena SpawnManager scored against the session roster; mode config carries allowsPvP / timeLimit / countdownSec instead of global flags; BroadcastAudience scopes the remaining screen-space remotes. Registered modes are Lobby and NoOp. Rewritten 2026-09-09 (refactor chunk 8, the Phase 6 stage-7 rewrite).
-updated: 2026-09-19
+description: Game mode framework — SessionRegistry (the session tables, as a module) over per-session RoundManager instances that each own a ScoreTracker; per-arena SpawnManager scored against the session roster; mode config carries allowsPvP / timeLimit / countdownSec instead of global flags; BroadcastAudience scopes the remaining screen-space remotes. Registered modes are PvEBoss (default), PvPDuel, NoOp and Lobby. Rewritten 2026-09-09 (refactor chunk 8, the Phase 6 stage-7 rewrite).
+updated: 2026-09-20
 ---
 
 # GameMode System

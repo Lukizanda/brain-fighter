@@ -1,7 +1,7 @@
 ---
 type: concept
 description: .model.json creates versioned non-script instances; .meta.json only modifies. Critical Rojo gotcha.
-updated: 2026-05-14
+updated: 2026-09-20
 ---
 
 # `.model.json` vs `.meta.json`
@@ -23,7 +23,7 @@ A persistent source of confusion in this project. Get it wrong and Rojo silently
 
 ## Examples in this repo
 
-- `src/shared/Weapon/Remotes/MeleeSwingRequest.model.json` — `{ "className": "RemoteEvent", "name": "MeleeSwingRequest" }` creates the RemoteEvent.
+- `src/shared/Lobby/Remotes/PortalRequest.model.json` — `{ "className": "RemoteEvent" }` creates the RemoteEvent; the name comes from the file name. (Was the melee `MeleeSwingRequest` example until the weapon stack was removed.)
 - `src/server/GameMode/Events/RoundStarted.model.json` and `RoundEnded.model.json` — versioning round-event BindableEvents per file. (The legacy `children`-array format inside an init meta silently failed Rojo sync; the per-file form fixed it.)
 - Any folder in this repo with `ignoreUnknownInstances` is using `.meta.json`.
 

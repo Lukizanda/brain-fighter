@@ -1,7 +1,7 @@
 ---
 type: design
 description: Migration plan for retiring the Spelling Staff / LetterBlaster and replacing it with direct click/tap-to-pop on letter blocks, plus a client-local hover affordance (planned as an in-range glow; see stage 5 for why it shipped as a single hover outline). Phase 5.7.
-updated: 2026-08-10
+updated: 2026-09-20
 ---
 
 # Tap-to-Pop migration
@@ -267,7 +267,7 @@ spell button does not.
   `LetterBlasterConfig` require.
 - `GameConfig.DEV_AUTO_EQUIP_TOOL` → `""`. `DevAutoEquipTool.server.luau` stays
   (generic helper, self-disables on empty config) but is no longer load-bearing.
-- **Keep** `laserBeamEffect` — `src/server/NPC/Scripts/Actions.luau` still uses it.
+- **Keep** `laserBeamEffect` — `src/server/NPC/Scripts/Actions.luau` still uses it. *(2026-09-20: that file moved to `src/server/AI/Scripts/Actions.luau` in chunk 11; the live drawer is `src/client/Vfx/WorldVfxController.client.luau`.)*
 - **Studio-side:** the `Muzzle` attachment and the Handle mesh are Studio-managed
   and vanish with the Tool. Per the pre-sync rule, check the Rojo panel for red
   items under `StarterPack` before syncing and confirm nothing else lives there.

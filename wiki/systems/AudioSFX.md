@@ -1,7 +1,7 @@
 ---
 title: Audio SFX
 description: Sound effect inventory, wiring patterns, placeholder locations, and gap list for Brain Fighter
-updated: 2026-08-10
+updated: 2026-09-20
 ---
 
 # Audio SFX
@@ -272,6 +272,8 @@ mySound:Play()
 Create once at module level; call `:Play()` at every event site.
 
 ### Firearm / melee weapon sound (new AudioPlayer system)
+
+> **Historical (2026-09-20 lint).** The weapon stack is gone ([[systems/Weapon]] REMOVED; melee in refactor chunk 11) and `playSoundFromSource.luau` / `playRandomSoundFromSource.luau` went with it. Kept as the record of how positional AudioPlayer sound was done; there is no live consumer and no replacement utility — spell audio goes through `spawnEffect` ([[systems/VisualEffects]]).
 
 Use `playSoundFromSource(templateAudioPlayer, targetPart)` from
 `src/shared/Weapon/Scripts/Utility/playSoundFromSource.luau`.

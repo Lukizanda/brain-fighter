@@ -213,7 +213,7 @@ leave it.
 | 4 | **Hub greybox + player state.** Lobby arena slot with its own session, `transferPlayer`, hub greybox, two portals, practice blocks, `InLobby/Queued/InArena` and the HUD suppression table above. Lands as 4a/4b/4c — see § Stage 4 detail. | — |
 | 5 | ✅ **Done 2026-09-19.** `Modes/PvEBoss.luau` runs the shipped `Default` arena (registry default + `ActiveGameMode`): 5 s countdown, 300 s clock, ends on the new `BossDefeated(arenaId)` Bindable or an emptied roster, no winner credited. Mode callbacks carry the arena id; `RoundManager.onIntermissionEnd` → `SessionRegistry.sendRosterHome`; `LobbyService` refuses joins during PostRound. Verified: Multiplayer suite 7/7 (three new `pve_*` tests) and one playtest — portal → countdown → boss stamped `Default` → `RoundTimerGui` at 4:45 → server-side kill → `Win condition met` → NPC set + boss cycle torn down (no respawn) → 10 s → `Transferred Default → Lobby`, `PlayerState=InLobby`, combat HUD disabled. See § Stage 5 detail. | — |
 | 6 | ✅ **Done 2026-09-19.** `Modes/PvPDuel.luau` on two scene-authored pads (`ArenaSlot` tag + `ArenaId`/`Mode` attributes → sessions at boot): exactly two (`minPlayers = maxPlayers = 2`, a capped round fills before it starts), `allowsPvP = true`, kill limit and clock as Workspace tunables (`DuelKillLimit`, `DuelTimeLimitMin`, fallback 3 / 3 min), leaving is a forfeit. The portal queue is real: `TargetMode` pool portals, intake only when a pad can start, 1 s flush; stage 5's PostRound refusal became a queue. Outcome ids on `RoundEnded` and the PostRound payload drive the card copy (`BOSS DEFEATED`, `OPPONENT LEFT`, …); `RoundTimerGui` ported; round-start heal. Gate judged met by the user: validated memorize with `ENFORCE = true`. See § Stage 6 detail. | — |
-| 7 | **Wiki + tests.** ✅ *GameMode page rewritten 2026-09-09 (chunk 8) off its NoOp-only record; session lifecycle tests landed as `Suites/Multiplayer/{sessions_isolate_scores, transfer_moves_roster_and_attributes, registry_views_agree}`.* Still open: `wiki/systems/Lobby.md`. | — |
+| 7 | **Wiki + tests.** ✅ *GameMode page rewritten 2026-09-09 (chunk 8) off its NoOp-only record; session lifecycle tests landed as `Suites/Multiplayer/{sessions_isolate_scores, transfer_moves_roster_and_attributes, registry_views_agree}`.* `wiki/systems/Lobby.md` written 2026-09-20 → [[systems/Lobby]]. **Stage 7 done; Phase 6 closed.** | — |
 
 *Stage numbering changed 2026-08-20: broadcast audience inserted as the new stage
 3, pushing hub/PvE/duel/wiki from 3–6 to 4–7. Stages 1 and 2 are unmoved.*
@@ -763,7 +763,7 @@ lines to expect are in `nimbalyst-local/stage6-duel-two-client.md`.
 - **A refusal reason on the panel.** With `PostRound` now queueing, the
   remaining refusals (range, wrong arena, unknown portal) are all cases the
   client already declines to offer.
-- **`wiki/systems/Lobby.md`** — still stage 7.
+- ~~**`wiki/systems/Lobby.md`** — still stage 7.~~ Written 2026-09-20 → [[systems/Lobby]].
 - **A bigger pad pool.** Asked 2026-09-20: should a new pad be created when
   the hub is busy? Decision: no — stay single-server with scene-authored
   pads and author more when a playtest shows the queue backing up. The two

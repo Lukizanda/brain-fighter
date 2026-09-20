@@ -1,7 +1,7 @@
 ---
 type: system
 description: Loadout system (REMOVED 2026-06-22, commit 6610291) — pedestal pickup, LoadoutService, RespawnPedestalManager, RespawnZoneService, and drop remote all deleted. Retained as historical record.
-updated: 2026-07-15
+updated: 2026-09-08
 ---
 
 # Loadout System

@@ -1,7 +1,7 @@
 ---
 type: design
 description: Audit of which systems run gameplay code on both VMs, and the staged plan to replace the accidental client-side prediction in the Skills pipeline with an explicit authority / prediction / presentation split.
-updated: 2026-09-11
+updated: 2026-09-14
 ---
 
 # Client/Server Boundary

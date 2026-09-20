@@ -1,7 +1,7 @@
 ---
 type: system
 description: REMOVED (Phase 5.7, commit 14881d9). Historical record of the Spelling Staff Tool and its LetterBlaster controller — the weapon that wrapped block input from Phase 4.6 until tap-to-pop replaced it. Input now lives in BlockTapController.
-updated: 2026-08-10
+updated: 2026-09-14
 ---
 
 # LetterBlaster — **REMOVED**

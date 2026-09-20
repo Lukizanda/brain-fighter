@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-09-19
+updated: 2026-09-20
 ---
 
 # Wiki Index
@@ -21,6 +21,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[design/tap-to-pop]] — Phase 5.7 plan (2026-08-10): retire the Spelling Staff / LetterBlaster, click or tap blocks directly to pop them; a hover outline says whether a click will land (and greys out past reach), and a **collect stream** funnels block-coloured sparks onto whoever took it as the PvP attribution cue replacing the beam. Also closes the optimistic-append phantom-letter hole PvP exposes
 - [[design/lobby]] — Phase 6 plan (2026-08-20): welcome lobby + PvE/PvP mode selection. Mode choice is a **session-container** problem, not a menu — `RoundManager`/`GameModeService` are a server-wide singleton. Hub place with in-place arena zones, co-op queued PvE, 1v1 duels on a pad pool, diegetic portals. Its PvP-gate blocker closed 2026-09-08 (refactor chunk 4): spells go through `applyDamage`, gate = `allowsPvP` on the victim's mode Stages 1–6 shipped; stage 6 (duels, forfeit rule, real queue, tunable kill limit/clock) 2026-09-19.
 - [[design/arena-instancing]] — future-work plan (2026-09-20) for scaling the duel pad pool: **decision = stay single-server with scene-authored pads**, author more pads before writing code (nothing names `Duel1`/`Duel2`). Records the two switch paths with diagrams: in-server dynamic instancing (~4–5 days, one factory + two boot scans become listeners, risk = teardown race) and reserved match servers (~2 weeks, second place + teleports). Not scheduled.
+- [[design/game-page]] — Phase 5.4 "game page assets" drafts (2026-09-20): short + two long store descriptions, icon concept (one cracked letter block), three-shot thumbnail list with Studio camera positions, Creator Dashboard upload path. Nothing uploaded yet
 - [[design/persistence-progression]] — persistence & progression strategy (2026-07-27): mastery-first (no meta unlocks), ProfileStore-backed PlayerData, settings + word PBs + reserved cosmetics schema; analytics pulled into the 5.4 gate; implementation = Phase 5.5
 
 ## Systems
@@ -32,6 +33,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/HUD]] — Builder + Config + LayoutManager pattern, attribute bars, Phase 4 gameplay widgets (WeaponRolodex + LoadoutDropClient removed in 6610291); all seven own-ScreenGui elements on Builder+Config since 2026-09-19 (`RoundTimerGui` last), round-over copy via `RoundOutcomeCopy`
 - [[systems/Loadout]] — **REMOVED (commit 6610291)**; pedestal pickup / RespawnPedestalManager / drop remote all deleted
 - [[systems/GameMode]] — **sessions**: `SessionRegistry` module owns the session tables (chunk 8, 2026-09-09); `RoundManager.new(deps)` per arena with its own roster, per-roster broadcast and its own `ScoreTracker`; `SpawnManager` per arena scored against the roster; `allowsPvP` / `timeLimit` / `countdownSec` on the mode config, no global round or team flags; FFA/TDM/TeamService deleted (6610291). Registered modes: **PvEBoss** (default, runs the shipped arena — co-op, 300 s clock, ends on `BossDefeated`, roster sent home after the intermission; Phase 6 stage 5, 2026-09-19) + Lobby + NoOp. Page rewritten (Phase 6 stage 7) **Stage 6 (2026-09-19):** `PvPDuel` live on two scene-authored duel pads (`ArenaSlot` tag → session at boot), `minPlayers`/`maxPlayers` on the config, `RoundOutcome` ids on `RoundEnded` + the PostRound payload.
+- [[systems/Lobby]] — the hub's portals: `LobbyService` owns the per-portal queue (one session by `TargetArenaId`, or every session running a `TargetMode`; intake only when the queue can bring a session to `minPlayers`, 1 s flush heartbeat), request validation (tag, range 34, same arena, cooldown), and the published `Occupancy`/`Capacity`/`Waiting`; `PortalGui` draws signs + confirm panel and decides nothing. Written 2026-09-20 (Phase 6 stage 7)
 - [[systems/Tests]] — in-Studio harness: TestRunner + `TestAutoRunner` (`workspace.RunTests`), 7 suites / 40 tests (NPC, Multiplayer, Phase3, Skills, Hardening, Economy, Unit), results in `TestResult_*` attributes; MCP-driven via `/run-tests`
 - [[systems/EnergyEconomy]] — Phase 1 pure-Luau module: word → per-color mana (Scrabble values × length tiers, floor-reconciled color splits)
 - [[systems/EnergyReservoirs]] — Phase 1 pure-Luau state container: three per-color energy bars, cap 60, `.changed(color)` BindableEvent signal

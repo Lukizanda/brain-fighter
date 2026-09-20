@@ -1,7 +1,7 @@
 ---
 type: system
 description: Phase 2 action — the cast pipeline. castSpecific fires an explicitly-picked tier (the production path since 5.8's hold-to-charge); resolveSpecAtCharge picks that tier from a hold duration; tapReservoir is the retired highest-affordable rule, kept for its tests. Drains the reservoir on cast and fires the client-local `spellResolved` signal on success.
-updated: 2026-09-08
+updated: 2026-09-09
 ---
 
 # CastAction

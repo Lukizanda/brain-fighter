@@ -1,7 +1,7 @@
 ---
 type: design
 description: Whole-repo system design audit (2026-09-07) — what closed since 2026-06, what is still open, and what the sessions refactor exposed. Headline = the damage path bypasses HealthService and blocks PvP kill credit; ScoreTracker/respawn/targeting are still server-wide; the HUD gate and the VFX relay each have one authority hole. Companion refactor plan in design/refactor-plan-2026-09.
-updated: 2026-09-08
+updated: 2026-09-20
 ---
 
 # System Design Audit — 2026-09-07
@@ -142,6 +142,8 @@ Where the wiki and the code disagree, and which one I think is right.
 10. **[[systems/VisualEffects]] frontmatter: "planned (PERF guardrails)".** `VfxConfig.PERF` exists at `:1618`. Stale.
 11. **`VfxController.client.luau:17-21` header vs `:117-127` body.** The file quotes the prediction contract and then breaks it for non-projectile impacts (F7). The intent (boundary stage 6) is right; the code is wrong. [[design/build-plan]] Phase 5.6 stage 6 was closed slightly early.
 12. **[[systems/GameMode]] body still describes the NoOp-only world** — flagged in the 2026-09-07 lint; stage 7 work.
+
+> **Cross-checked 2026-09-20 (BRA.20 resume, after Phase 7 and Phase 6 landed).** 1, 2 closed by chunk 4 (`applyDamage` is the one path; the `SkillEffects` comment is gone). 3 closed — `SkillPipeline` no longer mentions `drawnLocallyBy` handlers or reserved hooks. 4 closed — `SpellCastService` frontmatter says "checked and, since 2026-09-08, enforced"; `index` only quotes this audit. 5 closed by chunk 4 (`allowsPvP` on the victim's mode). 6 closed — the "gated off rather than deleted" comment is out of `GameConfig`. 7 closed — [[concepts/HudGate]] § Owners never write the gated property. 8 closed — [[design/client-server-boundary]] lists `BroadcastSpellVfx` as deleted 2026-09-08. 9 closed — [[systems/Tests]] lists Economy/Skills/Unit and the `__tests` wiring. 10 closed — `VisualEffects` frontmatter no longer says "planned". 11 is a code finding (F7), closed by chunk 7 per the boundary page. 12 closed by chunk 8. **Nothing open.**
 
 Where wiki and code *agree* and I think both are wrong: the singleton `ScoreTracker` is documented as "stage 5" (`init.server.luau:19`; [[design/lobby]] § Deliberately not in stage 4). It is a prerequisite for stage 5, not part of it — a mode cannot have a win condition against a table that another session zeroes.
 

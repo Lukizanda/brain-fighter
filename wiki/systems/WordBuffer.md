@@ -1,7 +1,7 @@
 ---
 type: system
 description: 12-slot color-tagged word buffer — pure-Luau state container for the word being spelled. Append-on-shot, drag-to-reorder, double-tap-to-destroy. Drains on Memorize.
-updated: 2026-07-27
+updated: 2026-09-08
 ---
 
 # WordBuffer

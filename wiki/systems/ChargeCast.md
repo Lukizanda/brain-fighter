@@ -1,7 +1,7 @@
 ---
 type: system
 description: Phase 5.8 — hold-to-charge tier selection. Press a colour panel and the charge climbs through the tiers you can afford; release fires what you reached. Mana is reserved, never drained, until release, so cancelling is free. The panels are circles that fill from the centre with concentric tier rings, and a character orb makes the windup a PvP tell.
-updated: 2026-09-11
+updated: 2026-09-14
 ---
 
 # ChargeCast
