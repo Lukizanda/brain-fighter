@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phase 6 plan (2026-08-20) — a welcome lobby and PvE/PvP mode selection. The finding is that mode choice is a session-container problem, not a menu problem; GameModeService and RoundManager are server-wide singletons. Decision = hub place with in-place arena zones, co-op queued PvE, 1v1 queued duels on a pad pool. Records what PvP needs that the lobby does not provide. Stage 6 (duels) shipped 2026-09-19.
-updated: 2026-09-19
+updated: 2026-09-20
 ---
 
 # Lobby & Mode Selection
@@ -764,6 +764,11 @@ lines to expect are in `nimbalyst-local/stage6-duel-two-client.md`.
   remaining refusals (range, wrong arena, unknown portal) are all cases the
   client already declines to offer.
 - **`wiki/systems/Lobby.md`** — still stage 7.
+- **A bigger pad pool.** Asked 2026-09-20: should a new pad be created when
+  the hub is busy? Decision: no — stay single-server with scene-authored
+  pads and author more when a playtest shows the queue backing up. The two
+  switch paths (in-server cloning, reserved servers) are costed in
+  [[design/arena-instancing]].
 - **The charge-tier hold check** (Q4(a), 2026-09-08) was explicitly deferred
   "until duels are actually playable". They are now; it is the next
   trust-model item to re-judge, and it belongs to [[systems/SpellCastService]].
