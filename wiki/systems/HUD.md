@@ -126,9 +126,10 @@ world-space GUI is culled by `MaxDistance` like any other part of the scene,
 and there is no screen region to place it in or zone policy to gate it by.
 `NameplateBuilder` is deliberately **not** under `Vfx/` — it is a readout, so
 it must survive the reduced-effects setting, and the numbers on it are the
-whole point. Neither builder tracks the camera: a `BillboardGui` sized in
-`Offset` already holds a fixed pixel size at any distance. See
-[[systems/Health]] § Nameplates.
+whole point. Neither builder tracks the camera, but they size differently on purpose:
+the portal sign is `Offset` (fixed pixels — it is a landmark you read from
+across the hub), the nameplate is `Scale` (studs — it belongs to a rig and
+must shrink with it). See [[systems/Health]] § Nameplates.
 
 ## Single-ownership invariants (Phase 4.8 audit)
 

@@ -109,13 +109,31 @@ target's max. The dummy has no `maxHealth` attribute, which lands it on
 `DEFAULT_MAX_HEALTH` — the same 100 a player gets — so what you read off the
 dummy is exactly what a player would take.
 
-**The plate does not scale with distance, and needs no code to avoid it.** A
-`BillboardGui` sized in `Offset` renders at that pixel size whatever the
-distance; measured, not assumed — the same 220 px plate spans the same width at
-20 studs and at 70 while the rig under it shrinks away. A draft that rescaled
-the plate per frame to "cancel" a falloff that does not exist was removed; it
-only made the plate grow as you backed away. `AbsoluteSize` is no help here:
-inside a BillboardGui it reports the billboard's own canvas, not screen pixels.
+**The plate is sized in studs, so it stays proportionate to its rig, and no
+code runs per frame to make that happen.** The route here was not obvious and
+is worth not re-walking:
+
+1. A draft rescaled the plate every frame to cancel an assumed distance
+   falloff. Measured instead: a `BillboardGui` sized in `Offset` holds a fixed
+   *pixel* size at any distance — the same 220 px plate spans an identical
+   width at 20 studs and at 70. The compensation would have made it *grow* as
+   you backed away, so it was deleted.
+2. Fixed pixel size then turned out to be the actual bug. From the lobby spawn,
+   137 studs from the dummy, a 220 px plate is a banner over a rig the size of
+   a thumbnail — it covered the dummy and the portal signs behind it.
+3. Sizing the plate in **studs** (the `Scale` half of `Size`) is the fix: the
+   engine shrinks it with its rig, so it reads as part of the character at
+   every range. Everything inside it is in `Scale` too — a 6 px corner radius
+   is meaningless against a canvas that is ~17 x 2.4 units at range.
+
+The trade is legibility: at ~35 studs the fill fraction reads clearly but the
+numbers do not. That is the right gradient — exact numbers at the dummy, which
+you walk up to; a fraction across a duel pad.
+
+`AbsoluteSize` is a trap in this investigation. For an `Offset`-sized billboard
+it reports the billboard's own canvas and equals `Size.Offset` at every
+distance, saying nothing about screen pixels. For a `Scale`-sized one it does
+track the projected size (168 px at 14 studs, 17 px at 137).
 
 **Death is not special-cased.** A dummy explodes through the normal
 `DeathHandler` path and respawns as a fresh clone, which arrives through the

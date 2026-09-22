@@ -22,12 +22,10 @@
 -- the combatants and pushes values in.
 --
 -- ## Distance
--- Nothing here tracks the camera. A BillboardGui sized in Offset already
--- renders at a fixed pixel size whatever the distance (measured: a 220 px
--- plate spans the same width at 20 studs and at 70), so the plate is
--- pinned above the head in the world and fixed in size on the display for
--- free. An earlier draft rescaled it per frame to "cancel" a falloff that
--- does not exist, which only made it grow as you backed away.
+-- Nothing here tracks the camera. The plate is sized in studs, so the
+-- engine shrinks it with its rig and it stays proportionate at any range
+-- for free — see `NameplateConfig` for why pixel sizing was wrong and
+-- what it costs at duel range.
 ----------------------------------------------------------------------
 
 local TweenService = game:GetService("TweenService")
@@ -45,9 +43,9 @@ export type Nameplate = {
 
 local NameplateBuilder = {}
 
-local ROW_TOTAL = NameplateConfig.NAME_ROW_HEIGHT + NameplateConfig.BAR_ROW_HEIGHT
-local NAME_FRACTION = NameplateConfig.NAME_ROW_HEIGHT / ROW_TOTAL
-local BAR_FRACTION = NameplateConfig.BAR_ROW_HEIGHT / ROW_TOTAL
+local ROW_TOTAL = NameplateConfig.NAME_ROW_WEIGHT + NameplateConfig.BAR_ROW_WEIGHT
+local NAME_FRACTION = NameplateConfig.NAME_ROW_WEIGHT / ROW_TOTAL
+local BAR_FRACTION = NameplateConfig.BAR_ROW_WEIGHT / ROW_TOTAL
 
 local function fillColorFor(fraction: number): Color3
 	if fraction <= NameplateConfig.LOW_THRESHOLD then
