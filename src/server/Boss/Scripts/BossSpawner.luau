@@ -31,6 +31,10 @@ local BOSS_TAG       = "Boss"
 
 local BossSpawner = {}
 
+-- The tag every spawned boss rig carries; exported so readers that need
+-- to recognise a boss (Hittables, AnalyticsReporter) share one name.
+BossSpawner.BOSS_TAG = BOSS_TAG
+
 -- ---------------------------------------------------------------
 -- Internal: add a welded visual part to the boss model.
 -- The part's CFrame is set relative to `anchorPart` before the

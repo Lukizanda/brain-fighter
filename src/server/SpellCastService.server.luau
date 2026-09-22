@@ -54,6 +54,11 @@ local RateLimiter         = require(script.Parent.Utility.RateLimiter)
 
 local log = Logger.new("SpellCastService")
 
+-- Domain signal for every cast the server applied: (player, spellName,
+-- color, tier, cost, targetName?). Lives with the SpellCast domain's
+-- other server files rather than beside this top-level Script.
+local spellCastEvent = script.Parent.SpellCast.Events.SpellCast :: BindableEvent
+
 local spellCastRemote = ReplicatedStorage.Shared.SpellCast.Remotes.SpellCastServer :: RemoteEvent
 
 local castLimiter = RateLimiter.new(
@@ -140,6 +145,7 @@ spellCastRemote.OnServerEvent:Connect(function(player: Player, color: any, tier:
 			mode = "authoritative",
 			predictedBy = player.UserId,
 		})
+		spellCastEvent:Fire(player, spec.name, spec.color, spec.tier, spec.cost, nil)
 		return
 	end
 
@@ -165,6 +171,7 @@ spellCastRemote.OnServerEvent:Connect(function(player: Player, color: any, tier:
 		mode = "authoritative",
 		predictedBy = player.UserId,
 	})
+	spellCastEvent:Fire(player, spec.name, spec.color, spec.tier, spec.cost, targetModel.Name)
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)

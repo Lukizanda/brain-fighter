@@ -1,7 +1,7 @@
 ---
 type: system
 description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. One boss cycle per arena session, started on RoundStarted and stopped on RoundEnded; HUD remotes, perception and skill targets are all scoped to the BossPoint's arena (Phase 6 stage 3 + refactor chunk 9).
-updated: 2026-09-19
+updated: 2026-09-22
 ---
 
 # Boss
@@ -214,6 +214,14 @@ only on its own arena's roster. See [[systems/NPC]] § Arena ownership and
 Studio: `Workspace.BossPoint` carries `ArenaId = Default` (set 2026-09-09 via
 MCP; the `.rbxl` needs saving). Stage 5's `Modes/PvEBoss.luau` will author its
 own BossPoint with its own id.
+
+## `BossSpawner.BOSS_TAG` (2026-09-22)
+
+The `"Boss"` tag every spawned rig carries was a file-local literal in
+`BossSpawner`; it is now exported as `BossSpawner.BOSS_TAG` so readers that
+must recognise a boss share one name. First external reader:
+[[systems/Analytics]]'s `first_boss_damage` step (a `PlayerDamaged` whose
+target rig carries the tag).
 
 ## Integration Points
 

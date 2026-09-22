@@ -1,7 +1,7 @@
 ---
 type: system
-description: In-Studio test harness — TestRunner module + Suites/{NPC,Multiplayer,Phase3,Skills,Hardening,Economy,Unit}, one Suites/Unit wrapper per pure-Luau __tests module. MCP-driven via test-runner subagent.
-updated: 2026-09-20
+description: In-Studio test harness — TestRunner module + Suites/{NPC,Multiplayer,Phase3,Skills,Hardening,Economy,Unit,Analytics}, one Suites/Unit wrapper per pure-Luau __tests module. MCP-driven via test-runner subagent.
+updated: 2026-09-22
 ---
 
 # Test System
@@ -105,6 +105,8 @@ src/shared/Tests/
     Economy/
       ledger_prices_a_cast.luau · ledger_refuses_over_cap_memorize.luau
       ledger_resets_on_round_start.luau
+    Analytics/
+      onboarding_funnel_rules.luau · analytics_wires_domain_events.luau
     Unit/
       wordbuffer_tests.luau · energyeconomy_tests.luau · energyreservoirs_tests.luau
       dictionary_tests.luau · spellregistry_tests.luau · memorizeaction_tests.luau

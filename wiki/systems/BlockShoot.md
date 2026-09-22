@@ -1,7 +1,7 @@
 ---
 type: system
 description: Shared helpers and server handler for block consumption. Client input is BlockTapController (Phase 5.7 — click/tap a block directly). Server-trust validation added in 5.4 and unchanged by the input migration.
-updated: 2026-09-10
+updated: 2026-09-22
 ---
 
 # BlockShoot
@@ -206,6 +206,16 @@ The rate limit is a token bucket, not a flat interval: network jitter routinely 
 ### What this does not cover
 
 These are instance-level checks. They bound *what* a client may destroy and *how fast*; they cannot verify the letter actually reached that player's word buffer, because [[systems/WordBuffer]] and [[systems/EnergyReservoirs]] both live client-side. The same gap is what blocks server-side affordability on the cast remote — see [[systems/SpellCastService]] § Trust model.
+
+## Server signal — `BlockConsumed` (2026-09-22)
+
+`src/server/BlockShoot/Events/BlockConsumed` (BindableEvent) fires
+`(player, letter, color, arenaId)` at the end of the accept branch in
+`BlockShootService` — after the ledger credit and the pop broadcast, so a
+listener can never hear about a consume the server refused. First
+consumer: [[systems/Analytics]] (the `first_pop` funnel step and the
+per-session pop count). The domain's first server-side signal; the same
+seam shape as Health's `PlayerDamaged`.
 
 ## See also
 

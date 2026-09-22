@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server relay for client-initiated spell casts. Applies effects server-side because client Humanoid.Health writes don't replicate for server-owned rigs. Hardened in 5.4; affordability is checked and, since 2026-09-08, enforced by the validated-memorize ledger.
-updated: 2026-09-10
+updated: 2026-09-22
 ---
 
 # SpellCastService
@@ -138,6 +138,20 @@ Two refinements keep the bound tight rather than useless:
 - Debit `spec.cost` from the cast's colour on every accepted cast, so the ceiling tracks earned-minus-spent rather than lifetime-earned.
 
 Both are sound in the same direction: they can only ever lower the ceiling toward the true value, and the check is `ceiling[colour] >= spec.cost`, so a too-high ceiling merely fails to catch an exploit while a too-low one would reject real play. Whatever the suite asserts, it should assert that asymmetry explicitly.
+
+## Server signals — `WordMemorized`, `MemorizeFizzled`, `SpellCast` (2026-09-22)
+
+Three BindableEvents added for listeners that must stay out of the accept
+path ([[systems/Analytics]] is the first):
+
+- `src/server/Economy/Events/WordMemorized` — `(player, word, energyByColor)`
+  after `EnergyLedger.reportMemorize` returned `ok`.
+- `src/server/Economy/Events/MemorizeFizzled` — `(player)` on the fizzle
+  branch (tiles covered by the held set but spelling no word).
+- `src/server/SpellCast/Events/SpellCast` — `(player, spellName, color,
+  tier, cost, targetName?)` after `SpellExecutor.cast` ran, on both the
+  self-target and the targeted branch. Not fired for a refused or
+  unaffordable cast.
 
 ## See also
 

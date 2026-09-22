@@ -41,6 +41,11 @@ local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 
 local log = Logger.new("BlockShootService")
 
+-- Server-side domain signal: (player, letter, color, arenaId) for every
+-- consume the server accepted. Sibling Events folder, in the tree
+-- before this Script runs.
+local blockConsumedEvent = script.Parent.Events.BlockConsumed :: BindableEvent
+
 local consumeRemote = ReplicatedStorage.Shared.BlockShoot.Remotes.ConsumeBlock :: RemoteEvent
 
 local consumeLimiter = RateLimiter.new(
@@ -178,6 +183,10 @@ consumeRemote.OnServerEvent:Connect(function(player: Player, block: any, request
 	end
 
 	broadcastPop(player, blockPos, blockColor)
+
+	-- Announced last, on the branch that succeeded, so a listener can
+	-- never hear about a pop the server refused (AnalyticsReporter).
+	blockConsumedEvent:Fire(player, blockLetter, blockColor, SessionRegistry.arenaIdFor(player))
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)

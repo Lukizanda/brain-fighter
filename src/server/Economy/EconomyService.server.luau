@@ -36,6 +36,11 @@ local devCreditRemote = ReplicatedStorage.Shared.Economy.Remotes.DevCreditLetter
 -- the tree by the time this Script runs, same as the Utility require.
 local roundStartedEvent = script.Parent.Parent.GameMode.Events.RoundStarted :: BindableEvent
 
+-- Domain signals for listeners that must not be in the accept path
+-- (AnalyticsReporter): a word the ledger credited, and a fizzle.
+local wordMemorizedEvent = script.Parent.Events.WordMemorized :: BindableEvent
+local memorizeFizzledEvent = script.Parent.Events.MemorizeFizzled :: BindableEvent
+
 local reportLimiter = RateLimiter.new(
 	EconomyConstants.REPORT_BURST_CAPACITY,
 	EconomyConstants.REPORT_REFILL_PER_SEC
@@ -65,6 +70,7 @@ reportRemote.OnServerEvent:Connect(function(player: Player, tiles: any)
 	if verdict.fizzle then
 		-- The player spelled nothing. Their letters are gone on both
 		-- sides and nothing was earned; that is the game working.
+		memorizeFizzledEvent:Fire(player)
 		return
 	end
 	if not verdict.ok then
@@ -73,6 +79,7 @@ reportRemote.OnServerEvent:Connect(function(player: Player, tiles: any)
 	end
 
 	log:info(string.format("%s memorized %s", player.Name, verdict.word or "?"))
+	wordMemorizedEvent:Fire(player, verdict.word or "", verdict.energyByColor)
 end)
 
 -- The ledger's ceiling has to zero where the client's reservoirs zero,

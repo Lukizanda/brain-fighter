@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-09-20
+updated: 2026-09-22
 ---
 
 # Wiki Index
@@ -32,6 +32,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/NPC]] — Perception → StateMachine → Actions, Patroller archetype, WorldDataManager
 - [[systems/HUD]] — Builder + Config + LayoutManager pattern, attribute bars, Phase 4 gameplay widgets (WeaponRolodex + LoadoutDropClient removed in 6610291); all seven own-ScreenGui elements on Builder+Config since 2026-09-19 (`RoundTimerGui` last), round-over copy via `RoundOutcomeCopy`
 - [[systems/Settings]] — client-side preferences (2026-09-20, BRA.21): SFX volume (one `SoundGroup`, every Sound routed in), Reduced effects (`spawnEffect`/`ScreenImpact` read the flag), letter palette (`Colors.PALETTES` default / Okabe–Ito high-contrast, drawn through `Colors.tint` on blocks, tiles and menu discs). Pure `Settings` module over `Settings_*` LocalPlayer attributes; `SettingsGui` gear + panel are the first `LobbyOnly` HUD elements. Not persisted until 5.5
+- [[systems/Analytics]] — Phase 5.4 analytics (2026-09-22): onboarding funnel joined → first_pop → first_memorize → first_cast → first_boss_damage → boss_kill (once, strictly in order, per player) + loop-health custom events (word_memorized, memorize_fizzle, spell_cast, round_played, blocks_popped, session_length) on Roblox `AnalyticsService`. Domains fire `BlockConsumed` / `WordMemorized` / `MemorizeFizzled` / `SpellCast` BindableEvents on their accept branch; `AnalyticsReporter` only listens; `AnalyticsSink` budgets + pcalls. `Analytics_FunnelStep` / `Analytics_Events` on the Player. Suite 2/2, live pop + cast probed
 - [[systems/Loadout]] — **REMOVED (commit 6610291)**; pedestal pickup / RespawnPedestalManager / drop remote all deleted
 - [[systems/GameMode]] — **sessions**: `SessionRegistry` module owns the session tables (chunk 8, 2026-09-09); `RoundManager.new(deps)` per arena with its own roster, per-roster broadcast and its own `ScoreTracker`; `SpawnManager` per arena scored against the roster; `allowsPvP` / `timeLimit` / `countdownSec` on the mode config, no global round or team flags; FFA/TDM/TeamService deleted (6610291). Registered modes: **PvEBoss** (default, runs the shipped arena — co-op, 300 s clock, ends on `BossDefeated`, roster sent home after the intermission; Phase 6 stage 5, 2026-09-19) + Lobby + NoOp. Page rewritten (Phase 6 stage 7) **Stage 6 (2026-09-19):** `PvPDuel` live on two scene-authored duel pads (`ArenaSlot` tag → session at boot), `minPlayers`/`maxPlayers` on the config, `RoundOutcome` ids on `RoundEnded` + the PostRound payload.
 - [[systems/Lobby]] — the hub's portals: `LobbyService` owns the per-portal queue (one session by `TargetArenaId`, or every session running a `TargetMode`; intake only when the queue can bring a session to `minPlayers`, 1 s flush heartbeat), request validation (tag, range 34, same arena, cooldown), and the published `Occupancy`/`Capacity`/`Waiting`; `PortalGui` draws signs + confirm panel and decides nothing. Written 2026-09-20 (Phase 6 stage 7)
