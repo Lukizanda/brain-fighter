@@ -75,8 +75,8 @@ Whether player A may damage player B is a property of **the mode B is playing un
 ## Nameplates (2026-09-22)
 
 Every combatant the local player can look at carries a **nameplate** — a name
-line, a health bar with a `current / max` readout, and a damage number that
-pops every time the health moves. Two kinds of combatant get one:
+line, a health bar showing a fraction, and a damage number that pops every time
+the health moves. Two kinds of combatant get one:
 
 | Combatant | Found by | Name shown |
 |---|---|---|
@@ -126,9 +126,19 @@ is worth not re-walking:
    every range. Everything inside it is in `Scale` too — a 6 px corner radius
    is meaningless against a canvas that is ~17 x 2.4 units at range.
 
-The trade is legibility: at ~35 studs the fill fraction reads clearly but the
-numbers do not. That is the right gradient — exact numbers at the dummy, which
-you walk up to; a fraction across a duel pad.
+The bar carries no `current / max` text. It was unreadable at any range worth
+reading a health bar at, and the floating damage number already says what a hit
+was worth — which is the number a player actually wants. The bar is left to do
+the one job it does well from a distance: show a fraction.
+
+**The engine is the third owner of the space over a head.** A `Humanoid` draws
+its own name and, once damaged, its own health bar — so the dummy showed two
+bars and two names (`Humanoid.DisplayName` = "Practice Dummy" against the
+plate's "Training Dummy"). It hid during development because
+`HealthDisplayType` defaults to `DisplayWhenDamaged`, and an undamaged dummy
+reads 100/100. `attach` sets `DisplayDistanceType = None` per rig, which covers
+the name and the bar together; turning off `HealthDisplayType` alone would
+leave the engine's name behind.
 
 `AbsoluteSize` is a trap in this investigation. For an `Offset`-sized billboard
 it reports the billboard's own canvas and equals `Size.Offset` at every

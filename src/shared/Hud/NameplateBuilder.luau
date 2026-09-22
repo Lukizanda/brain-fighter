@@ -4,8 +4,9 @@
 -- NameplateBuilder
 ----------------------------------------------------------------------
 -- View-only builder for the plate over a combatant's head: a name line,
--- a health bar with a `current / max` readout, and the damage numbers
--- that pop off it when the health moves.
+-- a health bar showing a fraction, and the damage numbers that pop off it
+-- when the health moves. No numbers on the bar itself — see
+-- `NameplateConfig`.
 --
 -- One plate serves every combatant a player can look at — another
 -- player, or the hub's training dummy. That is the point rather than a
@@ -111,23 +112,6 @@ function NameplateBuilder.build(anchor: BasePart): Nameplate
 	fillCorner.CornerRadius = NameplateConfig.CORNER_RADIUS
 	fillCorner.Parent = fill
 
-	-- Sits over the fill so the numbers stay legible at any fraction.
-	local readout = Instance.new("TextLabel")
-	readout.Name = "Readout"
-	readout.Size = UDim2.fromScale(1, 1)
-	readout.BackgroundTransparency = 1
-	readout.Font = NameplateConfig.TEXT_FONT
-	readout.TextScaled = true
-	readout.TextColor3 = NameplateConfig.TEXT_COLOR
-	readout.TextStrokeTransparency = NameplateConfig.TEXT_STROKE_TRANSPARENCY
-	readout.Text = ""
-	readout.Parent = track
-
-	local textPadding = Instance.new("UIPadding")
-	textPadding.PaddingLeft = NameplateConfig.TEXT_INSET
-	textPadding.PaddingRight = NameplateConfig.TEXT_INSET
-	textPadding.Parent = readout
-
 	local activeFillTween: Tween? = nil
 	local popups: { [BillboardGui]: true } = {}
 
@@ -150,8 +134,6 @@ function NameplateBuilder.build(anchor: BasePart): Nameplate
 			BackgroundColor3 = fillColorFor(fraction),
 		})
 		;(activeFillTween :: Tween):Play()
-
-		readout.Text = string.format(NameplateConfig.TEXT_FORMAT, math.round(current), math.round(safeMax))
 	end
 
 	-- A positive delta is damage, a negative one a heal. Both are drawn,

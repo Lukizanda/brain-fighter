@@ -4,17 +4,18 @@
 -- Tunable constants for the plate over a combatant's head: the name
 -- line, the health bar under it, and the damage numbers that pop off it.
 --
+-- The bar carries no `current / max` text. It was unreadable at any range
+-- worth reading a health bar at, and the floating damage number already
+-- says what a hit was worth — which is the number a player actually wants.
+-- The bar is left to do the one job it is good at from a distance: show a
+-- fraction.
+--
 -- The plate is sized in STUDS, not pixels, so it stays proportionate to
 -- the rig it belongs to at every range. A BillboardGui sized in Offset
 -- holds a fixed *pixel* size however far away it is — which sounds
 -- desirable and is not: from the lobby spawn, 137 studs out, a 220 px
 -- plate was a banner covering a dummy the size of a thumbnail. Sized in
 -- studs it shrinks with its rig, so it reads as part of the character.
---
--- The trade is legibility at range: at ~35 studs the bar's fill fraction
--- still reads clearly but the numbers do not. That is the right gradient
--- — you read exact numbers at the dummy, which you walk up to, and you
--- read a fraction across a duel pad.
 --
 -- Everything inside the plate is therefore in Scale too. Pixel trim
 -- (a 6 px corner, a 2 px stroke) is meaningless against a canvas that is
@@ -29,11 +30,12 @@ local NameplateConfig = {
 	-- is clearance over a head, not over the whole rig.
 	HEIGHT_STUDS        = 2.6,
 	-- Studs. Name row stacked over the bar, both this wide.
-	PLATE_SIZE          = UDim2.new(5.2, 0, 1.3, 0),
+	PLATE_SIZE          = UDim2.new(5.2, 0, 1.0, 0),
 	-- Relative weights, not pixels: the two rows split the plate's height
-	-- in this ratio whatever the plate currently renders at.
-	NAME_ROW_WEIGHT     = 22,
-	BAR_ROW_WEIGHT      = 34,
+	-- in this ratio whatever the plate currently renders at. The bar is the
+	-- slimmer row now that it holds no text.
+	NAME_ROW_WEIGHT     = 62,
+	BAR_ROW_WEIGHT      = 38,
 
 	----------------------------------------------------------------------
 	-- Name row
@@ -61,13 +63,6 @@ local NameplateConfig = {
 	MID_THRESHOLD       = 0.5,
 	LOW_THRESHOLD       = 0.25,
 	FILL_TWEEN          = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-
-	TEXT_FONT           = Enum.Font.RobotoMono,
-	TEXT_COLOR          = Color3.fromRGB(255, 255, 255),
-	TEXT_STROKE_TRANSPARENCY = 0.4,
-	-- Inset so the glyphs do not touch the rounded ends of the track.
-	TEXT_INSET          = UDim.new(0.03, 0),
-	TEXT_FORMAT         = "%d / %d",
 
 	-- Hide behind walls: combat reads need line of sight, the same call
 	-- the old nametag made.

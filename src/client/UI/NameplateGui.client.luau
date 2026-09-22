@@ -18,6 +18,11 @@
 -- Single Ownership rule exists to stop, and the health half has to be
 -- client-side anyway — see below.
 --
+-- The *engine* is the third owner nobody remembers. A Humanoid draws its
+-- own name and, once damaged, its own health bar; with a plate over the
+-- same head that reads as two health bars and two names (the rig's
+-- `DisplayName` against our label). `attach` turns it off per rig.
+--
 -- No remote in the read path. `Humanoid.Health` replicates on its own, so
 -- the delta between two replicated values *is* the damage — the same
 -- number `applyDamage` computed, without a second wire to keep in step.
@@ -88,6 +93,12 @@ local function attach(rig: Model, name: string)
 		log:warn(string.format("%s has no Head after %ds - no nameplate", rig.Name, PART_WAIT_SEC))
 		return
 	end
+
+	-- Silence the Humanoid's built-in name and health bar. `None` covers
+	-- both; `HealthDisplayType` alone would leave the engine's name behind.
+	-- Written on the client, which is where it matters — this plate is
+	-- client-drawn and the property does not replicate upward.
+	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 
 	-- The rig can be destroyed while the waits above are running, and a
 	-- second `attach` can win the race in the meantime.
