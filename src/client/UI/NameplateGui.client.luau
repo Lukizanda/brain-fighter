@@ -121,8 +121,8 @@ local function attach(rig: Model, name: string)
 
 			plate:setHealth(health, humanoid.MaxHealth)
 			plate:popDelta(delta)
-			-- A corpse is about to go transparent, or blow apart; a bar
-			-- reading 0 / 100 over the debris is not a readout.
+			-- A corpse is about to go transparent, or blow apart; an
+			-- empty bar hanging over the debris is not a readout.
 			plate:setVisible(health > 0)
 		end),
 

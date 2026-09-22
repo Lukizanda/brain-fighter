@@ -19,7 +19,7 @@
 --
 -- Everything inside the plate is therefore in Scale too. Pixel trim
 -- (a 6 px corner, a 2 px stroke) is meaningless against a canvas that is
--- ~17 x 2.4 units at range and would swallow the bar.
+-- only a couple of dozen units across at range, and would swallow it.
 ----------------------------------------------------------------------
 
 local NameplateConfig = {
