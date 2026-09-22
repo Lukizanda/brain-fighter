@@ -24,6 +24,11 @@ local HealthConstants = {
 	TORSO_PARTS = { "UpperTorso", "LowerTorso" },
 
 	DAMAGEABLE_TAG = "Damageable",
+	-- A Damageable rig that is there to be hit rather than to fight back:
+	-- it carries a world-space health readout so a player can read what a
+	-- spell actually did. Opt-in per rig, so tagging Damageable does not
+	-- put a bar over every NPC in the game.
+	TRAINING_DUMMY_TAG = "TrainingDummy",
 	MAX_HEALTH_ATTRIBUTE = "maxHealth",
 	RESPAWN_TIME_ATTRIBUTE = "respawnTime",
 }

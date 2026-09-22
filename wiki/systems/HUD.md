@@ -1,7 +1,7 @@
 ---
 type: system
 description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu as circular hold-to-charge panels with concentric tier rings, MemorizeButton, MindFullIndicator), the mobile DashButton, and the seven own-ScreenGui elements (DeathScreen, DamageFeedback, GameState, Scoreboard, BossHud, KillFeed, RoundTimer — the last ported 2026-09-19). Round-over copy comes from the payload's outcome id via RoundOutcomeCopy. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291. SettingsMenu cut 2026-09-15, refactor chunk 12.)
-updated: 2026-09-20
+updated: 2026-09-22
 ---
 
 # HUD System
@@ -109,6 +109,24 @@ flowchart LR
 ```
 
 Legend: blue = Coordinator LocalScript, orange = pure-module Builder, green = game-state source, purple = modal/own-ScreenGui (bypasses HudLayoutManager), gray = layout region. Solid arrows = mount/register. Dashed arrows = own ScreenGui parented directly to `PlayerGui`.
+
+## World-space builders (not HUD)
+
+Two builders in `src/shared/Hud/` do not produce HUD at all — they build
+`BillboardGui`s that live in the scene:
+
+| Builder | Draws | Carries a HudGate policy? |
+|---|---|---|
+| `PortalPanelBuilder.buildSign` | The floating sign over a portal pad | No |
+| `TrainingDummyBuilder` | The health bar and damage numbers over a `TrainingDummy` rig | No |
+
+They sit here because they are the same Builder + Config split as everything
+else in the folder, but they skip `HudLayoutManager` and `HudGate` entirely:
+world-space GUI is culled by `MaxDistance` like any other part of the scene,
+and there is no screen region to place it in or zone policy to gate it by.
+`TrainingDummyBuilder` is deliberately **not** under `Vfx/` — it is a readout,
+so it must survive the reduced-effects setting, and the numbers on it are the
+whole point. See [[systems/Health]] § Training dummies.
 
 ## Single-ownership invariants (Phase 4.8 audit)
 

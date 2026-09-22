@@ -1,7 +1,7 @@
 ---
 type: system
 description: Damage pipeline — one path. applyDamage.process / applyDamage.heal are the only Humanoid.Health writers; spells reach them through the DamageSink HealthService injects into SkillEffects; every request carries a cause id the kill feed credits; PvP is allowsPvP on the victim's mode, resolved through their session.
-updated: 2026-09-19
+updated: 2026-09-22
 ---
 
 # Health System
@@ -50,6 +50,8 @@ Whether player A may damage player B is a property of **the mode B is playing un
 - `src/server/Health/Scripts/HealthService/init.server.luau` — spawn-init health, round-start heal, wires `applyDamage` and injects it into `SkillEffects`
 - `src/server/Health/Scripts/HealthService/applyDamage.luau` — `process(...)` and `heal(...)`, the only `Health` writers
 - `src/server/Health/Scripts/DeathHandler.server.luau` — Damageable death cleanup + respawn
+- `src/shared/Hud/TrainingDummyBuilder.luau` / `TrainingDummyConfig.luau` — the world-space health readout over a training dummy
+- `src/client/UI/TrainingDummyGui.client.luau` — finds the tagged rigs, binds `Humanoid.Health`, pops the damage numbers
 - `src/server/Arena/DeathZoneService.server.luau` — lethal fall volumes, through `applyDamage` with `cause = death_zone`
 - `src/StarterCharacterScripts/Health.client.luau` — no-op override of Roblox's built-in client health-regen script (see below)
 
@@ -69,6 +71,38 @@ Whether player A may damage player B is a property of **the mode B is playing un
 2. `GameModeService.onPlayerEliminated` (player victims) credits `result.cause` to the kill feed via `ScoreTracker.recordKill`; `DeathHandler.handleDeath` (Damageable rigs) runs the explode-and-respawn cycle.
 3. Roblox fires `Humanoid.Died`; the Skills registries purge their per-Humanoid state.
 4. `GameModeService` handles the actual player respawn — see § Respawn.
+
+## Training dummies (2026-09-22)
+
+A rig tagged **`TrainingDummy`** (`HealthConstants.TRAINING_DUMMY_TAG`) carries a
+world-space health bar with a `current / max` line, and pops a damage number
+every time its health moves. It is how a player finds out what an attack spell
+is actually worth — before this, the hub dummy took the hit in silence.
+
+The tag is separate from `Damageable` on purpose: `Damageable` means "can be
+hurt", which is every NPC in the game, and none of those want a bar over their
+head. `TrainingDummy` means "is here to be hit and should say what happened".
+The hub's `Workspace.Lobby.TargetDummy` is the only rig carrying it.
+
+**No remote in the read path.** `Humanoid.Health` already replicates, so the
+delta between two replicated values *is* the damage — the same number
+`applyDamage` computed, without a second wire to keep in step. The consequence
+is that two hits landing inside one replication batch arrive as a single change
+and read as one combined number; for a practice target that is the honest
+total, and a damage-over-time spell still shows its individual ticks.
+
+Damage is a **fraction of the target's max HP** (`fractionOfMaxHP` — Firebolt
+5%, Fireball 20%, Inferno 50%), so the number on the dummy is only meaningful
+against its max. The dummy has no `maxHealth` attribute, which lands it on
+`DEFAULT_MAX_HEALTH` — the same 100 a player gets — so what you read off the
+dummy is exactly what a player would take.
+
+**Death is not special-cased.** The dummy explodes through the normal
+`DeathHandler` path and respawns as a fresh clone, which arrives through the
+same tag signal as the original and gets a new readout. Its `respawnTime`
+attribute is authored at **1s** rather than the `NPC_RESPAWN_TIME` default of
+5, so the new dummy stands up while the old one's debris is still in the air
+(fragments live `FRAGMENT_LIFETIME` = 3s).
 
 ## Respawn (2026-09-08)
 
