@@ -61,6 +61,14 @@ local function readNumber(portal: BasePart, name: string): number
 	return type(value) == "number" and value or 0
 end
 
+-- A portal standing under an arch has to hang its sign above the arch,
+-- not at the default height, which is inside the doorway. The clearance
+-- is a property of the authored geometry, so the geometry carries it.
+local function signHeightOf(portal: BasePart): number
+	local override = portal:GetAttribute(ATTR.SignHeight)
+	return type(override) == "number" and override or Lobby.SIGN_HEIGHT_STUDS
+end
+
 local function labelOf(portal: BasePart): string
 	local label = portal:GetAttribute(ATTR.ModeLabel)
 	return type(label) == "string" and label or portal.Name
@@ -101,7 +109,7 @@ local function addSign(portal: BasePart)
 		return
 	end
 
-	local sign = PortalPanelBuilder.buildSign(portal, Lobby.SIGN_HEIGHT_STUDS)
+	local sign = PortalPanelBuilder.buildSign(portal, signHeightOf(portal))
 	sign.gui.Parent = portal
 
 	local connections = {}

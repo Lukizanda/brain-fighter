@@ -35,6 +35,11 @@ Lobby.Attributes = {
 	Occupancy = "Occupancy",
 	Capacity = "Capacity",
 	Waiting = "Waiting",
+	-- Optional per-portal override for the floating sign's height, in
+	-- studs above the pad centre. Authored on portals whose geometry is
+	-- taller than the default clears -- the lobby arches, whose lintels
+	-- the sign would otherwise hang inside.
+	SignHeight = "SignHeight",
 }
 
 -- How close the player must be for the confirm panel to appear. The pad
@@ -60,7 +65,9 @@ Lobby.REQUEST_COOLDOWN_SEC = 1
 -- players long, and it is the same cadence the round loop ticks at.
 Lobby.QUEUE_FLUSH_SEC = 1
 
--- Studs above the pad centre for the floating sign.
+-- Studs above the pad centre for the floating sign, when the portal does
+-- not carry a `SignHeight` of its own. Tuned for a bare pad ringed by
+-- waist-to-shoulder geometry, which is what the return pads are.
 Lobby.SIGN_HEIGHT_STUDS = 16
 
 export type Action = "join" | "cancel"

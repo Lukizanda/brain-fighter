@@ -1,7 +1,7 @@
 ---
 type: system
 description: The hub and the portals — LobbyService owns who may use a portal, the per-portal queue that fills sessions (one session by TargetArenaId, or every session running a TargetMode), and the Occupancy/Capacity/Waiting counts the signs read; PortalGui draws the signs and the confirm panel client-side and decides nothing. Player state (InLobby/Queued/InArena) is published by SessionRegistry; HUD suppression is HudGate. Written 2026-09-20 as Phase 6 stage 7.
-updated: 2026-09-20
+updated: 2026-09-22
 ---
 
 # Lobby System
@@ -130,7 +130,14 @@ a portal with no numbers reads as broken when nobody else is on.
 ## The client: PortalGui
 
 - **Signs.** One `BillboardGui` per portal, `Lobby.SIGN_HEIGHT_STUDS` above
-  the pad, refreshed from `GetAttributeChangedSignal` on the four attributes.
+  the pad unless the pad carries a `SignHeight` of its own, refreshed from
+  `GetAttributeChangedSignal` on the four attributes.
+  The default is tuned for a bare pad; the two lobby arches are 27 studs
+  tall, so at 16 studs the sign hung inside the lintel. They carry
+  `SignHeight = 38`, measured from a client at eye height rather than from
+  the arch's extents — a billboard is a camera-facing plane at the pad's own
+  depth, so the near top edge of the lintel occludes it from well above the
+  arch as you walk in.
   Portals are discovered by tag at start, by `GetInstanceAddedSignal`, and by
   a second scan after connecting — tags replicate asynchronously and
   `addSign` is idempotent, so the belt-and-braces scan is free.
@@ -192,11 +199,12 @@ after a place-file revert is the first thing to check.
 | `PORTAL_TAG` | `"ModePortal"` | The portal pad tag |
 | `Attributes.TargetArenaId` / `TargetMode` / `ModeLabel` | — | Destination and label, authored |
 | `Attributes.Occupancy` / `Capacity` / `Waiting` | — | Published by the server |
+| `Attributes.SignHeight` | — | Optional per-portal sign height, authored |
 | `PANEL_RANGE_STUDS` | 22 | Client offers the panel |
 | `SERVER_RANGE_STUDS` | 34 | Server honours a request |
 | `REQUEST_COOLDOWN_SEC` | 1 | Per-player accepted-request spacing |
 | `QUEUE_FLUSH_SEC` | 1 | Heartbeat cadence |
-| `SIGN_HEIGHT_STUDS` | 16 | Billboard height |
+| `SIGN_HEIGHT_STUDS` | 16 | Billboard height, when the pad has no `SignHeight` |
 | `Action` | `"join" \| "cancel"` | The two remote actions |
 
 ## Files
