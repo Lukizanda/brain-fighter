@@ -118,15 +118,17 @@ Two builders in `src/shared/Hud/` do not produce HUD at all — they build
 | Builder | Draws | Carries a HudGate policy? |
 |---|---|---|
 | `PortalPanelBuilder.buildSign` | The floating sign over a portal pad | No |
-| `TrainingDummyBuilder` | The health bar and damage numbers over a `TrainingDummy` rig | No |
+| `NameplateBuilder` | The name, health bar and damage numbers over a combatant — another player, or a `TrainingDummy` rig | No |
 
 They sit here because they are the same Builder + Config split as everything
 else in the folder, but they skip `HudLayoutManager` and `HudGate` entirely:
 world-space GUI is culled by `MaxDistance` like any other part of the scene,
 and there is no screen region to place it in or zone policy to gate it by.
-`TrainingDummyBuilder` is deliberately **not** under `Vfx/` — it is a readout,
-so it must survive the reduced-effects setting, and the numbers on it are the
-whole point. See [[systems/Health]] § Training dummies.
+`NameplateBuilder` is deliberately **not** under `Vfx/` — it is a readout, so
+it must survive the reduced-effects setting, and the numbers on it are the
+whole point. Neither builder tracks the camera: a `BillboardGui` sized in
+`Offset` already holds a fixed pixel size at any distance. See
+[[systems/Health]] § Nameplates.
 
 ## Single-ownership invariants (Phase 4.8 audit)
 

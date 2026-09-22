@@ -50,8 +50,8 @@ Whether player A may damage player B is a property of **the mode B is playing un
 - `src/server/Health/Scripts/HealthService/init.server.luau` — spawn-init health, round-start heal, wires `applyDamage` and injects it into `SkillEffects`
 - `src/server/Health/Scripts/HealthService/applyDamage.luau` — `process(...)` and `heal(...)`, the only `Health` writers
 - `src/server/Health/Scripts/DeathHandler.server.luau` — Damageable death cleanup + respawn
-- `src/shared/Hud/TrainingDummyBuilder.luau` / `TrainingDummyConfig.luau` — the world-space health readout over a training dummy
-- `src/client/UI/TrainingDummyGui.client.luau` — finds the tagged rigs, binds `Humanoid.Health`, pops the damage numbers
+- `src/shared/Hud/NameplateBuilder.luau` / `NameplateConfig.luau` — the over-head plate: name, health bar, damage numbers
+- `src/client/UI/NameplateGui.client.luau` — finds the combatants, binds `Humanoid.Health`, pops the damage numbers
 - `src/server/Arena/DeathZoneService.server.luau` — lethal fall volumes, through `applyDamage` with `cause = death_zone`
 - `src/StarterCharacterScripts/Health.client.luau` — no-op override of Roblox's built-in client health-regen script (see below)
 
@@ -72,17 +72,29 @@ Whether player A may damage player B is a property of **the mode B is playing un
 3. Roblox fires `Humanoid.Died`; the Skills registries purge their per-Humanoid state.
 4. `GameModeService` handles the actual player respawn — see § Respawn.
 
-## Training dummies (2026-09-22)
+## Nameplates (2026-09-22)
 
-A rig tagged **`TrainingDummy`** (`HealthConstants.TRAINING_DUMMY_TAG`) carries a
-world-space health bar with a `current / max` line, and pops a damage number
-every time its health moves. It is how a player finds out what an attack spell
-is actually worth — before this, the hub dummy took the hit in silence.
+Every combatant the local player can look at carries a **nameplate** — a name
+line, a health bar with a `current / max` readout, and a damage number that
+pops every time the health moves. Two kinds of combatant get one:
 
-The tag is separate from `Damageable` on purpose: `Damageable` means "can be
-hurt", which is every NPC in the game, and none of those want a bar over their
-head. `TrainingDummy` means "is here to be hit and should say what happened".
-The hub's `Workspace.Lobby.TargetDummy` is the only rig carrying it.
+| Combatant | Found by | Name shown |
+|---|---|---|
+| Another player | `Players` + `CharacterAdded` | `player.Name` |
+| A training dummy | the `TrainingDummy` tag (`HealthConstants.TRAINING_DUMMY_TAG`) | the `NameplateLabel` attribute, else the model name |
+
+The local player gets none — they have the HUD health bar.
+
+**The dummy and a real opponent share one builder on purpose.** The hub dummy
+is the only safe place to learn what an attack spell is worth, so it has to
+teach the display a real opponent will show; a dummy with its own bespoke
+readout would be teaching the wrong lesson. That shared path is the feature,
+not a convenience — if the two ever diverge, the tutorial is lying.
+
+`TrainingDummy` stays separate from `Damageable` because `Damageable` means
+"can be hurt", which is every NPC in the game, and none of those want a bar
+over their head. The hub's `Workspace.Lobby.TargetDummy` is the only rig
+carrying it.
 
 **No remote in the read path.** `Humanoid.Health` already replicates, so the
 delta between two replicated values *is* the damage — the same number
@@ -92,17 +104,33 @@ and read as one combined number; for a practice target that is the honest
 total, and a damage-over-time spell still shows its individual ticks.
 
 Damage is a **fraction of the target's max HP** (`fractionOfMaxHP` — Firebolt
-5%, Fireball 20%, Inferno 50%), so the number on the dummy is only meaningful
-against its max. The dummy has no `maxHealth` attribute, which lands it on
+5%, Fireball 20%, Inferno 50%), so the number is only meaningful against the
+target's max. The dummy has no `maxHealth` attribute, which lands it on
 `DEFAULT_MAX_HEALTH` — the same 100 a player gets — so what you read off the
 dummy is exactly what a player would take.
 
-**Death is not special-cased.** The dummy explodes through the normal
+**The plate does not scale with distance, and needs no code to avoid it.** A
+`BillboardGui` sized in `Offset` renders at that pixel size whatever the
+distance; measured, not assumed — the same 220 px plate spans the same width at
+20 studs and at 70 while the rig under it shrinks away. A draft that rescaled
+the plate per frame to "cancel" a falloff that does not exist was removed; it
+only made the plate grow as you backed away. `AbsoluteSize` is no help here:
+inside a BillboardGui it reports the billboard's own canvas, not screen pixels.
+
+**Death is not special-cased.** A dummy explodes through the normal
 `DeathHandler` path and respawns as a fresh clone, which arrives through the
-same tag signal as the original and gets a new readout. Its `respawnTime`
+same tag signal as the original and gets a new plate. Its `respawnTime`
 attribute is authored at **1s** rather than the `NPC_RESPAWN_TIME` default of
 5, so the new dummy stands up while the old one's debris is still in the air
 (fragments live `FRAGMENT_LIFETIME` = 3s).
+
+### Replaces NametagService
+
+`NametagService` (server, name only) is gone. One head cannot have two owners
+— the Single Ownership rule — and the health half has to be client-side
+anyway, since it is computed from replicated `Humanoid.Health`. Names are now
+drawn client-side with the rest of the plate. `PlayerToHideFrom` became "skip
+the local player", which the coordinator does directly.
 
 ## Respawn (2026-09-08)
 

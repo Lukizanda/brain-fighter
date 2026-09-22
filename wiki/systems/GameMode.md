@@ -1,7 +1,7 @@
 ---
 type: system
 description: Game mode framework — SessionRegistry (the session tables, as a module) over per-session RoundManager instances that each own a ScoreTracker; per-arena SpawnManager scored against the session roster; mode config carries allowsPvP / timeLimit / countdownSec instead of global flags; BroadcastAudience scopes the remaining screen-space remotes. Registered modes are PvEBoss (default), PvPDuel, NoOp and Lobby. Rewritten 2026-09-09 (refactor chunk 8, the Phase 6 stage-7 rewrite).
-updated: 2026-09-20
+updated: 2026-09-22
 ---
 
 # GameMode System
@@ -167,7 +167,6 @@ src/server/GameMode/
     RoundManager.luau               — per-session state machine + roster + its ScoreTracker
     ScoreTracker.luau               — per-session scores; module-level leaderstats mirror + assist history
     SpawnManager.luau               — pad pick per arena, scored against a roster
-  Scripts/NametagService.server.luau — neutral-coloured nametags above heads
 src/shared/Tests/Suites/Multiplayer/
   sessions_isolate_scores · transfer_moves_roster_and_attributes · registry_views_agree · multiplayer_invariants
   pve_round_ends_on_boss_defeated · pve_round_ends_on_empty_roster · pve_intermission_returns_roster_to_lobby (stage 5)

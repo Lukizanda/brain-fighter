@@ -1,28 +1,41 @@
 ----------------------------------------------------------------------
--- TrainingDummyConfig
+-- NameplateConfig
 ----------------------------------------------------------------------
--- Tunable constants for the world-space health readout over a training
--- dummy, and for the damage numbers that pop off it.
+-- Tunable constants for the plate over a combatant's head: the name
+-- line, the health bar under it, and the damage numbers that pop off it.
 --
--- Pixel values here are billboard-local, not HUD pixels: a BillboardGui
--- sized in offset is 50 px to the stud, so BAR_SIZE is ~7 x 1 studs.
--- They are not scaled by the HUD's UIScale — this is scene furniture,
--- not HUD, and it should read the same whatever the viewport is.
+-- Pixel values here are real screen pixels. A BillboardGui sized in
+-- Offset renders at that pixel size whatever the distance — measured, not
+-- assumed: the same 220 px plate spans the same width at 20 studs and at
+-- 70, while the rig under it shrinks away. So the plate is pinned above
+-- the head in the world and fixed in size on the display, with nothing
+-- per-frame needed to keep it that way.
 ----------------------------------------------------------------------
 
-local TrainingDummyConfig = {
+local NameplateConfig = {
 	----------------------------------------------------------------------
-	-- The readout
+	-- The plate
 	----------------------------------------------------------------------
 	-- Studs above the anchor part. The anchor is the rig's Head, so this
 	-- is clearance over a head, not over the whole rig.
-	HEIGHT_STUDS        = 2.2,
-	-- 4.4 x 0.7 studs. Sized against the rig rather than for legibility
-	-- alone: a bar much wider than the dummy's shoulders stops reading as
-	-- part of it and starts reading as scenery.
-	BAR_SIZE            = UDim2.fromOffset(220, 34),
-	CORNER_RADIUS       = UDim.new(0, 8),
+	HEIGHT_STUDS        = 2.6,
+	-- Name row stacked over the bar, both this wide.
+	PLATE_SIZE          = UDim2.fromOffset(220, 56),
+	NAME_ROW_HEIGHT     = 22,
+	BAR_ROW_HEIGHT      = 34,
 
+	----------------------------------------------------------------------
+	-- Name row
+	----------------------------------------------------------------------
+	NAME_FONT           = Enum.Font.GothamBold,
+	NAME_COLOR          = Color3.fromRGB(230, 232, 238),
+	NAME_STROKE_COLOR   = Color3.fromRGB(0, 0, 0),
+	NAME_STROKE_TRANSPARENCY = 0.2,
+
+	----------------------------------------------------------------------
+	-- Health bar
+	----------------------------------------------------------------------
+	CORNER_RADIUS       = UDim.new(0, 6),
 	TRACK_COLOR         = Color3.fromRGB(22, 22, 26),
 	TRACK_TRANSPARENCY  = 0.15,
 	BORDER_COLOR        = Color3.fromRGB(255, 255, 255),
@@ -30,7 +43,7 @@ local TrainingDummyConfig = {
 	BORDER_TRANSPARENCY = 0.65,
 
 	-- The same three colours the player's own health bar uses, so a
-	-- fraction reads the same on the dummy as it does on your HUD.
+	-- fraction reads the same on an opponent as it does on your HUD.
 	FILL_COLOR          = Color3.fromRGB(80, 200, 80),
 	FILL_WARNING_COLOR  = Color3.fromRGB(220, 180, 40),
 	FILL_CRITICAL_COLOR = Color3.fromRGB(210, 60, 60),
@@ -42,18 +55,19 @@ local TrainingDummyConfig = {
 	TEXT_COLOR          = Color3.fromRGB(255, 255, 255),
 	TEXT_STROKE_TRANSPARENCY = 0.4,
 	-- Inset so the glyphs do not touch the rounded ends of the track.
-	TEXT_INSET          = UDim.new(0, 10),
+	TEXT_INSET          = UDim.new(0, 8),
 	TEXT_FORMAT         = "%d / %d",
 
-	-- Far enough to read from the portals across the hub, near enough
-	-- that it is not drawn for a player in another arena.
-	MAX_DISTANCE        = 160,
+	-- Hide behind walls: combat reads need line of sight, the same call
+	-- the old nametag made.
+	ALWAYS_ON_TOP       = false,
+	MAX_DISTANCE        = 200,
 
 	----------------------------------------------------------------------
 	-- Damage numbers
 	----------------------------------------------------------------------
 	-- One short-lived billboard per hit, rising and fading. Anchored to
-	-- the same part as the readout and started just above it, so a number
+	-- the same part as the plate and started just above it, so a number
 	-- never launches from inside the bar.
 	DAMAGE_SIZE         = UDim2.fromOffset(220, 70),
 	DAMAGE_FONT         = Enum.Font.GothamBold,
@@ -74,11 +88,10 @@ local TrainingDummyConfig = {
 	----------------------------------------------------------------------
 	-- Healing
 	----------------------------------------------------------------------
-	-- A dummy is healed only by a respawn or a heal spell, so the green
-	-- number is rare. It exists so a heal landing on the dummy is not
-	-- silent when every other change to the bar is annotated.
+	-- Rare on an opponent and rare on the dummy, but it exists so a heal
+	-- is not silent when every other change to the bar is annotated.
 	HEAL_COLOR          = Color3.fromRGB(96, 226, 118),
 	HEAL_FORMAT         = "+%d",
 }
 
-return TrainingDummyConfig
+return NameplateConfig
