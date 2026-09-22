@@ -66,7 +66,7 @@ function NameplateBuilder.build(anchor: BasePart): Nameplate
 	billboard.MaxDistance = NameplateConfig.MAX_DISTANCE
 	billboard.LightInfluence = 0
 
-	-- Rows are sized as fractions of the plate, so the two row heights in
+	-- Rows are sized as fractions of the plate, so the two row weights in
 	-- the config are the only place the split is stated.
 	local nameLabel = Instance.new("TextLabel")
 	nameLabel.Name = "PlayerName"

@@ -29,9 +29,9 @@
 -- The local player gets no plate — they have the HUD health bar, and the
 -- old nametag hid itself from its owner for the same reason.
 --
--- Nothing here runs per frame. A BillboardGui sized in Offset already
--- holds a fixed pixel size at any distance, so the plate stays put above
--- the head without the camera being tracked at all.
+-- Nothing here runs per frame. The plate is sized in studs, so the engine
+-- shrinks it with its rig and it stays proportionate at any range without
+-- the camera being tracked at all — see `NameplateConfig`.
 ----------------------------------------------------------------------
 
 local CollectionService = game:GetService("CollectionService")
