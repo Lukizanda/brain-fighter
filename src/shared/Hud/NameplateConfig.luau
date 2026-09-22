@@ -29,18 +29,23 @@ local NameplateConfig = {
 	-- Studs above the anchor part. The anchor is the rig's Head, so this
 	-- is clearance over a head, not over the whole rig.
 	HEIGHT_STUDS        = 2.6,
-	-- Studs. Name row stacked over the bar, both this wide.
-	PLATE_SIZE          = UDim2.new(5.2, 0, 1.2, 0),
-	-- Relative weights, not pixels: the two rows split the plate's height
-	-- in this ratio whatever the plate currently renders at.
+	PLATE_WIDTH_STUDS   = 5.2,
+
+	-- The plate's height is these three stacked, in studs, and the builder
+	-- adds them up — so each is independent. Change the font size without
+	-- touching the bar, or open up the gap without either moving.
 	--
-	-- To make the bar thicker, these are the two knobs and they do
-	-- different things. Raising BAR_ROW_WEIGHT alone thickens the bar by
-	-- taking height from the name; raising PLATE_SIZE's height alone
-	-- thickens both together. Moving both, as here, thickens the bar and
-	-- leaves the name where it was.
-	NAME_ROW_WEIGHT     = 62,
-	BAR_ROW_WEIGHT      = 50,
+	--   NAME_HEIGHT_STUDS   name row  <- this is the font size
+	--   ROW_GAP_STUDS       breathing space
+	--   BAR_HEIGHT_STUDS    the bar
+	--
+	-- The name label is `TextScaled`, so its glyphs grow to fill the row:
+	-- the row height *is* the font size. A long name is the exception — it
+	-- runs out of width first and shrinks to fit — so this is really the
+	-- largest the name will be drawn, not a guarantee.
+	NAME_HEIGHT_STUDS   = 0.66,
+	ROW_GAP_STUDS       = 0.10,
+	BAR_HEIGHT_STUDS    = 0.54,
 
 	----------------------------------------------------------------------
 	-- Name row

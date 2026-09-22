@@ -44,9 +44,19 @@ export type Nameplate = {
 
 local NameplateBuilder = {}
 
-local ROW_TOTAL = NameplateConfig.NAME_ROW_WEIGHT + NameplateConfig.BAR_ROW_WEIGHT
-local NAME_FRACTION = NameplateConfig.NAME_ROW_WEIGHT / ROW_TOTAL
-local BAR_FRACTION = NameplateConfig.BAR_ROW_WEIGHT / ROW_TOTAL
+-- The plate is exactly as tall as the three stacked pieces, so each of
+-- them is a real measurement rather than a share of a fixed total. The
+-- fractions below convert them into the Scale units the layout needs.
+local PLATE_HEIGHT_STUDS = NameplateConfig.NAME_HEIGHT_STUDS
+	+ NameplateConfig.ROW_GAP_STUDS
+	+ NameplateConfig.BAR_HEIGHT_STUDS
+
+local PLATE_SIZE = UDim2.new(NameplateConfig.PLATE_WIDTH_STUDS, 0, PLATE_HEIGHT_STUDS, 0)
+local NAME_FRACTION = NameplateConfig.NAME_HEIGHT_STUDS / PLATE_HEIGHT_STUDS
+local BAR_FRACTION = NameplateConfig.BAR_HEIGHT_STUDS / PLATE_HEIGHT_STUDS
+-- Where the bar starts: past the name and the gap.
+local BAR_OFFSET_FRACTION =
+	(NameplateConfig.NAME_HEIGHT_STUDS + NameplateConfig.ROW_GAP_STUDS) / PLATE_HEIGHT_STUDS
 
 local function fillColorFor(fraction: number): Color3
 	if fraction <= NameplateConfig.LOW_THRESHOLD then
@@ -61,14 +71,14 @@ function NameplateBuilder.build(anchor: BasePart): Nameplate
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "Nameplate"
 	billboard.Adornee = anchor
-	billboard.Size = NameplateConfig.PLATE_SIZE
+	billboard.Size = PLATE_SIZE
 	billboard.StudsOffsetWorldSpace = Vector3.new(0, NameplateConfig.HEIGHT_STUDS, 0)
 	billboard.AlwaysOnTop = NameplateConfig.ALWAYS_ON_TOP
 	billboard.MaxDistance = NameplateConfig.MAX_DISTANCE
 	billboard.LightInfluence = 0
 
-	-- Rows are sized as fractions of the plate, so the two row weights in
-	-- the config are the only place the split is stated.
+	-- Rows are sized as fractions of the plate, so the studs in the config
+	-- are the only place the layout is stated.
 	local nameLabel = Instance.new("TextLabel")
 	nameLabel.Name = "PlayerName"
 	nameLabel.Size = UDim2.fromScale(1, NAME_FRACTION)
@@ -85,7 +95,7 @@ function NameplateBuilder.build(anchor: BasePart): Nameplate
 	local track = Instance.new("Frame")
 	track.Name = "Track"
 	track.Size = UDim2.fromScale(1, BAR_FRACTION)
-	track.Position = UDim2.fromScale(0, NAME_FRACTION)
+	track.Position = UDim2.fromScale(0, BAR_OFFSET_FRACTION)
 	track.BackgroundColor3 = NameplateConfig.TRACK_COLOR
 	track.BackgroundTransparency = NameplateConfig.TRACK_TRANSPARENCY
 	track.BorderSizePixel = 0
