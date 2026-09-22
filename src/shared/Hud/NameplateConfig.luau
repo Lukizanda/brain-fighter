@@ -30,12 +30,17 @@ local NameplateConfig = {
 	-- is clearance over a head, not over the whole rig.
 	HEIGHT_STUDS        = 2.6,
 	-- Studs. Name row stacked over the bar, both this wide.
-	PLATE_SIZE          = UDim2.new(5.2, 0, 1.0, 0),
+	PLATE_SIZE          = UDim2.new(5.2, 0, 1.2, 0),
 	-- Relative weights, not pixels: the two rows split the plate's height
-	-- in this ratio whatever the plate currently renders at. The bar is the
-	-- slimmer row now that it holds no text.
+	-- in this ratio whatever the plate currently renders at.
+	--
+	-- To make the bar thicker, these are the two knobs and they do
+	-- different things. Raising BAR_ROW_WEIGHT alone thickens the bar by
+	-- taking height from the name; raising PLATE_SIZE's height alone
+	-- thickens both together. Moving both, as here, thickens the bar and
+	-- leaves the name where it was.
 	NAME_ROW_WEIGHT     = 62,
-	BAR_ROW_WEIGHT      = 38,
+	BAR_ROW_WEIGHT      = 50,
 
 	----------------------------------------------------------------------
 	-- Name row
