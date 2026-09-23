@@ -1,7 +1,7 @@
 ---
 title: Audio SFX
 description: Sound effect inventory, wiring patterns, placeholder locations, and gap list for Brain Fighter
-updated: 2026-09-20
+updated: 2026-09-23
 ---
 
 # Audio SFX
@@ -119,7 +119,7 @@ double-cueing a single death:
 |---|---|---|
 | Splash shot (`impactRadius > 0`, e.g. Fireball) | none | `spawnShockwave` already fires on *every* detonation cause, server-side |
 | Single-target direct rig hit **with** `impactEffectId` | none | the server's impact burst already covers it |
-| Single-target direct rig hit **without** `impactEffectId` (player Volley) | `projectile_destroy` | previously silent |
+| Single-target direct rig hit **without** `impactEffectId` (player Volley — parked since 2026-09-23, so no live spell takes this branch today) | `projectile_destroy` | previously silent |
 | Stopped on world geometry | `projectile_destroy` | previously silent — **the cover case** |
 | Expired mid-air | `projectile_destroy` | previously silent |
 | Died on a shield shell | `shield_block` | unchanged; already had its own cue |

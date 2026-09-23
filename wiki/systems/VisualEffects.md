@@ -2,7 +2,7 @@
 type: system
 description: Visual effects — particle effects for spell casts/impacts (the caster's client predicts the cast cue off SpellResolved; the authoritative run broadcasts cast + impact cues over the one VfxBroadcast → WorldVfxEvent lane), projectile bodies and trails, persistent status visuals (shield / freeze / burn / charge orb) bound by one shared CharacterAttributeWatcher, boss windup telegraphs, UI feedback animations, and per-color theming. Core, PERF guardrails and the block-pop collect stream are all shipped.
 status: implemented
-updated: 2026-09-20
+updated: 2026-09-23
 ---
 
 # Visual Effects
@@ -91,7 +91,7 @@ Fire projectiles were the last thing in the red school still speaking the pre-fl
 |---|---|---|
 | `projectile_red_t1` (Firebolt) | bolt, 3.4× | short sheath; flame gone ~a body-length behind it |
 | `projectile_red_t2` (Fireball) | orb | three layers, flame *grows* after birth, smoke tail, the only body with a light |
-| `projectile_red_t4` (Volley) | bolt, 3.0× | wider than T1 so three at 12° spread stay three shots |
+| `projectile_red_t4` (Volley) | bolt, 3.0× | wider than T1 so three at 12° spread stay three shots — **unreachable since T4 was parked** (2026-09-23); kept, like the spec it dresses |
 | `projectile_boss_bolt` (Brain) | bolt, 2.8× | first in-flight trail the boss has ever had |
 | `projectile_boss_arcane_bolt` (Wizard) | bolt, 3.2× | violet, ember-only — the shot *freezes*, so no flame layer |
 

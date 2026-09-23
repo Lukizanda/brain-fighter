@@ -14,6 +14,10 @@
 -- Tier costs pinned to SpellRegistry.TIER_COSTS = { 5, 10, 20, 40 }
 -- (wiki/design/gameplay-loop.md § "Spell tier thresholds"). If those
 -- numbers move, the threshold-edge cases below need to move with them.
+--
+-- T4 is parked (SpellRegistry.MAX_ENABLED_TIER = 3), so the 40-mana rung
+-- buys nothing: the cases below assert that a reservoir above T3's cost
+-- adds no spell, which is what un-parking has to flip back.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -112,17 +116,25 @@ local cases: { { any } } = {
 		end,
 	},
 	{
-		"listAffordable red 40 -> 4 entries (Volley unlocks)",
+		"listAffordable red 40 -> 3 entries (T4 parked, Volley stays out)",
 		function()
 			local r = SpellRegistry.listAffordableSpells("red", 40)
-			expectLen(r, 4, "red@40 length")
-			expectEq(r[4].name, "Volley", "red@40[4].name")
+			expectLen(r, 3, "red@40 length")
+			expectEq(r[3].name, "Inferno", "red@40[3].name")
 		end,
 	},
 	{
-		"listAffordable red 160 -> 4 entries (cap doesn't add more)",
+		"listAffordable red 160 -> 3 entries (cap doesn't add more)",
 		function()
-			expectLen(SpellRegistry.listAffordableSpells("red", 160), 4, "red@160 length")
+			expectLen(SpellRegistry.listAffordableSpells("red", 160), 3, "red@160 length")
+		end,
+	},
+	{
+		"tierCount is 3 for every school while T4 is parked",
+		function()
+			for _, color in { "red", "green", "blue" } do
+				expectEq(SpellRegistry.tierCount(color :: any), 3, color .. ".tierCount")
+			end
 		end,
 	},
 	{
@@ -135,7 +147,15 @@ local cases: { { any } } = {
 		end,
 	},
 	{
-		"getSpell red 5 errors (only 4 tiers exist)",
+		"getSpell red 4 errors (T4 parked)",
+		function()
+			expectThrows(function()
+				SpellRegistry.getSpell("red", 4)
+			end, "tier 4")
+		end,
+	},
+	{
+		"getSpell red 5 errors (above the ladder)",
 		function()
 			expectThrows(function()
 				SpellRegistry.getSpell("red", 5)

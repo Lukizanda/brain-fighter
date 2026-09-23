@@ -13,8 +13,8 @@
 -- affordable tier matches the expected pick. If the cost table
 -- changes, the thresholds and expected spells need to move too.
 --
--- Projectile vs instant: Firebolt (T1) / Fireball (T2) / Volley (T4)
--- are projectile delivery. The dummy in these tests sits parented to
+-- Projectile vs instant: Firebolt (T1) and Fireball (T2) are projectile
+-- delivery. The dummy in these tests sits parented to
 -- `script` (not workspace), so a launched projectile never finds a
 -- collidable target — the cast still returns ok=true (delivery
 -- accepted), but no health change is observable. Instant-delivery
@@ -180,6 +180,11 @@ function M.run()
 		return SpellRegistry.chargeTimeFor(tier)
 	end
 
+	-- A hold nobody can out-wait: well past the top of the live ladder.
+	-- Derived from NUM_TIERS rather than from a parked tier, so parking or
+	-- un-parking one (SpellRegistry.MAX_ENABLED_TIER) doesn't reach in here.
+	local LONG_HOLD_SEC = chargeTime(SpellRegistry.NUM_TIERS) * 10
+
 	-- Half the gap between two tiers' charge times. Used to sit a hold
 	-- unambiguously *between* thresholds.
 	local function midway(lowTier: number, highTier: number): number
@@ -216,7 +221,7 @@ function M.run()
 	do
 		local r = EnergyReservoirs.new()
 		r:add("red", 12)
-		local spec = CastAction.resolveSpecAtCharge("red", r, chargeTime(4) * 10)
+		local spec = CastAction.resolveSpecAtCharge("red", r, LONG_HOLD_SEC)
 		assert(spec ~= nil, "charge red=12 long hold: should resolve")
 		local s = spec :: { name: string, tier: number }
 		assert(s.tier == 2, `charge red=12 long hold: tier should clamp at 2, got {s.tier}`)
@@ -249,14 +254,14 @@ function M.run()
 		r:destroy()
 	end
 
-	-- 9. Green and blue have no T4. Holding past red's T4 charge time with
-	-- a full reservoir must still land on T3, because the roster ceiling
-	-- binds before the clock does.
+	-- 9. No school reaches past T3 — green and blue never defined a T4 and
+	-- red's is parked. An indefinite hold on a full reservoir must still
+	-- land on T3, because the roster ceiling binds before the clock does.
 	do
-		for _, color in { "green", "blue" } do
+		for _, color in { "red", "green", "blue" } do
 			local r = EnergyReservoirs.new()
 			r:add(color :: any, 60)
-			local spec = CastAction.resolveSpecAtCharge(color :: any, r, chargeTime(4) * 2)
+			local spec = CastAction.resolveSpecAtCharge(color :: any, r, LONG_HOLD_SEC)
 			assert(spec ~= nil, `charge {color}=60 long hold: should resolve`)
 			local s = spec :: { name: string, tier: number }
 			assert(s.tier == 3, `charge {color}=60 long hold: tier should be 3 (no T4), got {s.tier}`)

@@ -9,7 +9,7 @@
 --
 --   1. Look the spell up — whether an enemy lock is needed depends on
 --      the spell, not the colour (blue Shield is a self-buff).
---   2. Resolve the target, at release rather than at press: a 1.75 s T4
+--   2. Resolve the target, at release rather than at press: a 3 s T3
 --      charge is long enough for the world to move.
 --   3. CastAction.castSpecific — validates, drains the client reservoir,
 --      runs the predicted executor pass and fires `SpellResolved`.

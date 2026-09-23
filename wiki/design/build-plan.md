@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-09-22
+updated: 2026-09-23
 ---
 
 # Build Plan
@@ -26,7 +26,7 @@ Pure Luau modules. Zero Roblox-instance dependencies. All five built in parallel
 |---|---|---|
 | **Dictionary** | `isWord(s)`, `getStats()` | Hashtable lookup. 26 per-letter sub-modules from SCOWL 60 (~79.5k words); background-preloaded at game start. |
 | **EnergyEconomy** | `letterValue(c)`, `lengthMultiplier(len)`, `computeWordEnergy(word)`, `splitByColor(tiles)` | Scrabble values × length tiers. Sanity-checked against the worked examples in `gameplay-loop.md`. |
-| **SpellRegistry** | `getSpell(color, tier)`, `listAffordableSpells(color, energy)` | Config for 10 spells (R/G/B × T1–T3 + red T4 Volley) — cost, targetingMode, `skill:SkillSpec`. |
+| **SpellRegistry** | `getSpell(color, tier)`, `listAffordableSpells(color, energy)` | Config for 9 spells (R/G/B × T1–T3) — cost, targetingMode, `skill:SkillSpec`. Red's T4 Volley shipped here and was **parked 2026-09-23**; see [[systems/SpellRegistry]] § "T4 is parked". |
 | **WordBuffer** | `new(cap)`, `:append(letter,color)`, `:remove(idx)`, `:reorder(from,to)`, `:clear()`, `:asWord()`, `:colorBag()`, `:isFull()`, `.changed` | 12-slot state + changed signal. |
 | **EnergyReservoirs** | `new()`, `:add(color,n)`, `:get(color)`, `:canAfford(color,n)`, `:drain(color,n)`, `.changed(color)` | 3-color state with per-color signal. Cap 60 per color. |
 

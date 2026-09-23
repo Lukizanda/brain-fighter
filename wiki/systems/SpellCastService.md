@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server relay for client-initiated spell casts. Applies effects server-side because client Humanoid.Health writes don't replicate for server-owned rigs. Hardened in 5.4; affordability is checked and, since 2026-09-08, enforced by the validated-memorize ledger.
-updated: 2026-09-22
+updated: 2026-09-23
 ---
 
 # SpellCastService
@@ -36,15 +36,15 @@ Hardened in Phase 5.4. Checks run cheapest-first; every failure drops the reques
 | 4 | `checkTarget(target, caster)` | Non-Model targets, targets outside the world, targets beyond `MAX_TARGET_DISTANCE_STUDS` |
 | 5 | Target liveness | Dropped **silently** — a target dying mid-flight is ordinary play, not an exploit |
 
-Check 2 closes a latent crash as well as an exploit. `SpellRegistry.getSpell` accepts any tier in 1–4, but only red defines a T4, so `green/4` returned `nil` and the old handler then errored indexing it — killing that invocation. `resolveSpec` nil-checks the lookup rather than trusting the tier range.
+Check 2 closes a latent crash as well as an exploit. `SpellRegistry.getSpell` accepted any tier in 1–4 while only red defined a T4, so `green/4` returned `nil` and the old handler then errored indexing it — killing that invocation. `resolveSpec` nil-checks the lookup rather than trusting the tier range. Since **T4 was parked on 2026-09-23** the registry's range is 1–3 and `red/4` *errors* rather than returning nil, so the same check now rejects it through the pcall branch as `unknown spell red/4` — verified live. Both branches still matter: the nil branch is what catches a school shorter than the ladder, which is a shape the roster is allowed to have again at any time.
 
 ### Not checked: hold duration (2026-08-12)
 
 [[systems/ChargeCast]] made the tier a function of how long the player held a colour panel. **The server does not and cannot verify that hold.** There is no server-side clock on the gesture; the `ChargeState` remote it does receive is a cosmetic broadcast (see below) that carries no timing guarantee, and adding one would mean timestamping a client-owned input across the wire.
 
-**Re-affirmed 2026-09-08 (audit Q4(a)):** charge-tier trust stays accepted, to be revisited once duels are playable — see [[design/lobby]] § PvP. This is stated rather than fixed because it is not a hole. Hold-to-charge changed **which** tier the client picks, not **whether** the server prices it: the cast relay is byte-identical to before, check 2 still resolves the spec, and the ledger still debits `spec.cost`. A client that claims to have charged instantly buys itself *speed*, not mana — it still pays 40 for a T4 Volley, and if it never earned that 40 the affordability check refuses it exactly as it would a tapped one.
+**Re-affirmed 2026-09-08 (audit Q4(a)):** charge-tier trust stays accepted, to be revisited once duels are playable — see [[design/lobby]] § PvP. This is stated rather than fixed because it is not a hole. Hold-to-charge changed **which** tier the client picks, not **whether** the server prices it: the cast relay is byte-identical to before, check 2 still resolves the spec, and the ledger still debits `spec.cost`. A client that claims to have charged instantly buys itself *speed*, not mana — it still pays 20 for a T3 Inferno, and if it never earned that 20 the affordability check refuses it exactly as it would a tapped one.
 
-What a lying client does gain is the ability to skip the windup — 7 s for a T4 at the current `MANA_FLOW_PER_SEC`, and the longer that gets the more there is to gain — which is a PvP *tell* rather than a cost — an opponent watching for the charge orb would not see it coming. Closing that needs the same thing everything else here needs: a server that owns the gesture, not just the outcome. Filed with the authoritative-economy work below rather than as its own item.
+What a lying client does gain is the ability to skip the windup — 3 s for a T3 at the current `MANA_FLOW_PER_SEC`, and the longer that gets the more there is to gain (it was 7 s until T4 was parked, so there is less on the table now than when this was written) — which is a PvP *tell* rather than a cost — an opponent watching for the charge orb would not see it coming. Closing that needs the same thing everything else here needs: a server that owns the gesture, not just the outcome. Filed with the authoritative-economy work below rather than as its own item.
 
 The `ChargeState` remote itself lives in `server/SpellCast/ChargeStateService.server.luau`, deliberately **not** in this handler. Different remote, different lifecycle, different posture: a cast changes health and mana and gets the five checks above; a charge state writes two character attributes and gets a well-formedness check plus its own rate budget. Folding a cosmetic broadcast into the handler that debits the energy ledger would put the two on one rate limit and one rejection path for no reason.
 
@@ -62,7 +62,7 @@ The `ChargeState` remote itself lives in `server/SpellCast/ChargeStateService.se
 
 Energy state lives entirely client-side. `EnergyReservoirs` is instantiated in exactly one place — `src/client/PlayerSession.luau` — and the server holds no reservoir, no word buffer, and no memorize history. Nothing in `src/server/` references [[systems/EnergyReservoirs]], [[systems/WordBuffer]], [[systems/EnergyEconomy]] or [[systems/MemorizeAction]]. There is no server-side number to compare a cast cost against.
 
-The rate limit is a flood guard standing in for the missing price check. Its floor is derived from what the economy physically permits — energy only enters a reservoir by memorizing a word, every letter in that word costs one popped block, and the input gates pops at `BlockTapConfig.COOLDOWN` — taking the most generous possible reading of one block per cast so it can never reject real play. It stops a remote loop dead; it does not stop a client casting T4 Volley with an empty red bar.
+The rate limit is a flood guard standing in for the missing price check. Its floor is derived from what the economy physically permits — energy only enters a reservoir by memorizing a word, every letter in that word costs one popped block, and the input gates pops at `BlockTapConfig.COOLDOWN` — taking the most generous possible reading of one block per cast so it can never reject real play. It stops a remote loop dead; it does not stop a client casting T3 Inferno with an empty red bar.
 
 Two ways forward were put up:
 

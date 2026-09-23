@@ -49,8 +49,8 @@ SpellCastConstants.REJECTION_LOG_THROTTLE_SEC = 10
 -- ChargeState flood guard (Phase 5.8, hold-to-charge).
 --
 -- Derived from the cast budget above rather than picked: one held cast
--- sends at most one `start`, one `tier` per crossing (four, red being the
--- only school with a T4) and one `end`. Six events per cast, and casts
+-- sends at most one `start`, one `tier` per crossing (three while T4 is
+-- parked) and one `end`. Six events per cast, and casts
 -- are already capped at CAST_REFILL_PER_SEC, so this is that ceiling
 -- times the per-cast event count and nothing more.
 --

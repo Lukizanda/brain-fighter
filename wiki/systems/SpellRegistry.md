@@ -1,7 +1,7 @@
 ---
 type: system
-description: Pure-Luau config layer for the spell roster (R/G/B × T1–T4) — name, color, tier, cost, targeting mode, skill:SkillSpec. Single source of truth consumed by SpellExecutor and the cast-menu HUD.
-updated: 2026-09-09
+description: Pure-Luau config layer for the spell roster (R/G/B × T1–T3; T4 parked 2026-09-23) — name, color, tier, cost, targeting mode, skill:SkillSpec. Single source of truth consumed by SpellExecutor and the cast-menu HUD.
+updated: 2026-09-23
 ---
 
 # SpellRegistry
@@ -9,6 +9,18 @@ updated: 2026-09-09
 Config-only module for the spell roster. Owns the per-spell name, color, tier, cost, targeting mode, and a `skill: SkillSpec` that `SkillDelivery` / `SkillEffects` consume. (Prior to the Skills pipeline refactor, this field was `effectSpec: EffectSpec` — the shape changed in commit `03b6080`.)
 
 The roster is **pinned** to [[design/gameplay-loop]] § "Spell roster (prototype)" and § "Spell tier thresholds". If those numbers move in the design doc, this module is the single thing that changes — every other system reads through `getSpell` / `listAffordableSpells`.
+
+## T4 is parked (2026-09-23)
+
+`MAX_ENABLED_TIER = 3`. Red's Volley was the only T4 spell and it was a projectile proof-of-concept rather than a designed one, so the ladder stops at T3 until a fourth tier has a design — see [[design/gameplay-loop]] § "Spell typing & roster".
+
+What the constant does, and why it is the only lever:
+
+- The `Volley` spec literal **stays in `SPELLS`**, and the 40-mana rung stays in `TIER_COSTS` (the Studio mana-fill cheat keys off it). A loop after the table trims every school to `MAX_ENABLED_TIER`, so nothing downstream sees the parked spec at all.
+- `NUM_TIERS = MAX_ENABLED_TIER`, so `getSpell("red", 4)` and `chargeTimeFor(4)` now **error** rather than return nil. [[systems/SpellCastService]] already pcalls `getSpell`, so a forged `red/4` cast is rejected as `unknown spell red/4` — verified live.
+- Everything that draws or resolves tiers reads `tierCount(color)` or `NUM_TIERS`: the cast panel's rings, the charge orb's scale, `CastAction.resolveSpecAtCharge`, the server's charge-state clamp. None of them needed touching.
+
+Un-parking is `MAX_ENABLED_TIER = #TIER_COSTS` plus whatever the new T4 is supposed to do.
 
 ## Files
 
@@ -27,7 +39,7 @@ local spec = SpellRegistry.getSpell("red", 2)
 
 -- Affordable list for a single color reservoir, sorted by tier ascending.
 local options = SpellRegistry.listAffordableSpells("red", 35)
--- → { Firebolt, Fireball, Inferno }  (Volley costs 40, filtered out)
+-- → { Firebolt, Fireball, Inferno }  (T4 is parked; there is no fourth entry)
 ```
 
 ## Spec shape
@@ -39,7 +51,7 @@ export type TargetingMode = "auto" | "placement"
 export type Spec = {
   name: string,
   color: Color,
-  tier: number,         -- 1 | 2 | 3 | 4
+  tier: number,         -- 1 | 2 | 3  (4 while T4 is parked is not reachable)
   cost: number,         -- equals TIER_COSTS[tier] by design (drain == threshold)
   targetingMode: TargetingMode,
   selfTarget: boolean?,         -- resolves on the caster (Mend, Shield, Sanctuary)
@@ -62,22 +74,22 @@ It exists because the cast UI used to infer this from **colour** ("green means s
 | T1 | 5 |
 | T2 | 10 |
 | T3 | 20 |
-| T4 | 40 |
+| T4 *(parked)* | 40 |
 
-Declared as `TIER_COSTS = { 5, 10, 20, 40 }` in `init.luau`. Cost and drain are equal by design — see [[design/gameplay-loop]] § "Spell economy".
+Declared as `TIER_COSTS = { 5, 10, 20, 40 }` in `init.luau`; the fourth rung is inert while T4 is parked. Cost and drain are equal by design — see [[design/gameplay-loop]] § "Spell economy".
 
 ## Auto-target range
 
 `SpellRegistry.AUTO_TARGET_RANGE_STUDS = 150` is the single source for how far the client's auto-targeter (`SpellCastController.findAutoTarget` since refactor chunk 7) will lock onto an enemy. Candidates since 2026-09-09: models tagged `NPC`, models tagged `Damageable` (the lobby TargetDummy), and `workspace.Boss`; before that the Damageable dummy was never a candidate, so attack spells fizzled in the lobby. It used to be two independently-declared `150`s — one in `SpellMenuGui` and one as `SpellCastConstants.CLIENT_AUTO_TARGET_RANGE_STUDS` (server-side trust check) — that a future tuning pass could have silently pulled apart. `SpellCastConstants.MAX_TARGET_DISTANCE_STUDS` now reads this value and adds its own drift allowance on top; see [[systems/SpellCastService]] § Tuning.
 
-## The 10-spell roster
+## The 9-spell roster
 
 | Color | Tier | Name | Targeting | Delivery | onImpact |
 |---|---|---|---|---|---|
 | Red | T1 | Firebolt | `auto` | `projectile` | `damage fractionOfMaxHP=0.05` |
 | Red | T2 | Fireball | `auto` | `projectile` | `damage fractionOfMaxHP=0.20` |
 | Red | T3 | Inferno | `auto` | `instant` | `damage fractionOfMaxHP=0.50 + burn durationSec=3` |
-| Red | T4 | Volley | `auto` | `projectile` | `damage amount=12` (3 projectiles, `staggerSec=0.12`) |
+| ~~Red~~ | ~~T4~~ | ~~Volley~~ | — | — | **parked** — spec still in the file, trimmed out of the roster |
 | Green | T1 | Mend | self | `instant` | `heal fractionOfMaxHP=0.15` |
 | Green | T2 | Stone Wall | `placement` | `world_spawn` | _(none; the barrier Part is the effect — `durationSec=6`)_ |
 | Green | T3 | Sanctuary | self | `instant` | `heal fractionOfMaxHP=1.0 + shield amount=40` |
@@ -89,7 +101,7 @@ These numbers are first-prototype starting points. Tuning is expected — see [[
 
 ## Errors
 
-- `getSpell(color, tier)` — `error` if `color` is not `"red"|"green"|"blue"` or `tier` is not `1|2|3|4`.
+- `getSpell(color, tier)` — `error` if `color` is not `"red"|"green"|"blue"` or `tier` is outside `1..NUM_TIERS` (`1|2|3` while T4 is parked).
 - `listAffordableSpells(color, energy)` — `error` if `color` is invalid. Any non-negative `energy` is accepted; below-T1 returns `{}`.
 
 ## Cross-references

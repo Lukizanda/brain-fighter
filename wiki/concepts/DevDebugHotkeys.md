@@ -1,7 +1,7 @@
 ---
 type: concept
 description: Keyboard hotkeys available in DevDebug.client.luau for playtesting word buffer, energy reservoirs, and mobile-input simulation.
-updated: 2026-09-10
+updated: 2026-09-23
 ---
 
 # Dev Debug Hotkeys
@@ -18,7 +18,7 @@ updated: 2026-09-10
 | `1` | Fill all energy reservoirs to T1 (5 energy) **and grant the server ledger the same tier** |
 | `2` | Same, T2 (10 energy) |
 | `3` | Same, T3 (20 energy) |
-| `4` | Same, T4 (40 energy) |
+| `4` | Same, 40 energy — this was the T4 threshold; **T4 is parked since 2026-09-23**, so it is now just an over-cast-cost fill (the top live cast is T3 at 20) |
 | `M` | Toggle mobile-input override — forces `InputCategorizer` to report "Touch" so the touch HUD can be tested on desktop |
 | `;` | Toggle boss phase label visibility — hidden by default in gameplay; press to reveal/hide during playtesting |
 

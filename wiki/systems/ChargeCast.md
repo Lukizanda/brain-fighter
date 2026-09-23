@@ -1,14 +1,14 @@
 ---
 type: system
 description: Phase 5.8 — hold-to-charge tier selection. Press a colour panel and the charge climbs through the tiers you can afford; release fires what you reached. Mana is reserved, never drained, until release, so cancelling is free. The panels are circles that fill from the centre with concentric tier rings, and a character orb makes the windup a PvP tell.
-updated: 2026-09-14
+updated: 2026-09-23
 ---
 
 # ChargeCast
 
 The gesture that turns a colour panel into a **tier choice**.
 
-Brain Fighter has four spell tiers per colour ([[systems/SpellRegistry]] `TIER_COSTS = { 5, 10, 20, 40 }`, red alone reaching T4), and until Phase 5.8 there was **no way for the player to pick one**. A tap on a spell panel fired whatever the reservoir could currently afford, so "save big, fire small" — the decision [[design/gameplay-loop]] § "Spell economy" is built around — was unreachable in-game. The design doc's answer was a drag-from-reservoir vertical tier menu; this supersedes it.
+Brain Fighter has three spell tiers per colour ([[systems/SpellRegistry]] `TIER_COSTS = { 5, 10, 20, 40 }`, whose fourth rung is inert since **T4 was parked on 2026-09-23** — red's Volley was the only spell that ever reached it), and until Phase 5.8 there was **no way for the player to pick one**. A tap on a spell panel fired whatever the reservoir could currently afford, so "save big, fire small" — the decision [[design/gameplay-loop]] § "Spell economy" is built around — was unreachable in-game. The design doc's answer was a drag-from-reservoir vertical tier menu; this supersedes it.
 
 **Press the panel. The charge climbs. Release to fire what you reached.** One gesture, no menu, identical on mouse and touch.
 
@@ -27,9 +27,9 @@ At `MANA_FLOW_PER_SEC = 5` (retuned down from 20 on 2026-08-12, the first pass a
 | T1 | 5 | 0 s — a tap |
 | T2 | 10 | 1 s |
 | T3 | 20 | 3 s |
-| T4 | 40 | 7 s |
+| ~~T4~~ | ~~40~~ | *parked — would be 7 s* |
 
-T4 reads as a commitment for free, because it costs 8× a Firebolt and therefore takes 8× the mana to pour in. `MANA_FLOW_PER_SEC` (`SpellRegistry`) is the single lever for how a hold *feels*; moving it moves every tier together, which is the point — the ratios between tiers belong to the cost table, not to this constant.
+The top of the ladder reads as a commitment for free, because it costs 4× a Firebolt and therefore takes 4× the mana to pour in. (That argument was written about a 7 s T4; with the ladder stopping at 3 s, the longest hold in the game is now less than half what the tell was designed around — see § "What parking T4 took off the panel".) `MANA_FLOW_PER_SEC` (`SpellRegistry`) is the single lever for how a hold *feels*; moving it moves every tier together, which is the point — the ratios between tiers belong to the cost table, not to this constant.
 
 The charge climbs only through tiers that are **both** time-reached **and** currently affordable, and **stops dead at the affordability ceiling**. You cannot charge past what you own. At the ceiling the panel pulses and the orb strains instead of growing, so "this is as big as it gets" is legible with no text cue.
 
@@ -91,7 +91,7 @@ Seven changes, all of them in service of "a whole T1 cast should not look like a
 3. **Ready glow** — a panel that *can* cast breathes a coloured halo at its rim (`ReadyBloom` + `ReadyGlow`). This is the positive half of (2), and it was added because the negative half is the weaker one: grey only reads as grey when there is a lit panel beside it to compare against, which is exactly the case that fails when all three are drained or all three are full. Two strokes rather than one — a single `UIStroke` is a hard line and reads as a *border*, a thing the panel has, where a crisp edge over a soft inner bloom reads as light coming off it. Both breathe on one tween each, started on the same frame with the same `TweenInfo` so they stay in phase without being driven together. Only the crisp stroke bleeds outward and only by its own 4px, so two lit neighbours keep 2px of air in the 10px `BUTTON_GAP`; the bloom is inset and faces inward.
    **Ready motes** ride the same lifecycle: six sparks orbiting just inside the rim. The halo is a static shape and the eye stops seeing it; motion is what survives peripheral vision, which is the only vision a corner-of-screen widget gets. They are **not** a `ParticleEmitter` — that is a 3D instance and does not exist in a `ScreenGui`. They are plain circular Frames parented to a transparent full-size ring whose **`Rotation`** is tweened, so the entire orbit is one tween and no per-frame code. This is a dividend of the shape change: on a circle, "orbit" and "rotate the parent" are the same operation, where the old rectangles would have needed a Heartbeat and a path. Sizes and twinkle periods are jittered per mote and the spin direction alternates per panel, because without either the three panels lit by one Memorize move in lockstep and read as one mechanism rather than three living things.
 4. **Persistent numeral** — `35/60`, in the middle of the circle. Replaces the transient `EnergyPopup` that appeared on tap and faded: a number you only see *after* committing is on the wrong side of the decision. It sat inset from the top-right corner while the panels were rectangles; on a circle the corners of the bounding box are empty space *outside* the disc, so it floated in the void — and retiring the spell name freed up the centre.
-5. **Charge reserve** — an annulus eaten out of the **outer edge** of the fill: what this release will spend. Sized to the post-spend radius with a stroke thick enough to reach the pre-spend radius, so it always hugs the fill edge and eats inward. The numeral counts down in step. Both snap back on cancel, which is the whole refund story. At T4 on a full reservoir the annulus swallows the entire disc and the numeral reads `0/60`, which is the correct and rather good-looking extreme.
+5. **Charge reserve** — an annulus eaten out of the **outer edge** of the fill: what this release will spend. Sized to the post-spend radius with a stroke thick enough to reach the pre-spend radius, so it always hugs the fill edge and eats inward. The numeral counts down in step. Both snap back on cancel, which is the whole refund story. On a full reservoir the top cast now eats only the outer third (60 → 40 mana, radius 1.0 → 0.667); before T4 was parked, a T4 release swallowed the entire disc and read `0/60`, which was the extreme this treatment was tuned against.
 6. **Active ring highlight** — the ring for the tier you are at thickens and **inverts to white**, the one moment it should be the brightest thing on the panel rather than the darkest.
 7. **Ceiling pulse** — a rim halo breathes when the charge tops out. A ring rather than the wash over the whole panel it used to be: the wash competed with the fill disc for the same pixels and a halo outside the largest possible fill competes with nothing. Still its own instance rather than a `UIScale` pulse, because `playAffordBounce` already owns the panel's `UIScale`, and two systems tweening one property is exactly the fight [[concepts/SingleOwnership]] exists to stop.
 
@@ -122,12 +122,12 @@ There is **no `ClipsDescendants` anywhere in the panel**, deliberately. It clips
 
 | N | Mapping | Reads as |
 |---|---|---|
-| **1** (current) | diameter ∝ mana | The rings land where the bar's notches did, so the 5/10/20/40 curve is unchanged: the first three tiers bunch near the middle and whip past, T4 is a long way out. Because area grows as the square, the disc looks **emptier than the numeral says**. |
-| 0.5 | area ∝ mana | The disc leaps out of the centre on the first few points then crawls. The rings space out almost evenly, which **flatters the cost curve** by hiding that T4 costs double T3. |
+| **1** (current) | diameter ∝ mana | The rings land where the bar's notches did, so the cost curve is unchanged: the tiers bunch near the middle and whip past. Because area grows as the square, the disc looks **emptier than the numeral says**. |
+| 0.5 | area ∝ mana | The disc leaps out of the centre on the first few points then crawls. The rings space out almost evenly, which **flatters the cost curve** by hiding how steeply each tier doubles. |
 
 Everything that has to line up with the fill edge — both tier rings, both edges of the reserve annulus — goes through one `radiusFractionFor`, so the exponent stays one lever rather than four call sites that have to agree.
 
-A consequence of N = 1 worth knowing before tuning it: at 8.3% and 16.7% of the diameter, the **T1 and T2 rings are very small** — on a 180px panel they are 15px and 30px across, and the centred numeral sits over them. The useful rings in practice are T3 and T4. The alternative that keeps linear encoding *and* readable spacing is an arc gauge (mana travels around a 270° ring, arc length ∝ mana, centre free for the numeral); it is filed in [[ideas]] rather than built, because it needs the two-half rotation mask and the disc is nearly free.
+A consequence of N = 1 worth knowing before tuning it: at 8.3% and 16.7% of the diameter, the **T1 and T2 rings are very small** — on a 180px panel they are 15px and 30px across, and the centred numeral sits over them. The only comfortably readable ring left is T3 at 33.3%; the 66.7% one went with the parked T4 (§ "What parking T4 took off the panel"). The alternative that keeps linear encoding *and* readable spacing is an arc gauge (mana travels around a 270° ring, arc length ∝ mana, centre free for the numeral); it is filed in [[ideas]] rather than built, because it needs the two-half rotation mask and the disc is nearly free.
 
 ## The orb, and why it is an attribute
 
@@ -149,7 +149,7 @@ client (charging) ──ChargeState remote──► ChargeStateService ──Set
 
 ## The name label
 
-A `BillboardGui` over the orb naming the spell **this release would fire right now** — `Firebolt`, then `Fireball`, then `Volley` as the charge climbs. It pops in from zero scale on every crossing (`Back, Out`, which is the spring) and dissipates upward on release.
+A `BillboardGui` over the orb naming the spell **this release would fire right now** — `Firebolt`, then `Fireball`, then `Inferno` as the charge climbs. It pops in from zero scale on every crossing (`Back, Out`, which is the spring) and dissipates upward on release.
 
 This is where the spell name went when the panels became circles. Putting it on the orb rather than back on the HUD does two things the panel could not: it lands where the player is already looking mid-charge instead of in the corner they are pressing, and **an opponent reads it too**. That second one is free — the name for each tier of the charging colour is handed to `ChargeOrbVfx.start` as part of `ChargeInputs` (chunk 10; it used to query `SpellRegistry` from inside the visual), and `ChargeOrbController` already drives `setTier` off the replicated attributes, so the remote path needed no new wiring at all.
 
@@ -158,13 +158,13 @@ Four decisions worth keeping:
 - **`AlwaysOnTop` is off.** The orb is occluded by cover and the name is occluded with it. A label that reads through a wall turns a PvP tell into a wallhack.
 - **`MaxDistance = 120` studs**, well inside the orb's own visibility. At range an opponent should read *that* you are charging and roughly how big, not exactly what.
 - **Parented to the head, not to the orb.** The dissipate (0.3 s) outlives the orb's release flash (`RELEASE_TIME = 0.16 s`), and a label hanging off the orb would be destroyed mid-fade. `step` rides it on the orb's *live* radius each frame so the gap under the text stays constant as the orb grows.
-- **`spellNameFor` bounds the tier with `tierCount`, not `getSpell` alone.** `getSpell` validates against the roster maximum of 4 and green tops out at 3, so `getSpell("green", 4)` passes validation and returns **nil**. Reading `.name` off that is the crash the guard exists to avoid — the same off-by-one the tier rings dodge by counting from `tierCount`.
+- **`spellNameFor` bounds the tier with `tierCount`, not `getSpell` alone.** `getSpell` validates against the roster maximum, which has never been the same thing as a given colour's depth: green topped out at 3 while the ladder allowed 4, so `getSpell("green", 4)` passed validation and returned **nil**, and reading `.name` off that is the crash the guard exists to avoid. Parking T4 closes today's instance of the gap (every school is now exactly `NUM_TIERS` deep) without closing the class of it — the same off-by-one the tier rings dodge by counting from `tierCount`.
 
 **What it does not fix.** The label only exists *during* a charge, so it tells you what you are about to fire and still cannot teach you the roster before you press. The legend that the superseded drag-menu provided is still missing and still belongs to [[systems/Tutorial]]; this closes the mid-charge half of that gap, not the learning half.
 
 ## Trust
 
-**No new trust hole, and nothing here is authoritative.** The client already picked the tier before 5.8 and the server already validated it — [[systems/SpellCastService]] resolves the spec and debits `spec.cost` from the `EnergyLedger`. A hold-charged T4 debits 40 exactly as a tapped T4 did.
+**No new trust hole, and nothing here is authoritative.** The client already picked the tier before 5.8 and the server already validated it — [[systems/SpellCastService]] resolves the spec and debits `spec.cost` from the `EnergyLedger`. A hold-charged T3 debits 20 exactly as a tapped T3 did. Since 2026-09-23 the server also refuses a `red/4` outright — `getSpell` errors on a parked tier, so [[systems/SpellCastService]]'s pcall turns a forged T4 into `unknown spell red/4`.
 
 What the server **cannot** verify is *hold duration*. There is no server-side clock on the gesture, so a client could claim to have charged instantly. That costs nothing: the tier it claims is priced by the ledger regardless, so charging instantly buys speed, not mana. Recorded explicitly in [[systems/SpellCastService]] § Trust model rather than left implied.
 
@@ -239,6 +239,16 @@ Those captures were taken at **0.72 / 0.88**, where a dead panel was near-invisi
 **Feel check, first pass (2026-08-12):** `MANA_FLOW_PER_SEC` moved **20 → 5**, taking T4 from a 1.75 s hold to a 7 s one and T2 from 0.25 s to a full second. The lever did exactly what it exists for — no code, no test and no HUD constant had to move with it, because everything derives from `chargeTimeFor`. Whether 7 s is where it lands is a further play question; a hold that long makes the orb's PvP tell much easier to react to, which is a design consequence and not only a tuning one.
 
 **Still owed:** the other axis — does a disc that looks emptier than its numeral read as tension or as a bug (`FILL_RADIUS_EXPONENT`)?
+
+## What parking T4 took off the panel
+
+T4 was parked on 2026-09-23 ([[systems/SpellRegistry]] § "T4 is parked"), and the charge gesture is where a player feels it. Nothing broke — every surface here counts tiers from `tierCount(color)` — but three things about this system are now smaller than they were designed to be, and they are tuning questions rather than bugs:
+
+- **The longest hold in the game is 3 s**, down from 7. The orb was argued for as a commitment an opponent has time to punish; at 3 s it is still a tell, but a much cheaper one.
+- **Red draws three rings like everyone else**, and the outermost live ring sits at 33.3% of the diameter. The outer two-thirds of every panel is now unmarked fill, which is the half of § "What the circle encodes" that got worse.
+- **The reserve annulus never swallows the disc.** Its most legible extreme — a full reservoir spent to `0/60` — is unreachable while the top cast costs 20 of a 60 cap. The same surplus question [[design/gameplay-loop]] § "Spell economy" now carries.
+
+The verification runs recorded above predate the park; where they name a T4 ring, a `Volley` label or a 40-mana release, they are a record of what the system did on the day, not of what it draws now.
 
 ## Cross-references
 

@@ -71,7 +71,7 @@ local BASE_WALK_SPEED_ATTRIBUTE = "BaseWalkSpeed"
 -- whole reason the orb is affordable: the character is server-owned, so a
 -- server-written attribute lands on every client's copy of that rig with
 -- no fan-out RemoteEvent on the way out. The orb is a PvP tell — the
--- point is that your opponent can see you winding up a T4 — and that
+-- point is that your opponent can see you winding up the big one — and that
 -- costs one attribute write per tier crossing, not a broadcast per frame.
 --
 -- CHARGE_TIER_ATTR is 0 (or absent) while nothing is charging. A tier of

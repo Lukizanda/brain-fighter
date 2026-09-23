@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-09-22
+updated: 2026-09-23
 ---
 
 # Wiki Index
@@ -42,11 +42,11 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/Dictionary]] — Phase 1 pure-Luau word lookup; case-insensitive `isWord` plus wildcard-aware `resolve`/`isSpellable`, ~79.9k words (SCOWL 60 + geographic/playtest supplements); 26 per-letter sub-modules background-preloaded at game start
 - [[systems/WordBuffer]] — Phase 1 pure-Luau 12-slot color-tagged buffer for the word being spelled; append-on-shot, reorder, double-tap-destroy; drains on Memorize
 - [[systems/MemorizeAction]] — Phase 2 action: validate buffered word → split per-color energy into reservoirs + clear buffer; fizzle on empty (no mutation) or invalid (buffer cleared, letters consumed)
-- [[systems/SpellRegistry]] — Phase 1 config layer for the spell roster (R/G/B × T1–T4); tier costs 5/10/20/40, name/color/cost/targeting/`skill:SkillSpec`; consumed by SpellExecutor + SpellMenu HUD
+- [[systems/SpellRegistry]] — Phase 1 config layer for the spell roster (R/G/B × T1–T3; **T4 parked 2026-09-23** — red's Volley was the only one and it was never designed, `MAX_ENABLED_TIER = 3`); tier costs 5/10/20/40 with the fourth rung inert, name/color/cost/targeting/`skill:SkillSpec`; consumed by SpellExecutor + SpellMenu HUD
 - [[systems/SpellExecutor]] — Phase 2 effect runner; dispatches `damage`/`heal`/`freeze`/`knockup`/`shield`/`buff` against caster/target (all real as of 5.2)
 - [[systems/MindFullManager]] — Phase 2 transition watcher over WordBuffer: rising-edge `mindFull` / falling-edge `mindFreed` signals for the shoot gate + HUD indicator
 - [[systems/CastAction]] — Phase 2 cast pipeline: `castSpecific` (the production path since 5.8) + `resolveSpecAtCharge` (hold duration → tier); `tapReservoir` retired but kept for its tests. Drains the reservoir, fires `spellResolved`
-- [[systems/ChargeCast]] — Phase 5.8 (2026-08-12): press-hold-release on a colour panel picks the spell tier. Mana flows at 5/sec so T1 is a tap and T4 is a 7 s commitment; the charge clamps at what you can afford; nothing is drained until release, so cancelling is free. The panels are circles that fill outward from the centre with concentric tier rings, a reserve annulus and a centred numeral; a character orb, with the spell's name over it, makes the windup a PvP tell. Supersedes the never-built drag-from-reservoir tier menu
+- [[systems/ChargeCast]] — Phase 5.8 (2026-08-12): press-hold-release on a colour panel picks the spell tier. Mana flows at 5/sec so T1 is a tap and T3 — the top of the ladder since T4 was parked 2026-09-23 — is a 3 s commitment; the charge clamps at what you can afford; nothing is drained until release, so cancelling is free. The panels are circles that fill outward from the centre with concentric tier rings, a reserve annulus and a centred numeral; a character orb, with the spell's name over it, makes the windup a PvP tell. Supersedes the never-built drag-from-reservoir tier menu
 - [[systems/LetterBlock]] — Phase 3 entity: floating block prefab with `Block.Letter` + `Block.Color` attributes; chunky 4×4×4 cube with 6-face SurfaceGui letter glyph + colored ParticleEmitter; CollectionService tag drives the client animator (sinusoidal bob + 28°/s tumble on a tilted axis). 2026-08-20 face treatment: dark border + inset panel + light-tinted glyph, and a value tell scaling the emitter with the letter's Scrabble value
 - [[systems/BlockSpawner]] — Phase 3 server-side populator: Scrabble-weighted letter picks (plus a 27th wildcard roll at ~4%), configurable color weights, auto-refill via CollectionService removed signal. Arena bounds come from tagged `BlockSpawnVolume` parts, **not** the 40×8×40 figure in the config — that is only the fallback default; the shipped arena measures 219×20×248 and holds 40 blocks
 - [[systems/Wildcard]] — the gold ★ block that stands in for any letter (`D★G` → DOG); ASCII `*` internally / `★` on screen, uncapped per word, length-indexed dictionary matcher, energy spread across all three reservoirs

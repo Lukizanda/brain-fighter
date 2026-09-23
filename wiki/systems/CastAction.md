@@ -1,7 +1,7 @@
 ---
 type: system
 description: Phase 2 action — the cast pipeline. castSpecific fires an explicitly-picked tier (the production path since 5.8's hold-to-charge); resolveSpecAtCharge picks that tier from a hold duration; tapReservoir is the retired highest-affordable rule, kept for its tests. Drains the reservoir on cast and fires the client-local `spellResolved` signal on success.
-updated: 2026-09-09
+updated: 2026-09-23
 ---
 
 # CastAction
@@ -49,7 +49,7 @@ CastAction.resolveTapSpec(color: Color, reservoirs: EnergyReservoirs) -> Spec?
 -- Fire a specific tier. THE production entry point since 5.8.
 CastAction.castSpecific(
     color: Color,
-    tier: number,          -- 1 | 2 | 3 | 4 (T4 exists for red only — Volley)
+    tier: number,          -- 1 | 2 | 3  (T4 parked 2026-09-23; the registry errors on it)
     reservoirs: EnergyReservoirs,
     caster: Humanoid | Model,
     target: Humanoid | Model | Vector3 | nil
@@ -98,7 +98,7 @@ If `SpellExecutor.cast` returns `{ ok = false, ... }` — for instance because a
 - The refund keeps the cast pipeline's invariant clean: **a non-`ok` `CastResult` means no observable world change AND no observable reservoir change**.
 - The cost is small — one `:add` call — and the alternative (an empty try-cast handshake before the real drain) would double-call into SpellExecutor and is far more error-prone.
 
-Pinned to a `reason` line in the resulting `CastResult` so the HUD can surface why nothing happened. The current refunding case the project actually hits is **projectile spells (Firebolt/Fireball/Volley) tapped with no resolvable target** ([[systems/SpellExecutor]] / SkillDelivery returns a `"…requires a target…"` reason); future targeting-mode work may add more.
+Pinned to a `reason` line in the resulting `CastResult` so the HUD can surface why nothing happened. The current refunding case the project actually hits is **projectile spells (Firebolt/Fireball) tapped with no resolvable target** ([[systems/SpellExecutor]] / SkillDelivery returns a `"…requires a target…"` reason); future targeting-mode work may add more.
 
 The refund does NOT fire if the affordability check at step 2 fails — in that case `drain` was never called, so there's nothing to add back.
 
@@ -122,7 +122,7 @@ No throttling — casts are rare-per-frame.
 
 ## Consumers
 
-- **HUD: SpellMenu** (shipped — [[systems/HUD]], [[systems/ChargeCast]]) — `SpellMenuBuilder` owns the press-hold-release gesture and hands `SpellMenuGui` a `castRequested(color, tier)`; the coordinator resolves the enemy lock **at release** (a 1.75 s T4 charge is long enough for the world to move) and calls `castSpecific`. Reads `CastResult.cast` to relay the cast to [[systems/SpellCastService]] and to flash the panel; placement-target hand-off for `targetingMode == "placement"` still pending.
+- **HUD: SpellMenu** (shipped — [[systems/HUD]], [[systems/ChargeCast]]) — `SpellMenuBuilder` owns the press-hold-release gesture and hands `SpellMenuGui` a `castRequested(color, tier)`; the coordinator resolves the enemy lock **at release** (a 3 s T3 charge is long enough for the world to move) and calls `castSpecific`. Reads `CastResult.cast` to relay the cast to [[systems/SpellCastService]] and to flash the panel; placement-target hand-off for `targetingMode == "placement"` still pending.
 - **VFX: VfxController** — listens on `Remotes/SpellResolved` and draws the caster's **cast cue only** (see [Signal](#signal)). Impact cues and the copy other players see come from the authoritative run over `VfxBroadcast`; the client-originated relay was deleted 2026-09-08 ([[design/client-server-boundary]]).
 - **Tutorial / scripted first cast** — may call either entry point directly to drive a scripted cast in an intro level.
 
@@ -145,7 +145,7 @@ The fifteen scenarios (costs pinned to `TIER_COSTS = { 5, 10, 20, 40 }`, cap 60)
 | 1 | tap red, energy=0 | `ok=false, reason="no affordable tier"`, reservoir untouched |
 | 2 | tap red, energy=15 | Fireball fires (T2, drain 10); red=5 — projectile, no observable damage |
 | 3 | tap red, energy=30 | Inferno fires (T3, drain 20); red=10; HP 100→50 (instant delivery) |
-| 4 | tap red, energy=160 (caps at 60) | Volley fires (T4, drain 40); red=20 — projectile, no observable damage |
+| 4 | tap red, energy=160 (caps at 60) | *Retired with `tapReservoir`; before T4 was parked this fired Volley (drain 40)* |
 | 5 | castSpecific(red, 1), energy=80 (caps at 60) | Firebolt fires (save-big); red=55 |
 | 6 | castSpecific(red, 3), energy=15 | `ok=false, reason mentions "cannot afford Inferno"` (cost 20); red unchanged |
 | 7 | castSpecific("yellow", 1) | `ok=false, reason mentions "invalid"`; red unchanged (60) |
@@ -155,12 +155,14 @@ The fifteen scenarios (costs pinned to `TIER_COSTS = { 5, 10, 20, 40 }`, cap 60)
 | 11 | `resolveSpecAtCharge(red, energy=60, held=0)` | Firebolt (T1) — a tap is T1, **not** the highest affordable; the 5.8 behaviour change |
 | 12 | `resolveSpecAtCharge(red, energy=12, held=17.5 s)` | Fireball (T2) — clamped at the affordability ceiling, not the clock |
 | 13 | `resolveSpecAtCharge(red, energy=60)` at exactly `chargeTimeFor(3)` / midway 2→3 | T3 / T2 — the boundary is `<=`, asserted from both sides |
-| 14 | `resolveSpecAtCharge(green\|blue, energy=60, held=2×chargeTimeFor(4))` | T3 — the roster ceiling binds before the clock; neither school has a T4 |
+| 14 | `resolveSpecAtCharge(red\|green\|blue, energy=60, held=10×chargeTimeFor(NUM_TIERS))` | T3 — the roster ceiling binds before the clock; no school reaches past T3 since T4 was parked (2026-09-23), and the hold is derived from `NUM_TIERS` so parking or un-parking a tier does not reach into the test |
 | 15 | `chargeTimeFor` contract | `chargeTimeFor(1) == 0` (a tap) and strictly increasing with tier |
 
 > Scenarios 10–15 express hold durations as `SpellRegistry.chargeTimeFor(t)` rather than as literal seconds, so they survive the retune of `MANA_FLOW_PER_SEC` that the first feel-check playtest is expected to produce.
 
-> Projectile-delivery spells (Firebolt T1, Fireball T2, Volley T4) launch a projectile that never finds a collidable target in the test rig, so the cast returns `ok=true` (delivery accepted) but no health change is observable; instant-delivery spells (Inferno T3, Mend G-T1) synchronously mutate Humanoid health and are the canonical end-to-end cases.
+> **Numbering drift, noted 2026-09-23:** `__tests.luau` now holds ten scenarios, not fifteen — the `tapReservoir` rows went when that entry point was retired. The rows above still describe the behaviour correctly; only the indices are stale. Left rather than renumbered, since re-pinning the table to the file is a job of its own.
+
+> Projectile-delivery spells (Firebolt T1, Fireball T2) launch a projectile that never finds a collidable target in the test rig, so the cast returns `ok=true` (delivery accepted) but no health change is observable; instant-delivery spells (Inferno T3, Mend G-T1) synchronously mutate Humanoid health and are the canonical end-to-end cases.
 
 Tests are synchronous — CastAction itself is synchronous, and `EnergyReservoirs:get(color)` returns the post-mutation value immediately (the `.changed` signal is what's Deferred, not the underlying state write). No `task.wait()` needed.
 

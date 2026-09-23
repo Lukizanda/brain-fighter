@@ -1,7 +1,7 @@
 ---
 type: system
 description: Pure-Luau state container for the three per-color energy bars (red/green/blue). Caps at 60 per color, emits a `changed(color)` signal on every value change.
-updated: 2026-06-05
+updated: 2026-09-23
 ---
 
 # EnergyReservoirs
@@ -37,7 +37,7 @@ EnergyReservoirs.COLORS = { "red", "green", "blue" }
 `CAP_PER_COLOR = 60` = **3× the T3 cost (20)**. This holds enough headroom to bank a few big casts while still
 
 - *blocking* indefinite stockpiling — anyone who keeps Memorizing same-color words past 60 starts dropping energy on the floor, the design's deliberate brake on "hoard letters then nuke," and
-- *keeping casts frequent* — with the rebalanced tier costs (5/10/20/40), a full bar is one T4 (40) plus change, so players cast often rather than saving up.
+- *keeping casts frequent* — with the rebalanced tier costs (5/10/20/40), a full bar was one T4 (40) plus change, so players cast often rather than saving up. **Weakened since T4 was parked (2026-09-23):** the top live cast is T3 at 20, so a full bar is three of them and the top 40 mana no longer buys anything a player could not already afford. Whether the cap follows the ladder down is open — see [[design/gameplay-loop]] § "Spell economy".
 
 Pinned in `wiki/design/gameplay-loop.md` "Spell economy". The number is a tuning lever, not a load-bearing invariant — if playtest shows the cap is too tight or too loose, bump or pin it in code, then update both this page and the design doc.
 

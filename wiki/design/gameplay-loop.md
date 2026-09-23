@@ -1,7 +1,7 @@
 ---
 type: design
 description: Canonical core loop — aim, shoot letter blocks, spell words in a 12-slot buffer, cast color-typed spells that drain per-color energy reservoirs to defeat the level monster
-updated: 2026-08-12
+updated: 2026-09-23
 ---
 
 # Gameplay Loop
@@ -20,7 +20,7 @@ The full cycle, as drawn in [`./gameplay-loop.excalidraw`](./gameplay-loop.excal
 4. **Arrange** — player drags buffer tiles into the order they want and double-clicks/taps to destroy unwanted letters. The buffer is the only place words are constructed.
 5. **Memorize** — the explicit commit button (icon-only, e.g. ✨) validates the buffered word against the dictionary. **Valid** → the word's energy transmutes into the matching per-color reservoirs and the buffer clears. **Invalid** → the button shakes, the buffer flashes red, and the buffer is **cleared anyway** — the letters are consumed, so a bad commit costs the collected tiles and the player must re-collect. *No spell fires from this action* — committing and casting are now separate. (Revised from an earlier "preserve on invalid" rule; see Memorize section below.)
 6. **Energy** — on a valid Memorize, `word_energy = Σ letter_values × length_multiplier`. Mixed-color words are allowed; energy is **split value-weighted by tile color** — each tile contributes its own `letter_value × length_multiplier` to *its* color's reservoir. Sum across colors equals whole-word energy. All blocks are colored. Energy persists across words, so the player can Memorize multiple words to stockpile before casting.
-7. **Cast** — the player spends energy by **pressing and holding** a color reservoir. The charge starts at T1 (so a quick tap is a Firebolt) and climbs through the tiers that colour can afford — Firebolt T1·5 at 0 s, Fireball T2·10 at 0.25 s, Inferno T3·20 at 0.75 s, Volley T4·40 at 1.75 s — stopping dead at the affordability ceiling. Release over the panel fires the tier you reached; release outside cancels. Casting drains *exactly the tier cost*, not the whole bar, and **nothing is drained until release**, so a cancelled hold costs nothing. See [[systems/ChargeCast]].
+7. **Cast** — the player spends energy by **pressing and holding** a color reservoir. The charge starts at T1 (so a quick tap is a Firebolt) and climbs through the tiers that colour can afford — Firebolt T1·5 at 0 s, Fireball T2·10 at 1 s, Inferno T3·20 at 3 s — stopping dead at the affordability ceiling. Release over the panel fires the tier you reached; release outside cancels. Casting drains *exactly the tier cost*, not the whole bar, and **nothing is drained until release**, so a cancelled hold costs nothing. See [[systems/ChargeCast]].
 8. **Spell** — the spell config's `targetingMode` decides what happens next: `auto` fires at the monster (or self, for buffs); `placement` hands the player an aimed reticle for the spell's footprint.
 9. **Effect** — the spell resolves against the monster (damage, debuff) or the player (heal, shield) or the world (wall, AOE).
 10. **Loop** — buffer drains on Memorize; player re-engages floating blocks. Level ends when the monster's HP hits zero.
@@ -40,11 +40,12 @@ Pacing tension — slow spelling vs urgent combat — is the central design risk
 - **Block color determines spell type. Spell element is derived from blocks used, NOT word theme.** *Why:* spelling "ROCK" with red blocks is a damage spell, not an earth spell — because "ROCK" with green blocks is a heal. This keeps the system orthogonal: letters are a typing-puzzle layer, color is the spell-school layer, and they don't fight. Word theme is flavor, not mechanics.
 - **Three colors at launch — Red=Damage, Green=Healing/Walls, Blue=Utility.** *Why:* a three-school roster is the smallest set that can express the offense/defense/control rock-paper-scissors monsters can be designed around. More colors can be added later if they earn their place; starting wider risks each school feeling thin.
 - **Three tiers per color, gated by per-color energy thresholds.** *Why:* tiering gives the player a tangible "is this worth casting now or saving for the big one?" decision every cast, which is the choice the loop is built around. One tier per color would flatten that to "press button when bar full."
+- **T4 is parked (2026-09-23).** Red's Volley was the only spell that ever reached the fourth tier, and it was authored as a proof that the projectile delivery could fire a staggered burst — not as a designed spell. Its payload (3 × flat 12) is worth less than the Inferno one rung below it, so the top of the ladder was strictly worse than the middle. *Why park rather than rebalance:* what a fourth tier is *for* is the open question — a finisher, a school ultimate, a shared cross-colour cast — and picking numbers before answering that is how Volley happened the first time. The ladder stops at T3 until a T4 has a design. Code: `SpellRegistry.MAX_ENABLED_TIER = 3`; the spec and its 40-mana rung stay in the file, so re-enabling is one constant.
 
 ### Spell economy
 
 - **Per-color persistent reservoirs.** *Why:* one shared energy pool would erase the meaning of color; one tier-locked reservoir per color forces the player to actually engage with whichever colors the spawner is offering. Persistence (vs. per-word reset) is what lets short words contribute — `CAT` is worthless on its own, but five `CAT`s is a T2 cast.
-- **Casting drains exactly the tier cost; cap at 60 (3×T3).** *Why:* full-drain casting would punish the player for accidentally chaining big words. Exact-cost drain rewards efficiency without punishing surplus. The 60 cap (≈ one T4 cast plus change) blocks indefinite stockpiling that would trivialize encounters and keeps the player casting frequently rather than hoarding for one nuke. (Originally 160 = 2×T3-of-80; lowered alongside the tier-cost rebalance.)
+- **Casting drains exactly the tier cost; cap at 60 (3×T3).** *Why:* full-drain casting would punish the player for accidentally chaining big words. Exact-cost drain rewards efficiency without punishing surplus. The 60 cap blocks indefinite stockpiling that would trivialize encounters and keeps the player casting frequently rather than hoarding for one nuke. (Originally 160 = 2×T3-of-80; lowered alongside the tier-cost rebalance.) **Open since T4 was parked (2026-09-23):** the cap was sized as "one T4 cast plus change", and with the ladder stopping at T3 the top 40 mana of every reservoir now buys nothing but three T3 casts in a row. Whether that surplus should come down with the ladder — or stay, as the stockpile that lets a player open a fight with three Infernos — is a tuning question this doc has not answered.
 - **Word power = Scrabble letter values × length multiplier.** *Why:* Scrabble values are a known-good distribution that already rewards rare letters; pinning the formula to that gives us free intuition ("Z is worth more than E"). The length multiplier is what turns short common words into kindling and long words into the climactic payoff — `LIGHTNING` should feel meaningfully bigger than `FIRE`, not just slightly bigger.
 
 ### Targeting
@@ -70,7 +71,7 @@ An icon-only button next to the buffer converts the buffered word into mana.
 Each color's reservoir is the cast surface for that color. **Press it, hold to climb the tiers, release to fire what you reached.** Full system page: [[systems/ChargeCast]] (Phase 5.8, 2026-08-12).
 
 - **Press a reservoir** → the charge starts at T1 immediately, so a quick tap is a Firebolt.
-- **Keep holding** → the charge climbs through the tiers, priced in seconds by how much *more* mana each one costs than a tap: T2 at 1 s, T3 at 3 s, T4 at 7 s (`MANA_FLOW_PER_SEC = 5`). T4 reads as a commitment for free, because it costs 8× a Firebolt.
+- **Keep holding** → the charge climbs through the tiers, priced in seconds by how much *more* mana each one costs than a tap: T2 at 1 s, T3 at 3 s (`MANA_FLOW_PER_SEC = 5`). The top of the ladder reads as a commitment for free, because it costs 4× a Firebolt. (A T4, were one designed, would be a 7 s hold on the same arithmetic — see the T4 park above.)
 - **It stops dead at what you can afford.** The panel pulses and the character orb strains rather than growing. You cannot charge into a fizzle.
 - **Release over the panel** = fire that tier. **Release outside it** = cancel; no energy spent.
 - **Nothing is drained until release.** The reserve band eaten out of the top of the fill, and the numeral counting down beside it, are a *promise*. Cancelling snaps both back — there is no refund because nothing was taken.
@@ -135,11 +136,11 @@ Each color's reservoir is the cast surface for that color. **Press it, hold to c
 | T1 | 5 | 5 |
 | T2 | 10 | 10 |
 | T3 | 20 | 20 |
-| T4 | 40 | 40 |
+| T4 *(parked)* | 40 | 40 |
 
 Bar cap per color: **60** (3×T3). Energy above the cap is discarded. (Rebalanced 2026-05/06 from the original 10/30/80/75 + cap 160 — the lower numbers keep casts frequent rather than encouraging hoarding. Code is pinned: `SpellRegistry.TIER_COSTS = { 5, 10, 20, 40 }`, `EnergyReservoirs.CAP_PER_COLOR = 60`.)
 
-T4 exists for red only (Volley). Other colors top out at T3.
+**T4 is parked as of 2026-09-23** — see § "Spell typing & roster". Red was the only school that ever defined one (Volley); every school now tops out at T3, the 40-mana rung buys nothing, and `SpellRegistry` refuses a T4 cast outright. The rung stays in the table because the cost curve is the thing a future T4 would inherit.
 
 ### Spell roster (prototype)
 
@@ -148,7 +149,7 @@ T4 exists for red only (Volley). Other colors top out at T3.
 | Red | T1 | Firebolt | ~5% boss HP damage | projectile | `auto` |
 | Red | T2 | Fireball | ~20% boss HP damage | projectile | `auto` |
 | Red | T3 | Inferno | ~50% boss HP damage | instant | `auto` |
-| Red | T4 | Volley | 3 × flat-12 damage projectiles | projectile | `auto` |
+| ~~Red~~ | ~~T4~~ | ~~Volley~~ | ~~3 × flat-12 damage projectiles~~ | ~~projectile~~ | **parked 2026-09-23** |
 | Green | T1 | Mend | ~15% self-heal | instant | `auto` |
 | Green | T2 | Stone Wall | 6 s solid barrier, blocks everything | world_spawn | `placement` |
 | Green | T3 | Sanctuary | Full heal + 40 absorb | instant | self |

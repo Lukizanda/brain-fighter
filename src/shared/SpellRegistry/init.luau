@@ -3,7 +3,8 @@
 ----------------------------------------------------------------------
 -- SpellRegistry
 ----------------------------------------------------------------------
--- Pure-Luau config layer for the spell roster (R/G/B × T1/T2/T3 + T4).
+-- Pure-Luau config layer for the spell roster (R/G/B × T1/T2/T3; T4
+-- is parked — see MAX_ENABLED_TIER).
 -- Source of truth for spell name, color, tier, cost, targeting mode,
 -- and the SkillSpec that SkillDelivery/SkillEffects interpret.
 --
@@ -50,7 +51,19 @@ export type Spec = {
 -- Pinned from gameplay-loop.md § Spell tier thresholds.
 -- Cast cost equals the threshold (drain == threshold by design).
 local TIER_COSTS: { number } = { 5, 10, 20, 40 }
-local NUM_TIERS = #TIER_COSTS
+
+-- Highest tier the roster currently ships.
+--
+-- T4 is parked (2026-09-23). Volley, the only spell that ever reached it,
+-- was authored as a projectile proof-of-concept rather than designed, and
+-- no school has a fourth tier worth casting yet — so the ladder stops at
+-- T3 until one exists. The spec literal stays in SPELLS below and the
+-- 40-mana rung stays in TIER_COSTS (the Studio mana-fill cheat keys off
+-- it); this constant is the single thing that takes the tier out of play,
+-- because everything downstream reads tierCount/NUM_TIERS rather than
+-- counting the cost table. Set it back to #TIER_COSTS to re-enable.
+local MAX_ENABLED_TIER = 3
+local NUM_TIERS = MAX_ENABLED_TIER
 
 -- Max range for auto-targeting. Spells won't lock onto anything farther
 -- than this. Shared by the client targeter (SpellMenuGui) and the
@@ -65,9 +78,10 @@ local AUTO_TARGET_RANGE_STUDS = 150
 -- table. Mana *flows* into the charge at a constant rate and the tier
 -- thresholds are the costs directly above, so `chargeTimeFor` is a
 -- division rather than a second set of numbers to keep in sync with the
--- first. At 5/sec that is T1 = 0s (a tap), T2 = 1s, T3 = 3s, T4 = 7s —
--- T4 reads as a commitment for free, because it costs 8× a Firebolt and
--- therefore takes 8× the mana to pour in.
+-- first. At 5/sec that is T1 = 0s (a tap), T2 = 1s and T3 = 3s — the top
+-- of the ladder is a commitment for free, because it costs 4× a Firebolt
+-- and therefore takes 4× the mana to pour in. (T4, were it live, would be
+-- a 7 s hold on the same arithmetic.)
 --
 -- This is the single tuning lever for how a hold *feels*. Moving it moves
 -- every tier's timing together, which is the point: the ratios between
@@ -75,8 +89,8 @@ local AUTO_TARGET_RANGE_STUDS = 150
 local MANA_FLOW_PER_SEC = 5
 
 -- Red projectile tuning (Firebolt T1, Fireball T2). Inferno (T3) is
--- instant and Volley (T4) has its own params block; their tuning lives
--- in the spec literals below.
+-- instant and the parked Volley (T4) has its own params block; their
+-- tuning lives in the spec literals below.
 local FIREBOLT_SPEED = 80
 local FIREBOLT_LIFETIME_SEC = 1.5
 local FIREBOLT_PROXIMITY_RADIUS = 3
@@ -351,6 +365,16 @@ local SPELLS: { [Color]: { Spec } } = {
 	} :: { Spec }),
 }
 
+-- Take the parked tiers out of play. Trimming here rather than deleting
+-- the spec literals keeps parking a tier a one-constant change, and means
+-- every reader — tierCount, getSpell, listAffordableSpells and the charge
+-- resolver that walks them — sees the same ceiling without asking.
+for _, specs in SPELLS do
+	for tier = #specs, MAX_ENABLED_TIER + 1, -1 do
+		table.remove(specs, tier)
+	end
+end
+
 local function assertValidColor(color: string, fnName: string)
 	if not VALID_COLORS[color] then
 		error(
@@ -396,9 +420,10 @@ function SpellRegistry.chargeTimeFor(tier: number): number
 	return (TIER_COSTS[tier] - TIER_COSTS[1]) / MANA_FLOW_PER_SEC
 end
 
--- How many tiers this colour actually has. Red is the only school with a
--- T4, so anything drawing per-tier UI (the notches on the reservoir bar)
--- has to ask rather than assume NUM_TIERS.
+-- How many tiers this colour actually has. Schools are allowed to be
+-- shorter than the ladder — red was the only one that ever reached T4,
+-- and that tier is parked — so anything drawing per-tier UI (the rings on
+-- the cast panel) has to ask rather than assume NUM_TIERS.
 function SpellRegistry.tierCount(color: Color): number
 	assertValidColor(color, "tierCount")
 	return #SPELLS[color]

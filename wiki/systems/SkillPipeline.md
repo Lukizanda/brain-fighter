@@ -1,7 +1,7 @@
 ---
 type: system
 description: Unified data + dispatch pipeline shared by player spells and boss attacks. SkillSpec (data) + SkillEffects (effects) + SkillDelivery (deliveries), with caller-resolved origin so any caster (player, boss, future NPC) plugs in the same way.
-updated: 2026-09-14
+updated: 2026-09-23
 ---
 
 # Skill Pipeline
@@ -124,6 +124,8 @@ sequenceDiagram
 ```
 
 ## Execution Flow — Player Casts Volley (boss skill exposed as a spell)
+
+> Volley itself is **parked** as of 2026-09-23 ([[systems/SpellRegistry]] § "T4 is parked") — no player can cast it today. The walkthrough stays because what it illustrates is the pipeline's whole point: one `SkillSpec` shape serving a boss attack and a player spell through the same delivery handler. Read the spell name as an example, not as a roster entry.
 
 ```mermaid
 sequenceDiagram
