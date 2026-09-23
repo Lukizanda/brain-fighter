@@ -152,6 +152,30 @@ attribute is authored at **1s** rather than the `NPC_RESPAWN_TIME` default of
 5, so the new dummy stands up while the old one's debris is still in the air
 (fragments live `FRAGMENT_LIFETIME` = 3s).
 
+### Verification status (2026-09-22)
+
+Proven on the dummy, and on a player rig by temporarily tagging the local
+player's character — which exercises `attach` against a real R15 character
+(accessories, Tool, animate script) and confirmed exactly one `BillboardGui`
+on the head.
+
+**Not yet proven with a second player.** `watchPlayer` — the path that names a
+real opponent off `player.Name` and rebuilds their plate on `CharacterAdded`
+after a respawn — has never run against an actual second client. It is the one
+branch a single-client playtest cannot reach. Worth a two-client pass on a duel
+pad before relying on it in PvP; see [[concepts/MultiplayerTestPattern]].
+
+### Scene state, not repo state
+
+Four things this feature needs live in the `.rbxl`, not in git, the same way
+the portal pads' `ModeLabel` and `TargetArenaId` do. If the hub geometry is
+ever rebuilt, they go with it and the code silently falls back to defaults:
+
+| Instance | Carries |
+|---|---|
+| `Workspace.Lobby.TargetDummy` | the `TrainingDummy` tag, `NameplateLabel` = "Training Dummy", `respawnTime` = 1 |
+| `Workspace.Lobby.Portal_PvE.Pad` / `Portal_PvP.Pad` | `SignHeight` = 38 |
+
 ### Replaces NametagService
 
 `NametagService` (server, name only) is gone. One head cannot have two owners
