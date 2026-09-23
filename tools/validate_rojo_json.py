@@ -23,8 +23,9 @@ Hard-blocked patterns (file fails CI):
 NOT enforced (convention-only, Rojo handles fine):
 
 * Non-init `.meta.json` with `className` and no sibling .luau/folder —
-  Rojo treats this as instance-creating in many cases. The convention
-  prefers `.model.json`, but this isn't a correctness bug.
+  Rojo 7.7 creates NOTHING from this (verified 2026-09-23: the four
+  Health event files existed only in the .rbxl). Use `.model.json`.
+  Not yet hard-blocked here; candidate for promotion.
 * `.model.json` without explicit `name` — Rojo derives the name from
   the filename stem.
 

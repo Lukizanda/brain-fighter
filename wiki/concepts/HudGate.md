@@ -1,7 +1,7 @@
 ---
 type: concept
 description: How HUD elements are suppressed by player state (lobby vs arena). A declared policy per element, enforced by a required argument on register — because the failure mode is silent leakage, not an error.
-updated: 2026-09-20
+updated: 2026-09-23
 ---
 
 # HudGate
@@ -201,11 +201,11 @@ registers **three** elements and they do not agree.
 | `BuffTrayGui` | `Always` | self-buff spells are castable in the lobby. Moot today — the tray is unwired and awaiting a BuffAdapter (the `_G.PlayerHud.BuffTray` handle it used to publish was deleted in refactor chunk 3; nothing had ever read it) |
 | `BossHudGui` | `ArenaOnly` | own ScreenGui, gated via `.Enabled` |
 | `DamageFeedbackGui` | `ArenaOnly` | fires on damage *taken*; nothing in the lobby damages you |
-| `KillFeedGui`, `ScoreboardGui`, `RoundTimerGui`, `GameStateGui`, `DeathScreenGui`, `TeamScoreGui` | `ArenaOnly` | round and competition surfaces with no lobby meaning |
+| `KillFeedGui`, `ScoreboardGui`, `RoundTimerGui`, `GameStateGui`, `DeathScreenGui` | `ArenaOnly` | round and competition surfaces with no lobby meaning |
 | portal confirm panel | `Always` | **corrected on implementation.** `LobbyOnly` stops being right the moment the arena contains a portal, and stage 4b put a return pad there. Proximity decides whether the panel is on screen; the arena check decides which portals are near you. `LobbyOnly` had no users until the settings surface (2026-09-20): `SettingsGui`'s gear button (region `TopRight`) and its panel (own ScreenGui) are both `LobbyOnly` — settings live on the hub wall, and the gate closing on arena entry is also what closes an open panel. |
 
-`TeamScoreGui` is additionally suppressed at boot by `TEAMS_ENABLED`; the
-policy is what it gets when teams return.
+`TeamScoreGui` used to sit in that row, suppressed at boot by `TEAMS_ENABLED`;
+it was deleted with the team plumbing in refactor chunk 0 (`ba9891d`).
 
 ### The target dummy is nearly free
 
@@ -241,8 +241,8 @@ both paths, and there is nothing to special-case.
 reads `PlayerState` directly and adds the practice-block exception. Clean split:
 **`HudGate` handles GuiObjects, `PlayerState` is the raw read anything can use.**
 
-`ReticleBuilder` needs no policy — nothing in `src/` calls `build`, so it is
-dead template code.
+`ReticleBuilder` needed no policy — nothing in `src/` called `build`, and the
+dead template module was deleted in refactor chunk 0 (`ba9891d`).
 
 ## Resolved: lobby energy does not follow you into the arena
 

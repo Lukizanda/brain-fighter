@@ -1,7 +1,7 @@
 ---
 type: concept
 description: .model.json creates versioned non-script instances; .meta.json only modifies. Critical Rojo gotcha.
-updated: 2026-09-20
+updated: 2026-09-23
 ---
 
 # `.model.json` vs `.meta.json`
@@ -30,6 +30,8 @@ A persistent source of confusion in this project. Get it wrong and Rojo silently
 ## The trap
 
 A common mistake: putting a `children` array inside an `init.meta.json` to "create" sibling RemoteEvents. Rojo accepts the file but silently does not create the children. You discover this only when the runtime fires `WaitForChild` and infinite-yields. The fix is always: split each child into its own `.model.json` file.
+
+**The quieter variant (found 2026-09-23):** a *lone* `Name.meta.json` with a `className` and no sibling script or folder. Rojo 7.7 creates **nothing** from it — `Shared/Health/Remotes/DamageConfirm.meta.json`, `DamageFeedback.meta.json` and `Server/Health/Events/PlayerDamaged.meta.json`, `PlayerEliminated.meta.json` had sat like that since the initial commit, and the RemoteEvents/BindableEvents the damage path depends on existed only in the `.rbxl`, inside a second, Studio-only `Remotes` / `Events` folder that the parent's `ignoreUnknownInstances` kept alive. Rojo's own folder was empty; the code only worked because `FindFirstChild` returned the Studio copy first. A fresh clone would have hung on `WaitForChild`. Rojo's `/api/read` tree is the tell — if it shows the folder empty, the instances are not versioned. Fixed by renaming the four files to `.model.json` and collapsing the duplicate folders.
 
 ## See also
 

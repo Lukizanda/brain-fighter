@@ -1,7 +1,7 @@
 ---
 type: concept
 description: Pre-commit validator for `.meta.json` / `.model.json` files; hard-blocks the silent-fail traps Rojo doesn't warn about
-updated: 2026-05-22
+updated: 2026-09-23
 ---
 
 # Rojo JSON Validator
@@ -32,7 +32,7 @@ These don't show up in `git diff` review unless you already know the trap. A pre
 Originally the validator was stricter. After empirical MCP-probing of a running Studio session (see ingest log entry 2026-05-01) I dropped two rules that turned out to be over-corrected:
 
 - **`.model.json` must have `name`** — Rojo derives the name from the filename stem when omitted. `Bind.model.json` with `{"className": "BindableEvent"}` produces a `Bind` BindableEvent.
-- **Non-init `.meta.json` with `className` must have a sibling .luau/folder** — CLAUDE.md says non-init `.meta.json` files only *modify* an existing instance. Empirically Rojo creates instances from this pattern in many cases. The convention prefers `.model.json` (more explicit), but it's a style preference, not a correctness rule. The validator stays out of style debates.
+- **Non-init `.meta.json` with `className` must have a sibling .luau/folder** — CLAUDE.md says non-init `.meta.json` files only *modify* an existing instance. This page used to say Rojo creates instances from that pattern "in many cases"; on 2026-09-23 the four Health event files proved otherwise — Rojo 7.7 created nothing, and the instances lived only in the `.rbxl` (see [[concepts/ModelJsonInstances]] § The trap). It is a correctness bug, not a style preference, and is a candidate for promotion to a hard rule.
 
 The lesson: **validate against proven bugs, not aspirational conventions.** Style policing produces false positives that erode trust in the tool.
 

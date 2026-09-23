@@ -71,7 +71,7 @@ No Roblox-instance dependencies beyond the internal `BindableEvent`. No knowledg
 
 - **MemorizeAction** — deposits via `:add` on every valid word.
 - **CastAction** — drains via `:drain` on every spell cast (and re-`:add`s on the refund path when the executor fails); precomputes affordable tiers via `:canAfford`.
-- **HUD: SpellMenu** — the per-color mana fill subscribes to `.changed` and repaints the affected color. (The standalone `ReservoirBars` builder exists but is currently unused — see [[systems/HUD]].)
+- **HUD: SpellMenu** — the per-color mana fill subscribes to `.changed` and repaints the affected color. (The standalone `ReservoirBarsBuilder` was deleted in Phase 4.8 R-2 — the SpellMenu panels own the fill; see [[systems/HUD]].)
 - **SpellRegistry** — does not consume; owns the tier-threshold numbers (5 / 10 / 20 / 40) that callers compare against `:get(color)` and `:canAfford(color, threshold)`.
 
 ## Verification

@@ -127,35 +127,37 @@ Replace `YOUR_SESSION_NAME` with a short identifier for the current session's ta
 
 ## Project Structure
 
-Template-era systems (Character/Weapon/Health/NPC/GameMode/Loadout) sit alongside the Brain Fighter spelling-combat gameplay chain (LetterBlock → WordBuffer → Dictionary/EnergyEconomy → EnergyReservoirs → SpellRegistry → CastAction → SpellExecutor → Skills → Vfx). Representative tree, not exhaustive — `src/` is the authority.
+The Brain Fighter spelling-combat chain (LetterBlock → BlockShoot → WordBuffer → Dictionary/EnergyEconomy → EnergyReservoirs → MemorizeAction → SpellRegistry → CastAction → SpellExecutor → Skills → Vfx) sits alongside the surviving template systems (Health, NPC, GameMode, Boss, Dash). The TPS weapon/loadout/locomotion stack, the LetterBlaster Tool and BossAdapter are all deleted — their wiki pages are historical records. Representative tree, not exhaustive — `src/` is the authority.
 ```
 src/
-  client/          — LocalScripts: CameraManager, LocomotionManager, DashManager,
-                     DevDebug (playtest hotkeys), PlayerSession (per-session state cache)
-    UI/            — HUD coordinator LocalScripts (GameplayHudGui, SpellMenuGui,
-                     DashButtonGui, KillFeedGui, ScoreboardGui, …)
-    Vfx/           — VfxController (client cast/impact playback + relay)
-  server/          — Server Scripts: Firearm, Health, GameMode, Loadout, NPC, Boss,
-                     BlockShoot (block destroy), BlockSpawner, SpellCastService (relay),
-                     Vfx (VfxBroadcastService), Tests
-    BossAdapter/   — disabled (superseded by server/Boss); see wiki/systems/BossAdapter.md
+  client/          — LocalScripts: BlockTapController (tap-to-pop), DashManager, DevDebug (playtest
+                     hotkeys), SettingsController, SpellCastController/, PlayerSession (module)
+    UI/            — one coordinator LocalScript per HUD element (GameplayHudGui, SpellMenuGui,
+                     ScoreboardGui, KillFeedGui, PortalGui, SettingsGui, NameplateGui, …)
+    Vfx/           — VfxController (caster-side cast prediction), WorldVfxController (the one
+                     broadcast lane), status controllers (Shield/Freeze/Inferno/ChargeOrb/BarrierCrumble)
+  server/          — Server Scripts: Health (HealthService/applyDamage, DeathHandler), GameMode
+                     (GameModeService/RoundManager/SessionRegistry), Boss, NPC + AI, BlockShoot,
+                     BlockSpawner, SpellCast + SpellCastService (relay + validation), Economy
+                     (EnergyLedger), Lobby (LobbyService), Analytics, Arena, Dev, Tests (TestAutoRunner)
   shared/
-    Core/          — Logger, Cleanup, InputCategorizer, GameConfig
-    Character/     — CameraController, LocomotionController
-    Health/        — damage types, constants, modifiers, getHitZone
-    Hud/           — Builder + Config + LayoutManager HUD modules
-    Weapon/        — firearm + melee controllers, effects, state machines
-    NPC/ · GameMode/ · Boss/   — AI archetypes, mode registry, boss config/types
-    -- Brain Fighter gameplay chain (pure-Luau modules, each <Name>/init.luau + __tests):
+    Core/          — Logger, Colors, InputCategorizer, GameConfig
+    Character/     — DashController (the only survivor of the locomotion stack)
+    Health/        — damage types, constants, modifiers, getHitZone, Remotes/
+    Hud/           — Builder + Config pair per element, HudConstants, HudLayoutManager, HudGate
+    GameMode/      — mode definitions (Modes/: PvEBoss, PvPDuel, Lobby, NoOp), Arena, Remotes/
+    NPC/ · Boss/ · Lobby/ · Settings/ · Economy/ · SpellCast/   — archetypes, boss config, remotes
+    -- Brain Fighter gameplay chain (pure-Luau modules, each <Name>/init.luau + __tests.luau):
     Dictionary/    — word lookup (26 per-letter word modules under words/)
-    WordBuffer/ · EnergyEconomy/ · EnergyReservoirs/   — buffer + mana economy
+    WordBuffer/ · EnergyEconomy/ · EnergyReservoirs/ · Wildcard/   — buffer + mana economy
     SpellRegistry/ · SpellExecutor/ · CastAction/ · MemorizeAction/ · MindFullManager/
-    Skills/        — SkillSpec/Effects/Delivery/Interrupt/Visuals (player + boss)
-    Vfx/           — VfxConfig, spawnEffect, StatusVisuals/ (shared VFX engine)
-    BlockShoot/ · LetterBlocks/ · LetterBlaster/   — block consume pipeline
-    Tests/         — TestRunner + suites (NPC, Melee, Multiplayer, Phase3)
-  StarterPack/
-    Spelling Staff/  — the LetterBlaster weapon Tool (Handle + sounds + boot script)
+    Skills/        — SkillTypes/Effects/Delivery/Interrupt/Visuals/Buffs (player + boss)
+    Vfx/           — VfxConfig, spawnEffect, VfxBroadcast, CosmeticProjectile, StatusVisuals/
+    BlockShoot/ · BlockSpawner/ · LetterBlocks/   — block consume pipeline
+    Weapon/        — no code; ignoreUnknownInstances shell for the Studio-side Objects (LaserBeam)
+    Tests/         — TestRunner + Suites/ (NPC, Multiplayer, Phase3, Skills, Hardening, Economy, Unit, Analytics)
+  StarterCharacterScripts/ — Health.client.luau
+  utility/         — lerp
 ```
 
 ## Naming Conventions
