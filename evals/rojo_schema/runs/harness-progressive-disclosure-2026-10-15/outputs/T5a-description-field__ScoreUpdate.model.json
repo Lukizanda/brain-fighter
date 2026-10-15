@@ -1,0 +1,6 @@
+{
+  "className": "RemoteEvent",
+  "attributes": {
+    "Description": "Fires after every kill. Payload: killerUserId (number), newScore (number)."
+  }
+}

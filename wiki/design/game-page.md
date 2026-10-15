@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phase 5.4 release-gate item "game page assets" — draft store description (short + long), icon concept, a three-shot thumbnail list with Studio camera positions, and the upload path (Creator Dashboard; no Open Cloud route for icon/thumbnails). Drafts written 2026-09-20; nothing uploaded yet.
-updated: 2026-09-20
+updated: 2026-10-15
 ---
 
 # Game Page — icon, thumbnails, description
@@ -68,7 +68,7 @@ Two routes:
    `screen_capture` at a 3/4 angle, then crop and upscale. Cheapest and on
    brand by construction.
 2. **Meshy / image model** from the render as reference, the way
-   `tools/weapon_icon.py` produces weapon icons. Use only if route 1 reads
+   the deleted `tools/weapon_icon.py` produced weapon icons (in git history). Use only if route 1 reads
    muddy at 64 px.
 
 ## Thumbnails (1920 × 1080, up to 5; three planned)
@@ -92,8 +92,8 @@ captured from a client ([[design/client-server-boundary]]).
 
 Icon, thumbnails and description are set in **Creator Dashboard → the
 experience → Basic Settings**. There is no Open Cloud endpoint for the icon or
-thumbnails; the Decal upload in `tools/weapon_icon.py` is for in-game assets
-and does not apply here. If the dashboard rejects an image, the usual causes
+thumbnails; the Decal upload in the deleted `tools/weapon_icon.py` was for in-game
+assets and does not apply here. If the dashboard rejects an image, the usual causes
 are aspect ratio (thumbnails must be exactly 16:9) and text that moderation
 reads as a link.
 

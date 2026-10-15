@@ -1,0 +1,7 @@
+{
+  "className": "BindableEvent",
+  "attributes": {
+    "EmittedByServer": true,
+    "ReplicatesToClients": false
+  }
+}

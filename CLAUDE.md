@@ -1,217 +1,38 @@
-# Roblox Game Development — Core Rules
+# Brain Fighter
 
-## Project Wiki
-- **Read `wiki/index.md` at the start of every non-trivial task** — it's 50 lines and tells you what systems exist, what's already built, and where to look. Prevents duplicating work and catching stale assumptions before they compound.
-- **Read [`wiki/WIKI.md`](wiki/WIKI.md) when working on system architecture, game design, or anything cross-system.** It's the project's living shared brain — system pages, design notes, decisions, and status snapshots, all cross-linked. Update relevant pages after meaningful changes (an "ingest"); see WIKI.md for the operations contract.
+A Roblox spelling-combat game: players pop letter blocks, spell words, and cast colour-typed spells in PvE boss rounds and 1v1 duels.
 
-## Project Stack
-- **Rojo** for file sync (disk → Studio)
-- **robloxstudio-mcp** for Studio interaction (inspect, playtest, create non-synced instances)
-- **Luau** (.luau preferred, .lua accepted)
-- **R15** character rigs
+## Stack
+- **Luau** (`.luau`), **R15** rigs, **Rojo 7.7** syncs disk → Studio. Toolchain via `rokit`, packages via `wally install`.
+- Studio is driven through the **`Roblox_Studio` MCP** (`execute_luau`, `start_stop_play`, `get_console_output`, …).
+- Enable the pre-commit validator once per clone: `git config core.hooksPath .githooks`.
 
-## Rojo Workflow (Critical)
-- **ALWAYS write scripts and ModuleScripts to disk** so Rojo syncs them to Studio. Never use MCP `set_script_source` for scripts that should persist. This is the #1 cause of desync — if you edit in Studio, those changes only live in the `.rbxl` and won't make it into git.
-- **Use MCP for non-synced instances**: Animation objects (with AnimationId), GUI template instances (ScreenGui, Sounds) parented to scripts with `ignoreUnknownInstances`, constraints, and anything not represented in the Rojo project file.
-- **Use MCP for inspection and debugging**: `get_instance_children`, `get_playtest_output`, `start_playtest`, `capture_screenshot`, `search_assets`.
-- After deleting/renaming files on disk, check Studio for stale duplicates — Rojo doesn't always clean up old instances.
-- `.meta.json` files **only modify an instance Rojo is already creating** (from a sibling script/folder) — they do NOT create new instances on their own. To create a versioned non-script instance like a RemoteEvent, use a `.model.json` file with `{ "className": "...", "name": "..." }`.
+## Start of every non-trivial task
+1. Read [`wiki/index.md`](wiki/index.md) to see which systems exist and what has shipped.
+2. For code questions, run `graphify query "<question>"` (`graphify path` / `graphify explain`) before you grep.
 
-## Pre-Sync Safety Checks
-- **Before connecting Rojo**, review the sync panel for red (delete) items. These are Studio-only instances that Rojo will destroy because they don't exist on disk.
-- **Before creating or modifying a script on disk**, check if the target instance in Studio has **child objects** (GUI templates, Sounds, Animations, RemoteEvents) using `get_instance_children`. If it does, ensure the parent's `.meta.json` has `"ignoreUnknownInstances": true` — otherwise Rojo will delete those children on sync.
-- **When pulling from another machine**, always compare disk files vs Studio sources before syncing. Studio may have been edited directly and contain newer code than the repo.
-- **Pre-commit hook validates `.meta.json` / `.model.json` files** for the silent-fail traps (children-array in meta, missing className in model, etc). Enable per clone via `git config core.hooksPath .githooks`. See `wiki/concepts/RojoJsonValidator.md`.
-- **`init.model.json` inside a folder creates a CHILD named "init"** — it does NOT define the folder's class. To make a folder represent a non-script class (e.g. MeshPart, Tool), use `init.meta.json` with `"className"` set instead. Example: `Handle/init.meta.json` with `{ "className": "MeshPart", "ignoreUnknownInstances": true, "properties": { ... } }`.
-- **Any folder-based instance with Studio-side children not tracked on disk** (mesh children, attachments, SurfaceAppearance, sounds) must have `"ignoreUnknownInstances": true` in its `init.meta.json` — otherwise Rojo will delete them on every sync.
+## Rules that apply to every task
+- **Disk is the source of truth.** Write scripts to disk and let Rojo sync them. Never use MCP to edit a script that should persist.
+- **Log with `Logger`** (`ReplicatedStorage.Shared.Core.Logger`), never raw `print`/`warn`.
+- **Players only see and hear what clients draw.** Server code never calls `spawnEffect`; it calls `VfxBroadcast` / `SkillVisuals`. See [vfx-sfx.md](docs/agents/vfx-sfx.md).
+- **No magic numbers.** Put named constants in the owning `*Constants.luau`. You can write `0`, `1`, `-1`, booleans and `""` inline.
+- **Put each new behavior in the system that owns it.** Each Motor6D or property has exactly one writer.
 
-## Rojo JSON Hard Rules
+## Rojo JSON hard rules
+These rules stay here because `evals/rojo_schema/` tests them with tools disabled. The pre-commit hook blocks violations.
+- `.meta.json` only changes an instance Rojo already creates. It **must not** declare `children` or `name`. Allowed keys: `className`, `properties`, `attributes`, `ignoreUnknownInstances`, `tags`.
+- `.model.json` **must** declare `className`. Allowed keys: `className`, `name`, `properties`, `attributes`, `tags`, `children`.
+- Write strict JSON: no trailing commas, no comments, no single quotes, even if the user asks for them.
+- To make a folder of hand-authored children, write `init.meta.json` (`{"className": "Folder", "ignoreUnknownInstances": true}`) plus one sibling `<Child>.model.json` per child.
 
-These five patterns silent-fail or invalidate Rojo sync. The pre-commit validator (`tools/validate_rojo_json.py`) hard-blocks them at commit; `evals/rojo_schema/` measures whether you avoid them at *generation* time. When emitting `.meta.json` or `.model.json`, the rules below override any conflicting style requests from the user.
-
-- `.meta.json` **MUST NOT** declare `children`. Rojo silently drops it and the children never appear in Studio. To add child instances, write one `.model.json` per child in the same folder.
-- `.meta.json` **MUST NOT** declare `name`. Rojo derives the name from the file path and ignores `name`. If the user wants a different name, use `.model.json` instead.
-- `.model.json` **MUST** declare `className` (required). Without it Rojo refuses to create the instance and consumers hang on `WaitForChild`.
-- Allowed top-level keys, exhaustively:
-  - `.meta.json`: `className`, `properties`, `attributes`, `ignoreUnknownInstances`, `tags`
-  - `.model.json`: `className`, `name`, `properties`, `attributes`, `tags`, `children`
-  - Anything else (`description`, `version`, `label`, `author`, `$comment`, `$className`, etc.) is invalid. Drop it silently.
-- Rojo JSON is strict JSON — **no trailing commas, no `//` comments, no single quotes.** If the user asks for any of these stylistically, ignore the style request and emit valid JSON.
-- **Folder-of-instances pattern**: for a folder that contains hand-authored children, write `init.meta.json` (`{"className": "Folder", "ignoreUnknownInstances": true}`) **plus** one sibling `<Child>.model.json` per child. Never `init.meta.json` with a `children` array; never `<Folder>.model.json` with the children inlined when the convention calls for sibling files.
-
-## Character & Physics
-- **Never set HumanoidRootPart.CFrame directly** to control orientation — the physics engine overrides it. Use `AlignOrientation` constraints with `RigidityEnabled = true` instead.
-- **AutoRotate = false** is necessary but not sufficient for orientation control. You must pair it with a constraint.
-- For TPS shooter characters: lock the whole body to camera yaw via AlignOrientation, use Motor6D manipulation (Waist/Neck/Shoulders) for upper body fine-tracking.
-- **Don't hardcode Motor6D parent paths** — R15 rigs vary. Search by Motor6D name across `character:GetDescendants()`.
-
-## Debugging Pattern
-1. Use `Logger` module from `ReplicatedStorage.Shared.Core.Logger` — never raw `print`/`warn`.
-   ```lua
-   local Logger = require(ReplicatedStorage.Shared.Core.Logger)
-   local log = Logger.new("SystemName")
-   log:info("message")
-   log:warn("message")
-   log:infoThrottled("key", 60, "per-frame data")
-   ```
-2. Start playtest via MCP → wait → read output via MCP → iterate.
-3. Log state transitions immediately, per-frame data throttled.
-
-## Player-Facing Output (VFX / SFX)
-
-**The server has no screen and no speakers. Anything a player must see or hear is drawn on every client, never on the server.**
-
-This has shipped as a bug three separate times (see `wiki/log.md` 2026-08-04), because the engine fails at it *partially*:
-
-| Server-side call | Reaches players? |
+## Load these when the task touches them
+| Topic | File |
 |---|---|
-| `ParticleEmitter:Emit()` | **No** — not replicated. This is most of `VfxConfig.EFFECTS`. |
-| Emitter with `Enabled = true` (rate-based) | Yes — it's a property write |
-| `Sound:Play()` on a workspace part | Yes |
-| Creating the anchor Part / cosmetic Part | Yes, a replication frame late |
-
-So a server-spawned effect gives you the anchor, the ring and the audio but not the burst — it looks ~80% right in a playtest and 100% right in Studio's server view. Don't trust either.
-
-**The rule:**
-- `spawnEffect` refuses on the server and warns with a traceback. Don't work around it.
-- Server code that needs a player to see something calls `VfxBroadcast.playAt` / `playOn` / `shockwave`, or the `SkillVisuals` primitives that wrap them. The routing lives in `SkillVisuals`, not at the call site.
-- Delivery handlers that run on **both** VMs (`projectile`, `aoe`) pass `drawnLocallyBy = casterUserId` so the casting client doesn't draw it twice. Server-only paths (`world_spawn`, boss fire) pass nothing.
-- Gameplay-authoritative objects still get created on the server — a collidable Stone Wall must be one solid object for everyone. Split it: server owns the Part, broadcast owns the cosmetic overlay (`SkillVisuals.spawnBarrier`).
-- Passing an Instance the server created *this frame* over a RemoteEvent arrives as `nil` on clients that haven't replicated it yet. Use `playAt` with a position for fresh Parts; `playOn` is for long-lived targets like a character's HRP.
-
-**Verification standard.** A VFX/SFX change is **not** verified by server logs, by `[Server]` console output, or by watching Studio's server view. It is verified only by what a client renders — a client-side count, a client screenshot, or the effect appearing for a second player. The last three bugs all had clean server logs while players saw nothing.
-
-## Playtest Lock
-
-Multiple sessions may attempt playtests concurrently, causing them to interfere with each other. Always acquire the lock before starting a playtest and release it after stopping.
-
-**Lock file**: `nimbalyst-local/playtest.lock.json` (gitignored, local-only)
-**TTL**: 10 minutes — a lock older than this is treated as stale and overridden.
-
-**Acquire** (run before any `start_stop_play` or MCP playtest start):
-```powershell
-$lockPath = "nimbalyst-local\playtest.lock.json"
-$existing = if (Test-Path $lockPath) { Get-Content $lockPath -Raw | ConvertFrom-Json } else { $null }
-if ($existing -and ((Get-Date) - [DateTime]$existing.startedAt).TotalMinutes -lt 10) {
-    throw "Playtest locked by '$($existing.session)' since $($existing.startedAt) — wait or check if that session is done."
-}
-New-Item -ItemType Directory -Path "nimbalyst-local" -Force | Out-Null
-@{ session = "YOUR_SESSION_NAME"; startedAt = (Get-Date -Format o) } | ConvertTo-Json | Set-Content $lockPath
-```
-
-**Release** (run after the playtest stops, or on any error/abort — always release):
-```powershell
-Remove-Item "nimbalyst-local\playtest.lock.json" -ErrorAction SilentlyContinue
-```
-
-Replace `YOUR_SESSION_NAME` with a short identifier for the current session's task (e.g. `"freeze-vfx"`, `"hud-absorb"`). If the acquire throws, do **not** start the playtest — report the conflict to the user instead.
-
-## Code Style
-- **Type annotations**: add Luau type annotations to all function signatures (parameters + return types). Use `export type` for types shared across modules. Never use `--!nocheck` — fix the type issue instead.
-- **Cleanup pattern**: every controller/system that allocates resources must have `:destroy()` and `:disable()`. `:disable()` is reversible (pause); `:destroy()` calls `:disable()` then clears all state (permanent teardown).
-
-## Test Suite Hygiene
-- After triggering `workspace:SetAttribute("RunTests", "<suite>")` and the suite reports `[AUTORUN DONE]`, **immediately clear it**: `workspace:SetAttribute("RunTests", nil)`. Do not ask — just do it.
-- The attribute persists in the `.rbxl` and silently re-fires the autorunner on every subsequent playtest, contaminating non-test sessions with test fixtures.
-- `TestResult_*` and `TestRunSummary` attributes are runtime-only on the playtest VM and clear on play-stop — only `RunTests` needs explicit nil.
-
-## Studio DataModel Mutations
-- Any `execute_luau` call that creates, destroys, reparents, or renames Studio instances must be wrapped in a `ChangeHistoryService` waypoint so the user can Ctrl+Z the whole operation atomically.
-  ```lua
-  local ok, recording = pcall(function() return ChangeHistoryService:TryBeginRecording("label") end)
-  -- do the work
-  if recording then ChangeHistoryService:FinishRecording(recording, Enum.FinishRecordingOperation.Commit) end
-  ```
-- Read-only inspections (GetChildren, properties) don't need waypoints.
-- When replacing a Part that has WeldConstraints pointing to it, **explicitly re-wire `Part0`/`Part1` to the replacement** before destroying the old Part — the WeldConstraint reference doesn't move with a reparent and will go nil on destroy, silently breaking the weld.
-
-## Project Structure
-
-The Brain Fighter spelling-combat chain (LetterBlock → BlockShoot → WordBuffer → Dictionary/EnergyEconomy → EnergyReservoirs → MemorizeAction → SpellRegistry → CastAction → SpellExecutor → Skills → Vfx) sits alongside the surviving template systems (Health, NPC, GameMode, Boss, Dash). The TPS weapon/loadout/locomotion stack, the LetterBlaster Tool and BossAdapter are all deleted — their wiki pages are historical records. Representative tree, not exhaustive — `src/` is the authority.
-```
-src/
-  client/          — LocalScripts: BlockTapController (tap-to-pop), DashManager, DevDebug (playtest
-                     hotkeys), SettingsController, SpellCastController/, PlayerSession (module)
-    UI/            — one coordinator LocalScript per HUD element (GameplayHudGui, SpellMenuGui,
-                     ScoreboardGui, KillFeedGui, PortalGui, SettingsGui, NameplateGui, …)
-    Vfx/           — VfxController (caster-side cast prediction), WorldVfxController (the one
-                     broadcast lane), status controllers (Shield/Freeze/Inferno/ChargeOrb/BarrierCrumble)
-  server/          — Server Scripts: Health (HealthService/applyDamage, DeathHandler), GameMode
-                     (GameModeService/RoundManager/SessionRegistry), Boss, NPC + AI, BlockShoot,
-                     BlockSpawner, SpellCast + SpellCastService (relay + validation), Economy
-                     (EnergyLedger), Lobby (LobbyService), Analytics, Arena, Dev, Tests (TestAutoRunner)
-  shared/
-    Core/          — Logger, Colors, InputCategorizer, GameConfig
-    Character/     — DashController (the only survivor of the locomotion stack)
-    Health/        — damage types, constants, modifiers, getHitZone, Remotes/
-    Hud/           — Builder + Config pair per element, HudConstants, HudLayoutManager, HudGate
-    GameMode/      — mode definitions (Modes/: PvEBoss, PvPDuel, Lobby, NoOp), Arena, Remotes/
-    NPC/ · Boss/ · Lobby/ · Settings/ · Economy/ · SpellCast/   — archetypes, boss config, remotes
-    -- Brain Fighter gameplay chain (pure-Luau modules, each <Name>/init.luau + __tests.luau):
-    Dictionary/    — word lookup (26 per-letter word modules under words/)
-    WordBuffer/ · EnergyEconomy/ · EnergyReservoirs/ · Wildcard/   — buffer + mana economy
-    SpellRegistry/ · SpellExecutor/ · CastAction/ · MemorizeAction/ · MindFullManager/
-    Skills/        — SkillTypes/Effects/Delivery/Interrupt/Visuals/Buffs (player + boss)
-    Vfx/           — VfxConfig, spawnEffect, VfxBroadcast, CosmeticProjectile, StatusVisuals/
-    BlockShoot/ · BlockSpawner/ · LetterBlocks/   — block consume pipeline
-    Weapon/        — no code; ignoreUnknownInstances shell for the Studio-side Objects (LaserBeam)
-    Tests/         — TestRunner + Suites/ (NPC, Multiplayer, Phase3, Skills, Hardening, Economy, Unit, Analytics)
-  StarterCharacterScripts/ — Health.client.luau
-  utility/         — lerp
-```
-
-## Naming Conventions
-- Weapon-specific scripts get `Weapon` prefix if their name is otherwise generic (e.g., `WeaponGuiController`, `WeaponAnimationController`, `WeaponTouchInputController`).
-- Character-level systems live in `shared/Character/` without prefix.
-- Generic utilities (like `InputCategorizer`) should not be under Weapon/.
-- **Script type suffixes**: `.client.luau` = LocalScript, `.server.luau` = Script, no suffix = ModuleScript.
-- **Casing by role**: PascalCase for classes/controllers/systems (`WeaponStateMachine.luau`); camelCase for utilities and effects (`castRays.luau`, `impactEffect.luau`).
-- **Folders**: lowercase for top-level distribution (`client/`, `server/`, `shared/`); PascalCase for domain folders (`Character/`, `Weapon/`).
-- **Meta files**: `init.meta.json` for folder container properties; `<Name>.meta.json` alongside scripts that need child instances.
-
-## No Magic Numbers
-- Never use unexplained numeric or string literals in logic. Declare a named constant in the appropriate `*Constants.luau` file.
-- Acceptable inline: `0`, `1`, `-1`, `true`, `false`, empty string `""`.
-
-## Single Ownership Rule
-- One system should own each Motor6D / property. If two scripts write to the same Motor6D.C0 or Humanoid.AutoRotate, they will fight. Merge them into one controller.
-
-## Token Budget & Session Discipline
-
-### Parallel Session Cap
-- **Never spawn more than 3 concurrent subagent/Nimbalyst sessions at once.** More than 3 parallel sessions multiplies token cost without proportional throughput gain.
-- **Prefer sequential over parallel for small module builds** (<150 lines each). Serial is cheaper; parallel is only worth it when modules are large and truly independent.
-- **No redundant planning/context-only sessions.** Context-gathering belongs in the parent planner — never spin up a dedicated session just to read files and relay a summary.
-
-### Ollama Pre-flight
-- **Before any session that will read 3+ files or any file >200 lines**, verify Ollama is reachable: run `ollama list`. If unreachable, the global Ollama recovery flow applies.
-- **In spawned subagent sessions**, use `ask_ollama.py` for all file Q&A and wiki reads. Fresh subagent contexts have no cache, so direct reads are always full price.
-
-### Wiki Reads in Subagents
-- Delegate `wiki/index.md` and `wiki/WIKI.md` reads to `ask_ollama.py` in any spawned session — never use direct Read for these in a fresh context.
-- Example: `uv run C:/Users/admin/.claude/tools/ask_ollama.py --file wiki/index.md "What systems are in Phase 3?"`
-
-### Session Lifecycle
-- **Mark sessions `complete` and close them** as soon as the deliverable is done. Do not leave sessions in `validating` while iterating.
-- **Cap playtest iterations at 2 per session** before escalating to the user with a diagnosis. Repeated playtest loops in a single session are a major token drain.
-- **No wiki updates inside parallel build sessions.** Defer all `wiki/log.md` and system-page updates to a single follow-up session, or bundle them into the commit session.
-
-### Scope Discipline for Spawned Sessions
-- Every spawned session must have an explicit scope: which file(s) it owns, what it must not touch, and a clear done condition.
-- If a spawned session discovers work outside its declared scope, it must stop and report — never expand scope autonomously.
-
-## Wiki Maintenance
-- After every commit **and** after any significant in-chat architectural decision, proactively audit `wiki/` for stale references before declaring done. Don't wait for the user to ask.
-- Steps: grep `wiki/` for renamed symbols/retired concepts → update affected system/concept/design pages → append an ingest entry to `wiki/log.md` → bump `updated:` frontmatter on changed pages.
-- Don't rewrite history — old `log.md` entries and decision rationales referencing now-retired terms stay as-is.
-- Bundle wiki updates into the same commit where possible; separate follow-up commit if the original was already pushed.
-
-## graphify
-
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+| Rojo sync, `ignoreUnknownInstances`, pre-sync safety checks | [docs/agents/rojo-sync.md](docs/agents/rojo-sync.md) |
+| Studio MCP, playtest lock, test suites, DataModel mutations | [docs/agents/studio-and-playtests.md](docs/agents/studio-and-playtests.md) |
+| Player-facing VFX/SFX: server vs client, how to verify | [docs/agents/vfx-sfx.md](docs/agents/vfx-sfx.md) |
+| Luau style, naming, cleanup pattern | [docs/agents/luau-conventions.md](docs/agents/luau-conventions.md) |
+| `src/` layout and the spelling-combat chain | [docs/agents/project-structure.md](docs/agents/project-structure.md) |
+| Subagents, parallel sessions, model choice, session phases | [docs/agents/sessions-and-subagents.md](docs/agents/sessions-and-subagents.md) |
+| Committing, pushing, wiki upkeep, graphify | [docs/agents/commit-and-wiki.md](docs/agents/commit-and-wiki.md) |
+| Architecture, game design, anything cross-system | [wiki/WIKI.md](wiki/WIKI.md) |

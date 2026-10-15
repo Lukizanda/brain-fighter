@@ -1,7 +1,7 @@
 ---
 type: system
 description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu as circular hold-to-charge panels with concentric tier rings, MemorizeButton, MindFullIndicator), the mobile DashButton, and the seven own-ScreenGui elements (DeathScreen, DamageFeedback, GameState, Scoreboard, BossHud, KillFeed, RoundTimer — the last ported 2026-09-19). Round-over copy comes from the payload's outcome id via RoundOutcomeCopy. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291. SettingsMenu cut 2026-09-15, refactor chunk 12.)
-updated: 2026-09-22
+updated: 2026-10-15
 ---
 
 # HUD System
@@ -302,4 +302,3 @@ The weapon-cycling card widget (Builder + Config + `WeaponRolodexGui` coordinato
 ## Cross-references
 
 - Pattern → [[concepts/BuilderConfigLayout]]
-- Weapon icons (asset pipeline) → `reference_weapon_icon_pipeline.md` in auto-memory

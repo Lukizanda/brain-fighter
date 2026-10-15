@@ -34,6 +34,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -136,10 +137,29 @@ def parse_response(text: str) -> tuple[str | None, str | None, str | None]:
     return filename, body, None
 
 
+def resolve_claude_bin() -> str:
+    """Path to a real claude executable.
+
+    On Windows the npm install puts a `claude.cmd` shim on PATH, which
+    subprocess can't launch by bare name, and cmd.exe would mangle the
+    multi-line --append-system-prompt argument anyway. Prefer the native
+    exe the shim forwards to.
+    """
+    found = shutil.which("claude")
+    if found and found.lower().endswith((".cmd", ".bat")):
+        bundled = Path(found).parent / "node_modules" / "@anthropic-ai" / "claude-code" / "bin" / "claude.exe"
+        if bundled.exists():
+            return str(bundled)
+    return found or "claude"
+
+
+CLAUDE_BIN = resolve_claude_bin()
+
+
 async def call_claude(prompt: str, *, raw_model: bool, model: str | None, semaphore: asyncio.Semaphore) -> dict:
     """Returns {"stdout": ..., "stderr": ..., "exit_code": ..., "elapsed_s": ..., "parsed_json": ...|None}."""
     args = [
-        "claude", "-p",
+        CLAUDE_BIN, "-p",
         "--output-format", "json",
         "--tools", "",
         "--append-system-prompt", OUTPUT_CONTRACT,
@@ -266,7 +286,7 @@ def harness_fingerprint() -> dict:
         pass
 
     try:
-        ver = subprocess.check_output(["claude", "--version"], text=True).strip()
+        ver = subprocess.check_output([CLAUDE_BIN, "--version"], text=True).strip()
         fingerprint["claude_cli_version"] = ver
     except (subprocess.CalledProcessError, FileNotFoundError):
         pass

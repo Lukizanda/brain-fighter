@@ -1,0 +1,7 @@
+{
+  "className": "StringValue",
+  "name": "Tooltip",
+  "properties": {
+    "Value": "The spell menu shows every spell you can cast right now. Each spell is tied to a word, and its colour shows its type. Open the menu during a round to see which words you know and which spells they unlock.\n\nTo cast a spell, pop letter blocks in the arena to collect letters, then spell the spell's word. Once the word is complete, the spell is ready, and the menu highlights it so you know it can be cast.\n\nChoose a spell from the menu to cast it at your target. Match spell colours to the situation: some types work better against certain bosses or opponents. Watch the menu between casts to plan your next word before the letters run out."
+  }
+}
