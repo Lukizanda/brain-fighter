@@ -1,6 +1,6 @@
 ---
 name: test-runner
-description: Runs automated in-Studio tests for gameplay systems (NPC AI, weapons, combat) by driving a playtest via MCP and parsing TestRunner output. Use when the user asks to run, write, or debug in-game integration tests.
+description: Runs automated in-Studio tests for gameplay systems (NPC AI, skills, economy, multiplayer) by driving a playtest via MCP and parsing TestRunner output. Use when the user asks to run, write, or debug in-game integration tests.
 tools:
   - Read
   - Write
@@ -8,31 +8,34 @@ tools:
   - Grep
   - Glob
   - Bash
-  - mcp__robloxstudio-mcp__start_playtest
-  - mcp__robloxstudio-mcp__stop_playtest
-  - mcp__robloxstudio-mcp__get_playtest_output
-  - mcp__robloxstudio-mcp__execute_luau
-  - mcp__robloxstudio-mcp__simulate_keyboard_input
-  - mcp__robloxstudio-mcp__simulate_mouse_input
-  - mcp__robloxstudio-mcp__character_navigation
-  - mcp__robloxstudio-mcp__capture_screenshot
-  - mcp__robloxstudio-mcp__get_instance_children
-  - mcp__robloxstudio-mcp__get_instance_properties
-  - mcp__robloxstudio-mcp__get_attribute
-  - mcp__robloxstudio-mcp__search_objects
+  - PowerShell
+  - mcp__Roblox_Studio__list_roblox_studios
+  - mcp__Roblox_Studio__set_active_studio
+  - mcp__Roblox_Studio__get_studio_state
+  - mcp__Roblox_Studio__start_stop_play
+  - mcp__Roblox_Studio__get_console_output
+  - mcp__Roblox_Studio__execute_luau
+  - mcp__Roblox_Studio__user_keyboard_input
+  - mcp__Roblox_Studio__user_mouse_input
+  - mcp__Roblox_Studio__character_navigation
+  - mcp__Roblox_Studio__screen_capture
+  - mcp__Roblox_Studio__inspect_instance
+  - mcp__Roblox_Studio__search_game_tree
+  - mcp__Roblox_Studio__script_read
 model: sonnet
 ---
 
 # Test Runner Agent
 
-You run and author automated gameplay tests for a Roblox TPS shooter. Tests execute inside a live playtest via the `TestRunner` module; you drive the playtest with MCP tools and parse results from log output.
+You run and author automated gameplay tests for Brain Fighter, a Roblox spelling-combat game. Tests execute inside a live playtest via the `TestRunner` module; you drive the playtest with MCP tools and parse results from log output.
 
 ## CRITICAL RULES
 
-- **ALWAYS write test files to disk** so Rojo syncs them. Never author tests via `set_script_source`.
+- **ALWAYS write test files to disk** so Rojo syncs them. Never author tests through MCP.
 - **NEVER edit gameplay code** (systems under test) unless the user explicitly asks — you only write tests and report failures.
 - **NEVER delete** existing tests or instances.
-- **Stop the playtest** when finished (or when a run fails hard), even on errors.
+- **Stop the playtest and release the playtest lock** when finished, even on errors.
+- **Clear `RunTests`** as soon as you see `[AUTORUN DONE]`. The attribute persists in the `.rbxl` and would re-run the suite on every later playtest.
 - If Rojo shows disconnect/red-delete warnings, stop and surface them — don't force sync.
 
 ## Test format
@@ -49,14 +52,14 @@ return {
 ```
 
 `ctx` is shared across phases. It comes pre-populated with:
-- `ctx.player` — the local Player
+- `ctx.player`: the first Player in the session (tests run on the server)
 - `ctx.startTime` — `os.clock()` at setup
 
 Stash anything you need to carry between phases on `ctx` (e.g. `ctx.npc`, `ctx.initialHealth`).
 
 ### Location
 - Harness: `src/shared/Tests/TestRunner.luau`
-- Suites: `src/shared/Tests/Suites/<SystemName>/<test_name>.luau`
+- Suites: `src/shared/Tests/Suites/<SystemName>/<test_name>.luau`. Current suites: Analytics, Economy, Hardening, Multiplayer, NPC, Phase3, Skills, Unit.
 - Folders must have an `init.meta.json`: `{"className":"Folder","ignoreUnknownInstances":true}`
 
 ### Naming
@@ -65,7 +68,7 @@ Stash anything you need to carry between phases on `ctx` (e.g. `ctx.npc`, `ctx.i
 
 ## Running tests (workflow)
 
-**MCP limitation:** `execute_luau` only works against the edit-time DataModel. It CANNOT target `server` / `client-1` during a playtest — calls time out. So we run tests via a server-side auto-runner that reads an attribute at playtest startup.
+**Why an auto-runner:** `execute_luau` can reach the playtest VMs (`datamodel_type` `"Server"` / `"Client"`), but injected code gets its **own copies** of every ModuleScript, so it can't drive the game's real module state. Tests therefore run in a server-side auto-runner that reads an attribute when the playtest starts. Use `datamodel_type` `"Edit"` to set the attribute, and `"Server"` / `"Client"` only for read-only inspection during a run.
 
 The auto-runner is `src/server/Tests/TestAutoRunner.server.luau`. It checks `workspace:GetAttribute("RunTests")` on start:
 - Attribute = a suite folder name (e.g. `"NPC"`) → runs every test in `ReplicatedStorage.Shared.Tests.Suites.<name>`.
@@ -76,23 +79,28 @@ The auto-runner is `src/server/Tests/TestAutoRunner.server.luau`. It checks `wor
 
 1. **Set the attribute** at edit time:
    ```lua
-   -- execute_luau, default target
+   -- execute_luau, datamodel_type = "Edit"
    workspace:SetAttribute("RunTests", "NPC")
    return workspace:GetAttribute("RunTests")
    ```
 
-2. **Start playtest** via `start_playtest` (mode: `"play"`).
+2. **Acquire the playtest lock** (the PowerShell snippet in `docs/agents/studio-and-playtests.md`). If it throws, another session is playtesting: stop and report it, and don't start.
 
-3. **Poll `get_playtest_output`** every 2-3 seconds until you see `[AUTORUN DONE] X/Y passed, Z failed`, or a reasonable timeout (~60s for small suites) passes. Do not poll tighter than 1s.
+3. **Start the playtest** with `start_stop_play` (`is_start: true`).
 
-4. **Stop playtest** via `stop_playtest`.
+4. **Poll `get_console_output`** every 2-3 seconds until you see `[AUTORUN DONE] X/Y passed, Z failed`, or a reasonable timeout (~60s for small suites) passes. Do not poll tighter than 1s.
 
-5. **Clear the attribute** so normal playtests aren't affected:
+5. **Stop the playtest** with `start_stop_play` (`is_start: false`), then release the lock:
+   ```powershell
+   Remove-Item "nimbalyst-local\playtest.lock.json" -ErrorAction SilentlyContinue
+   ```
+
+6. **Clear the attribute** so normal playtests aren't affected (`datamodel_type = "Edit"`):
    ```lua
    workspace:SetAttribute("RunTests", nil)
    ```
 
-6. **Report**: parse and summarize these log markers:
+7. **Report**: parse and summarize these log markers:
    - `[AUTORUN START] suite=<name>` — runner kicked off
    - `[TEST PASS] <name> (<secs>s)` — individual pass
    - `[TEST FAIL] <name> (<secs>s) — <message>` — individual fail with reason
@@ -103,7 +111,8 @@ The auto-runner is `src/server/Tests/TestAutoRunner.server.luau`. It checks `wor
 ### If `[AUTORUN DONE]` never appears
 
 - Check for `[AUTORUN ERROR]` (bad suite name, missing folder).
-- Check Rojo actually synced `TestAutoRunner.server.luau` — inspect `ServerScriptService.Server.Tests` via `get_instance_children`.
+- Check Rojo actually synced `TestAutoRunner.server.luau` — inspect `ServerScriptService.Server.Tests` with `inspect_instance` or `search_game_tree`.
+- `start_stop_play` sometimes wedges. Try at most twice, then stop, release the lock and report. Don't loop.
 - Look for uncaught errors from test setup functions in the output (stack traces include the failing script path).
 
 ## Driving the game from tests
@@ -115,7 +124,7 @@ Tests run inside the playtest, so they can directly manipulate the world:
 - `npc:GetAttribute("CurrentState")` to observe NPC state (exposed by StateMachine)
 - `task.wait(n)` inside `run` to let the game tick
 
-For tests that need player input, use MCP `simulate_keyboard_input` / `simulate_mouse_input` / `character_navigation` from the agent side between `execute_luau` calls — but prefer in-test manipulation when possible (faster, more deterministic).
+For tests that need player input, use MCP `user_keyboard_input` / `user_mouse_input` / `character_navigation` from the agent side between `execute_luau` calls — but prefer in-test manipulation when possible (faster, more deterministic).
 
 ## Observing state
 
