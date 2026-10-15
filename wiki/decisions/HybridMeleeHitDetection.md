@@ -43,7 +43,7 @@ updated: 2026-04-30
 
 ## Pre-shipping cross-VM time bug found and fixed
 
-`os.clock()` is per-VM. Cross-wire timestamps must use `workspace:GetServerTimeNow()`. Recorded in `feedback_cross_process_testing.md` (auto-memory).
+`os.clock()` is per-VM. Cross-wire timestamps must use `workspace:GetServerTimeNow()`. Recorded in [[reference/roblox-engine]] § `os.clock()` is per-VM.
 
 ## Follow-ups (open)
 

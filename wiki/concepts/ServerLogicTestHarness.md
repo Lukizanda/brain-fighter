@@ -74,4 +74,4 @@ The harness should be a top-level `.server.luau` that runs unconditionally at bo
 - [[systems/Tests]] — the in-Studio harness that now covers most of what this pattern was for
 - [[concepts/MultiplayerTestPattern]] — server-authoritative test suite this harness pattern complements
 - [[concepts/ValidateBeforeShip]] — when to use this pattern (always, for server-only fixes)
-- Memory `feedback_mcp_clone_replication.md` — the negative version: client-context probes can't validate server logic
+- [[reference/studio-mcp]] § Instances cloned through MCP — the negative version: client-context probes can't validate server logic

@@ -93,4 +93,4 @@ MVP shipped; chase, vision cones, and multiple archetypes are the next steps.
 
 - The deleted NPC melee path → [[systems/Weapon]] (`Actions.MeleeAttack` and `Weapon/Melee/*` removed in chunk 11; nothing ever wired them to an archetype)
 - Boss states over the same three layers → [[systems/Boss]]
-- WorldDataManager pattern (snapshot then destroy markers) → [[concepts/ModelJsonInstances]]
+- WorldDataManager pattern (snapshot then destroy markers) → [[reference/rojo]]

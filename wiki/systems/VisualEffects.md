@@ -452,7 +452,7 @@ Heal / freeze / shield / wall / buff follow the same shape; `freeze` and `shield
 - **Folder-with-init layout** (implemented, now deleted): `Handle.model.json` was converted to:
   - `src/StarterPack/Spelling Staff/Handle/init.model.json` — same MeshPart props (MeshId + Size).
   - `src/StarterPack/Spelling Staff/Handle/Tip.model.json` — `Attachment` className, CFrame placeholder at `(0, 2.877, 0)` (top of staff, Y/2 of the MeshPart height).
-  - See [[concepts/ModelJsonInstances]] for the folder-with-init convention (sibling `.model.json` files parent to the init instance, not to the Tool).
+  - See [[reference/rojo]] for the folder-with-init convention (sibling `.model.json` files parent to the init instance, not to the Tool).
   - **Fallback**: if Tip CFrame iteration drags, anchor v1 cast VFX to `caster.HumanoidRootPart` and defer Tip to v1.1. *(This is what shipped, and then became permanent.)*
 - `VfxController.spawnCast(playerOrCharacter, effectId)`:
   1. ~~Resolves the character → finds the equipped Tool → `Tool.Handle.Tip` Attachment.~~ Resolves the character → `HumanoidRootPart`.

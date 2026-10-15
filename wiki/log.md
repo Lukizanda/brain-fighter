@@ -2035,3 +2035,16 @@ Closes the two stale files flagged in the entry above.
 ## [2026-10-15] ingest | `.claude/settings.json` pruned
 
 Allow list cut from 72 to 53 entries. Removed: the one-off Sandbox find/grep/mkdir commands, the template-era `.lua`→`.luau` renames (`Bash(mv:*)` already covers them), the Read grants for another machine's `achong` profile and the old `d:\` Sandbox, `mcp__robloxstudio-mcp__*`, and the `python -c` entries that `Bash(python:*)` already covers. The retired `nimbalyst-mcp` / `nimbalyst-session-naming` tool names are now the current `mcp__nimbalyst__*` / `mcp__nimbalyst-trackers__*` names. `additionalDirectories` now holds only `RobloxPlugins`; all 11 Sandbox and `d:\` paths are gone. The graphify PreToolUse hook and `acceptEdits` are unchanged.
+
+## [2026-10-15] ingest | wiki/reference/ added; platform gotchas moved out of concepts and memory
+
+- **New category `reference/`**: external platforms as tested here, one page each, with the version verified against and a link to the official docs. The pages are [[reference/rojo]] (was `concepts/ModelJsonInstances`), [[reference/open-cloud]] (was `concepts/RobloxOpenCloudAuth`, plus the `rbxthumb://` rule), [[reference/studio-mcp]] and [[reference/roblox-engine]]. The last two are new, built from six auto-memory files that are now deleted and replaced by one pointer memory. `WIKI.md` gets the `reference` page type, a rule against copying official docs, and a corrected folder layout (the never-created `status/` folder and the Weapon/Locomotion/TDM examples are gone). `index.md` gets a Reference section, and CLAUDE.md and `docs/agents/{rojo-sync,studio-and-playtests}` link to it. Links rewritten in RojoJsonValidator, build-plan, LetterBlock, NPC, VisualEffects, ServerLogicTestHarness, ValidateBeforeShip, HybridMeleeHitDetection and Tests.
+- **Benchmarked with the new `evals/agent_bench/`**: 6 lookup questions × 3 runs through the real harness, read-only, MCP off. All arms answered 18/18 correctly.
+
+  | arm | fixed prompt | mean context/question | mean turns | mean wall | 18-run cost |
+  |---|---|---|---|---|---|
+  | A: old 217-line CLAUDE.md | 36.8k | 55.9k | 1.50 | 8.3 s | $1.42 |
+  | B: 38-line CLAUDE.md + docs/agents | 30.6k | 51.9k | 1.67 | 8.3 s | $1.02 |
+  | C: B + reference/ move | 30.3k | 74.3k | 2.39 | 9.7 s | $1.32 |
+
+  The CLAUDE.md split saves about 6.2k tokens on **every** turn of every session. The move made the moved-fact questions slower: `execute_luau` and `rbxthumb` questions went from 1 turn to about 3 (+50–65k tokens, +4 s), because their answers used to sit in the always-loaded memory index lines and now need a page read. Questions whose facts were already in the wiki (Rojo, the Open Cloud 401) didn't change or got slightly cheaper.

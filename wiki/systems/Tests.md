@@ -202,9 +202,9 @@ The subagent drives a real playtest via MCP, parses TestRunner output, reports p
 
 ## Test design conventions
 
-- **No mocks** for in-engine behavior. Tests spawn real Humanoids, Tools, etc. (see `feedback_cross_process_testing.md` in auto-memory.)
+- **No mocks** for in-engine behavior. Tests spawn real Humanoids, Tools, etc. (see [[reference/roblox-engine]] § `os.clock()` is per-VM.)
 - Tests that require player input (e.g. firearm fire) cannot be MCP-driven — those are documented as "manual playtest" in their respective status pages.
-- Cross-VM time uses `workspace:GetServerTimeNow()`, not `os.clock()` (different per VM). See `feedback_cross_process_testing.md`.
+- Cross-VM time uses `workspace:GetServerTimeNow()`, not `os.clock()` (different per VM). See [[reference/roblox-engine]].
 - `__tests.luau` files may change their **return shape** freely (wrap in a function, expose `.run`/`.runAll`) without it counting as touching "the module under test" — the assertions inside are still off-limits unless they're demonstrably stale against documented behavior (see the MemorizeAction case in `wiki/design/refactor-plan-2026-09.md` Chunk 1).
 
 ## Glossary

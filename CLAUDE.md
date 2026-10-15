@@ -35,4 +35,5 @@ These rules stay here because `evals/rojo_schema/` tests them with tools disable
 | `src/` layout and the spelling-combat chain | [docs/agents/project-structure.md](docs/agents/project-structure.md) |
 | Subagents, parallel sessions, model choice, session phases | [docs/agents/sessions-and-subagents.md](docs/agents/sessions-and-subagents.md) |
 | Committing, pushing, wiki upkeep, graphify | [docs/agents/commit-and-wiki.md](docs/agents/commit-and-wiki.md) |
+| Platform gotchas we verified: Rojo, Studio MCP, Roblox engine, Open Cloud | [wiki/reference/](wiki/index.md) (Reference section) |
 | Architecture, game design, anything cross-system | [wiki/WIKI.md](wiki/WIKI.md) |

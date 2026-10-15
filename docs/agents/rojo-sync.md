@@ -1,6 +1,6 @@
 # Rojo sync
 
-The JSON hard rules are in the root [CLAUDE.md](../../CLAUDE.md). This page covers everything else about sync. Validator details: [`wiki/concepts/RojoJsonValidator.md`](../../wiki/concepts/RojoJsonValidator.md).
+The JSON hard rules are in the root [CLAUDE.md](../../CLAUDE.md). This page covers everything else about sync. Validator details: [`wiki/concepts/RojoJsonValidator.md`](../../wiki/concepts/RojoJsonValidator.md). How Rojo 7.7 actually behaves, with the traps we hit: [`wiki/reference/rojo.md`](../../wiki/reference/rojo.md).
 
 ## What goes on disk and what goes through MCP
 - **Disk (Rojo):** every Script, LocalScript and ModuleScript. If you edit one in Studio, the change only lives in the `.rbxl` and never reaches git. This is the #1 cause of desync.

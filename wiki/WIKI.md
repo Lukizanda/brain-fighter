@@ -1,6 +1,7 @@
 ---
 type: schema
 description: Conventions and operations for the Brain Fighter project wiki — read this first before reading or writing any other wiki page.
+updated: 2026-10-15
 ---
 
 # Brain Fighter Wiki — Schema
@@ -20,11 +21,12 @@ wiki/
   WIKI.md              — this file (schema + operations)
   index.md             — categorized catalog of every wiki page
   log.md               — append-only chronological record of ingests / lints
-  systems/             — one page per gameplay/engine system (Weapon, Health, NPC, Locomotion, HUD, Loadout, GameMode, Tests)
-  design/              — game-design pages (vision, art direction, weapon family vocabulary, level intent)
+  ideas.md             — parking lot for unscheduled ideas
+  systems/             — one page per gameplay/engine system (WordBuffer, SpellRegistry, Skills pipeline, Health, GameMode, Lobby, HUD, …); retired systems (Weapon, Loadout, LetterBlaster, BossAdapter) keep their pages as historical records
+  design/              — game-design pages (gameplay loop, build plan, art direction, audits, refactor plans)
   decisions/           — mini-ADRs: non-obvious choices with rationale
-  concepts/            — recurring patterns / shared idioms (Single Ownership, Builder+Config+LayoutManager, .model.json)
-  status/              — living progress snapshots per workstream (TDM, Loadout, Greybox, Melee, etc.)
+  concepts/            — recurring patterns / shared idioms of *this* project (Single Ownership, Builder+Config+LayoutManager, HudGate)
+  reference/           — external platforms as tested here (Rojo, Studio MCP, Roblox engine, Open Cloud): behaviour the official docs don't cover or got wrong
 ```
 
 ## Page conventions
@@ -33,7 +35,7 @@ Every page begins with frontmatter:
 
 ```yaml
 ---
-type: system | design | decision | concept | status
+type: system | design | decision | concept | reference
 description: one-line hook — used in index.md and search
 updated: YYYY-MM-DD
 ---
@@ -52,7 +54,7 @@ updated: YYYY-MM-DD
 | `design` | Game-design intent (vision, pillars, art direction, vocabulary). | Long-lived; updated when intent shifts. |
 | `decision` | Why we made a non-obvious choice. Rationale + alternatives considered. | Append-only — old decisions stay even when superseded; add a "Superseded by" link. |
 | `concept` | A pattern or idiom that recurs across systems. | Long-lived. |
-| `status` | Living progress snapshot for a workstream. | High churn — updated whenever progress is made. May be archived when the workstream ships. |
+| `reference` | How an external platform actually behaves, as verified here. Starts with the version and date it was verified against and a link to the official docs; each fact says how we found out. | Long-lived; re-verify when the platform version changes. |
 
 ## Operations
 
@@ -90,6 +92,7 @@ On demand (`/wiki-lint` or "lint the wiki"):
 
 - Anything reproducible from `git log` / `git blame`.
 - File-by-file API documentation that mirrors the code (the code is the doc).
+- Copies of official Roblox or Rojo docs. Link to them from a `reference/` page and record only what we verified that they don't say.
 - Ephemeral session state — that goes in plans, tasks, or memory.
 - Secrets, tokens, asset upload credentials.
 - Rules already in `CLAUDE.md` — link to them, don't duplicate.

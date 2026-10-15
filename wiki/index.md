@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-09-23
+updated: 2026-10-15
 ---
 
 # Wiki Index
@@ -64,17 +64,24 @@ Start here. See [[WIKI]] for conventions and operations.
 
 - [[concepts/SingleOwnership]] — one system owns each Motor6D / property
 - [[concepts/BuilderConfigLayout]] — HUD architecture: Builder constructs, Config tunes, LayoutManager places
-- [[concepts/ModelJsonInstances]] — `.model.json` creates versioned non-script instances; `.meta.json` only modifies
 - [[concepts/ClientServerPredictionParity]] — client prediction must use identical math to server validation; otherwise silent rejects produce desyncs
 - [[concepts/LocalScriptPlacement]] — `.client.luau` only auto-runs from `src/client/` (or inside Tool templates); shared/ LocalScripts are dead code
 - [[concepts/RojoJsonValidator]] — pre-commit linter that hard-blocks the silent-fail traps in `.meta.json` / `.model.json` files
 - [[concepts/MultiplayerTestPattern]] — how to write integration tests for server-authoritative multiplayer paths against a synthetic enemy
 - [[concepts/ServerLogicTestHarness]] — gated `.server.luau` drivers for testing server-only logic when MCP only gives client-side execute_luau
 - [[concepts/ValidateBeforeShip]] — a fix is not done until you've observed it working; build a deterministic repro before pushing
-- [[concepts/RobloxOpenCloudAuth]] — Open Cloud "Invalid API Key" 401 with a previously-working key → regenerate from the dashboard, paste new value into `.env`, move on
 - [[concepts/RemoteVisualDebugging]] — 5-layer diagnostic checklist for "works for me, not for other clients" multiplayer visual bugs
 - [[concepts/HudGate]] — HUD suppression by player state; a required policy argument, because a leaked element fails silently
 - [[concepts/DevDebugHotkeys]] — `[ ] \ 1–4 M` hotkeys in DevDebug.client.luau for word buffer, energy tier fills, and mobile-input simulation
+
+## Reference (external platforms, as tested here)
+
+Platform behaviour we verified ourselves: what the docs don't say, or got wrong. Check here before working around Rojo, Studio MCP, Open Cloud or engine edge cases.
+
+- [[reference/rojo]] — Rojo 7.7: `.model.json` creates instances, `.meta.json` only modifies; a lone `.meta.json` silently creates nothing
+- [[reference/studio-mcp]] — `execute_luau` gets its own module copies (drive via attributes), `datamodel_type` Client/Server/Edit, MCP-cloned instances arrive nil over remotes, `start_stop_play` wedge
+- [[reference/roblox-engine]] — server `Emit()` doesn't replicate, `os.clock()` is per-VM, Studio fps is paced (measure with RenderBreakdown counts), third-party images don't load
+- [[reference/open-cloud]] — "Invalid API Key" 401 → regenerate the key; Open Cloud Decals need `rbxthumb://`
 
 ## Decisions
 

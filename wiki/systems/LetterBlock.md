@@ -26,7 +26,7 @@ Template (Model)         ← src/shared/LetterBlocks/Template/init.meta.json (Ro
     └── Mana (ParticleEmitter)
 ```
 
-The Cube + its 6 SurfaceGuis + ParticleEmitter are MCP-managed: they were created via `execute_luau` in Studio, persist in `BrainFighter.rbxl`, and survive Rojo sync because `Template/init.meta.json` sets `ignoreUnknownInstances: true` (see [[concepts/ModelJsonInstances]]).
+The Cube + its 6 SurfaceGuis + ParticleEmitter are MCP-managed: they were created via `execute_luau` in Studio, persist in `BrainFighter.rbxl`, and survive Rojo sync because `Template/init.meta.json` sets `ignoreUnknownInstances: true` (see [[reference/rojo]]).
 
 Why a single Part instead of a multi-part Model? The cube IS the block — no rig, no socketed accessories. One Part is the cheapest possible representation, and SurfaceGuis live on it directly (no Adornee plumbing needed when the GUI's parent is the BasePart it adorns).
 
@@ -243,6 +243,6 @@ Blocks are server-spawned but their motion is purely cosmetic. Animating server-
 ## See also
 
 - `wiki/design/build-plan.md` — Phase 3 sequencing (LetterBlock template → BlockSpawner → BlockShoot).
-- [[concepts/ModelJsonInstances]] — why the Template uses `init.meta.json` with `ignoreUnknownInstances` rather than declaring children in JSON.
+- [[reference/rojo]] — why the Template uses `init.meta.json` with `ignoreUnknownInstances` rather than declaring children in JSON.
 - [[systems/WordBuffer]] — where `(letter, color)` pairs flow once a block is consumed.
 - [[systems/EnergyReservoirs]] — same color vocabulary on the receiving side.

@@ -46,4 +46,4 @@ The pattern in the harness — gated by `GameConfig.DEV_*`, writes results to `w
 - [[concepts/ServerLogicTestHarness]] — the how-to for the `.server.luau` driver pattern
 - [[concepts/MultiplayerTestPattern]] — when an existing test suite test is the right tool instead
 - Memory `feedback_validate_before_push.md` — the same principle in feedback form
-- Memory `feedback_mcp_clone_replication.md` — why client-side probes can't substitute
+- [[reference/studio-mcp]] § Instances cloned through MCP — why client-side probes can't substitute

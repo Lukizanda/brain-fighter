@@ -40,3 +40,4 @@ if recording then ChangeHistoryService:FinishRecording(recording, Enum.FinishRec
 - Before you destroy a Part that WeldConstraints point to, re-wire `Part0`/`Part1` to its replacement. Otherwise the welds silently go nil.
 - Injected Luau gets its own copies of modules. Drive gameplay through attributes, and observe it through `DescendantAdded`.
 - Instances that MCP clones arrive as `nil` when passed as RemoteEvent arguments. Use a real `.server.luau` dev harness instead.
+- Details, `datamodel_type`, simulated input and the `start_stop_play` wedge: [wiki/reference/studio-mcp.md](../../wiki/reference/studio-mcp.md).
