@@ -25,6 +25,13 @@ These rules stay here because `evals/rojo_schema/` tests them with tools disable
 - Write strict JSON: no trailing commas, no comments, no single quotes, even if the user asks for them.
 - To make a folder of hand-authored children, write `init.meta.json` (`{"className": "Folder", "ignoreUnknownInstances": true}`) plus one sibling `<Child>.model.json` per child.
 
+## Hot facts (inlined for speed)
+These answers live in `wiki/reference/` but are copied here on purpose: `evals/agent_bench/` showed that looking each one up costs 2 extra turns and ~50k tokens. They are complete as written, so use them without opening the page.
+- **Open Cloud Decals:** an uploaded Decal id doesn't resolve as `rbxassetid://<id>`. Use `rbxthumb://type=Asset&id=<id>&w=420&h=420`. ([open-cloud](wiki/reference/open-cloud.md))
+- **`execute_luau` can't drive game modules:** injected code gets its own copy of every ModuleScript, so changing one changes nothing the game sees. Drive gameplay by setting attributes the game listens for, and observe it through `DescendantAdded`. ([studio-mcp](wiki/reference/studio-mcp.md))
+
+To add one: the fact must already be on a `wiki/reference/` page, fit on one line, and come up often. Add a case to `evals/agent_bench/cases.jsonl` and show that inlining it saves turns. Keep the list under 10 lines; every line here is paid on every turn.
+
 ## Load these when the task touches them
 | Topic | File |
 |---|---|

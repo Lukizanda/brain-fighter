@@ -2048,3 +2048,9 @@ Allow list cut from 72 to 53 entries. Removed: the one-off Sandbox find/grep/mkd
   | C: B + reference/ move | 30.3k | 74.3k | 2.39 | 9.7 s | $1.32 |
 
   The CLAUDE.md split saves about 6.2k tokens on **every** turn of every session. The move made the moved-fact questions slower: `execute_luau` and `rbxthumb` questions went from 1 turn to about 3 (+50–65k tokens, +4 s), because their answers used to sit in the always-loaded memory index lines and now need a page read. Questions whose facts were already in the wiki (Rojo, the Open Cloud 401) didn't change or got slightly cheaper.
+
+## [2026-10-15] ingest | CLAUDE.md § Hot facts: two lookups inlined again
+
+Following up the entry above. The `rbxthumb://` rule and "`execute_luau` gets its own module copies; drive gameplay through attributes" are copied back into a new `CLAUDE.md` § Hot facts. The section says why it exists and what it takes to add a line: the fact must already be on a `reference/` page, fit on one line, come up often, and have a benchmark case showing the saving; the list stays under 10 lines. `WIKI.md`'s `reference` page type now says to update the CLAUDE.md copy when a hot fact changes.
+
+Arm D (`evals/agent_bench/runs/D-hot-facts.jsonl`), 18/18 correct: both questions are back to **1 turn / ~30.7k tokens**, from 2.7–3 turns / 83–96k in arm C. The fixed prompt grows by 74 tokens (30,637 → 30,711). Mean wall time rose (14.4 s median against 7.2 s in B), but median API time is flat (7.6 s against 7.7 s), so the extra time was local process overhead on the machine, not the model. Cost rose for a similar reason: editing CLAUDE.md invalidated the prompt cache, so D wrote 146k cache tokens against 85k in B. `studio-fps` still takes 3 turns (2 in B, when the memory index carried the RenderBreakdown hint), which makes it the first candidate for a third hot fact.

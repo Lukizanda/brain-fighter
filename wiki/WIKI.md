@@ -54,7 +54,7 @@ updated: YYYY-MM-DD
 | `design` | Game-design intent (vision, pillars, art direction, vocabulary). | Long-lived; updated when intent shifts. |
 | `decision` | Why we made a non-obvious choice. Rationale + alternatives considered. | Append-only — old decisions stay even when superseded; add a "Superseded by" link. |
 | `concept` | A pattern or idiom that recurs across systems. | Long-lived. |
-| `reference` | How an external platform actually behaves, as verified here. Starts with the version and date it was verified against and a link to the official docs; each fact says how we found out. | Long-lived; re-verify when the platform version changes. |
+| `reference` | How an external platform actually behaves, as verified here. Starts with the version and date it was verified against and a link to the official docs; each fact says how we found out. | Long-lived; re-verify when the platform version changes. If you change a fact that is also copied into `CLAUDE.md` § Hot facts, update that line too. |
 
 ## Operations
 
