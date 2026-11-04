@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-09-23
+updated: 2026-11-04
 ---
 
 # Build Plan
@@ -17,6 +17,16 @@ Work items are tracked as Nimbalyst `task` trackers, tagged with their phase. Ea
 - **Assets that need design judgment (LetterBlock look, spell VFX, boss model) are coordinated synchronously with the user** rather than fanned out to subagents — to avoid taste drift.
 
 The plan is a living doc — update it as systems land or discover new dependencies. Each landing system gets a wiki/systems/`<Name>`.md page and a `log.md` ingest entry. Cross-link from this plan to those pages.
+
+## Current focus (set 2026-11-04)
+
+**Goal: ship the Phase 5.4 soft launch.** The user picked this over more gameplay features or doing persistence first. Order:
+
+1. **Re-baseline.** Run all 8 suites after the six-week pause, and do the open client checks: the stage 6 two-client duel ([[design/lobby]]), the chunk 9 two-arena check, the charge-tier hold check Q4(a), and the nameplate check. *Blocked 2026-11-04: the `Roblox_Studio` MCP registered with no tools, so nothing ran.*
+2. **Unlisted publish, early.** This is the only way to check analytics delivery to the dashboard. It also gives the friends playtest a build, and that playtest feeds the tuning pass.
+3. **Tutorial (5.3), on a minimal `PlayerData`.** The user chose to pull the ProfileStore-backed `PlayerData` module forward from 5.5, with a schema holding only the tutorial-seen flag. 5.5 then extends that module instead of starting from nothing. The tutorial needs a design pass first: [[systems/Tutorial]] still assumes a raw DataStore flag.
+4. **Audio (5.2): decision deferred.** The stand-in SFX stay for the unlisted friends test. Buying a pack versus using free sources is decided before the public listing, because the milestone requires no placeholder audio.
+5. **Tuning pass, thumbnails from a client shot, then the public listing.**
 
 ## Phase 1 — Foundations (parallel)
 
@@ -189,7 +199,7 @@ The three stubs resolved into two real effects and one deletion — `wall` had n
 | **UI review leftovers** | R-5..R-9 from [[design/ui-architecture-review]] (2 Medium / 3 Low). |
 | **Tier 3 debt (opportunistic)** | ~~Color type dedup ×4~~ (closed 2026-09-20 — one palette table in `Colors`, see below), Skills/Vfx magic-number extraction — as polish touches each area. |
 | **Settings surface** | ✅ **2026-09-20** (BRA.21, user call: build all three). SFX volume, Reduced effects, letter palette with an Okabe–Ito high-contrast option. [[systems/Settings]]. Persistence waits for 5.5. |
-| **Tutorial** | Guided first-play sequence per [[systems/Tutorial]] (shoot → buffer → memorize → cast → boss hit). |
+| **Tutorial** | Guided first-play sequence per [[systems/Tutorial]] (shoot → buffer → memorize → cast → boss hit). The "seen it" flag lives in a minimal `PlayerData` pulled forward from 5.5 (decided 2026-11-04). |
 
 ## Phase 5.4 — Release gate: public soft launch
 
@@ -217,7 +227,7 @@ First phase after the soft launch. Decisions and rationale live in [[design/pers
 
 | Item | Detail |
 |---|---|
-| **PlayerData module** | ProfileStore (session locking) wrapped in a single server-side `PlayerData` module — the only file allowed to touch DataStores ([[concepts/SingleOwnership]]). Schema versioning + reconcile-with-defaults from day one. |
+| **PlayerData module** | ProfileStore (session locking) wrapped in a single server-side `PlayerData` module — the only file allowed to touch DataStores ([[concepts/SingleOwnership]]). Schema versioning + reconcile-with-defaults from day one. **The skeleton moves to 5.3 (2026-11-04):** it ships with the tutorial, holding only the tutorial-seen flag, and 5.5 extends its schema. |
 | **Settings persistence** | Input prefs, UI options. |
 | **Word stats & personal bests** | Total words, highest-value word, longest word, best boss clear time, boss kills, total sessions — all from existing MemorizeAction/CastAction/Boss events. |
 | **Cosmetics schema reservation** | `owned`/`equipped` slots in the profile template; **no cosmetic content in 5.5**. Future cosmetics are mastery-milestone-earned only, no Robux. |
@@ -360,6 +370,8 @@ Added 2026-09-08 from [[design/system-audit-2026-09]]. Full tickable plan with o
 **Decisions:** Q1–Q11 answered 2026-09-08 (recommended option on every one); recorded in [[design/refactor-plan-2026-09]] § Decisions. No chunk is blocked on input. All chunks done as of 2026-09-15; remaining loose ends live on the plan page (chunk 9's two-arena client check, tracker BRA.21 settings surface; `RoundTimerGui` was ported in Phase 6 stage 6). Phase 6 stages 5 and 6 shipped 2026-09-19.
 
 ## Plan changelog
+
+- **2026-11-04**: **Status review after a six-week pause** (last gameplay commit 2026-09-23). The user set the goal to the 5.4 soft launch and recorded the order in § Current focus. The tutorial's persistence flag pulls a minimal `PlayerData` forward from 5.5. The audio sourcing decision is deferred until before the public listing. The re-baseline suite run is blocked because the Studio MCP exposed no tools this session. Housekeeping in the same pass: the two SCOWL-80 plan trackers were closed (the dictionary shipped as SCOWL 60 + supplements), and [[systems/AudioSFX]] lost its firearm, melee and loadout rows.
 
 - **2026-09-22**: **Phase 5.4 analytics built** — the onboarding funnel and six loop-health events on Roblox `AnalyticsService` ([[systems/Analytics]]). The shape decision: gameplay domains fire their own server BindableEvents on the branch that accepted the thing (`BlockConsumed`, `WordMemorized`, `MemorizeFizzled`, `SpellCast` — the first server-side signals those domains expose), and one reporter listens; funnel steps are logged once and strictly in order (a gap is reported, not filled), sends are token-bucketed under Roblox's 120/min. Verified by a new Analytics suite (2/2), the engine's own `event fired` acknowledgements, and a live pop + cast probed through the real remotes. 5.4 now has two items open: game-page upload (drafts on [[design/game-page]]) and the rollout itself.
 - **2026-09-20** (later): **Settings surface built** (BRA.21) — the user chose to build all three rather than defer: SFX volume through one `SoundGroup` every Sound is routed into, Reduced effects read at draw time by `spawnEffect` and `ScreenImpact`, and a letter palette that also closed the "colour type dedup ×4" debt (blocks, buffer tiles, spell-menu discs all draw through `Colors.tint`; Okabe–Ito high-contrast option). Gear + panel are `LobbyOnly`, the first users of that policy. Pure `Settings` module with a Unit suite; verified client-side in one playtest. Filed under Phase 5.3. [[systems/Settings]].

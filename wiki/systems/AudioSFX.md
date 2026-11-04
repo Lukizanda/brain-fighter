@@ -1,7 +1,7 @@
 ---
 title: Audio SFX
 description: Sound effect inventory, wiring patterns, placeholder locations, and gap list for Brain Fighter
-updated: 2026-09-23
+updated: 2026-11-04
 ---
 
 # Audio SFX
@@ -10,16 +10,9 @@ Central reference for all in-game sound effects: what exists, where it's wired, 
 
 ---
 
-## Two Audio Backends
+## Audio Backend
 
-Two different Roblox audio systems are in use. Do not mix them for the same asset.
-
-| Backend | Class | Used by |
-|---------|-------|---------|
-| **Old Sound** | `Instance.new("Sound")` | BlockTapController, SpellMenuGui, GameplayHudGui, `Vfx/spawnEffect` |
-| **New AudioPlayer** | `AudioPlayer` + `Wire` + `AudioEmitter` | Firearm (ShotReplication), Melee (MeleeHitReplication) |
-
-The old Sound class is simpler and fine for new work unless you need 3D positional audio or the new audio API's mixing features. The utility modules `playSoundFromSource.luau` and `playRandomSoundFromSource.luau` wrap the new system.
+Every live sound uses the old `Sound` class (`Instance.new("Sound")`): BlockTapController, SpellMenuGui, GameplayHudGui and `Vfx/spawnEffect`. The new `AudioPlayer` + `Wire` + `AudioEmitter` API had two consumers, the firearm and melee replication scripts, and both were deleted with the weapon stack ([[systems/Weapon]]). Its wrappers `playSoundFromSource` / `playRandomSoundFromSource` went with them. Nothing in `src/` uses `AudioPlayer` as of 2026-11-04.
 
 ---
 
@@ -180,30 +173,6 @@ refused action sounds identical wherever it was triggered from.
 
 ---
 
-### Firearm (AudioPlayer + Wire system)
-
-Sounds live in a `Sounds` folder on the weapon model. `ShotReplication.client.luau` also expects an `AudioEmitter` on the Handle.
-
-| Event | Status | Notes |
-|-------|--------|-------|
-| Fire | ✅ wired | `Sounds/Shoot` AudioPlayer |
-| Hit on target | ❌ silent | no client-side impact sound |
-| Reload | ❌ silent | |
-| Empty / out of ammo | ❌ silent | dry-fire click is standard feedback |
-
----
-
-### Melee (AudioPlayer + Wire system)
-
-`MeleeHitReplication.client.luau` looks for `weapon:FindFirstChild("Sounds"):FindFirstChild("Hit")`.
-
-| Event | Status | Notes |
-|-------|--------|-------|
-| Hit confirmed | ✅ wired | random variant supported if Hit is a Folder |
-| Swing / miss | ❌ silent | common to omit for melee |
-
----
-
 ### Player State
 
 No sounds wired for any player lifecycle event. `CharacterSystemsLoader.client.luau` has no audio logic.
@@ -212,9 +181,8 @@ No sounds wired for any player lifecycle event. `CharacterSystemsLoader.client.l
 |-------|--------|
 | Death | ❌ silent |
 | Respawn | ❌ silent |
-| Loadout drop request | ❌ silent |
-| Loadout drop rejected (toast shown) | ❌ silent |
-| Loadout drop success | ❌ silent |
+
+The firearm, melee and loadout-drop sections were removed 2026-11-04: those systems were deleted ([[systems/Weapon]], [[systems/Loadout]]), so they have no sounds left to wire.
 
 ---
 
@@ -224,7 +192,6 @@ No sounds wired for any player lifecycle event. `CharacterSystemsLoader.client.l
 |----------|-----|--------|
 | **High** | **Source a real spell SFX pack and replace every `VfxConfig.SFX` id.** All 6 are stand-ins; `impactFreeze` (a sword hit standing in for an ice crack) is the weakest match. Needs a purchased/commissioned pack — the free library has nothing usable. | 1 line per entry once assets exist |
 | ~~High~~ | ~~FizzleSound SoundId in Studio (LetterBlaster)~~ — **resolved 5.7**: the Studio-side Sound is gone; the cue is built from `VfxConfig.SFX.fizzle` in code | done |
-| High | Firearm empty-click (dry fire) | small — add Sound child + 2 lines in shot validation |
 | Medium | `EffectSpec.light` and `.beam` are declared but still unimplemented in `spawnEffect` (only `emitters` + `sound` are consumed) | moderate |
 | Medium | Projectile trails (`projectile_red_t1/t2/t4`) — 2026-08-04: now play a quiet one-shot `SFX.cast` layer at launch (no looping path in `spawnEffect`) instead of nothing; still no real continuous in-flight whoosh | needs a loopable asset |
 | Medium | Boss `FireballVolley` launch (`projectile_boss_fireball`, `SFX.bossProjectileLaunch`) and impact (`impactEffectId = "impact_damage"`) — 2026-08-04: both hooks now wired in `BossConfig` (Brain + Wizard) with an audible reused-asset stand-in, no longer `UNSET`/silent | needs purpose-made launch + hit assets |
@@ -233,8 +200,6 @@ No sounds wired for any player lifecycle event. `CharacterSystemsLoader.client.l
 | ~~Low~~ **Done 2026-08-04** | Single-target projectiles that hit a wall or expired mid-air were silent — `detonate()` only played `impactEffectId` on a direct victim hit. Now every projectile death is audible via `projectile_destroy`; see "Projectile death cue" below | done |
 | Medium | Memorize success chime | new Sound in GameplayHudGui |
 | Medium | Spell cast success sound | new Sound in SpellMenuGui |
-| Medium | Firearm reload start/complete | new Sounds + wiring in weapon state machine |
-| Low | Loadout drop feedback sounds | new Sounds in LoadoutDropClient |
 | Low | Death / respawn stings | CharacterSystemsLoader or DeathHandler |
 
 ---
