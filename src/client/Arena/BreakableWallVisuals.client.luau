@@ -20,6 +20,10 @@
 -- drawn in whatever state it is already in, silently. Only a transition
 -- observed live plays a sound or burst.
 --
+-- Fossil letters: a wall carrying a server-published `FossilLetter` also
+-- draws that letter on its broad faces while cracked or critical (see
+-- "Fossil glyph" below); this controller owns that glyph too.
+--
 -- Reduced effects (Settings) is honoured the way spawnEffect honours it:
 -- bursts and sounds are spawnEffect's to scale; this controller drops the
 -- ghost pulse and the re-seal fade, which are motion for its own sake.
@@ -30,14 +34,19 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local BreakableWallConstants = require(ReplicatedStorage.Shared.Arena.BreakableWallConstants)
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
+local FossilConstants = require(ReplicatedStorage.Shared.BlockSpawner.FossilConstants)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local Settings = require(ReplicatedStorage.Shared.Settings)
 local SkillVisuals = require(ReplicatedStorage.Shared.Skills.SkillVisuals)
+local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
 
 local log = Logger.new("BreakableWallVisuals")
 
 local C = BreakableWallConstants
 local State = C.State
+local Fossil = FossilConstants
+local Glyph = FossilConstants.Glyph
 
 type Watched = {
 	part: BasePart,
@@ -45,6 +54,10 @@ type Watched = {
 	baseTransparency: number,
 	lastState: string,
 	stateConn: RBXScriptConnection,
+	-- Fossil letter changes (a new round re-rolls it) redraw a showing glyph.
+	fossilConns: { RBXScriptConnection },
+	-- One SurfaceGui per broad face while the glyph shows.
+	glyphGuis: { SurfaceGui },
 	tween: Tween?,
 	telegraphThread: thread?,
 }
@@ -123,10 +136,89 @@ local function scheduleTelegraph(w: Watched)
 	w.telegraphThread = task.delay(wait, showGhost, w)
 end
 
+----------------------------------------------------------------------
+-- Fossil glyph
+----------------------------------------------------------------------
+-- A wall with a `FossilLetter` (published by the server's FossilWatcher)
+-- shows that letter on its two broad faces while it is cracked or critical:
+-- the crack opens onto the letter. Intact walls show nothing, and a broken
+-- one has already freed its letter as a block. The server draws none of it.
+
+local function clearGlyph(w: Watched)
+	for _, gui in w.glyphGuis do
+		gui:Destroy()
+	end
+	table.clear(w.glyphGuis)
+end
+
+-- The two faces of the wall's thinnest horizontal axis: a wall 20 wide and
+-- 2 thick shows on front and back, not on its 2-stud ends. (A rock that is
+-- roughly square gets two of its four sides; either reads.)
+local function broadFaces(part: BasePart): (Enum.NormalId, Enum.NormalId, number, number)
+	local size = part.Size
+	if size.X < size.Z then
+		return Enum.NormalId.Right, Enum.NormalId.Left, size.Z, size.Y
+	end
+	return Enum.NormalId.Front, Enum.NormalId.Back, size.X, size.Y
+end
+
+local function showGlyph(w: Watched)
+	clearGlyph(w)
+	local letter = w.part:GetAttribute(Fossil.LETTER_ATTRIBUTE)
+	local color = w.part:GetAttribute(Fossil.COLOR_ATTRIBUTE)
+	if type(letter) ~= "string" or type(color) ~= "string" then
+		return
+	end
+
+	local tint = Colors.tint(color):Lerp(Color3.new(1, 1, 1), Glyph.LIGHTEN)
+	local faceA, faceB, faceWidth, faceHeight = broadFaces(w.part)
+	for _, face in { faceA, faceB } do
+		local gui = Instance.new("SurfaceGui")
+		gui.Name = Glyph.GUI_NAME
+		gui.Face = face
+		gui.Adornee = w.part
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		gui.PixelsPerStud = Glyph.PIXELS_PER_STUD
+		gui.LightInfluence = 0
+		gui.ResetOnSpawn = false
+
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.AnchorPoint = Vector2.new(0.5, 0.5)
+		label.Position = UDim2.fromScale(0.5, 0.5)
+		-- A square, as tall as the face allows, so the letter is not stretched.
+		local side = math.min(faceWidth, faceHeight) * Glyph.SIZE_FRACTION * Glyph.PIXELS_PER_STUD
+		label.Size = UDim2.fromOffset(side, side)
+		label.TextScaled = true
+		label.Font = Enum.Font.GothamBlack
+		label.Text = Wildcard.toDisplay(letter)
+		label.TextColor3 = tint
+		label.TextTransparency = Glyph.TEXT_TRANSPARENCY
+		label.Parent = gui
+
+		local stroke = Instance.new("UIStroke")
+		stroke.Thickness = Glyph.STROKE_THICKNESS
+		stroke.Color = Glyph.STROKE_COLOR
+		stroke.Parent = label
+
+		gui.Parent = w.part
+		table.insert(w.glyphGuis, gui)
+	end
+end
+
+local function updateGlyph(w: Watched, state: string)
+	if state == State.Cracked or state == State.Critical then
+		showGlyph(w)
+	else
+		clearGlyph(w)
+	end
+end
+
 local function draw(w: Watched, state: string, live: boolean)
 	local previous = w.lastState
 	w.lastState = state
 	stopMotion(w)
+	updateGlyph(w, state)
 	local part = w.part
 
 	if state == State.Broken then
@@ -190,7 +282,19 @@ local function watch(instance: Instance)
 				draw(current, state, true)
 			end
 		end),
+		fossilConns = {},
+		glyphGuis = {},
 	}
+	-- A re-rolled (or late-replicated) letter redraws the glyph if the wall
+	-- is in a state that shows it.
+	for _, attribute in { Fossil.LETTER_ATTRIBUTE, Fossil.COLOR_ATTRIBUTE } do
+		table.insert(w.fossilConns, part:GetAttributeChangedSignal(attribute):Connect(function()
+			local current = watched[part]
+			if current then
+				updateGlyph(current, current.lastState)
+			end
+		end))
+	end
 	watched[part] = w
 
 	local state = stateOf(part)
@@ -206,6 +310,10 @@ local function unwatch(instance: Instance)
 	end
 	watched[instance :: BasePart] = nil
 	w.stateConn:Disconnect()
+	for _, connection in w.fossilConns do
+		connection:Disconnect()
+	end
+	clearGlyph(w)
 	stopMotion(w)
 	-- Put the authored look back: the part may be re-tagged or re-streamed.
 	if w.part.Parent then

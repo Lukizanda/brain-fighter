@@ -46,6 +46,10 @@
 -- (server/BlockSpawner/WordKitWatcher) calls those methods. Kit blocks count
 -- toward getTargetCount() and stay out of the density pool.
 --
+-- Timed blocks (Phase 8 stage 8): spawnTimedBlock holds one block that sits
+-- outside every box, count and refill and removes itself after a lifetime;
+-- fossil letters are the user. See the section of that name below.
+--
 -- Letter selection is Scrabble-frequency-weighted (English vowels +
 -- common consonants dominate) — the SOFT-HEURISTIC the design defers
 -- "explicit dictionary-bag scan" complexity to (see
@@ -410,6 +414,9 @@ export type BlockSpawner = typeof(setmetatable(
 		_densityCount: number,
 		_quotaTotal: number,
 		_kitTotal: number,
+		-- Timed blocks (fossils): stamped like pool blocks but in no box, so
+		-- in no count and never refilled. See spawnTimedBlock.
+		_timed: { [Model]: boolean },
 		_running: boolean,
 		_destroyed: boolean,
 		_removedConnection: RBXScriptConnection?,
@@ -467,6 +474,7 @@ function BlockSpawner.new(userOpts: Opts?): BlockSpawner
 		_densityCount = 0,
 		_quotaTotal = quotaTotal,
 		_kitTotal = kitTotal,
+		_timed = {},
 		_running = false,
 		_destroyed = false,
 		_removedConnection = nil,
@@ -630,20 +638,20 @@ end
 -- otherwise.
 function BlockSpawner._spawnOne(self: BlockSpawner, fixedBox: BoxState?): Model
 	local cf, box = self:_pickSpacedCFrame(fixedBox)
-	-- A wildcard's color is fixed to gold rather than rolled, so it can't
-	-- masquerade as a reservoir color the player might be hunting for. That
-	-- holds in a ColorOnly volume too.
-	local letter = LetterTables.pick(box.letterTable)
-	local color: string
-	if Wildcard.isWildcard(letter) then
-		color = Wildcard.COLOR
-	elseif box.colorOnly then
-		color = box.colorOnly
-	else
-		color = self:_pickColor()
-	end
-
+	local letter, color = self:_rollLetter(box.letterTable, box.colorOnly)
 	return self:_spawnTracked(letter, color, cf, box)
+end
+
+-- One letter from the named table and the colour it is drawn in. A
+-- wildcard's color is fixed to gold rather than rolled, so it can't
+-- masquerade as a reservoir color the player might be hunting for. That
+-- holds in a ColorOnly volume too.
+function BlockSpawner._rollLetter(self: BlockSpawner, letterTable: string, colorOnly: string?): (string, string)
+	local letter = LetterTables.pick(letterTable)
+	if Wildcard.isWildcard(letter) then
+		return letter, Wildcard.COLOR
+	end
+	return letter, colorOnly or self:_pickColor()
 end
 
 -- Spawns one block and records it against `box`. The single place a block
@@ -934,6 +942,70 @@ function BlockSpawner.rerollKits(self: BlockSpawner): number
 	return #self._kitBoxes
 end
 
+----------------------------------------------------------------------
+-- Timed blocks (Phase 8 stage 8: fossil letters)
+----------------------------------------------------------------------
+-- A timed block is a normal poppable block of this arena (same ArenaId
+-- stamp, so ConsumeBlock accepts it) that the pool does not manage as part
+-- of the field: it is in no box, so it is not in getTargetCount(), the
+-- density pool, any quota or kit; it is never refilled when popped or
+-- expired; and rerollAll() leaves it alone (it is a reward, not a pool
+-- block). It goes away on its own after `lifetimeSec`, on
+-- clearTimedBlocks(), or on destroy(). Who asks for one, and why, is not
+-- the pool's business (see server/BlockSpawner/FossilWatcher).
+
+-- Draws a letter and its colour exactly as a volume would (wildcards gold,
+-- otherwise the pool's colour weights) without spawning anything. The
+-- caller has validated `letterTable` (LetterTables.isValid).
+function BlockSpawner.rollLetter(self: BlockSpawner, letterTable: string): (string, string)
+	return self:_rollLetter(letterTable, nil)
+end
+
+-- Spawns a block at `cframe` that removes itself after `lifetimeSec`.
+-- Returns nil on a destroyed pool. A pool that is merely disabled still
+-- accepts one: a timed block does not depend on refilling.
+function BlockSpawner.spawnTimedBlock(
+	self: BlockSpawner,
+	letter: string,
+	color: string,
+	cframe: CFrame,
+	lifetimeSec: number
+): Model?
+	if self._destroyed then
+		return nil
+	end
+	local block = LetterBlocks.spawn(letter, color, cframe, self._opts.parent)
+	block:SetAttribute(Arena.ID_ATTRIBUTE, self.arenaId)
+	self._timed[block] = true
+	-- However it ends (popped, expired, cleared), forget it.
+	block.Destroying:Connect(function()
+		self._timed[block] = nil
+	end)
+	task.delay(lifetimeSec, function()
+		if block.Parent ~= nil then
+			block:Destroy()
+		end
+	end)
+	return block
+end
+
+function BlockSpawner.getTimedBlocks(self: BlockSpawner): { Model }
+	local out: { Model } = {}
+	for block in self._timed do
+		table.insert(out, block)
+	end
+	return out
+end
+
+-- Removes every live timed block of this pool; returns how many.
+function BlockSpawner.clearTimedBlocks(self: BlockSpawner): number
+	local snapshot = self:getTimedBlocks()
+	for _, block in ipairs(snapshot) do
+		block:Destroy()
+	end
+	return #snapshot
+end
+
 -- Blocks the non-quota boxes hold; resolved from those boxes only.
 function BlockSpawner.getDensityTarget(self: BlockSpawner): number
 	return self._opts.targetCount
@@ -1064,8 +1136,11 @@ function BlockSpawner.destroy(self: BlockSpawner)
 	for _, block in ipairs(snapshot) do
 		block:Destroy()
 	end
+	local timedRemoved = self:clearTimedBlocks()
 
-	log:info(string.format("[%s] destroyed — %d blocks removed", self.arenaId, #snapshot))
+	log:info(string.format(
+		"[%s] destroyed — %d blocks removed (+%d timed)", self.arenaId, #snapshot, timedRemoved
+	))
 end
 
 function BlockSpawner.rerollAll(self: BlockSpawner)

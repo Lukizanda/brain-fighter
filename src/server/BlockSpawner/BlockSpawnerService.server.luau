@@ -42,6 +42,7 @@ local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local BlockSpawner = require(ReplicatedStorage.Shared.BlockSpawner)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
+local FossilWatcher = require(script.Parent.FossilWatcher)
 local WordKitWatcher = require(script.Parent.WordKitWatcher)
 
 local log = Logger.new("BlockSpawnerService")
@@ -183,6 +184,13 @@ for _, pool in pools do
 end
 if hasKits then
 	WordKitWatcher.new(pools):start()
+end
+
+-- Fossil letters (Phase 8 stage 8): a BreakableWall with a FossilTable hides a
+-- letter that is freed when the wall breaks. FossilWatcher rolls, publishes
+-- and frees it; it only starts when some wall in the place asks for one.
+if FossilWatcher.isNeeded() then
+	FossilWatcher.new(pools):start()
 end
 
 local summary: { string } = {}

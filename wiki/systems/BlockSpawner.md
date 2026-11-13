@@ -16,6 +16,7 @@ Server-side populator that keeps a target count of [[systems/LetterBlock|LetterB
 - `src/shared/BlockSpawner/LetterTables.luau` — the named letter tables (`Standard`, `Common`, `Premium`, `Wildcard`) and the weighted pick. See § Letter zones.
 - `src/shared/BlockSpawner/WordKits.luau` — the curated 5- and 6-letter word lists and the kit shuffle. See § Word kits.
 - `src/server/BlockSpawner/WordKitWatcher.luau` — tells the pools when a kit must be replaced: its gate wall re-sealed, or a round started.
+- `src/shared/BlockSpawner/FossilConstants.luau`, `src/server/BlockSpawner/FossilWatcher.luau` — fossil letters: the attribute names and tuning, and the watcher that rolls a wall's letter and frees it on a break. See § Fossil letters.
 - `src/server/BlockSpawner/BlockSpawnerService.server.luau` — server bootstrap that groups `BlockSpawnVolume`-tagged parts by arena and starts one pool per group, threading the `GameConfig` tunables.
 - `src/shared/GameMode/Arena.luau` — the shared `ArenaId` / `Default` vocabulary, also used by [[systems/GameMode]].
 - `src/shared/Tests/Suites/Phase3/blockspawner_respawn_delay.luau` — asserts the arena stays short mid-cooldown and returns to *exactly* target after, catching a refill-to-target regression.
@@ -35,6 +36,9 @@ Server-side populator that keeps a target count of [[systems/LetterBlock|LetterB
 | `:getArenaId()` / `:getTargetCount()` | `() -> string` / `() -> number` | Identity and resolved target, for logging and assertions. Since letter zones the target is the density target **plus** every quota **plus** every kit's word length. |
 | `:getDensityTarget()` / `:getQuotaTotal()` / `:getKitTotal()` | `() -> number` | The three parts of the target. |
 | `:rerollKitsForGate(gate)` / `:rerollKits()` | `(string) -> number` / `() -> number` | Replace whole every kit gated on `gate`, or every kit. Return how many were rolled; 0 on a pool that is not running. |
+| `:rollLetter(table)` | `(string) -> (string, string)` | A letter and colour drawn as a volume would draw them (wildcards gold), spawning nothing. |
+| `:spawnTimedBlock(letter, color, cframe, lifetimeSec)` | `-> Model?` | A poppable block of this arena that sits in no box: not in the target, never refilled, left alone by `rerollAll()`. Removes itself after the lifetime. |
+| `:getTimedBlocks()` / `:clearTimedBlocks()` | `() -> { Model }` / `() -> number` | The live timed blocks, and remove them all. `destroy()` clears them too. |
 | `:getKitGates()` / `:getKitWords()` | `() -> { string }` | The gate ids the pool's kits listen for, and the word each kit currently shows. |
 | `.LETTER_FREQUENCIES` | `{ [string]: number }` | Scrabble-standard 98-tile distribution used for weighted letter picks. Module-level: derived from constants, so it is built once at require rather than per pool. |
 
@@ -177,6 +181,49 @@ at `Default=40, Duel1=5, Duel2=5, Lobby=8`, and on the staged island the cave ro
 WATCH in red, then JOLLY in blue and YUMMY in green on two re-seals. The re-seals were
 driven by setting `WallState` by hand; a real boss breaking the real plug is not yet
 seen.
+
+## Fossil letters (Phase 8 stage 8, 2026-11-13)
+
+A breakable rock can hide a letter ([[design/boss-arena]] § Fossil letters). The letter
+shows when the rock cracks and floats free when it breaks.
+
+| Attribute | On | Meaning |
+|---|---|---|
+| `FossilTable` | a `BreakableWall` | authored: a letter-table name. Absent means no fossil |
+| `FossilLetter`, `FossilColor` | the same wall | published by `FossilWatcher`; read by the wall-visuals client |
+| `FossilExpiresAt` | the freed block | when it disappears, in `workspace:GetServerTimeNow()` seconds |
+
+- **Roll.** At start-up, on each `RoundStarted` of the wall's arena, and when
+  `FossilTable` or `RegenSec` is edited. An unknown table, or a wall with
+  `RegenSec > 0`, warns once naming the part and holds nothing.
+- **Break.** `WallState` moving into `broken` frees one timed block of that letter and
+  colour at the wall's centre, `HEIGHT_ABOVE_BASE_STUDS` (8) above its base, for
+  `LIFETIME_SEC` (20). A wall pays once per roll, so once per round.
+- **Round start** removes leftover fossil blocks, then re-rolls.
+- **Glyph.** `BreakableWallVisuals` draws the letter on the wall's two broad faces
+  while the state is `cracked` or `critical`. A wildcard shows as a star. Look
+  constants are in `FossilConstants.Glyph`.
+- `FossilWatcher` is a sibling of `WordKitWatcher`: that one acts per pool, this one
+  per wall. `BlockSpawnerService` starts it only when some wall carries `FossilTable`
+  at boot.
+- **A watcher leaves alone any wall whose arena it has no pool for.** Found when the
+  island's rocks were tagged: the game's watcher and the tests' watchers then ran side
+  by side and each cleared the other's published letters, failing four tests. One
+  watcher must never write on another's walls.
+
+On the staged island 15 low rocks carry `Standard`, 2 tall rocks `Premium` and 3 spires
+`Wildcard`.
+
+Verified 2026-11-13: seven Phase 3 tests (the seventh pins the rule above; Phase3 ran 29/29 with it); `RunTests=all` gave 79/80 with only the known
+intermittent `NPC_deals_damage` failing. On the island all 20 walls published a letter,
+and a low rock and a spire each freed the letter they published when their state was
+set to `broken` by hand; shipped counts unchanged. The build session saw the glyph on
+its own client on a test wall.
+
+Not built or not verified: the fade tell on a freed block (the block just disappears on
+time; `FossilExpiresAt` is published for `LetterBlockAnimator` to use); popping a freed
+block through the real remote; the glyph on the island's own rocks; any of it under
+real boss fire.
 
 ## Design decisions
 

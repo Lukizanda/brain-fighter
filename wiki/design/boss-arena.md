@@ -294,8 +294,8 @@ letters around the boss are urgent instead of merely valuable.
 | 3 | Greybox the layout in Studio: rim, cover, gates, balconies, vaults, retagged volumes | with the user, after the sketch is approved and 1–2 land | **staged 2026-11-13** beside the old arena (see § Greybox staging); the swap waits on the user's walk-through |
 | 4 | Playtest and tune: wall health against a 20-shot volley, letter height, quotas, boss reach to the outer ring | with the user | waiting |
 | 7 | Word kits: a spawn volume that holds one ready-made word, re-rolled when its gate re-seals; the cave's reward | build session (Sonnet) | **built 2026-11-13**, 10 tests — [[systems/BlockSpawner]] § Word kits. Cave tagged on the staged island (`WordKit = 5`, `KitGate` / `GateId = CaveRidge`); re-roll seen live with the wall state set by hand, not yet under boss fire |
-| 8 | Fossil letters: `FossilTable` on a wall, glyph on crack, freed timed letter on break, suite | build session (Sonnet) | decided 2026-11-13; starts when stage 7 lands, because both edit the spawner |
-| 9 | Hungry brain: boss eats the nearest letter on a timer and heals, suite | build session (Sonnet) | decided 2026-11-13; starts after stage 8 for the same reason |
+| 8 | Fossil letters: `FossilTable` on a wall, glyph on crack, freed timed letter on break, suite | build session (Sonnet) | **built 2026-11-13**, 7 tests — [[systems/BlockSpawner]] § Fossil letters. Island rocks tagged (15 `Standard`, 2 `Premium`, 3 `Wildcard`). The fade tell on the freed block is not built; not yet seen under boss fire |
+| 9 | Hungry brain: boss eats the nearest letter on a timer and heals, suite | build session (Sonnet) | spawned 2026-11-13 |
 | 6 | Arrival beat: timed boss entrance keyed on the first arrival, brief arrival protection, suite | build session (Sonnet) | **built 2026-11-13**, 6 tests — [[systems/Boss]] § Entrance, [[systems/Health]] § Protection. Not yet seen end to end on the island |
 | 5 | Arena entry teleporter: `ArenaEntryPad` → `ArenaArrivalPoint`, suite | build session (Sonnet) | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]]. Physical touch not yet verified |
 
