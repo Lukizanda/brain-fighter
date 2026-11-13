@@ -117,8 +117,8 @@ How that maps onto what exists:
   already returns you there, so "die" needs no new code.
 - **Quit** is the `LobbyReturnPad`, which sits on the bridge today and moves into the
   ready room. Leaving mid-fight therefore means dying first (or leaving the game).
-  That is the assistant's reading of "quit or die"; an in-fight "return to lobby"
-  button would be the alternative and is not planned.
+  Confirmed by the user 2026-11-13: the return pad in the ready room, no in-fight
+  "return to lobby" button.
 - **New:** a one-way pad in the ready room that puts the player on the island's
   arrival pad. Contract: a `BasePart` tagged **`ArenaEntryPad`**, and a `BasePart`
   tagged **`ArenaArrivalPoint`**, matched by `ArenaId`. Server-owned; stepping on the
@@ -214,9 +214,9 @@ playtest in.
 
 ## Open questions
 
-- **Scope against the soft launch.** [[design/build-plan]] § Current focus puts the 5.4
-  soft launch first. This phase was started at the user's request on 2026-11-13; whether
-  it ships before or after the unlisted publish is not decided.
+- ~~**Scope against the soft launch.**~~ Decided by the user 2026-11-13: the arena
+  ships **before** the unlisted publish. [[design/build-plan]] § Current focus now lists
+  Phase 8 stages 3–4 ahead of the publish.
 - **Outer ring safety.** Boss `attackRange` is 100 and it walks at 6. A player at r 120
   may sit outside its reach for long stretches. Tune in stage 4.
 - **Wall health.** One volley is 20 shots. Health has to be set so a segment survives

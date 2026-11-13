@@ -2073,3 +2073,7 @@ New [[design/boss-arena]] and a to-scale sketch beside it. The user asked for a 
 ## [2026-11-13] ingest | Phase 8 stages 1, 2 and 5 built; layout revised
 
 Three Sonnet build sessions ran against the contract on [[design/boss-arena]]: [[systems/BreakableWalls]] (new; boss fireballs and Ground Slams wear down tagged walls, fed by `SkillDelivery`'s new `WorldImpact` / `AoeImpact` Bindables), [[systems/BlockSpawner]] § Letter zones (per-volume `LetterTable` / `ColorOnly` / `BlockQuota`, shipped arenas unchanged at 40/5/5/8) and [[systems/ArenaEntry]] (new; one-way pad from the ready room). `RunTests=all` went 43 → 58, all passing; [[systems/Tests]] gained the `Arena` suite and a note that test names must fit a 100-character attribute name. The user asked for a more organic level and then for a teleporter instead of the bridge: the sketch is now an irregular island with the Spit, the Stones and the Overhang in place of three identical balconies, and the ridge is closed all round. Not verified: a real boss shot against a wall, the physical pad touch, and any of it in the place, since the greybox (stage 3) has not started. [[systems/Boss]] volley count corrected to 20.
+
+## [2026-11-13] ingest | Phase 8 sequenced before the unlisted publish
+
+Two user decisions recorded on [[design/boss-arena]] and [[design/build-plan]] § Current focus: the new boss arena lands before the unlisted publish (step 1a), and leaving the arena is the `LobbyReturnPad` in the ready room, with no in-fight button.

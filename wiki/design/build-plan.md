@@ -23,6 +23,7 @@ The plan is a living doc — update it as systems land or discover new dependenc
 **Goal: ship the Phase 5.4 soft launch.** The user picked this over more gameplay features or doing persistence first. Order:
 
 1. **Re-baseline.** Run all 8 suites after the six-week pause, and do the open client checks: the stage 6 two-client duel ([[design/lobby]]), the chunk 9 two-arena check, the charge-tier hold check Q4(a), and the nameplate check. *Suites done 2026-11-04: `RunTests=all` passed 43/43 with a clean boot, after the Studio MCP reconnected. The only new console noise was `ContentId rbxassetid://203785492 … Asset type does not match` ×3 on the client. That id is not in `src/` or the Edit DataModel, so something creates it at runtime. Not yet traced. The client checks are still open.*
+1a. **Boss arena layout (Phase 8), before the publish.** Added 2026-11-13: the user chose to land the new arena ahead of the unlisted publish, so the friends playtest sees it. The code (stages 1, 2, 5) is in; the Studio greybox and the tuning playtest (stages 3–4) are what remain.
 2. **Unlisted publish, early.** This is the only way to check analytics delivery to the dashboard. It also gives the friends playtest a build, and that playtest feeds the tuning pass.
 3. **Tutorial (5.3), on a minimal `PlayerData`.** The user chose to pull the ProfileStore-backed `PlayerData` module forward from 5.5, with a schema holding only the tutorial-seen flag. 5.5 then extends that module instead of starting from nothing. The tutorial needs a design pass first: [[systems/Tutorial]] still assumes a raw DataStore flag.
 4. **Audio (5.2): decision deferred.** The stand-in SFX stay for the unlisted friends test. Buying a pack versus using free sources is decided before the public listing, because the milestone requires no placeholder audio.
@@ -381,7 +382,7 @@ Added 2026-11-13 at the user's request. Full design, measured arena, layout tabl
 | 4 | Playtest and tune | no, with the user | waits on 3 |
 | 5 | Arena entry teleporter (one-way pad from the ready room to the island; the bridge is removed, so leaving means dying or quitting) | with 1 | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]] |
 
-**Not sequenced against 5.4.** § Current focus still names the soft launch as the goal; whether this phase lands before or after the unlisted publish is an open question on the design page.
+**Sequenced before the unlisted publish** (user, 2026-11-13); see § Current focus step 1a. "Quit" from the arena is the `LobbyReturnPad` in the ready room, not an in-fight button.
 
 ## Plan changelog
 
