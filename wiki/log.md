@@ -2093,3 +2093,7 @@ On the user's suggestion the staged island's cover now mixes heights by role: in
 ## [2026-11-13] ingest | Phase 8 stage 6 built: boss entrance and arrival protection
 
 A Sonnet build session added the arrival beat. [[systems/ArenaEntry]] now announces `PlayerEntered`; [[systems/Boss]] § Entrance holds a padded arena's first boss spawn for the first arrival and then counts down `entranceDelaySec` (Brain 8 s) with a client countdown; [[systems/Health]] § Protection adds a `_protectedUntil` window that `applyDamage` respects, granted for 2 s on arrival. Finding: the PvE round goes Active while the first player is still in the ready room, so the delay had to key on the arrival; an earlier note that the round starts at server boot was wrong and is corrected. `RunTests=all` 58 → 64, all passing. Not verified: the entrance end to end on the island, which needs the swap (the ready-room pad must carry `ArenaId = Default`). Open: the existing 3 s respawn `ForceField` may not block `applyDamage` at all.
+
+## [2026-11-13] ingest | Island: three spires, hollow boulder cave removed
+
+At the user's request three tall rocks on the staged island became spires (36-44 studs) and one cave was removed; the mid-field hollow boulder went and the ridge cave stayed. 25 breakable walls and 56 letter blocks remain. Recorded on [[design/boss-arena]] § After the first walk-through. Place file only.

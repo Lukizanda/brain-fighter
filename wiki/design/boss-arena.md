@@ -300,6 +300,15 @@ Decided and applied to the staged greybox:
   carries a `CoverHeight` attribute. Low cover still stops fireballs: the boss fires
   from `ATTACK_ORIGIN_HEIGHT = 2`, close to ground level.
 
+- **Spires, and one cave fewer** (the user, same day). Three of the five tall rocks are
+  now spires at 36, 40 and 44 studs (`Cover_06`, `Cover_10`, `Cover_02`,
+  `CoverHeight = "spire"`); two of them flank the overlook and frame the arrival view.
+  They are still breakable at the default health, which may want raising for something
+  that size. The user asked for one of the two caves to go; the assistant removed the
+  mid-field hollow boulder and kept the ridge cave, because the boulder was a 40 x 36
+  box in open ground and the ridge cave sits against the rim. The island now has 25
+  breakable walls and 56 letter blocks.
+
 Decided, in build as stage 6:
 
 - **Timed boss entrance.** The countdown starts when the first player arrives for the
