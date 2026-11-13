@@ -56,8 +56,9 @@ refusal and the cooldown.
 
 Not verified:
 
-- The physical `Touched` signal from a walking character. The test calls `handleTouch`
-  directly.
+- ~~The physical `Touched` signal from a walking character.~~ Checked later the same
+  day: a character walked onto the temporary lobby pad with `Humanoid:MoveTo` and was
+  teleported to the island ([[design/boss-arena]] § Greybox staging).
 - A client drawing the two cues.
 - The service's own boot lines: the console output was truncated at the top in that
   playtest, though no errors appeared in what remained.

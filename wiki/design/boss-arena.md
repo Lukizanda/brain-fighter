@@ -248,6 +248,15 @@ at 30 health, and the shipped arenas unchanged at 40/5/5/8. That is the first ti
 zone attributes were read off real Studio volumes. Three zones logged the one-time
 spacing warning; they were resized afterwards and not re-run.
 
+**Temporary walk-through pad (2026-11-13, remove at the swap).**
+`Workspace.TEMP_IslandWalkthrough` holds a teal `ArenaEntryPad` in the lobby at
+(-715, 203, 28), in front of the spawn pads, and a second `ArenaArrivalPoint` on the
+island. Both carry `ArenaId = Lobby`, so a lobby player matches them with no code
+change. The player stays in the Lobby session on the island: no boss, no popping. To
+get back, reset the character or jump off. Verified in a playtest by walking the
+character onto the pad with `Humanoid:MoveTo`: it arrived on the island at full health.
+That is also the first physical-touch check of [[systems/ArenaEntry]].
+
 **Not done:** nobody has walked it; no boss has fought on it. The ready room, the entry
 pad, the `LobbyReturnPad` move and the bridge removal belong to the swap.
 
