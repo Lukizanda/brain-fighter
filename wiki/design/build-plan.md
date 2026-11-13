@@ -378,7 +378,7 @@ Added 2026-11-13 at the user's request. Full design, measured arena, layout tabl
 |---|---|---|---|
 | 1 | `BreakableWalls` system (server health/regen/reset, client visuals, `WorldImpact` / `AoeImpact` events out of `SkillDelivery`, suite) | with 2 | **built 2026-11-13**, suite 7/7 — [[systems/BreakableWalls]] |
 | 2 | `BlockSpawner` letter zones (`LetterTable` / `ColorOnly` / `BlockQuota` per volume, suite) | with 1 | **built 2026-11-13** — [[systems/BlockSpawner]] § Letter zones |
-| 3 | Studio greybox of the layout | no, with the user | waits on sketch approval and 1–2 |
+| 3 | Studio greybox of the layout | no, with the user | **staged 2026-11-13** as `Workspace.Arena.IslandGreybox` beside the old arena under `ArenaId = IslandStaging`; the swap waits on the user's walk-through. In the place file only |
 | 4 | Playtest and tune | no, with the user | waits on 3 |
 | 5 | Arena entry teleporter (one-way pad from the ready room to the island; the bridge is removed, so leaving means dying or quitting) | with 1 | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]] |
 

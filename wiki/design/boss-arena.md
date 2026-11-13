@@ -204,13 +204,57 @@ computed from the remaining volumes only.
 |---|---|---|---|
 | 1 | `BreakableWalls` system: service, constants, client visuals, the two `SkillDelivery` events, suite | build session (Sonnet) | **built 2026-11-13**, suite 7/7 — [[systems/BreakableWalls]]. Real boss fire not yet verified |
 | 2 | `BlockSpawner` letter zones: per-volume table, colour and quota, suite | build session (Sonnet) | **built 2026-11-13**, 5 new tests — [[systems/BlockSpawner]] § Letter zones |
-| 3 | Greybox the layout in Studio: rim, cover, gates, balconies, vaults, retagged volumes | with the user, after the sketch is approved and 1–2 land | waiting |
+| 3 | Greybox the layout in Studio: rim, cover, gates, balconies, vaults, retagged volumes | with the user, after the sketch is approved and 1–2 land | **staged 2026-11-13** beside the old arena (see § Greybox staging); the swap waits on the user's walk-through |
 | 4 | Playtest and tune: wall health against a 20-shot volley, letter height, quotas, boss reach to the outer ring | with the user | waiting |
 | 5 | Arena entry teleporter: `ArenaEntryPad` → `ArenaArrivalPoint`, suite | build session (Sonnet) | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]]. Physical touch not yet verified |
 
 Stage 3 is not fanned out. The build plan's rule is that work needing design judgment
 is done with the user, and it needs the Studio place, which the two build sessions also
 playtest in.
+
+## Greybox staging (2026-11-13)
+
+The user chose to build the island **beside** the old arena and swap only after walking
+it. It lives in the place file, not in git, and the place has to be saved to keep it.
+
+- **Where:** `Workspace.Arena.IslandGreybox` (a Model, 259 parts), centred 500 studs +Z
+  of the old plaza at X 53.4 / Z 528.2, floor top Y 202.5. The centre is stored on the
+  Model as `CenterX` / `FloorY` / `CenterZ`. Built by script through MCP with one undo
+  waypoint per pass.
+- **Staging arena id:** everything tagged carries `ArenaId = IslandStaging`, so nothing
+  joins the shipped `Default` arena. There is no session for that id: letters spawn and
+  walls register, but no boss spawns there and a player cannot pop its blocks.
+- **Name prefixes:** `Floor_`, `Ridge_`, `Gate_` (regenerating), `Cover_` (breakable),
+  `Core_` (permanent), `Cave_`, `Ledge_`, `Zone_` (letter volumes), plus
+  `BossPoint_Island`, `ArrivalPoint` and its own `DeathZone`.
+- **Counts:** 26 breakable walls (20 cover, 3 ridge gates at `RegenSec` 25, 2 cave
+  plugs at 25, the Overhang slab at 15). 17 letter zones, all on quotas, 59 blocks:
+  premium 6, standard 5×4, common 5×4, wildcards 7, caves 2×3.
+- **Differences from the sketch:** gates sit on ridge segments, so the ways out are at
+  71°, 169° and 289°. Ledges step down 4–5 studs below the floor so the ridge lip hides
+  their letters from deep inside. Caves grew to 32 x 28 inside so their letters clear
+  the walls. Three common-letter zones slid sideways along the outer band to find room
+  between cover and ridge. Letter zones are axis-aligned boxes, because the spawner
+  reads `Position ± Size/2` and ignores rotation.
+
+Checked in Edit mode by raycast: from the boss spawn the first thing hit toward each
+ridge gate and each cave plug is that gate or plug, and toward the arrival pad it is
+the permanent rock. No letter zone, grown by a block's half-size, touches solid rock.
+
+Checked in one playtest boot: `IslandStaging` resolved to 61 quota blocks (before the
+cave quota dropped from 4 to 3), every block inside its zone, common zones rolled only
+common letters, premium rolled `QFV*FF`, wildcard zones only wildcards, 26 walls intact
+at 30 health, and the shipped arenas unchanged at 40/5/5/8. That is the first time the
+zone attributes were read off real Studio volumes. Three zones logged the one-time
+spacing warning; they were resized afterwards and not re-run.
+
+**Not done:** nobody has walked it; no boss has fought on it. The ready room, the entry
+pad, the `LobbyReturnPad` move and the bridge removal belong to the swap.
+
+**The swap**, once approved: move the Model onto the old centre, retag `IslandStaging`
+to `Default` (or strip the attribute), rename `BossPoint_Island` over the old
+`BossPoint`, delete the old `Plaza`, bridge and the eight old volumes, place the
+`ArenaEntryPad` and return pad in the ready room, and move or seal the ready room.
 
 ## Open questions
 

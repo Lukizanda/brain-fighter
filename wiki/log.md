@@ -2077,3 +2077,7 @@ Three Sonnet build sessions ran against the contract on [[design/boss-arena]]: [
 ## [2026-11-13] ingest | Phase 8 sequenced before the unlisted publish
 
 Two user decisions recorded on [[design/boss-arena]] and [[design/build-plan]] § Current focus: the new boss arena lands before the unlisted publish (step 1a), and leaving the arena is the `LobbyReturnPad` in the ready room, with no in-fight button.
+
+## [2026-11-13] ingest | Island greybox staged beside the old arena
+
+`Workspace.Arena.IslandGreybox` built through MCP, 500 studs +Z of the old plaza, under `ArenaId = IslandStaging` so the shipped arena is untouched: irregular floor, ridge with three regenerating gates, ten rock clusters, two caves, the Spit, the Stones, the Overhang, 17 quota letter zones. Sightlines and zone clearances checked by raycast; one playtest boot confirmed the zone attributes are read off real volumes (first time) and 26 walls register. Not walked, not fought on, not swapped in. Details in [[design/boss-arena]] § Greybox staging. Place file only.
