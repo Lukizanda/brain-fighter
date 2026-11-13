@@ -59,6 +59,13 @@ export type Result = { ok: boolean, reason: string? }
 
 local log = Logger.new("SkillDelivery")
 
+-- Server-side announcements of where a delivery landed on the world, for
+-- systems that react to it (BreakableWallService). Fired from the
+-- authoritative run only, like everything else here.
+local skillEvents      = ReplicatedStorage.Shared.Skills.SkillEvents
+local worldImpactEvent = skillEvents.WorldImpact :: BindableEvent
+local aoeImpactEvent   = skillEvents.AoeImpact :: BindableEvent
+
 -- world_spawn fallbacks, used when a spec omits them. The placement
 -- distance only applies to target-less casts (no placement reticle yet);
 -- far enough ahead that the wall lands between the caster and whatever
@@ -737,6 +744,10 @@ SkillDelivery.handlers = {
 								pierceThrough(rayVictim)
 							else
 								conn:Disconnect()
+								-- No rig struck: the ray stopped on world geometry.
+								if not rayVictim then
+									worldImpactEvent:Fire(rayHit.Instance, rayHit.Position, skill.name, source)
+								end
 								detonate(projectile, rayHit.Position, rayVictim, "impact")
 								return
 							end
@@ -851,6 +862,7 @@ SkillDelivery.handlers = {
 				-- Reaches every client. Nothing draws this locally any more
 				-- — see the note in the projectile handler.
 			})
+			aoeImpactEvent:Fire(center, radius, skill.name, source)
 
 			-- Apply onImpact to every player of the caster's arena in
 			-- radius. Players only, as it was before the target list was

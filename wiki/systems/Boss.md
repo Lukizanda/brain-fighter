@@ -1,7 +1,7 @@
 ---
 type: system
 description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. One boss cycle per arena session, started on RoundStarted and stopped on RoundEnded; HUD remotes, perception and skill targets are all scoped to the BossPoint's arena (Phase 6 stage 3 + refactor chunk 9).
-updated: 2026-09-22
+updated: 2026-11-13
 ---
 
 # Boss
@@ -127,7 +127,7 @@ Implementations live in [[systems/SkillPipeline|SkillDelivery]] (`handlers.proje
 
 ### FireballVolley (`delivery = "projectile"`)
 
-Part projectiles in spread. Each is `CanCollide = false` with a `LinearVelocity` constraint — Touched doesn't fire so hit detection is a per-Heartbeat proximity check (`≤ 3 studs`). 0.15 s stagger between projectiles; `attackComplete` set via `ctx.onComplete` after all are in flight. Brain's tuning: `count=30`, `speed=90`, damage `15 HP` (`onImpact = [{kind="damage", amount=15}]`). SFX hooks added 2026-08-04, both Brain and Wizard: `deliveryParams.launchEffectId = "projectile_boss_fireball"` (fired at the muzzle on every client) and `deliveryParams.impactEffectId = "impact_damage"`. Both `VfxConfig.EFFECTS` entries are audible reused-asset stubs, not final art. The launch cue was initially hung on `cosmeticEffectId` and was inaudible for two compounding reasons — see [[systems/AudioSFX]] § "Two traps that make a world SFX inaudible"; the short version is that a Sound is a child of its anchor (so the shot's death truncated it) and default 3D rolloff scales a 100-stud-away sound to roughly a tenth volume.
+Part projectiles in spread. Each is `CanCollide = false` with a `LinearVelocity` constraint — Touched doesn't fire so hit detection is a per-Heartbeat proximity check (`≤ 3 studs`). 0.15 s stagger between projectiles; `attackComplete` set via `ctx.onComplete` after all are in flight. Brain's tuning: `count=20`, `speed=90`, damage `15 HP` (`onImpact = [{kind="damage", amount=15}]`). SFX hooks added 2026-08-04, both Brain and Wizard: `deliveryParams.launchEffectId = "projectile_boss_fireball"` (fired at the muzzle on every client) and `deliveryParams.impactEffectId = "impact_damage"`. Both `VfxConfig.EFFECTS` entries are audible reused-asset stubs, not final art. The launch cue was initially hung on `cosmeticEffectId` and was inaudible for two compounding reasons — see [[systems/AudioSFX]] § "Two traps that make a world SFX inaudible"; the short version is that a Sound is a child of its anchor (so the shot's death truncated it) and default 3D rolloff scales a 100-stud-away sound to roughly a tenth volume.
 
 ### GroundSlam (`delivery = "aoe"`)
 
@@ -225,6 +225,8 @@ target rig carries the tag).
 
 ## Integration Points
 
+- **[[systems/BreakableWalls]]** (2026-11-13) — a boss fireball that stops on a `BreakableWall`, or a Ground Slam that reaches one, damages it. The boss is the only source that can. `BreakableWallConstants.VOLLEY_SHOTS` mirrors `FireballVolley.count` and a test fails if they drift.
+
 No changes needed in other systems:
 
 - **SpellExecutor** — damages any Humanoid; Boss is `workspace.Boss` so `SpellCastController.findAutoTarget` picks it (alongside `NPC`- and `Damageable`-tagged models); server-side the same three sources are `Hittables` (chunk 9), filtered to the caster's arena
@@ -256,7 +258,7 @@ All boss constants are now per-type in `BossConfig.BOSS_TYPES[<name>]`. Brain's 
 | attackRange | 100 studs | `BOSS_TYPES.Brain.attackRange` |
 | attackWindupSec | 0.5 s | `BOSS_TYPES.Brain.attackWindupSec` |
 | continuousFacing | true | `BOSS_TYPES.Brain.continuousFacing` — boss tracks player in all non-moving states; `false`/nil = AttackPrep only |
-| FireballVolley count / speed / damage | 3 / 30 / 15 HP | `BOSS_TYPES.Brain.skills.FireballVolley.deliveryParams` + `.onImpact[1].amount` |
+| FireballVolley count / speed / damage | 20 / 90 / 15 HP | `BOSS_TYPES.Brain.skills.FireballVolley.deliveryParams` + `.onImpact[1].amount` |
 | GroundSlam radius / damage / knockup | 22 / 25 HP / 60 | `BOSS_TYPES.Brain.skills.GroundSlam.deliveryParams` + `.onImpact[*]` |
 
 Add a new boss type by adding another entry to `BOSS_TYPES`; switch the active boss by setting `workspace.BossPoint:SetAttribute("BossType", "<name>")`. Falls back to `BossConfig.DEFAULT_TYPE` when unset.

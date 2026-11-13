@@ -1146,6 +1146,52 @@ VfxConfig.EFFECTS = {
 		anchor           = "worldPosition",
 	},
 
+	-- A BreakableWall giving way, played by
+	-- `client/Arena/BreakableWallVisuals` at the wall's centre when the
+	-- server publishes `WallState = "broken"`. A one-shot burst of the same
+	-- stone dust and chips the Stone Wall's rise uses, over the same
+	-- rumble sample pitched a little higher than the rise so a wall
+	-- collapsing is not the sound of one climbing out of the floor.
+	wall_break = {
+		emitters = {
+			{
+				template    = "BurstMedium",
+				color       = STONE_DUST,
+				emitCount   = 26,
+				lifetime    = NumberRange.new(0.60, WALL_RISE_DUST_MAX_LIFETIME_SEC),
+				size        = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 1.2),
+					NumberSequenceKeypoint.new(0.5, 3.0),
+					NumberSequenceKeypoint.new(1.0, 4.5),
+				}),
+				speed        = NumberRange.new(4, 14),
+				spreadAngle  = Vector2.new(180, 180),
+				rotation     = NumberRange.new(-180, 180),
+				transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.40),
+					NumberSequenceKeypoint.new(0.4, 0.60),
+					NumberSequenceKeypoint.new(1.0, 1.00),
+				}),
+			},
+			{
+				template    = "ImpactBurst",
+				color       = STONE_DUST,
+				emitCount   = 22,
+				lifetime    = NumberRange.new(0.40, 0.80),
+				size        = NumberSequence.new({
+					NumberSequenceKeypoint.new(0.0, 0.5),
+					NumberSequenceKeypoint.new(1.0, 0.0),
+				}),
+				speed       = NumberRange.new(14, 30),
+				spreadAngle = Vector2.new(180, 180),
+				rotation    = NumberRange.new(-180, 180),
+			},
+		},
+		sound            = { soundId = SFX.stoneRumble, volume = 0.85, pitchRange = NumberRange.new(0.40, 0.52) },
+		totalDurationSec = WALL_RISE_DUST_MAX_LIFETIME_SEC + 0.1,
+		anchor           = "worldPosition",
+	},
+
 	impact_buff = {
 		emitters = {
 			{

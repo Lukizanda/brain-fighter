@@ -16,6 +16,14 @@
 -- A volume with no ArenaId belongs to Arena.DEFAULT_ID — the shipped
 -- arena's eight volumes are all in that state, so the attribute is how you
 -- opt a volume OUT of the default arena, never how you opt one in.
+--
+-- Three more optional attributes shape what a volume spawns (the pool
+-- validates the values; this file only reads them off the part):
+--   LetterTable (string)  Standard | Common | Premium | Wildcard
+--   ColorOnly   (string)  red | green | blue
+--   BlockQuota  (number)  hold exactly this many blocks, outside the
+--                         density pool
+-- A volume with none of them behaves as it always has.
 ----------------------------------------------------------------------
 
 local CollectionService = game:GetService("CollectionService")
@@ -33,6 +41,24 @@ local SPAWN_VOLUME_TAG = "BlockSpawnVolume"
 
 -- Boxes grouped by the arena that owns them, keyed by arena id.
 type ArenaBoxes = { [string]: { BlockSpawner.BoxDef } }
+
+-- Reads one optional attribute, requiring it to be `expected` type. A wrong
+-- type is a mistake in the authored part, so it warns naming the part and
+-- is ignored rather than being coerced into something surprising.
+local function readAttribute(part: BasePart, attribute: string, expected: string): any?
+	local value = part:GetAttribute(attribute)
+	if value == nil then
+		return nil
+	end
+	if typeof(value) ~= expected then
+		log:warn(string.format(
+			"%s: attribute %s must be a %s, got %s — ignoring it",
+			part:GetFullName(), attribute, expected, typeof(value)
+		))
+		return nil
+	end
+	return value
+end
 
 local function collectVolumesByArena(): ArenaBoxes
 	local byArena: ArenaBoxes = {}
@@ -55,7 +81,14 @@ local function collectVolumesByArena(): ArenaBoxes
 				boxes = {}
 				byArena[arenaId] = boxes
 			end
-			table.insert(boxes, { boxMin = pos - half, boxMax = pos + half })
+			table.insert(boxes, {
+					boxMin = pos - half,
+					boxMax = pos + half,
+					letterTable = readAttribute(part, BlockSpawner.LETTER_TABLE_ATTRIBUTE, "string"),
+					colorOnly = readAttribute(part, BlockSpawner.COLOR_ONLY_ATTRIBUTE, "string"),
+					quota = readAttribute(part, BlockSpawner.BLOCK_QUOTA_ATTRIBUTE, "number"),
+					label = part:GetFullName(),
+				})
 		end
 	end
 
@@ -126,7 +159,11 @@ end
 
 local summary: { string } = {}
 for arenaId, pool in pools do
-	table.insert(summary, string.format("%s=%d", arenaId, pool:getTargetCount()))
+	local entry = string.format("%s=%d", arenaId, pool:getTargetCount())
+	if pool:getQuotaTotal() > 0 then
+		entry ..= string.format(" (%d density + %d quota)", pool:getDensityTarget(), pool:getQuotaTotal())
+	end
+	table.insert(summary, entry)
 end
 table.sort(summary)
 log:info(string.format("BlockSpawnerService ready — %d arena(s): %s",

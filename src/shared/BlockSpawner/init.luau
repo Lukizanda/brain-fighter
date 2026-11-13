@@ -26,6 +26,13 @@
 -- replacement doesn't materialise in the player's face the instant
 -- they shoot one. Each block is on its own clock — see _scheduleRefill.
 --
+-- Letter zones (Phase 8 stage 2): a BoxDef may carry `letterTable`,
+-- `colorOnly` and `quota`. A box with none of them behaves exactly as the
+-- pool always did. A quota box holds exactly `quota` blocks, refills
+-- itself in place, and is left out of the density pool: the arena's
+-- density target counts non-quota boxes only. See
+-- wiki/design/boss-arena.md § Letter zones and ./LetterTables.luau.
+--
 -- Letter selection is Scrabble-frequency-weighted (English vowels +
 -- common consonants dominate) — the SOFT-HEURISTIC the design defers
 -- "explicit dictionary-bag scan" complexity to (see
@@ -50,6 +57,7 @@ local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
 local Colors = require(ReplicatedStorage.Shared.Core.Colors)
+local LetterTables = require(script.LetterTables)
 
 local log = Logger.new("BlockSpawner")
 
@@ -67,38 +75,6 @@ local DEFAULT_BOX_MAX = Vector3.new(20, 16, 20)
 -- Per-level designers may override to bias a color scarce.
 local DEFAULT_COLOR_WEIGHT = 1
 local COLORS = Colors.SPELL_COLORS
-
--- Scrabble letter frequencies (standard English bag of 98 tiles).
--- These are the SOFT-HEURISTIC weights — English vowels and common
--- consonants dominate so a random sample of ~24 blocks will almost
--- always contain spellable letters without an explicit "must be
--- spellable" guarantee.
---
--- These values intentionally MATCH the standard Scrabble distribution
--- and are kept here (not imported from EnergyEconomy) because frequency
--- is conceptually distinct from per-letter point values. Cross-check
--- against [[systems/EnergyEconomy]] if either drifts.
-local LETTER_FREQUENCIES: { [string]: number } = {
-	A = 9,  B = 2,  C = 2,  D = 4,  E = 12,
-	F = 2,  G = 3,  H = 2,  I = 9,  J = 1,
-	K = 1,  L = 4,  M = 2,  N = 6,  O = 8,
-	P = 2,  Q = 1,  R = 6,  S = 4,  T = 6,
-	U = 4,  V = 2,  W = 2,  X = 1,  Y = 2,
-	Z = 1,
-}
-
-local ALPHABET = {
-	"A","B","C","D","E","F","G","H","I","J","K","L","M",
-	"N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
-}
-
--- Wildcard blocks roll as a 27th "letter" against the same cumulative
--- table. The Scrabble bag above totals 98, so weight 4 lands at
--- 4/102 ≈ 3.9% — roughly one ★ visible in the ~24-block reference
--- arena. Scrabble's own 2-blanks-in-98 is stingier than this design
--- wants given blocks recycle continuously as they're consumed.
--- Set to 0 to disable wildcard spawns entirely.
-local WILDCARD_FREQUENCY = 4
 
 local FULL_REVOLUTION_RADIANS = math.pi * 2
 local MAX_SPAWN_ATTEMPTS = 20
@@ -118,16 +94,34 @@ local STUDS_PER_DENSITY_UNIT = 1000
 -- BlockSpawnerService — tune it there, not here.
 local DEFAULT_RESPAWN_DELAY_SECONDS = 0
 
+-- Volume-part attribute names BlockSpawnerService reads (the contract in
+-- wiki/design/boss-arena.md § Letter zones).
+local LETTER_TABLE_ATTRIBUTE = "LetterTable"
+local COLOR_ONLY_ATTRIBUTE = "ColorOnly"
+local BLOCK_QUOTA_ATTRIBUTE = "BlockQuota"
+
+local UNNAMED_BOX_LABEL = "(unnamed box)"
+
 ----------------------------------------------------------------------
 -- Types
 ----------------------------------------------------------------------
 
-export type BoxDef = { boxMin: Vector3, boxMax: Vector3 }
+export type BoxDef = {
+	boxMin: Vector3,
+	boxMax: Vector3,
+	-- Letter zone fields; all optional, absent means "as always".
+	letterTable: string?,  -- LetterTables name; default Standard
+	colorOnly: string?,  -- "red" | "green" | "blue"
+	quota: number?,  -- holds exactly this many blocks and refills itself
+	label: string?,  -- part name, for warnings
+}
 
 export type Opts = {
 	-- Which arena slot this pool belongs to. Labels the logs and is what
 	-- callers key their instances by; defaults to Arena.DEFAULT_ID.
 	arenaId: string?,
+	-- Density target: the blocks held by the NON-quota boxes. Quota boxes
+	-- add their quotas on top (see getTargetCount).
 	targetCount: number?,
 	density: number?,
 	boxes: { BoxDef }?,
@@ -140,6 +134,7 @@ export type Opts = {
 }
 
 type ResolvedOpts = {
+	-- Blocks the density (non-quota) boxes hold.
 	targetCount: number,
 	minSpacing: number,
 	respawnDelay: number,
@@ -147,46 +142,18 @@ type ResolvedOpts = {
 	parent: Instance,
 }
 
-type LetterCumEntry = { letter: string, threshold: number }
-type BoxCumEntry = { box: BoxDef, threshold: number }
+-- A box after validation, plus its live bookkeeping.
+type BoxState = {
+	def: BoxDef,
+	label: string,
+	letterTable: string,
+	colorOnly: string?,
+	quota: number?,  -- nil = density box
+	count: number,  -- live blocks that came from this box
+	spacingWarned: boolean,
+}
 
-----------------------------------------------------------------------
--- Letter table (module-level)
-----------------------------------------------------------------------
--- Derived purely from the constants above, never from per-instance opts,
--- so it is built once at require rather than copied into every arena.
--- Cumulative thresholds make a weighted pick a single linear scan over 27
--- entries instead of summing frequencies on every roll.
-
-local letterCumulative: { LetterCumEntry } = {}
-local letterTotal = 0
-
-do
-	for _, letter in ipairs(ALPHABET) do
-		local weight = LETTER_FREQUENCIES[letter] or 0
-		if weight > 0 then
-			letterTotal += weight
-			table.insert(letterCumulative, { letter = letter, threshold = letterTotal })
-		end
-	end
-	if WILDCARD_FREQUENCY > 0 then
-		letterTotal += WILDCARD_FREQUENCY
-		table.insert(letterCumulative, { letter = Wildcard.CHAR, threshold = letterTotal })
-	end
-end
-
-local function pickLetter(): string
-	local roll = math.random() * letterTotal
-	for _, entry in ipairs(letterCumulative) do
-		if roll <= entry.threshold then
-			return entry.letter
-		end
-	end
-	-- Numerical-edge fallback: math.random() can return values very
-	-- close to letterTotal due to float rounding; cumulative threshold
-	-- comparisons may miss the last entry.
-	return letterCumulative[#letterCumulative].letter
-end
+type BoxCumEntry = { box: BoxState, threshold: number }
 
 ----------------------------------------------------------------------
 -- Options resolution
@@ -203,27 +170,86 @@ local function resolveBoxes(u: Opts): { BoxDef }
 	} }
 end
 
-local function totalVolumeOf(boxes: { BoxDef }): number
-	local total = 0
-	for _, box in ipairs(boxes) do
-		local size = box.boxMax - box.boxMin
-		total += math.abs(size.X * size.Y * size.Z)
-	end
-	return total
+local function volumeOf(box: BoxDef): number
+	local size = box.boxMax - box.boxMin
+	return math.abs(size.X * size.Y * size.Z)
 end
 
-local function resolveOpts(u: Opts, boxes: { BoxDef }): ResolvedOpts
-	-- Resolve target count: explicit > density-computed > hardcoded default.
+-- Validates a box's optional zone fields. A bad value warns (naming the
+-- part) and falls back to the default instead of silently spawning nothing.
+local function makeBoxState(def: BoxDef, arenaId: string): BoxState
+	local label = def.label or UNNAMED_BOX_LABEL
+
+	local letterTable = LetterTables.DEFAULT
+	if def.letterTable ~= nil then
+		if LetterTables.isValid(def.letterTable) then
+			letterTable = def.letterTable
+		else
+			log:warn(string.format(
+				"[%s] %s: unknown %s '%s' (valid: %s) — using %s",
+				arenaId, label, LETTER_TABLE_ATTRIBUTE, tostring(def.letterTable),
+				table.concat(LetterTables.names(), ", "), LetterTables.DEFAULT
+			))
+		end
+	end
+
+	local colorOnly: string? = nil
+	if def.colorOnly ~= nil then
+		if Colors.isSpellColor(def.colorOnly) then
+			colorOnly = def.colorOnly
+		else
+			log:warn(string.format(
+				"[%s] %s: unknown %s '%s' (valid: %s) — using mixed colours",
+				arenaId, label, COLOR_ONLY_ATTRIBUTE, tostring(def.colorOnly), table.concat(COLORS, ", ")
+			))
+		end
+	end
+
+	local quota: number? = nil
+	if def.quota ~= nil then
+		local floored = math.floor(def.quota)
+		if floored >= 1 then
+			quota = floored
+		else
+			log:warn(string.format(
+				"[%s] %s: %s must be at least 1, got %s — treating as a density volume",
+				arenaId, label, BLOCK_QUOTA_ATTRIBUTE, tostring(def.quota)
+			))
+		end
+	end
+
+	return {
+		def = def,
+		label = label,
+		letterTable = letterTable,
+		colorOnly = colorOnly,
+		quota = quota,
+		count = 0,
+		spacingWarned = false,
+	}
+end
+
+local function resolveOpts(u: Opts, densityBoxes: { BoxState }): ResolvedOpts
+	-- Resolve the density target: explicit > density-computed > hardcoded
+	-- default.
 	--
-	-- The density term is over THIS arena's boxes only. As a singleton it
-	-- summed every tagged volume in the world, which is the same number
-	-- while one arena exists and quietly the wrong one the moment a second
-	-- appears — both arenas would size themselves off the combined volume.
+	-- The density term is over THIS arena's non-quota boxes only. As a
+	-- singleton it summed every tagged volume in the world, which is the
+	-- same number while one arena exists and quietly the wrong one the
+	-- moment a second appears. Quota boxes hold their own fixed counts and
+	-- must not inflate (or be thinned out of) the open-arena density.
 	local targetCount: number
-	if u.targetCount then
+	if #densityBoxes == 0 then
+		-- Nothing for density blocks to live in (an all-quota pool).
+		targetCount = 0
+	elseif u.targetCount then
 		targetCount = u.targetCount
 	elseif u.density and u.density > 0 then
-		targetCount = math.max(1, math.round(u.density * totalVolumeOf(boxes) / STUDS_PER_DENSITY_UNIT))
+		local volume = 0
+		for _, box in ipairs(densityBoxes) do
+			volume += volumeOf(box.def)
+		end
+		targetCount = math.max(1, math.round(u.density * volume / STUDS_PER_DENSITY_UNIT))
 	else
 		targetCount = DEFAULT_TARGET_COUNT
 	end
@@ -256,23 +282,32 @@ end
 local BlockSpawner = {}
 BlockSpawner.__index = BlockSpawner
 
-BlockSpawner.LETTER_FREQUENCIES = LETTER_FREQUENCIES
-BlockSpawner.WILDCARD_FREQUENCY = WILDCARD_FREQUENCY
+BlockSpawner.LETTER_FREQUENCIES = LetterTables.LETTER_FREQUENCIES
+BlockSpawner.WILDCARD_FREQUENCY = LetterTables.STANDARD_WILDCARD_FREQUENCY
+BlockSpawner.LETTER_TABLE_ATTRIBUTE = LETTER_TABLE_ATTRIBUTE
+BlockSpawner.COLOR_ONLY_ATTRIBUTE = COLOR_ONLY_ATTRIBUTE
+BlockSpawner.BLOCK_QUOTA_ATTRIBUTE = BLOCK_QUOTA_ATTRIBUTE
 
 export type BlockSpawner = typeof(setmetatable(
 	{} :: {
 		arenaId: string,
 		_opts: ResolvedOpts,
-		_boxes: { BoxDef },
-		-- Cumulative box-volume table; volume-weighted so each cubic stud
-		-- of this arena has equal probability of spawning a block.
+		_boxes: { BoxState },
+		_quotaBoxes: { BoxState },
+		-- Cumulative box-volume table over the DENSITY (non-quota) boxes;
+		-- volume-weighted so each cubic stud of the open arena has equal
+		-- probability of spawning a block.
 		_boxCumulative: { BoxCumEntry },
 		_boxVolumeTotal: number,
-		-- Set keyed by Model: lookup is O(1) so the removed-signal handler
-		-- can tell "one of mine?" in constant time. getActiveBlocks()
-		-- materializes the array for callers.
-		_active: { [Model]: true },
+		-- Map keyed by Model, valued with the box the block came from:
+		-- lookup is O(1) so the removed-signal handler can tell "one of
+		-- mine?" in constant time and knows which box to refill.
+		-- getActiveBlocks() materializes the array for callers.
+		_active: { [Model]: BoxState },
 		_activeCount: number,
+		-- Live blocks that came from density (non-quota) boxes.
+		_densityCount: number,
+		_quotaTotal: number,
 		_running: boolean,
 		_destroyed: boolean,
 		_removedConnection: RBXScriptConnection?,
@@ -282,14 +317,30 @@ export type BlockSpawner = typeof(setmetatable(
 
 function BlockSpawner.new(userOpts: Opts?): BlockSpawner
 	local u = userOpts or {}
-	local boxes = resolveBoxes(u)
-	local opts = resolveOpts(u, boxes)
+	local boxDefs = resolveBoxes(u)
+	local arenaId = u.arenaId or Arena.DEFAULT_ID
+
+	local boxes: { BoxState } = {}
+	local densityBoxes: { BoxState } = {}
+	local quotaBoxes: { BoxState } = {}
+	local quotaTotal = 0
+	for _, def in ipairs(boxDefs) do
+		local state = makeBoxState(def, arenaId)
+		table.insert(boxes, state)
+		if state.quota then
+			table.insert(quotaBoxes, state)
+			quotaTotal += state.quota
+		else
+			table.insert(densityBoxes, state)
+		end
+	end
+
+	local opts = resolveOpts(u, densityBoxes)
 
 	local boxCumulative: { BoxCumEntry } = {}
 	local boxVolumeTotal = 0
-	for _, box in ipairs(boxes) do
-		local size = box.boxMax - box.boxMin
-		local vol = math.abs(size.X * size.Y * size.Z)
+	for _, box in ipairs(densityBoxes) do
+		local vol = volumeOf(box.def)
 		if vol > 0 then
 			boxVolumeTotal += vol
 			table.insert(boxCumulative, { box = box, threshold = boxVolumeTotal })
@@ -297,20 +348,26 @@ function BlockSpawner.new(userOpts: Opts?): BlockSpawner
 	end
 
 	local self = setmetatable({
-		arenaId = u.arenaId or Arena.DEFAULT_ID,
+		arenaId = arenaId,
 		_opts = opts,
 		_boxes = boxes,
+		_quotaBoxes = quotaBoxes,
 		_boxCumulative = boxCumulative,
 		_boxVolumeTotal = boxVolumeTotal,
 		_active = {},
 		_activeCount = 0,
+		_densityCount = 0,
+		_quotaTotal = quotaTotal,
 		_running = false,
 		_destroyed = false,
 		_removedConnection = nil,
 	}, BlockSpawner)
 
-	log:info(string.format("[%s] Pool created — %d boxes, %.0f cubic studs, target %d blocks",
-		self.arenaId, #boxes, boxVolumeTotal, opts.targetCount))
+	log:info(string.format(
+		"[%s] Pool created — %d boxes (%d quota), %.0f cubic studs of density volume, target %d blocks (%d density + %d quota)",
+		arenaId, #boxes, #quotaBoxes, boxVolumeTotal,
+		opts.targetCount + quotaTotal, opts.targetCount, quotaTotal
+	))
 
 	return self
 end
@@ -339,9 +396,10 @@ function BlockSpawner._pickColor(self: BlockSpawner): string
 	return COLORS[#COLORS]
 end
 
-function BlockSpawner._pickPosition(self: BlockSpawner): Vector3
-	-- Volume-weighted box selection: roll against cumulative volume thresholds
-	-- so each cubic stud across this arena's boxes has equal spawn probability.
+-- Volume-weighted pick among the density boxes: roll against cumulative
+-- volume thresholds so each cubic stud across this arena's open volumes
+-- has equal spawn probability. Quota boxes are never chosen here.
+function BlockSpawner._pickDensityBox(self: BlockSpawner): BoxState
 	local roll = math.random() * self._boxVolumeTotal
 	local chosen = self._boxCumulative[#self._boxCumulative].box
 	for _, entry in ipairs(self._boxCumulative) do
@@ -350,7 +408,11 @@ function BlockSpawner._pickPosition(self: BlockSpawner): Vector3
 			break
 		end
 	end
-	local minV, maxV = chosen.boxMin, chosen.boxMax
+	return chosen
+end
+
+function BlockSpawner._pickPosition(_self: BlockSpawner, box: BoxState): Vector3
+	local minV, maxV = box.def.boxMin, box.def.boxMax
 	return Vector3.new(
 		minV.X + math.random() * (maxV.X - minV.X),
 		minV.Y + math.random() * (maxV.Y - minV.Y),
@@ -358,13 +420,16 @@ function BlockSpawner._pickPosition(self: BlockSpawner): Vector3
 	)
 end
 
-function BlockSpawner._pickCFrame(self: BlockSpawner): CFrame
+-- `fixedBox` pins the roll to one box (quota refills); nil rolls a fresh
+-- density box per call, as the pool always did.
+function BlockSpawner._pickCFrame(self: BlockSpawner, fixedBox: BoxState?): (CFrame, BoxState)
 	-- Random initial yaw so a cluster of blocks doesn't read as a
 	-- synchronised baseline before the client animator phase-offset
 	-- kicks in.
-	local position = self:_pickPosition()
+	local box = fixedBox or self:_pickDensityBox()
+	local position = self:_pickPosition(box)
 	local yaw = math.random() * FULL_REVOLUTION_RADIANS
-	return CFrame.new(position) * CFrame.Angles(0, yaw, 0)
+	return CFrame.new(position) * CFrame.Angles(0, yaw, 0), box
 end
 
 ----------------------------------------------------------------------
@@ -385,65 +450,108 @@ end
 --
 -- Clearance is measured against this arena's blocks only. Two arenas
 -- never share space, so a neighbour in another one is not a collision.
-function BlockSpawner._pickSpacedCFrame(self: BlockSpawner): CFrame
+--
+-- Quota boxes (`fixedBox`) are measured against their OWN box's blocks
+-- only, and warn at most once per box. A vault is a sealed room: its
+-- neighbours across the wall are irrelevant, and a quota set too high for
+-- its volume would otherwise log on every refill, forever.
+function BlockSpawner._pickSpacedCFrame(self: BlockSpawner, fixedBox: BoxState?): (CFrame, BoxState)
 	local minDist = self._opts.minSpacing
 	if minDist <= 0 then
-		return self:_pickCFrame()
+		return self:_pickCFrame(fixedBox)
 	end
 
-	local best = self:_pickCFrame()
+	local best, bestBox = self:_pickCFrame(fixedBox)
 	local bestClearance = -1
 
 	for attempt = 1, MAX_SPAWN_ATTEMPTS do
-		local cf = if attempt == 1 then best else self:_pickCFrame()
+		local cf, box = best, bestBox
+		if attempt > 1 then
+			cf, box = self:_pickCFrame(fixedBox)
+		end
 
 		-- Distance to the nearest existing block. Stays math.huge on an
 		-- empty arena, which clears the check on the first attempt.
 		local clearance = math.huge
-		for block in self._active do
-			local d = (cf.Position - block:GetPivot().Position).Magnitude
-			if d < clearance then
-				clearance = d
+		for block, blockBox in self._active do
+			if fixedBox == nil or blockBox == fixedBox then
+				local d = (cf.Position - block:GetPivot().Position).Magnitude
+				if d < clearance then
+					clearance = d
+				end
 			end
 		end
 
 		if clearance >= minDist then
-			return cf
+			return cf, box
 		end
 		if clearance > bestClearance then
 			best = cf
+			bestBox = box
 			bestClearance = clearance
 		end
 	end
 
-	log:warn(string.format(
-		"[%s] no clear spawn point in %d attempts — wanted %.1f studs, best was %.1f. "
-			.. "Arena is too dense for %d blocks; lower BLOCK_SPAWN_DENSITY or add spawn volume.",
-		self.arenaId, MAX_SPAWN_ATTEMPTS, minDist, bestClearance, self._opts.targetCount
-	))
-	return best
+	if fixedBox == nil then
+		log:warn(string.format(
+			"[%s] no clear spawn point in %d attempts — wanted %.1f studs, best was %.1f. "
+				.. "Arena is too dense for %d blocks; lower BLOCK_SPAWN_DENSITY or add spawn volume.",
+			self.arenaId, MAX_SPAWN_ATTEMPTS, minDist, bestClearance, self._opts.targetCount
+		))
+	elseif not fixedBox.spacingWarned then
+		fixedBox.spacingWarned = true
+		log:warn(string.format(
+			"[%s] %s: no clear spawn point in %d attempts — wanted %.1f studs, best was %.1f. "
+				.. "%s %d is too many for this volume; shrink the quota or enlarge the part. (Warning shown once per volume.)",
+			self.arenaId, fixedBox.label, MAX_SPAWN_ATTEMPTS, minDist, bestClearance,
+			BLOCK_QUOTA_ATTRIBUTE, fixedBox.quota or 0
+		))
+	end
+	return best, bestBox
 end
 
-function BlockSpawner._spawnOne(self: BlockSpawner): Model
-	local cf = self:_pickSpacedCFrame()
+-- Spawns one block, into `fixedBox` for quota boxes or a density box
+-- otherwise.
+function BlockSpawner._spawnOne(self: BlockSpawner, fixedBox: BoxState?): Model
+	local cf, box = self:_pickSpacedCFrame(fixedBox)
 	-- A wildcard's color is fixed to gold rather than rolled, so it can't
-	-- masquerade as a reservoir color the player might be hunting for.
-	local letter = pickLetter()
-	local color = if Wildcard.isWildcard(letter) then Wildcard.COLOR else self:_pickColor()
+	-- masquerade as a reservoir color the player might be hunting for. That
+	-- holds in a ColorOnly volume too.
+	local letter = LetterTables.pick(box.letterTable)
+	local color: string
+	if Wildcard.isWildcard(letter) then
+		color = Wildcard.COLOR
+	elseif box.colorOnly then
+		color = box.colorOnly
+	else
+		color = self:_pickColor()
+	end
 
 	local block = LetterBlocks.spawn(letter, color, cf, self._opts.parent)
 	-- Which pool's block this is. ConsumeBlock refuses a player whose
 	-- session is in a different arena — the range check alone would let a
 	-- hub player at the boundary pop arena blocks (chunk 9).
 	block:SetAttribute(Arena.ID_ATTRIBUTE, self.arenaId)
-	self._active[block] = true
+	self._active[block] = box
 	self._activeCount += 1
+	box.count += 1
+	if not box.quota then
+		self._densityCount += 1
+	end
 	return block
 end
 
 function BlockSpawner._maintainCount(self: BlockSpawner)
-	while self._running and self._activeCount < self._opts.targetCount do
-		self:_spawnOne()
+	if #self._boxCumulative > 0 then
+		while self._running and self._densityCount < self._opts.targetCount do
+			self:_spawnOne()
+		end
+	end
+	for _, box in ipairs(self._quotaBoxes) do
+		local quota = box.quota or 0
+		while self._running and box.count < quota do
+			self:_spawnOne(box)
+		end
 	end
 end
 
@@ -456,29 +564,38 @@ end
 -- two of them early, in a burst. One-in-one-out keeps each replacement
 -- on the clock that its own destruction started.
 --
--- Still bounded by targetCount so a stale timer surviving a
--- disable()/start() cycle can't push the arena over.
-function BlockSpawner._spawnOneIfBelowTarget(self: BlockSpawner)
+-- Still bounded by the target (the density target, or the box's quota) so
+-- a stale timer surviving a disable()/start() cycle can't push it over.
+-- `box` is the box the consumed block came from: a quota block comes back
+-- in the same volume.
+function BlockSpawner._spawnOneIfBelowTarget(self: BlockSpawner, box: BoxState)
 	if not self._running or self._destroyed then
 		return
 	end
-	if self._activeCount >= self._opts.targetCount then
+	if box.quota then
+		if box.count >= box.quota then
+			return
+		end
+		self:_spawnOne(box)
+		return
+	end
+	if self._densityCount >= self._opts.targetCount or #self._boxCumulative == 0 then
 		return
 	end
 	self:_spawnOne()
 end
 
-function BlockSpawner._scheduleRefill(self: BlockSpawner)
+function BlockSpawner._scheduleRefill(self: BlockSpawner, box: BoxState)
 	local delaySeconds = self._opts.respawnDelay
 	if delaySeconds > 0 then
 		task.delay(delaySeconds, function()
-			self:_spawnOneIfBelowTarget()
+			self:_spawnOneIfBelowTarget(box)
 		end)
 	else
 		-- task.defer rather than an inline call: this runs inside the
 		-- removed-signal handler, which is mid-iteration over `_active`.
 		task.defer(function()
-			self:_spawnOneIfBelowTarget()
+			self:_spawnOneIfBelowTarget(box)
 		end)
 	end
 end
@@ -491,8 +608,21 @@ function BlockSpawner.getArenaId(self: BlockSpawner): string
 	return self.arenaId
 end
 
+-- Total blocks the pool holds when full: the density target plus every
+-- quota. For a pool with no quota boxes this is the density target alone,
+-- exactly what it returned before zones existed.
 function BlockSpawner.getTargetCount(self: BlockSpawner): number
+	return self._opts.targetCount + self._quotaTotal
+end
+
+-- Blocks the non-quota boxes hold; resolved from those boxes only.
+function BlockSpawner.getDensityTarget(self: BlockSpawner): number
 	return self._opts.targetCount
+end
+
+-- Sum of every quota box's quota.
+function BlockSpawner.getQuotaTotal(self: BlockSpawner): number
+	return self._quotaTotal
 end
 
 function BlockSpawner.getActiveBlocks(self: BlockSpawner): { Model }
@@ -521,11 +651,16 @@ function BlockSpawner.start(self: BlockSpawner)
 	-- `_active` lookup is what makes it this arena's business only.
 	self._removedConnection = CollectionService:GetInstanceRemovedSignal(LetterBlocks.TAG):Connect(function(instance)
 		local block = instance :: Model
-		if self._active[block] then
+		local box = self._active[block]
+		if box then
 			self._active[block] = nil
 			self._activeCount -= 1
+			box.count -= 1
+			if not box.quota then
+				self._densityCount -= 1
+			end
 			if self._running then
-				self:_scheduleRefill()
+				self:_scheduleRefill(box)
 			end
 		end
 	end)
@@ -541,8 +676,9 @@ end
 -- The singleton's stop()/start() pair could not do that — start() reset
 -- `active` to empty while the Models it described were still parented to
 -- the workspace, so a restart spawned a second full field on top of an
--- orphaned one. Keeping the set across a disable() is what makes this the
--- reversible half of the project's disable/destroy pair.
+-- orphaned one. Keeping the set (and each box's count) across a disable()
+-- is what makes this the reversible half of the project's disable/destroy
+-- pair.
 function BlockSpawner.disable(self: BlockSpawner)
 	if not self._running then
 		return
@@ -571,6 +707,10 @@ function BlockSpawner.destroy(self: BlockSpawner)
 	local snapshot = self:getActiveBlocks()
 	table.clear(self._active)
 	self._activeCount = 0
+	self._densityCount = 0
+	for _, box in ipairs(self._boxes) do
+		box.count = 0
+	end
 	for _, block in ipairs(snapshot) do
 		block:Destroy()
 	end
@@ -587,7 +727,8 @@ function BlockSpawner.rerollAll(self: BlockSpawner)
 		block:Destroy()
 	end
 	-- The removed-signal handler has cleared `_active` by now and
-	-- queued one refill per destroy, each replacing a single block.
+	-- queued one refill per destroy, each replacing a single block in the
+	-- box it came from (so a quota volume refills in place).
 	-- With a respawnDelay set, the whole field comes back one
 	-- cooldown later rather than immediately.
 end

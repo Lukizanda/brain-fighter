@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server-side letter-block populator — one instance per arena, maintaining that arena's target count of floating LetterBlocks with Scrabble-weighted letter distribution, configurable color weights, and a per-block respawn cooldown.
-updated: 2026-09-10
+updated: 2026-11-13
 ---
 
 # BlockSpawner
@@ -13,6 +13,7 @@ Server-side populator that keeps a target count of [[systems/LetterBlock|LetterB
 ## Files
 
 - `src/shared/BlockSpawner/init.luau` — the pool class: `new` / start / disable / destroy / rerollAll / getActiveBlocks / pickers / tunables.
+- `src/shared/BlockSpawner/LetterTables.luau` — the named letter tables (`Standard`, `Common`, `Premium`, `Wildcard`) and the weighted pick. See § Letter zones.
 - `src/server/BlockSpawner/BlockSpawnerService.server.luau` — server bootstrap that groups `BlockSpawnVolume`-tagged parts by arena and starts one pool per group, threading the `GameConfig` tunables.
 - `src/shared/GameMode/Arena.luau` — the shared `ArenaId` / `Default` vocabulary, also used by [[systems/GameMode]].
 - `src/shared/Tests/Suites/Phase3/blockspawner_respawn_delay.luau` — asserts the arena stays short mid-cooldown and returns to *exactly* target after, catching a refill-to-target regression.
@@ -29,19 +30,26 @@ Server-side populator that keeps a target count of [[systems/LetterBlock|LetterB
 | `:destroy()` | `() -> ()` | `:disable()`, then destroys this pool's blocks and clears its state. Permanent. |
 | `:rerollAll()` | `() -> ()` | Destroys this pool's blocks. Each queues its own replacement, so the field returns one cooldown later. **No callers** as of 2026-08-08 — it is a documented escape hatch from [[design/gameplay-loop]], not a shipped mechanic. |
 | `:getActiveBlocks()` | `() -> { Model }` | Snapshot of the blocks *this pool* tracks. Another arena's blocks are never included. |
-| `:getArenaId()` / `:getTargetCount()` | `() -> string` / `() -> number` | Identity and resolved target, for logging and assertions. |
+| `:getArenaId()` / `:getTargetCount()` | `() -> string` / `() -> number` | Identity and resolved target, for logging and assertions. Since letter zones the target is the density target **plus** every quota. |
+| `:getDensityTarget()` / `:getQuotaTotal()` | `() -> number` | The two halves of the target. |
 | `.LETTER_FREQUENCIES` | `{ [string]: number }` | Scrabble-standard 98-tile distribution used for weighted letter picks. Module-level: derived from constants, so it is built once at require rather than per pool. |
 
 ### Opts type
 
 ```luau
-type BoxDef = { boxMin: Vector3, boxMax: Vector3 }
+type BoxDef = {
+    boxMin: Vector3, boxMax: Vector3,
+    letterTable: string?,  -- LetterTables name; default Standard
+    colorOnly: string?,    -- "red" | "green" | "blue"
+    quota: number?,        -- holds exactly this many blocks, outside the density pool
+    label: string?,        -- part name, for warnings
+}
 
 type Opts = {
     arenaId: string?,            -- which arena slot this pool is; default Arena.DEFAULT_ID
 
     -- Target count: explicit > density-computed > hardcoded default (24)
-    targetCount: number?,        -- explicit override; ignores density
+    targetCount: number?,        -- explicit override; ignores density. Means the DENSITY target: quota boxes add on top
     density: number?,            -- blocks per 1000 cubic studs (see GameConfig.BLOCK_SPAWN_DENSITY)
 
     -- Spawn volumes: prefer boxes array; fall back to single-box shorthand
@@ -71,6 +79,48 @@ Tag any `BasePart` in Workspace with the `BlockSpawnVolume` CollectionService ta
 **Circular boss arena example**: place 4–8 rectangular parts arranged in a ring around the boss, each tagged `BlockSpawnVolume` and attributed with the same `ArenaId`. Blocks distribute across them weighted by volume, so equal-sized parts produce equal density.
 
 Density is controlled by `GameConfig.BLOCK_SPAWN_DENSITY` and applies **per arena**: a pool's target is density × *that arena's* volume / 1000. The count auto-adjusts as you add or resize that arena's volumes, and resizing one arena never changes another's count.
+
+## Letter zones (Phase 8 stage 2, 2026-11-13)
+
+Built for [[design/boss-arena]], which needs different letters in different places. A
+`BlockSpawnVolume` part takes three optional attributes; `BlockSpawnerService` reads
+them and the pool validates them. **A volume with none of them behaves exactly as
+before**: the shipped arenas still resolve to `Default=40, Duel1=5, Duel2=5, Lobby=8`.
+
+| Attribute | Type | Meaning |
+|---|---|---|
+| `LetterTable` | string | Which table the volume rolls letters from |
+| `ColorOnly` | string | `red`, `green` or `blue`: every block is that colour. A wildcard stays gold |
+| `BlockQuota` | number | The volume holds exactly this many blocks and refills itself |
+
+| Table | Letters | Wildcard weight |
+|---|---|---|
+| `Standard` | The full bag, as always | 4 (about 3.9%) |
+| `Common` | Letter value 2 or less: A E I O U L N S T R D G | none |
+| `Premium` | Letter value 4 or more: F H V W Y K J X Q Z | 3 (about 17% of rolls) |
+| `Wildcard` | Wildcard only | all |
+
+`Common` and `Premium` are derived from `EnergyEconomy.letterValue` against two named
+thresholds, so a retuned letter value moves the letter between tables. Weight within a
+table is still Scrabble frequency. `Premium` has no vowels, so the inner ring cannot
+spell a word on its own.
+
+**Why a quota.** Distribution is volume-weighted, so a small vault or ledge would get
+almost nothing, and blocks sealed in a vault would thin the open arena. A quota volume
+is counted apart: the density target comes from the non-quota volumes only, each block
+remembers its box, and a consumed quota block comes back in the same volume on its own
+`respawnDelay` timer. A pool made only of quota volumes has a density target of 0.
+
+**Spacing.** A quota volume measures clearance against its own blocks only, because a
+sealed room's neighbours across the wall are irrelevant. A quota too large for its
+volume warns once per volume and places blocks as best it can; it is not clamped.
+Density volumes still measure against every block in the arena.
+
+**Bad values.** An unknown table or colour, a quota below 1, or an attribute of the
+wrong type logs a warning naming the part and falls back to the default.
+
+Verified by five new Phase 3 tests in a 55/55 run. Not yet exercised: reading the
+attributes off a real Studio volume, since none carries them until the greybox.
 
 ## Design decisions
 

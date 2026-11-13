@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-11-04
+updated: 2026-11-13
 ---
 
 # Build Plan
@@ -369,7 +369,23 @@ Added 2026-09-08 from [[design/system-audit-2026-09]]. Full tickable plan with o
 
 **Decisions:** Q1–Q11 answered 2026-09-08 (recommended option on every one); recorded in [[design/refactor-plan-2026-09]] § Decisions. No chunk is blocked on input. All chunks done as of 2026-09-15; remaining loose ends live on the plan page (chunk 9's two-arena client check, tracker BRA.21 settings surface; `RoundTimerGui` was ported in Phase 6 stage 6). Phase 6 stages 5 and 6 shipped 2026-09-19.
 
+## Phase 8 — Boss arena layout
+
+Added 2026-11-13 at the user's request. Full design, measured arena, layout table and the tag/attribute contract in [[design/boss-arena]]; top-down sketch beside it. The shipped arena is a bare disc where a 200-stud reach makes position meaningless, so the layout adds a permanent rim, three value rings, cover the boss destroys when it misses, regenerating gates in front of wildcard balconies and two vaults opened by baiting the boss.
+
+| Stage | Item | Parallel? | Status |
+|---|---|---|---|
+| 1 | `BreakableWalls` system (server health/regen/reset, client visuals, `WorldImpact` / `AoeImpact` events out of `SkillDelivery`, suite) | with 2 | **built 2026-11-13**, suite 7/7 — [[systems/BreakableWalls]] |
+| 2 | `BlockSpawner` letter zones (`LetterTable` / `ColorOnly` / `BlockQuota` per volume, suite) | with 1 | **built 2026-11-13** — [[systems/BlockSpawner]] § Letter zones |
+| 3 | Studio greybox of the layout | no, with the user | waits on sketch approval and 1–2 |
+| 4 | Playtest and tune | no, with the user | waits on 3 |
+| 5 | Arena entry teleporter (one-way pad from the ready room to the island; the bridge is removed, so leaving means dying or quitting) | with 1 | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]] |
+
+**Not sequenced against 5.4.** § Current focus still names the soft launch as the goal; whether this phase lands before or after the unlisted publish is an open question on the design page.
+
 ## Plan changelog
+
+- **2026-11-13**: **Phase 8 added** — boss arena layout ([[design/boss-arena]]). User decisions: value rings + cover + jackpot ledges; keep the 200-stud reach and rely on line of sight; boss attacks that miss destroy walls, including walls hiding reward areas; most walls are gone for the round and some regenerate; Ground Slam cracks cover in its radius. Stages 1 and 2 are parallel code builds against a contract fixed on the design page; the greybox is done with the user.
 
 - **2026-11-04**: **Status review after a six-week pause** (last gameplay commit 2026-09-23). The user set the goal to the 5.4 soft launch and recorded the order in § Current focus. The tutorial's persistence flag pulls a minimal `PlayerData` forward from 5.5. The audio sourcing decision is deferred until before the public listing. The re-baseline suite run passed 43/43 once the Studio MCP reconnected. Housekeeping in the same pass: the two SCOWL-80 plan trackers were closed (the dictionary shipped as SCOWL 60 + supplements), and [[systems/AudioSFX]] lost its firearm, melee and loadout rows.
 

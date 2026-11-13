@@ -1,7 +1,7 @@
 ---
 type: system
 description: Unified data + dispatch pipeline shared by player spells and boss attacks. SkillSpec (data) + SkillEffects (effects) + SkillDelivery (deliveries), with caller-resolved origin so any caster (player, boss, future NPC) plugs in the same way.
-updated: 2026-09-23
+updated: 2026-11-13
 ---
 
 # Skill Pipeline
@@ -412,6 +412,19 @@ There is one. `SkillEffects.handlers.damage` and `.heal` build a request and han
 The request carries what `applyDamage` needs to do its whole job: `sourcePlayer` (the caster's Player when the delivery `source` is a player character, nil for boss/NPC fire — drives the PvP gate, the hitmarker and kill credit), `baseDamage` with `SkillBuffs.damageAmp` already folded in, and `cause` — the skill name, which `SkillDelivery.applyImpactEffects` passes as the fourth argument of `SkillEffects.apply(spec, target, source, cause)`. The kill feed prints it. `EffectSpec.useApplyDamage` is gone; every spec takes the same path. Details, the PvP gate and the caller table are on [[systems/Health]] § One damage path.
 
 The 2026-07-27 decision this replaces ("hit zones/damage modifiers are out of scope for spells; unify when 5.4 moves casting server-side") came due with [[design/refactor-plan-2026-09]] chunk 4. Spells now default to `DamageType.Spell` and `HitZone.Torso`, so the headshot modifier is neutral for them and boss numbers are unchanged (`BossConfig` amounts land as-is).
+
+## World-impact events (Phase 8, 2026-11-13)
+
+`SkillDelivery` fires two server-side BindableEvents from `shared/Skills/SkillEvents`,
+on the authoritative run only:
+
+- `WorldImpact(hitInstance, hitPosition, skillName, source)` — projectile handler, in
+  the swept-ray branch, when the ray stopped on something that is not a rig. Not fired
+  on expiry or fuze.
+- `AoeImpact(center, radius, skillName, source)` — `handlers.aoe`, beside the shockwave.
+
+`SkillDelivery` only announces; it does not know what a wall is. The one listener today
+is [[systems/BreakableWalls]].
 
 ## Testing
 

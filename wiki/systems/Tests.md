@@ -1,7 +1,7 @@
 ---
 type: system
-description: In-Studio test harness — TestRunner module + Suites/{NPC,Multiplayer,Phase3,Skills,Hardening,Economy,Unit,Analytics}, one Suites/Unit wrapper per pure-Luau __tests module. MCP-driven via test-runner subagent.
-updated: 2026-09-23
+description: In-Studio test harness — TestRunner module + Suites/{NPC,Multiplayer,Phase3,Skills,Hardening,Economy,Unit,Analytics,Arena}, one Suites/Unit wrapper per pure-Luau __tests module. MCP-driven via test-runner subagent.
+updated: 2026-11-13
 ---
 
 # Test System
@@ -170,15 +170,16 @@ Requiring any `__tests.luau` must be side-effect-free — the assertions only ru
 |---|---|---|
 | NPC | LIVE (fixture-gated via `ensurePatroller`) | Combat engage/disengage state transitions, NPC-deals-damage — [[systems/NPC]] |
 | Multiplayer | LIVE (10 tests) | `multiplayer_invariants` — boot-time structure: GameMode remotes, PlayerDamaged/PlayerEliminated events; `registry_views_agree`, `sessions_isolate_scores`, `transfer_moves_roster_and_attributes` — [[systems/GameMode]] SessionRegistry views, per-session ScoreTracker, roster + attribute transfer (chunk 8); `pve_round_ends_on_boss_defeated`, `pve_round_ends_on_empty_roster`, `pve_intermission_returns_roster_to_lobby` — Phase 6 stage 5: the `BossDefeated` objective, the emptied-roster end, and the intermission → lobby hook, all through the real round loop (the last one waits out the real 10 s intermission, ~16 s); `duel_win_condition` (pure: kill limit / forfeit / abandoned / leader / draw and their outcome ids), `duel_waits_for_two` (a PvPDuel session with one member stays in WaitingForPlayers past its countdown and reports one free seat), `scene_slots_have_sessions` (every `ArenaSlot` in the scene has a session running its `Mode`, PvP pads come in twos, pool portals name a known mode) — Phase 6 stage 6 |
-| Phase3 | LIVE (7 tests) | BlockSpawner pool/refill/bounds/respawn-delay, BlockShoot helpers/remote — [[systems/BlockShoot]] |
+| Phase3 | LIVE (12 tests) | BlockSpawner pool/refill/bounds/respawn-delay, letter zones (premium table, colour-only, quota refill, quota/density split, no-attributes unchanged — added 2026-11-13), BlockShoot helpers/remote — [[systems/BlockShoot]], [[systems/BlockSpawner]] |
 | Skills | LIVE (5 tests) | SkillInterrupt lifecycle, SpellExecutor case table, CastAction scenarios, cast-rejection, predicted-vs-authoritative |
 | Hardening | LIVE (4 tests) | [[systems/BlockShoot]] § Trust model (payload, range/rate, arena match), [[systems/SpellCastService]] § Trust model |
 | Economy | LIVE (3 tests) | [[systems/EnergyEconomy]] ledger: prices a cast, refuses over-cap memorize, resets on round start (ENFORCE=true since chunk 6) |
 | Unit | LIVE (9 tests) | WordBuffer, EnergyEconomy, EnergyReservoirs, Dictionary, SpellRegistry, MemorizeAction, MindFullManager, Settings (all real runs) + Hud (server-VM skip, real on client) |
 | Analytics | LIVE (2 tests) | `analytics_wires_domain_events` (the domain BindableEvents reach `AnalyticsReporter`), `onboarding_funnel_rules` (steps log once, strictly in order) — [[systems/Analytics]] |
+| Arena | LIVE (10 tests, added 2026-11-13) | `wall_*` ×7 — [[systems/BreakableWalls]]: break count, default health outlasts a volley, non-boss sources ignored, slam radius, regen only with `RegenSec`, regen waits for a character, round-start reset. `entry_*` ×3 — [[systems/ArenaEntry]]: matching by arena id, no-arrival warning, touch moves the character |
 | Melee | **deleted** (chunk 1, 2026-09-08) | Was: MeleeHitDetector sweep. Dead code — [[systems/Weapon]] melee path is unused; chunk 11 removes the modules |
 
-**43 tests total.** `RunTests="all"` last verified **43/43 on 2026-09-23** — twice that day: the T4-park playtest and the post-refactor sanity check (see [[log]]), the latter with the Health event folders collapsed to their Rojo-versioned copies. Any other total means a suite folder lost or gained a module — check for `[AUTORUN WARN] Skipped` lines first.
+**58 tests total.** `RunTests="all"` last verified **58/58 on 2026-11-13** (Phase 8: +5 Phase3, +10 Arena). **Test names must be short:** the result is written to a `TestResult_<Suite>_<name>` attribute, attribute names cap at 100 characters, and a longer one crashes the autorunner. Before Phase 8 the total was 43, last verified **43/43 on 2026-09-23** — twice that day: the T4-park playtest and the post-refactor sanity check (see [[log]]), the latter with the Health event folders collapsed to their Rojo-versioned copies. Any other total means a suite folder lost or gained a module — check for `[AUTORUN WARN] Skipped` lines first.
 
 Deleted alongside Melee: `Suites/Multiplayer/{drop_request_zone_gated,respawnzone_tracks_hrp_presence,applydamage_credits_bot_kill}.luau` (their C1/C2 deliverables and the bot-spawner they exercised are gone — see `wiki/design/refactor-plan-2026-09.md` Chunk 0/1). `Helpers/restoreToSafeSpawn.luau` was deleted in the same pass (its only caller at the time was `respawnzone_tracks_hrp_presence`) but recovered days later — see § Files above.
 
