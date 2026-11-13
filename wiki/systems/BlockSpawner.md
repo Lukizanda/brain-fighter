@@ -39,6 +39,7 @@ Server-side populator that keeps a target count of [[systems/LetterBlock|LetterB
 | `:rollLetter(table)` | `(string) -> (string, string)` | A letter and colour drawn as a volume would draw them (wildcards gold), spawning nothing. |
 | `:spawnTimedBlock(letter, color, cframe, lifetimeSec)` | `-> Model?` | A poppable block of this arena that sits in no box: not in the target, never refilled, left alone by `rerollAll()`. Removes itself after the lifetime. |
 | `:getTimedBlocks()` / `:clearTimedBlocks()` | `() -> { Model }` / `() -> number` | The live timed blocks, and remove them all. `destroy()` clears them too. |
+| `:takeNearestEligible(point, radius)` | `(Vector3, number) -> TakenBlock?` | Removes the nearest ordinary block within `radius` through the normal removal path (so its zone refills as after a pop) and returns its position, letter and colour. Kit letters and timed blocks are never eligible. |
 | `:getKitGates()` / `:getKitWords()` | `() -> { string }` | The gate ids the pool's kits listen for, and the word each kit currently shows. |
 | `.LETTER_FREQUENCIES` | `{ [string]: number }` | Scrabble-standard 98-tile distribution used for weighted letter picks. Module-level: derived from constants, so it is built once at require rather than per pool. |
 
@@ -224,6 +225,16 @@ Not built or not verified: the fade tell on a freed block (the block just disapp
 time; `FossilExpiresAt` is published for `LetterBlockAnimator` to use); popping a freed
 block through the real remote; the glyph on the island's own rocks; any of it under
 real boss fire.
+
+## Pool registry (Phase 8 stage 9, 2026-11-13)
+
+`src/server/BlockSpawner/BlockPoolRegistry.luau` is how another server system reaches
+an arena's pool. The pools are built inside `BlockSpawnerService`, a Script that cannot
+be required, so the service registers each pool here. It is a module and not a
+BindableFunction, following `SessionRegistry`: typed calls, no yield when nothing is
+bound, and a test can register a pool under its own arena id. It holds references and
+forwards one question, `takeNearestEligible(arenaId, point, radius)`; it owns no block
+state. The only asker today is the boss's hunger ([[systems/Boss]] § Hunger).
 
 ## Design decisions
 

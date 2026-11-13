@@ -1016,6 +1016,52 @@ function BlockSpawner.getQuotaTotal(self: BlockSpawner): number
 	return self._quotaTotal
 end
 
+-- What takeNearestEligible hands back: where the block was and what it was.
+export type TakenBlock = {
+	position: Vector3,
+	letter: string,
+	color: string,
+}
+
+-- Removes the block nearest `point` within `radius` studs and returns what it
+-- was, or nil when nothing eligible is in range (or the pool is destroyed).
+-- Eligible means an ordinary field block: a word-kit letter is excluded
+-- because its box has a kitLength, and a timed block (a freed fossil letter)
+-- is excluded because it is not in `_active` at all. Both are rewards a
+-- player earned. Quota-zone blocks are eligible.
+--
+-- The block leaves by Destroy(), the same way a pop removes it, so the
+-- removed-signal handler does the bookkeeping and queues the refill: the
+-- zone refills after `respawnDelay` exactly as after a pop, and the counts
+-- stay right. A radius of 0 or less takes nothing. Ties go to whichever the
+-- iteration reaches first.
+function BlockSpawner.takeNearestEligible(self: BlockSpawner, point: Vector3, radius: number): TakenBlock?
+	if self._destroyed or radius <= 0 then
+		return nil
+	end
+	local nearest: Model? = nil
+	local nearestDistance = radius
+	for block, box in self._active do
+		if box.kitLength == nil and block.Parent ~= nil then
+			local distance = (block:GetPivot().Position - point).Magnitude
+			if distance <= nearestDistance then
+				nearest = block
+				nearestDistance = distance
+			end
+		end
+	end
+	if nearest == nil then
+		return nil
+	end
+	local taken: TakenBlock = {
+		position = nearest:GetPivot().Position,
+		letter = tostring(nearest:GetAttribute(LetterBlocks.LETTER_ATTRIBUTE)),
+		color = tostring(nearest:GetAttribute(LetterBlocks.COLOR_ATTRIBUTE)),
+	}
+	nearest:Destroy()
+	return taken
+end
+
 function BlockSpawner.getActiveBlocks(self: BlockSpawner): { Model }
 	local out: { Model } = {}
 	for block in self._active do

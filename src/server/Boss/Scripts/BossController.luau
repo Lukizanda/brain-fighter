@@ -11,6 +11,7 @@
 --   1. Perception.update(bb)         — observe nearest player / LOS
 --   2. BossPhaseManager.update()     — check HP thresholds, fire callback
 --   3. StateMachine.tick(bb)         — advance AI state
+--   4. BossHunger.tick(dt)           — eat a nearby letter on a timer
 ----------------------------------------------------------------------
 
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
@@ -28,6 +29,7 @@ local StateMachine = require(ServerScriptService.Server.AI.Scripts.StateMachine)
 
 local BossStates      = require(script.Parent.BossStates)
 local BossPhaseManager = require(script.Parent.BossPhaseManager)
+local BossHunger       = require(script.Parent.BossHunger)
 
 type BB                   = BossTypes.BossBlackboard
 type BossTypeSpec         = BossTypes.BossTypeSpec
@@ -55,6 +57,7 @@ export type BossControllerInstance = {
 	_blackboard: BB,
 	_decision: StateMachineInstance,
 	_phaseManager: PhaseManagerInstance,
+	_hunger: BossHunger.BossHungerInstance?,
 	_onPhaseChanged: ((number, any) -> ())?,
 	_alive: boolean,
 }
@@ -140,6 +143,7 @@ function BossController.new(
 		_blackboard     = bb,
 		_decision       = decision,
 		_phaseManager   = phaseManager,
+		_hunger         = BossHunger.new(boss, humanoid, hrp :: BasePart, typeSpec),
 		_onPhaseChanged = onPhaseChanged,
 		_alive          = true,
 	}, BossController)
@@ -160,7 +164,7 @@ end
 -- ---------------------------------------------------------------
 -- Tick — called every Heartbeat from BossService
 -- ---------------------------------------------------------------
-function BossController:tick(_dt: number)
+function BossController:tick(dt: number)
 	if not self._alive then return end
 
 	local bb = self._blackboard
@@ -205,6 +209,13 @@ function BossController:tick(_dt: number)
 
 	-- 3. Decision: advance state machine
 	self._decision:tick(asNPC(bb))
+
+	-- 4. Hunger: a timer beside the state machine, not a state in it (the
+	-- boss eats whatever it is doing). Nil for a type that does not eat.
+	local hunger = self._hunger
+	if hunger then
+		hunger:tick(dt)
+	end
 end
 
 -- ---------------------------------------------------------------

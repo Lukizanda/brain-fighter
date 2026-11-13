@@ -39,6 +39,12 @@ local bossTypes: { [string]: BossTypeSpec } = {
 		attackRange      = 100,
 		attackWindupSec  = 0.5,
 		continuousFacing = true,
+		-- Hungry brain: the letters around the boss are urgent. At these
+		-- values it heals at most 12% of its health a minute. Setting
+		-- eatHealFraction to 0 keeps the pressure and drops the heal.
+		eatIntervalSec   = 5,
+		eatRadius        = 25,
+		eatHealFraction  = 0.01,
 		skills = {
 			FireballVolley = {
 				name      = "FireballVolley",

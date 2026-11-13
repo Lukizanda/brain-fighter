@@ -42,6 +42,7 @@ local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local BlockSpawner = require(ReplicatedStorage.Shared.BlockSpawner)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
+local BlockPoolRegistry = require(script.Parent.BlockPoolRegistry)
 local FossilWatcher = require(script.Parent.FossilWatcher)
 local WordKitWatcher = require(script.Parent.WordKitWatcher)
 
@@ -157,6 +158,7 @@ for arenaId, boxes in byArena do
 	})
 	pool:start()
 	pools[arenaId] = pool
+	BlockPoolRegistry.register(arenaId, pool)
 end
 
 if next(pools) == nil then
@@ -172,6 +174,7 @@ if next(pools) == nil then
 	})
 	pool:start()
 	pools[Arena.DEFAULT_ID] = pool
+	BlockPoolRegistry.register(Arena.DEFAULT_ID, pool)
 end
 
 -- Word kits are replaced whole when their gate re-seals or a round starts;

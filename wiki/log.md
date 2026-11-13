@@ -2117,3 +2117,7 @@ Phase 8 stage 7 landed: a `WordKit` spawn volume holds one curated 5- or 6-lette
 ## [2026-11-13] ingest | Fossil letters built; island rocks hide letters
 
 Phase 8 stage 8 landed: a `FossilTable` breakable wall publishes a hidden letter, the wall-visuals client shows it on a crack, and the break frees it as a 20 s block ([[systems/BlockSpawner]] § Fossil letters). Tagging the island's 20 rocks made the game's watcher run beside the tests' watchers, and each cleared the other's letters (4 tests failed); the parent session fixed the watcher to ignore walls of arenas it has no pool for. `RunTests=all` then gave 79/80 with only the intermittent NPC test failing. The fade tell on a freed block is not built.
+
+## [2026-11-13] ingest | Hungry brain built; Phase 8 code complete
+
+Phase 8 stage 9 landed: the Brain eats the nearest letter within 25 studs every 5 s and heals 1% ([[systems/Boss]] § Hunger), reaching the pool through the new `BlockPoolRegistry` ([[systems/BlockSpawner]] § Pool registry). `RunTests=all` gave 89/90, the failure being the intermittent NPC damage test. It was never seen on a real Brain because no letter is in reach in the old arena. Every code stage of Phase 8 is now committed; [[design/boss-arena]] gained § Pick up here listing what is left: the walk-through, the swap and tuning.

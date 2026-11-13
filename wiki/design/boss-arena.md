@@ -295,7 +295,7 @@ letters around the boss are urgent instead of merely valuable.
 | 4 | Playtest and tune: wall health against a 20-shot volley, letter height, quotas, boss reach to the outer ring | with the user | waiting |
 | 7 | Word kits: a spawn volume that holds one ready-made word, re-rolled when its gate re-seals; the cave's reward | build session (Sonnet) | **built 2026-11-13**, 10 tests — [[systems/BlockSpawner]] § Word kits. Cave tagged on the staged island (`WordKit = 5`, `KitGate` / `GateId = CaveRidge`); re-roll seen live with the wall state set by hand, not yet under boss fire |
 | 8 | Fossil letters: `FossilTable` on a wall, glyph on crack, freed timed letter on break, suite | build session (Sonnet) | **built 2026-11-13**, 7 tests — [[systems/BlockSpawner]] § Fossil letters. Island rocks tagged (15 `Standard`, 2 `Premium`, 3 `Wildcard`). The fade tell on the freed block is not built; not yet seen under boss fire |
-| 9 | Hungry brain: boss eats the nearest letter on a timer and heals, suite | build session (Sonnet) | spawned 2026-11-13 |
+| 9 | Hungry brain: boss eats the nearest letter on a timer and heals, suite | build session (Sonnet) | **built 2026-11-13**, 9 tests — [[systems/Boss]] § Hunger. Never seen on a real Brain: nothing is in reach in the old arena |
 | 6 | Arrival beat: timed boss entrance keyed on the first arrival, brief arrival protection, suite | build session (Sonnet) | **built 2026-11-13**, 6 tests — [[systems/Boss]] § Entrance, [[systems/Health]] § Protection. Not yet seen end to end on the island |
 | 5 | Arena entry teleporter: `ArenaEntryPad` → `ArenaArrivalPoint`, suite | build session (Sonnet) | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]]. Physical touch not yet verified |
 
@@ -445,6 +445,28 @@ Two findings from that session stay open and are **not yet checked in a fight**:
 The session's view, which the assistant shares: the island's geometry is at the limit
 of what a first-time player can read on arrival, so new rules on existing objects are
 preferable to new props.
+
+## Pick up here (written 2026-11-13 at the end of the session)
+
+All code for stages 1, 2 and 5 to 9 is committed. What is left needs the user and
+Studio. **The place file was unsaved when the session ended**: the island, the cave's
+word-kit tags and the rocks' fossil tags live only in it.
+
+1. **Walk the island and approve it** (temporary pad in the lobby). Things nobody has
+   looked at yet: the higher letters, the overlook arrival, mixed cover heights, the
+   spires, the clad cave, the cave's five-letter word.
+2. **The swap** (§ Greybox staging lists the steps). Until then no boss fights on the
+   island, so none of the following has been seen under real boss fire: walls
+   breaking, gates re-sealing, the cave word re-rolling, fossil glyphs and freed
+   letters, the boss entrance, the hungry brain.
+3. **First real fight, then tune (stage 4):** wall health against a volley, letter
+   height, quotas, hunger radius and heal, the glyph size on real rocks, whether the
+   cave word should always buy a top-tier cast, and the two ideation findings above
+   (premium letters reachable from the rim; premium patch left behind by the boss).
+4. **Small follow-ups:** a fade on a freed fossil letter before it disappears
+   (`FossilExpiresAt` is published for it); the layout sketch
+   `boss-arena-layout.html` still shows the removed second cave and the old cover;
+   the `NPC_deals_damage` test failed in two of four full runs.
 
 ## Open questions
 

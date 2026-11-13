@@ -56,6 +56,15 @@ local BossConstants = {
 	ENTRANCE_LABEL_REFRESH_SEC = 0.1,
 
 	-- ============================================================
+	-- Hunger (the boss eating letter blocks; numbers live in BossConfig)
+	-- ============================================================
+	-- Cause string on the heal request, for the Health log.
+	HUNGER_HEAL_CAUSE = "BossHunger",
+	-- VfxConfig.EFFECTS id played on the boss when a bite actually healed it.
+	-- Reused stand-in (it carries its own sound); not final art.
+	HUNGER_HEAL_VFX = "impact_heal",
+
+	-- ============================================================
 	-- Attacks
 	-- ============================================================
 	-- Height above the root part that an attack is delivered from, so

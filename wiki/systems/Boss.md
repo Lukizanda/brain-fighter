@@ -299,6 +299,42 @@ Verified by `boss_holds_for_arrival`, `boss_instant_without_pad` and
 probe part. Not verified: a real padded arena running the entrance end to end on a
 client, the cue audio, two clients.
 
+## Hunger (Phase 8 stage 9, 2026-11-13)
+
+The "hungry brain" ([[design/boss-arena]] § Hungry brain): the boss eats the nearest
+letter block on a timer and heals a little, so letters near it are urgent.
+
+| `BossConfig` value (Brain) | Start | Meaning |
+|---|---|---|
+| `eatIntervalSec` | 5 | Seconds between bites. 0 or less, or absent, switches hunger off |
+| `eatRadius` | 25 | Studs from the boss's root, measured in 3D. 0 or less, or absent, switches it off |
+| `eatHealFraction` | 0.01 | Share of maximum health healed per bite. 0 still eats, heals nothing and sends no heal cue |
+
+- `Boss/Scripts/BossHunger.luau` is one small object per boss, ticked by
+  `BossController` beside the state machine. It is a timer and not an AI state,
+  because the boss eats whatever else it is doing.
+- No controller exists before the boss spawns and it stops ticking at death, which
+  covers "not during the entrance" and "not when dead".
+- It does not eat while the character carries `_frozen`, and the interval does not run
+  while frozen. **No stun status exists in the code**, so freeze is the only hold.
+- The boss never touches blocks. It asks `BlockPoolRegistry.takeNearestEligible`
+  ([[systems/BlockSpawner]] § Pool registry); the pool excludes word-kit letters and
+  freed fossil letters.
+- The heal goes through Health's `applyDamage.heal` with cause `BossHunger`.
+- **What a player sees:** the existing laser beam from where the block was to the boss
+  (the collect stream is bound to a player, so it was not reused), and the
+  `impact_heal` cue on the boss when a bite actually healed. Both are stand-ins sent
+  with `VfxBroadcast`; `impact_heal` carries its own sound.
+
+Verified 2026-11-13: nine `hunger_*` tests in the Arena suite; `RunTests=all` gave
+89/90 with only the intermittent `NPC_deals_damage` failing; shipped block counts
+unchanged.
+
+**Not seen on a real Brain.** In the shipped `Default` arena the nearest letter is
+about 63 studs from the boss, so it never eats there. On the staged island 4 letters
+sit within 25 studs of the boss point, so it should bite there, but that waits on the
+swap. Radius and heal are stage 4 tuning.
+
 ## Future Work
 
 - **BossBrain visual iteration** — sphere + eyes is a first pass; the model lives in Studio (ServerStorage.AIWorldData.Rigs.BossBrain) and can be reshaped without any code changes.

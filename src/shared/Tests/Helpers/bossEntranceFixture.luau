@@ -49,6 +49,9 @@ export type Options = {
 	entranceDelaySec: number?,
 	-- Whether the arena has an entry pad (and an arrival point).
 	withPad: boolean,
+	-- Lets a test adjust the test boss type's spec before the boss exists
+	-- (the hunger tests give it eat values).
+	configureSpec: ((spec: any) -> ())?,
 }
 
 export type Fixture = {
@@ -87,6 +90,9 @@ function Fixture.build(self: Fixture, player: Player, options: Options): boolean
 	local spec: any = table.clone(BossConfig.BOSS_TYPES.Wizard)
 	spec.name = TEST_TYPE_NAME
 	spec.entranceDelaySec = options.entranceDelaySec
+	if options.configureSpec then
+		options.configureSpec(spec)
+	end
 	;(BossConfig.BOSS_TYPES :: any)[TEST_TYPE_NAME] = spec
 
 	local bossPoint = Instance.new("Part")

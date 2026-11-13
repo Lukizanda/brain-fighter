@@ -38,6 +38,14 @@ export type BossTypeSpec = {
 	-- When true the boss smoothly rotates toward its target in all non-moving states.
 	-- When false (default) facing only happens during AttackPrep (windup telegraph).
 	continuousFacing: boolean?,
+	-- Hungry brain (Phase 8 stage 9): every `eatIntervalSec` the living boss
+	-- eats the nearest eligible letter block within `eatRadius` studs of itself
+	-- and heals `eatHealFraction` of its maximum health. A type that leaves any
+	-- of the first two out, or sets either to 0 or less, does not eat. A
+	-- fraction of 0 or absent still eats (pressure without healing).
+	eatIntervalSec: number?,
+	eatRadius: number?,
+	eatHealFraction: number?,
 	skills: { [string]: SkillTypes.SkillSpec },
 	phases: { PhaseSpec },
 }
