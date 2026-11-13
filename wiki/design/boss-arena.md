@@ -230,6 +230,57 @@ Contract, as an extension of letter zones:
   the dictionary holds about 80k words including obscure and geographic ones, and an
   anagram nobody can find is not a reward.
 
+### Fossil letters (decided 2026-11-13)
+
+Picked by the user from the mechanics ideation (see § Mechanics ideation). Each
+breakable rock hides a letter. The crack shows it and the break frees it, so losing
+cover pays out in the game's own language and cover becomes a spelling choice.
+
+| Attribute | On | Meaning |
+|---|---|---|
+| `FossilTable` | a `BreakableWall` | string: a letter-table name (`Standard`, `Common`, `Premium`, `Wildcard`). The wall holds one letter rolled from that table. Absent means no fossil |
+| `FossilLetter`, `FossilColor` | the same wall | published by the server each `RoundStarted`; read by the client |
+
+- **Opt-in per wall.** Greybox authoring: low cover `Standard`, tall cover `Premium`,
+  spires `Wildcard`. Gates and the cave plug carry none.
+- A wall with `RegenSec > 0` cannot hold a fossil; setting both warns and the fossil is
+  ignored. A regenerating wall would otherwise pay out every time it breaks.
+- **The glyph is hidden while the wall is intact.** The wall-visuals client draws it
+  when `WallState` becomes `cracked` or `critical`. A letter painted on every rock from
+  the start would read as gamey.
+- When the wall breaks, one ordinary letter block of that letter and colour appears
+  where the wall stood, at a fixed height above the wall's base, and is removed after
+  `FOSSIL_LIFETIME_SEC` (start at 20) with a fade tell in its last seconds.
+- The freed block is outside the density pool and outside every quota. It is not
+  refilled.
+- Ownership: the letter roll and the freed block belong to [[systems/BlockSpawner]]
+  (it owns letter tables and blocks) in a watcher beside the word-kit one. The wall
+  service is not changed; the watcher reads `WallState`. The glyph belongs to the
+  wall-visuals client.
+
+### Hungry brain (decided 2026-11-13)
+
+Also picked by the user. The boss eats letters near it and heals a little, so the
+letters around the boss are urgent instead of merely valuable.
+
+- Every `eatIntervalSec` (start at 5) the living boss takes the nearest letter block
+  within `eatRadius` (start at 25 studs), and heals `eatHealFraction` of its maximum
+  health (start at 0.01). At most 12% a minute at these values.
+- It does not eat during the entrance, while frozen or stunned, or when no block is in
+  range. It never eats a word-kit letter or a freed fossil letter: both are rewards a
+  player earned.
+- The block is removed through the spawner's normal removal path, so its zone refills
+  as it would after a pop.
+- The player sees a stream from the block to the boss and a heal cue on the boss, both
+  sent with `VfxBroadcast`.
+- Ownership: the behaviour and its numbers belong to [[systems/Boss]] (`BossConfig`).
+  The boss asks [[systems/BlockSpawner]] for the block; it does not touch blocks
+  itself. The heal goes through the Health system's existing heal path.
+- Risks named by the ideation session, to watch in stage 4: "why is the boss healing?"
+  confusion for a first-time player, and a co-op player at range paying for a fight
+  they did not choose. The three numbers are the tuning levers; `eatHealFraction = 0`
+  switches the heal off while keeping the pressure on the letters.
+
 ## Stages
 
 | Stage | Item | Owner | Status |
@@ -239,6 +290,8 @@ Contract, as an extension of letter zones:
 | 3 | Greybox the layout in Studio: rim, cover, gates, balconies, vaults, retagged volumes | with the user, after the sketch is approved and 1–2 land | **staged 2026-11-13** beside the old arena (see § Greybox staging); the swap waits on the user's walk-through |
 | 4 | Playtest and tune: wall health against a 20-shot volley, letter height, quotas, boss reach to the outer ring | with the user | waiting |
 | 7 | Word kits: a spawn volume that holds one ready-made word, re-rolled when its gate re-seals; the cave's reward | build session (Sonnet) | spawned 2026-11-13 |
+| 8 | Fossil letters: `FossilTable` on a wall, glyph on crack, freed timed letter on break, suite | build session (Sonnet) | decided 2026-11-13; starts when stage 7 lands, because both edit the spawner |
+| 9 | Hungry brain: boss eats the nearest letter on a timer and heals, suite | build session (Sonnet) | decided 2026-11-13; starts after stage 8 for the same reason |
 | 6 | Arrival beat: timed boss entrance keyed on the first arrival, brief arrival protection, suite | build session (Sonnet) | **built 2026-11-13**, 6 tests — [[systems/Boss]] § Entrance, [[systems/Health]] § Protection. Not yet seen end to end on the island |
 | 5 | Arena entry teleporter: `ArenaEntryPad` → `ArenaArrivalPoint`, suite | build session (Sonnet) | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]]. Physical touch not yet verified |
 
@@ -362,6 +415,32 @@ Decided, in build as stage 6:
 
 Still open from this pass: whether raising the letters is enough to fix the crowding,
 or whether the rocks and ridge also need to come down.
+
+## Mechanics ideation (2026-11-13)
+
+The user asked for a session to propose level mechanics, interactable objects and
+hazards. A read-only Opus session returned twelve ideas. The user's picks:
+
+| Idea | Outcome |
+|---|---|
+| Fossil letters | **build now** (stage 8) |
+| Hungry brain | **build now** (stage 9) |
+| Toppling spire, riddle stone | filed in [[ideas]] |
+| Boss sheds premium letters on a slam; heavy letters (premium reach 50–60 studs); brain fog; resonant crystal | not picked |
+| Scorched ground, crosswind on the Spit, ridge rockfall, crumbling edge | not picked; the session itself advised against them for launch |
+
+Two findings from that session stay open and are **not yet checked in a fight**:
+
+- **The value rings may carry little risk now.** With letters at 18–28 studs and low
+  cover at 6–8, the premium patch is probably visible from the rim, about 150 studs
+  out and inside the 200-stud reach. Hungry brain adds urgency to those letters but
+  does not make a player walk in for them.
+- **The premium patch is fixed at the boss's spawn point and the boss walks away from
+  it.** Hungry brain only bites while the boss stands near letters.
+
+The session's view, which the assistant shares: the island's geometry is at the limit
+of what a first-time player can read on arrival, so new rules on existing objects are
+preferable to new props.
 
 ## Open questions
 

@@ -1,6 +1,6 @@
 ---
 title: Ideas Scrapbook
-updated: 2026-08-12
+updated: 2026-11-13
 ---
 
 # Ideas Scrapbook
@@ -10,6 +10,42 @@ Raw ideas, shower thoughts, and playtest observations. No commitment to build �
 ---
 
 ## Open Ideas
+
+### Toppling spire
+*Captured: 2026-11-13, from the boss-arena mechanics ideation*
+
+When a spire on the boss island takes enough damage it falls instead of vanishing. It falls away from the boss, crushes anyone on that side, then lies across the ground as a long low wall for the rest of the round. The tallest cover gains a late-fight cost, and the arena reshapes without boss phases.
+
+**Design questions to answer before building:**
+- Which spire? Two of the three frame the arrival view, so probably only the third.
+- Is the crack readable as a warning, or does a crushed player blame the game?
+- Co-op: a player can drag the boss so a spire falls on a teammate.
+- A broken wall turns its collision off, so the fallen spire has to be a separate pre-placed part.
+
+**Wait for:** the friends' playtest, to see whether players use the spires at all.
+
+**Related systems:** `BreakableWalls`
+**Wiki pages:** `wiki/design/boss-arena.md` § Mechanics ideation
+
+---
+
+### Riddle stone
+*Captured: 2026-11-13, from the boss-arena mechanics ideation*
+
+A carved standing stone in the open mid-field shows a short challenge: "a word with a Z", "a 6-letter word", "a word starting with B". Memorizing a qualifying word while standing near it makes the stone strike the boss, then it shows a new challenge. The strongest spelling tie of the ideation's twelve ideas, and the most educational.
+
+**Design questions to answer before building:**
+- The challenge pool must be broad enough that the field always holds the letters.
+- Can a young player parse "starts with B" under fire?
+- Co-op: the first player to answer takes it.
+- It hands out a word-shaped reward, which overlaps the cave's ready-made word.
+
+**Wait for:** real players' vocabularies, to tune the challenge pool.
+
+**Related systems:** `WordMemorized` event, `Boss`
+**Wiki pages:** `wiki/design/boss-arena.md` § Mechanics ideation
+
+---
 
 ### Arc-gauge cast panels (the alternative to the fill disc)
 *Captured: 2026-08-12*

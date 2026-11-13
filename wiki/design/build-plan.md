@@ -381,6 +381,8 @@ Added 2026-11-13 at the user's request. Full design, measured arena, layout tabl
 | 3 | Studio greybox of the layout | no, with the user | **staged 2026-11-13** as `Workspace.Arena.IslandGreybox` beside the old arena under `ArenaId = IslandStaging`; the swap waits on the user's walk-through. In the place file only |
 | 4 | Playtest and tune | no, with the user | waits on 3 |
 | 7 | Word kits: a `BlockSpawner` volume holding one ready-made word in one colour, re-rolled when its gate re-seals; the cave's reward (added 2026-11-13) | no | build session spawned 2026-11-13 |
+| 8 | Fossil letters: a breakable rock hides a letter, shown when it cracks and freed for about 20 s when it breaks (added 2026-11-13 from the mechanics ideation) | no, after 7 | decided, not started |
+| 9 | Hungry brain: the boss eats the nearest letter on a timer and heals a little (added 2026-11-13 from the mechanics ideation) | no, after 8 | decided, not started |
 | 6 | Arrival beat: timed boss entrance from the first arrival, brief arrival protection (added 2026-11-13 after the user's first walk-through) | no | **built 2026-11-13**, 6 tests — [[systems/Boss]] § Entrance, [[systems/Health]] § Protection |
 | 5 | Arena entry teleporter (one-way pad from the ready room to the island; the bridge is removed, so leaving means dying or quitting) | with 1 | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]] |
 
@@ -388,6 +390,7 @@ Added 2026-11-13 at the user's request. Full design, measured arena, layout tabl
 
 ## Plan changelog
 
+- **2026-11-13**: **Phase 8 stages 8 and 9 added** — fossil letters and the hungry brain, picked by the user from a mechanics ideation session ([[design/boss-arena]] § Mechanics ideation). They run one after the other behind stage 7, because all three edit `BlockSpawner`. The toppling spire and the riddle stone went to [[ideas]].
 - **2026-11-13**: **Phase 8 added** — boss arena layout ([[design/boss-arena]]). User decisions: value rings + cover + jackpot ledges; keep the 200-stud reach and rely on line of sight; boss attacks that miss destroy walls, including walls hiding reward areas; most walls are gone for the round and some regenerate; Ground Slam cracks cover in its radius. Stages 1 and 2 are parallel code builds against a contract fixed on the design page; the greybox is done with the user.
 
 - **2026-11-04**: **Status review after a six-week pause** (last gameplay commit 2026-09-23). The user set the goal to the 5.4 soft launch and recorded the order in § Current focus. The tutorial's persistence flag pulls a minimal `PlayerData` forward from 5.5. The audio sourcing decision is deferred until before the public listing. The re-baseline suite run passed 43/43 once the Studio MCP reconnected. Housekeeping in the same pass: the two SCOWL-80 plan trackers were closed (the dictionary shipped as SCOWL 60 + supplements), and [[systems/AudioSFX]] lost its firearm, melee and loadout rows.
