@@ -2101,3 +2101,7 @@ At the user's request three tall rocks on the staged island became spires (36-44
 ## [2026-11-13] ingest | Island: ridge cave reshaped as a rock outcrop
 
 The staged island's ridge cave was a plain box. It is now clad in 21 tilted rocks so it reads as the ridge bulging inward, with the sealed chamber kept inside; the boss sightline to the plug was re-checked by raycast. Recorded on [[design/boss-arena]] § After the first walk-through. Place file only.
+
+## [2026-11-13] ingest | Cave reward decided: a ready-made word
+
+The user chose the cave's carrot: five or six one-colour letters guaranteed to anagram into a real word, with the colour changing each time the plug re-seals. [[design/boss-arena]] gained a Word kits contract (`WordKit` / `KitGate` on a spawn volume, `GateId` on a wall, letters laid in a row along the part's X axis, words from a curated list). Added as Phase 8 stage 7 and handed to a build session.

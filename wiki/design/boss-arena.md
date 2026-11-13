@@ -198,6 +198,38 @@ would otherwise receive almost nothing, and blocks sealed in a vault would thin 
 open arena. Quota volumes are counted separately; the arena's density target is
 computed from the remaining volumes only.
 
+### Word kits (the cave's reward, decided 2026-11-13)
+
+The user asked what carrot the cave should hold and chose the assistant's
+recommendation: **a ready-made word**. The cave holds five or six letters of one colour
+that are guaranteed to anagram into a real word, so the reward is something the open
+arena cannot give and it pays out as one big cast. The colour changes each time the
+plug regenerates, so players can read from outside what is on offer. Rejected: the
+three random red letters built first (may not spell, not worth being cornered for), a
+generic power-up (outside the spelling loop) and a safe room (hiding is the opposite of
+risk for reward).
+
+Contract, as an extension of letter zones:
+
+| Attribute | On | Meaning |
+|---|---|---|
+| `WordKit` | a `BlockSpawnVolume` | number: the word length. The volume holds the letters of one word of that length from a curated list, shuffled |
+| `KitGate` | the same volume | string: re-roll the kit when a `BreakableWall` with the same `GateId` re-seals |
+| `GateId` | a `BreakableWall` | string: names the wall for `KitGate` |
+
+- A kit is laid out as a **row along the volume part's local X axis**, evenly spaced
+  across `Size.X`, at the part's position. This is the one case where a volume's
+  rotation is honoured; ordinary zones stay axis-aligned boxes.
+- A kit is one colour. `ColorOnly` fixes it; without it the pool picks a colour each
+  time the kit is rolled.
+- A kit does not refill letter by letter. It is replaced whole: when its gate re-seals,
+  or, with no `KitGate`, once it has been emptied.
+- `WordKit` implies the block count, so `BlockQuota` and `LetterTable` are ignored on
+  a kit volume, with a warning if set.
+- Words come from a short curated list of common words, not a random dictionary pick:
+  the dictionary holds about 80k words including obscure and geographic ones, and an
+  anagram nobody can find is not a reward.
+
 ## Stages
 
 | Stage | Item | Owner | Status |
@@ -206,6 +238,7 @@ computed from the remaining volumes only.
 | 2 | `BlockSpawner` letter zones: per-volume table, colour and quota, suite | build session (Sonnet) | **built 2026-11-13**, 5 new tests — [[systems/BlockSpawner]] § Letter zones |
 | 3 | Greybox the layout in Studio: rim, cover, gates, balconies, vaults, retagged volumes | with the user, after the sketch is approved and 1–2 land | **staged 2026-11-13** beside the old arena (see § Greybox staging); the swap waits on the user's walk-through |
 | 4 | Playtest and tune: wall health against a 20-shot volley, letter height, quotas, boss reach to the outer ring | with the user | waiting |
+| 7 | Word kits: a spawn volume that holds one ready-made word, re-rolled when its gate re-seals; the cave's reward | build session (Sonnet) | spawned 2026-11-13 |
 | 6 | Arrival beat: timed boss entrance keyed on the first arrival, brief arrival protection, suite | build session (Sonnet) | **built 2026-11-13**, 6 tests — [[systems/Boss]] § Entrance, [[systems/Health]] § Protection. Not yet seen end to end on the island |
 | 5 | Arena entry teleporter: `ArenaEntryPad` → `ArenaArrivalPoint`, suite | build session (Sonnet) | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]]. Physical touch not yet verified |
 
