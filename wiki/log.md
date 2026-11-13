@@ -2097,3 +2097,7 @@ A Sonnet build session added the arrival beat. [[systems/ArenaEntry]] now announ
 ## [2026-11-13] ingest | Island: three spires, hollow boulder cave removed
 
 At the user's request three tall rocks on the staged island became spires (36-44 studs) and one cave was removed; the mid-field hollow boulder went and the ridge cave stayed. 25 breakable walls and 56 letter blocks remain. Recorded on [[design/boss-arena]] § After the first walk-through. Place file only.
+
+## [2026-11-13] ingest | Island: ridge cave reshaped as a rock outcrop
+
+The staged island's ridge cave was a plain box. It is now clad in 21 tilted rocks so it reads as the ridge bulging inward, with the sealed chamber kept inside; the boss sightline to the plug was re-checked by raycast. Recorded on [[design/boss-arena]] § After the first walk-through. Place file only.

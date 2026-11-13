@@ -309,6 +309,15 @@ Decided and applied to the staged greybox:
   box in open ground and the ridge cave sits against the rim. The island now has 25
   breakable walls and 56 letter blocks.
 
+- **Ridge cave as an outcrop** (the user, same day: the rectangle hid the real shape
+  of the level). The box shell stays inside as the sealed chamber, recoloured to the
+  ridge's colour, and 21 tilted `Cave_Ridge_Rock` blocks clad it: leaning jambs and a
+  lintel at the mouth, flanks, a back that climbs into the ridge, skirts thinning out
+  along it and a mound on top. A script pushed any rock clear of the chamber and of the
+  lane in front of the plug. Raycasts from the boss spot still reach the plug across its
+  whole face. The skirts step up in jumpable heights, so players can probably climb
+  onto the mound; not yet tried.
+
 Decided, in build as stage 6:
 
 - **Timed boss entrance.** The countdown starts when the first player arrives for the
