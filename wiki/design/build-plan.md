@@ -380,7 +380,7 @@ Added 2026-11-13 at the user's request. Full design, measured arena, layout tabl
 | 2 | `BlockSpawner` letter zones (`LetterTable` / `ColorOnly` / `BlockQuota` per volume, suite) | with 1 | **built 2026-11-13** — [[systems/BlockSpawner]] § Letter zones |
 | 3 | Studio greybox of the layout | no, with the user | **staged 2026-11-13** as `Workspace.Arena.IslandGreybox` beside the old arena under `ArenaId = IslandStaging`; the swap waits on the user's walk-through. In the place file only |
 | 4 | Playtest and tune | no, with the user | waits on 3 |
-| 7 | Word kits: a `BlockSpawner` volume holding one ready-made word in one colour, re-rolled when its gate re-seals; the cave's reward (added 2026-11-13) | no | build session spawned 2026-11-13 |
+| 7 | Word kits: a `BlockSpawner` volume holding one ready-made word in one colour, re-rolled when its gate re-seals; the cave's reward (added 2026-11-13) | no | **built 2026-11-13**, 10 tests — [[systems/BlockSpawner]] § Word kits; cave tagged on the staged island |
 | 8 | Fossil letters: a breakable rock hides a letter, shown when it cracks and freed for about 20 s when it breaks (added 2026-11-13 from the mechanics ideation) | no, after 7 | decided, not started |
 | 9 | Hungry brain: the boss eats the nearest letter on a timer and heals a little (added 2026-11-13 from the mechanics ideation) | no, after 8 | decided, not started |
 | 6 | Arrival beat: timed boss entrance from the first arrival, brief arrival protection (added 2026-11-13 after the user's first walk-through) | no | **built 2026-11-13**, 6 tests — [[systems/Boss]] § Entrance, [[systems/Health]] § Protection |

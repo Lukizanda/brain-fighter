@@ -33,6 +33,19 @@
 -- density target counts non-quota boxes only. See
 -- wiki/design/boss-arena.md § Letter zones and ./LetterTables.luau.
 --
+-- Word kits (Phase 8 stage 7): a BoxDef with `wordKit = N` holds the letters
+-- of one curated N-letter word (./WordKits.luau), shuffled, in one colour,
+-- laid out as a row along the volume part's LOCAL X axis (a row too short
+-- to be straight zig-zags across its local Z). It is the one
+-- case where a volume's rotation is honoured, which is why a kit BoxDef also
+-- carries the part's `cframe` and `size`; ordinary boxes are still read as
+-- boxMin/boxMax. A kit never refills letter by letter: it is replaced whole,
+-- by `rerollKitsForGate` (its `kitGate` wall re-sealed), by `rerollKits`
+-- (a new round) or, with no gate, a `respawnDelay` after its last letter is
+-- consumed. The pool knows nothing about walls or rounds: whoever does
+-- (server/BlockSpawner/WordKitWatcher) calls those methods. Kit blocks count
+-- toward getTargetCount() and stay out of the density pool.
+--
 -- Letter selection is Scrabble-frequency-weighted (English vowels +
 -- common consonants dominate) — the SOFT-HEURISTIC the design defers
 -- "explicit dictionary-bag scan" complexity to (see
@@ -58,6 +71,7 @@ local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
 local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 local LetterTables = require(script.LetterTables)
+local WordKits = require(script.WordKits)
 
 local log = Logger.new("BlockSpawner")
 
@@ -99,8 +113,21 @@ local DEFAULT_RESPAWN_DELAY_SECONDS = 0
 local LETTER_TABLE_ATTRIBUTE = "LetterTable"
 local COLOR_ONLY_ATTRIBUTE = "ColorOnly"
 local BLOCK_QUOTA_ATTRIBUTE = "BlockQuota"
+local WORD_KIT_ATTRIBUTE = "WordKit"
+local KIT_GATE_ATTRIBUTE = "KitGate"
 
 local UNNAMED_BOX_LABEL = "(unnamed box)"
+
+-- A kit's N letters sit at the centres of N equal cells across the part's
+-- Size.X, so the row is centred on the part and every block stays inside it.
+local KIT_CELL_CENTER_OFFSET = 0.5
+-- A row too short to be straight zig-zags (see kitStagger): letters alternate
+-- between two sides, so the nearest letter on the same side is this many
+-- cells away.
+local KIT_SAME_SIDE_CELLS = 2
+-- At the shortest row a zig-zag allows (cells of minSpacing / 2) the two sides
+-- sit minSpacing * sqrt(3) / 2 apart; quoted in the too-small warning.
+local KIT_ZIGZAG_MIN_DEPTH_FACTOR = math.sqrt(3) / 2
 
 ----------------------------------------------------------------------
 -- Types
@@ -114,6 +141,13 @@ export type BoxDef = {
 	colorOnly: string?,  -- "red" | "green" | "blue"
 	quota: number?,  -- holds exactly this many blocks and refills itself
 	label: string?,  -- part name, for warnings
+	-- Word kit fields (Phase 8 stage 7); absent means an ordinary box.
+	wordKit: number?,  -- word length: the box holds one shuffled word of this length
+	kitGate: string?,  -- re-rolled by rerollKitsForGate(kitGate)
+	cframe: CFrame?,  -- the part's CFrame; a kit lays out along its local X axis
+	size: Vector3?,  -- the part's Size; Size.X is the kit's row length
+	-- With neither cframe nor size a kit uses the box centre and the
+	-- (boxMax - boxMin) extent, axis-aligned.
 }
 
 export type Opts = {
@@ -151,6 +185,16 @@ type BoxState = {
 	quota: number?,  -- nil = density box
 	count: number,  -- live blocks that came from this box
 	spacingWarned: boolean,
+	-- Kit boxes only (kitLength ~= nil). A kit is neither a density nor a
+	-- quota box.
+	kitLength: number?,
+	kitGate: string?,
+	kitWord: string?,  -- the word currently laid out
+	kitColor: string?,  -- the colour it was rolled in
+	-- Bumped by every roll and every scheduled roll, so a timer that was
+	-- overtaken (by a gate re-roll, a disable, a destroy) finds a newer
+	-- number and does nothing.
+	kitToken: number,
 }
 
 type BoxCumEntry = { box: BoxState, threshold: number }
@@ -180,8 +224,46 @@ end
 local function makeBoxState(def: BoxDef, arenaId: string): BoxState
 	local label = def.label or UNNAMED_BOX_LABEL
 
+	-- A kit's word length. WordKit implies the block count and the letters,
+	-- so BlockQuota and LetterTable are ignored on a kit volume (below).
+	local kitLength: number? = nil
+	if def.wordKit ~= nil then
+		if WordKits.isSupportedLength(def.wordKit) then
+			kitLength = def.wordKit
+		else
+			kitLength = WordKits.nearestLength(def.wordKit)
+			log:warn(string.format(
+				"[%s] %s: %s %s is not a supported word length (supported: %s) — using %d",
+				arenaId, label, WORD_KIT_ATTRIBUTE, tostring(def.wordKit),
+				table.concat(WordKits.lengths(), ", "), kitLength
+			))
+		end
+	end
+	local isKit = kitLength ~= nil
+
+	local kitGate: string? = nil
+	if def.kitGate ~= nil then
+		if not isKit then
+			log:warn(string.format(
+				"[%s] %s: %s has no effect without %s — ignoring it",
+				arenaId, label, KIT_GATE_ATTRIBUTE, WORD_KIT_ATTRIBUTE
+			))
+		elseif def.kitGate == "" then
+			log:warn(string.format(
+				"[%s] %s: %s is blank — the kit has no gate", arenaId, label, KIT_GATE_ATTRIBUTE
+			))
+		else
+			kitGate = def.kitGate
+		end
+	end
+
 	local letterTable = LetterTables.DEFAULT
-	if def.letterTable ~= nil then
+	if def.letterTable ~= nil and isKit then
+		log:warn(string.format(
+			"[%s] %s: %s is ignored on a %s volume — a kit's letters are its word's",
+			arenaId, label, LETTER_TABLE_ATTRIBUTE, WORD_KIT_ATTRIBUTE
+		))
+	elseif def.letterTable ~= nil then
 		if LetterTables.isValid(def.letterTable) then
 			letterTable = def.letterTable
 		else
@@ -206,7 +288,12 @@ local function makeBoxState(def: BoxDef, arenaId: string): BoxState
 	end
 
 	local quota: number? = nil
-	if def.quota ~= nil then
+	if def.quota ~= nil and isKit then
+		log:warn(string.format(
+			"[%s] %s: %s is ignored on a %s volume — the word length sets the block count",
+			arenaId, label, BLOCK_QUOTA_ATTRIBUTE, WORD_KIT_ATTRIBUTE
+		))
+	elseif def.quota ~= nil then
 		local floored = math.floor(def.quota)
 		if floored >= 1 then
 			quota = floored
@@ -226,7 +313,18 @@ local function makeBoxState(def: BoxDef, arenaId: string): BoxState
 		quota = quota,
 		count = 0,
 		spacingWarned = false,
+		kitLength = kitLength,
+		kitGate = kitGate,
+		kitWord = nil,
+		kitColor = nil,
+		kitToken = 0,
 	}
+end
+
+-- Density boxes are the ones the open arena's target is computed from:
+-- neither a quota box nor a kit.
+local function isDensityBox(box: BoxState): boolean
+	return box.quota == nil and box.kitLength == nil
 end
 
 local function resolveOpts(u: Opts, densityBoxes: { BoxState }): ResolvedOpts
@@ -287,6 +385,8 @@ BlockSpawner.WILDCARD_FREQUENCY = LetterTables.STANDARD_WILDCARD_FREQUENCY
 BlockSpawner.LETTER_TABLE_ATTRIBUTE = LETTER_TABLE_ATTRIBUTE
 BlockSpawner.COLOR_ONLY_ATTRIBUTE = COLOR_ONLY_ATTRIBUTE
 BlockSpawner.BLOCK_QUOTA_ATTRIBUTE = BLOCK_QUOTA_ATTRIBUTE
+BlockSpawner.WORD_KIT_ATTRIBUTE = WORD_KIT_ATTRIBUTE
+BlockSpawner.KIT_GATE_ATTRIBUTE = KIT_GATE_ATTRIBUTE
 
 export type BlockSpawner = typeof(setmetatable(
 	{} :: {
@@ -294,6 +394,7 @@ export type BlockSpawner = typeof(setmetatable(
 		_opts: ResolvedOpts,
 		_boxes: { BoxState },
 		_quotaBoxes: { BoxState },
+		_kitBoxes: { BoxState },
 		-- Cumulative box-volume table over the DENSITY (non-quota) boxes;
 		-- volume-weighted so each cubic stud of the open arena has equal
 		-- probability of spawning a block.
@@ -308,6 +409,7 @@ export type BlockSpawner = typeof(setmetatable(
 		-- Live blocks that came from density (non-quota) boxes.
 		_densityCount: number,
 		_quotaTotal: number,
+		_kitTotal: number,
 		_running: boolean,
 		_destroyed: boolean,
 		_removedConnection: RBXScriptConnection?,
@@ -323,11 +425,16 @@ function BlockSpawner.new(userOpts: Opts?): BlockSpawner
 	local boxes: { BoxState } = {}
 	local densityBoxes: { BoxState } = {}
 	local quotaBoxes: { BoxState } = {}
+	local kitBoxes: { BoxState } = {}
 	local quotaTotal = 0
+	local kitTotal = 0
 	for _, def in ipairs(boxDefs) do
 		local state = makeBoxState(def, arenaId)
 		table.insert(boxes, state)
-		if state.quota then
+		if state.kitLength then
+			table.insert(kitBoxes, state)
+			kitTotal += state.kitLength
+		elseif state.quota then
 			table.insert(quotaBoxes, state)
 			quotaTotal += state.quota
 		else
@@ -352,21 +459,24 @@ function BlockSpawner.new(userOpts: Opts?): BlockSpawner
 		_opts = opts,
 		_boxes = boxes,
 		_quotaBoxes = quotaBoxes,
+		_kitBoxes = kitBoxes,
 		_boxCumulative = boxCumulative,
 		_boxVolumeTotal = boxVolumeTotal,
 		_active = {},
 		_activeCount = 0,
 		_densityCount = 0,
 		_quotaTotal = quotaTotal,
+		_kitTotal = kitTotal,
 		_running = false,
 		_destroyed = false,
 		_removedConnection = nil,
 	}, BlockSpawner)
 
 	log:info(string.format(
-		"[%s] Pool created — %d boxes (%d quota), %.0f cubic studs of density volume, target %d blocks (%d density + %d quota)",
-		arenaId, #boxes, #quotaBoxes, boxVolumeTotal,
-		opts.targetCount + quotaTotal, opts.targetCount, quotaTotal
+		"[%s] Pool created — %d boxes (%d quota, %d kit), %.0f cubic studs of density volume, "
+			.. "target %d blocks (%d density + %d quota + %d kit)",
+		arenaId, #boxes, #quotaBoxes, #kitBoxes, boxVolumeTotal,
+		opts.targetCount + quotaTotal + kitTotal, opts.targetCount, quotaTotal, kitTotal
 	))
 
 	return self
@@ -376,24 +486,30 @@ end
 -- Pickers
 ----------------------------------------------------------------------
 
-function BlockSpawner._pickColor(self: BlockSpawner): string
+-- `exclude` (a kit re-roll passing the colour it just had) takes one colour
+-- out of the draw; nil draws from all of them, exactly as it always did.
+function BlockSpawner._pickColor(self: BlockSpawner, exclude: string?): string
 	local weights = self._opts.colorWeights
+	local candidates: { string } = {}
 	local total = 0
 	for _, color in ipairs(COLORS) do
-		total += weights[color] or 0
+		if color ~= exclude then
+			table.insert(candidates, color)
+			total += weights[color] or 0
+		end
 	end
 	if total <= 0 then
-		return COLORS[math.random(1, #COLORS)]
+		return candidates[math.random(1, #candidates)]
 	end
 	local roll = math.random() * total
 	local runningSum = 0
-	for _, color in ipairs(COLORS) do
+	for _, color in ipairs(candidates) do
 		runningSum += weights[color] or 0
 		if roll <= runningSum then
 			return color
 		end
 	end
-	return COLORS[#COLORS]
+	return candidates[#candidates]
 end
 
 -- Volume-weighted pick among the density boxes: roll against cumulative
@@ -527,6 +643,13 @@ function BlockSpawner._spawnOne(self: BlockSpawner, fixedBox: BoxState?): Model
 		color = self:_pickColor()
 	end
 
+	return self:_spawnTracked(letter, color, cf, box)
+end
+
+-- Spawns one block and records it against `box`. The single place a block
+-- joins the pool, so density, quota and kit blocks are stamped and counted
+-- the same way.
+function BlockSpawner._spawnTracked(self: BlockSpawner, letter: string, color: string, cf: CFrame, box: BoxState): Model
 	local block = LetterBlocks.spawn(letter, color, cf, self._opts.parent)
 	-- Which pool's block this is. ConsumeBlock refuses a player whose
 	-- session is in a different arena — the range check alone would let a
@@ -535,10 +658,138 @@ function BlockSpawner._spawnOne(self: BlockSpawner, fixedBox: BoxState?): Model
 	self._active[block] = box
 	self._activeCount += 1
 	box.count += 1
-	if not box.quota then
+	if isDensityBox(box) then
 		self._densityCount += 1
 	end
 	return block
+end
+
+----------------------------------------------------------------------
+-- Word kits
+----------------------------------------------------------------------
+
+-- Removes every live block of `box` from the pool and destroys it. The
+-- bookkeeping goes first so the removed-signal handler does not recognise
+-- the blocks and queue refills for them.
+function BlockSpawner._clearBox(self: BlockSpawner, box: BoxState)
+	local leftover: { Model } = {}
+	for block, blockBox in self._active do
+		if blockBox == box then
+			table.insert(leftover, block)
+		end
+	end
+	for _, block in ipairs(leftover) do
+		self._active[block] = nil
+		self._activeCount -= 1
+		box.count -= 1
+		if isDensityBox(box) then
+			self._densityCount -= 1
+		end
+	end
+	for _, block in ipairs(leftover) do
+		block:Destroy()
+	end
+end
+
+-- Where the kit's row sits: the part's CFrame, Size.X (the row's length) and
+-- Size.Z (the depth a short row may zig-zag across), or, for a box that came
+-- without them, its centre and X and Z extents, axis-aligned.
+function BlockSpawner._kitRow(_self: BlockSpawner, box: BoxState): (CFrame, number, number)
+	local def = box.def
+	local origin = def.cframe or CFrame.new((def.boxMin + def.boxMax) * 0.5)
+	local rowLength = if def.size then def.size.X else math.abs(def.boxMax.X - def.boxMin.X)
+	local rowDepth = if def.size then def.size.Z else math.abs(def.boxMax.Z - def.boxMin.Z)
+	return origin, rowLength, rowDepth
+end
+
+-- How far apart, along the part's local Z, alternate letters of a kit sit.
+-- 0 for a row long enough to be straight. A shorter row zig-zags: letters
+-- alternate front and back so neighbours are still `minSpacing` apart on the
+-- diagonal. The second result is false when even that cannot be done inside
+-- the part: letters two apart (same side) would be too close, or the part is
+-- not deep enough.
+local function kitStagger(cell: number, rowDepth: number, minSpacing: number): (number, boolean)
+	if minSpacing <= 0 or cell >= minSpacing then
+		return 0, true
+	end
+	local wanted = math.sqrt(minSpacing * minSpacing - cell * cell)
+	local fits = cell * KIT_SAME_SIDE_CELLS >= minSpacing and wanted <= rowDepth
+	return math.min(wanted, rowDepth), fits
+end
+
+-- Replaces the kit whole: whatever is left of the old word goes, a new word
+-- (never the one just there) is rolled in a colour (never the one just there,
+-- unless ColorOnly fixes it), and its letters are laid out by position, not by
+-- rejection sampling: N cells of equal width across the row, one letter each,
+-- in a shuffled order. A row too short for that zig-zags across the part's
+-- depth (kitStagger).
+function BlockSpawner._rollKit(self: BlockSpawner, box: BoxState)
+	local length = box.kitLength
+	if length == nil then
+		return
+	end
+	box.kitToken += 1
+	self:_clearBox(box)
+
+	local word = WordKits.pick(length, box.kitWord)
+	local color = box.colorOnly or self:_pickColor(box.kitColor)
+	local letters = WordKits.shuffledLetters(word)
+	box.kitWord = word
+	box.kitColor = color
+
+	local origin, rowLength, rowDepth = self:_kitRow(box)
+	local cell = rowLength / length
+	local minSpacing = self._opts.minSpacing
+	local stagger, fits = kitStagger(cell, rowDepth, minSpacing)
+	if not fits and not box.spacingWarned then
+		box.spacingWarned = true
+		log:warn(string.format(
+			"[%s] %s: a %d-letter %s cannot keep its letters %.1f studs apart in a part %.1f long (X) and %.1f deep (Z). "
+				.. "A straight row needs Size.X of %.1f; a zig-zag needs Size.X of %.1f and Size.Z of %.1f. "
+				.. "(Warning shown once per volume.)",
+			self.arenaId, box.label, length, WORD_KIT_ATTRIBUTE, minSpacing, rowLength, rowDepth,
+			minSpacing * length, minSpacing * length / KIT_SAME_SIDE_CELLS,
+			minSpacing * KIT_ZIGZAG_MIN_DEPTH_FACTOR
+		))
+	end
+
+	for i, letter in ipairs(letters) do
+		local alongRow = ((i - 1) + KIT_CELL_CENTER_OFFSET) * cell - rowLength * KIT_CELL_CENTER_OFFSET
+		local side = if i % KIT_SAME_SIDE_CELLS == 0 then 1 else -1
+		local acrossRow = side * stagger * KIT_CELL_CENTER_OFFSET
+		local position = origin:PointToWorldSpace(Vector3.new(alongRow, 0, acrossRow))
+		local yaw = math.random() * FULL_REVOLUTION_RADIANS
+		self:_spawnTracked(letter, color, CFrame.new(position) * CFrame.Angles(0, yaw, 0), box)
+	end
+	log:info(string.format("[%s] %s: kit rolled — %s in %s", self.arenaId, box.label, word, color))
+end
+
+-- Queues a whole-kit roll `respawnDelay` from now (next frame at 0). It is
+-- the kit's analogue of _scheduleRefill, but one timer replaces the whole
+-- kit rather than one block. Several can be queued; only the newest acts.
+function BlockSpawner._scheduleKitRoll(self: BlockSpawner, box: BoxState)
+	box.kitToken += 1
+	local token = box.kitToken
+	local function roll()
+		if self._running and not self._destroyed and box.kitToken == token and box.count == 0 then
+			self:_rollKit(box)
+		end
+	end
+	local delaySeconds = self._opts.respawnDelay
+	if delaySeconds > 0 then
+		task.delay(delaySeconds, roll)
+	else
+		task.defer(roll)
+	end
+end
+
+-- A kit letter was consumed. The kit does not refill letter by letter: an
+-- emptied kit with no gate is replaced whole after the respawn delay; an
+-- emptied kit with a gate waits for rerollKitsForGate (or a new round).
+function BlockSpawner._onKitLetterConsumed(self: BlockSpawner, box: BoxState)
+	if box.count == 0 and box.kitGate == nil then
+		self:_scheduleKitRoll(box)
+	end
 end
 
 function BlockSpawner._maintainCount(self: BlockSpawner)
@@ -551,6 +802,12 @@ function BlockSpawner._maintainCount(self: BlockSpawner)
 		local quota = box.quota or 0
 		while self._running and box.count < quota do
 			self:_spawnOne(box)
+		end
+	end
+	-- A kit is rolled whole or not at all, so only an empty one is filled.
+	for _, box in ipairs(self._kitBoxes) do
+		if self._running and box.count == 0 then
+			self:_rollKit(box)
 		end
 	end
 end
@@ -609,10 +866,72 @@ function BlockSpawner.getArenaId(self: BlockSpawner): string
 end
 
 -- Total blocks the pool holds when full: the density target plus every
--- quota. For a pool with no quota boxes this is the density target alone,
--- exactly what it returned before zones existed.
+-- quota plus every kit's word length. For a pool with no quota or kit boxes
+-- this is the density target alone, exactly what it returned before zones
+-- existed.
 function BlockSpawner.getTargetCount(self: BlockSpawner): number
-	return self._opts.targetCount + self._quotaTotal
+	return self._opts.targetCount + self._quotaTotal + self._kitTotal
+end
+
+-- Sum of every kit box's word length.
+function BlockSpawner.getKitTotal(self: BlockSpawner): number
+	return self._kitTotal
+end
+
+-- The gates the pool's kits listen for, each once, in no particular order.
+-- Whoever watches the scene uses this to know which walls matter.
+function BlockSpawner.getKitGates(self: BlockSpawner): { string }
+	local seen: { [string]: boolean } = {}
+	local gates: { string } = {}
+	for _, box in ipairs(self._kitBoxes) do
+		local gate = box.kitGate
+		if gate ~= nil and not seen[gate] then
+			seen[gate] = true
+			table.insert(gates, gate)
+		end
+	end
+	return gates
+end
+
+-- The word each kit currently shows, in the order the kit volumes were given.
+-- A kit with nothing rolled yet (or since destroyed) has no entry.
+function BlockSpawner.getKitWords(self: BlockSpawner): { string }
+	local words: { string } = {}
+	for _, box in ipairs(self._kitBoxes) do
+		if box.kitWord ~= nil and box.count > 0 then
+			table.insert(words, box.kitWord)
+		end
+	end
+	return words
+end
+
+-- Replaces, whole, every kit gated on `gate` (its wall just re-sealed).
+-- Returns how many kits it rolled; 0 when the pool is not running, so a
+-- paused or destroyed pool ignores a gate that fires.
+function BlockSpawner.rerollKitsForGate(self: BlockSpawner, gate: string): number
+	if not self._running or self._destroyed then
+		return 0
+	end
+	local rolled = 0
+	for _, box in ipairs(self._kitBoxes) do
+		if box.kitGate == gate then
+			self:_rollKit(box)
+			rolled += 1
+		end
+	end
+	return rolled
+end
+
+-- Replaces, whole, every kit in the pool whatever its gate: a new round
+-- starts, so nobody inherits a half-eaten word. Returns how many it rolled.
+function BlockSpawner.rerollKits(self: BlockSpawner): number
+	if not self._running or self._destroyed then
+		return 0
+	end
+	for _, box in ipairs(self._kitBoxes) do
+		self:_rollKit(box)
+	end
+	return #self._kitBoxes
 end
 
 -- Blocks the non-quota boxes hold; resolved from those boxes only.
@@ -633,6 +952,30 @@ function BlockSpawner.getActiveBlocks(self: BlockSpawner): { Model }
 	return out
 end
 
+-- Forgets blocks that left the world while the pool was not listening. While
+-- disabled, the removed-signal handler is disconnected, so a block consumed
+-- in that window would otherwise stay in `_active` (and in the counts) as a
+-- ghost, and the refill after start() would think the pool was fuller than it
+-- is. A pool's blocks are parented to its own container, so no parent means
+-- gone.
+function BlockSpawner._pruneGone(self: BlockSpawner)
+	local gone: { Model } = {}
+	for block in self._active do
+		if block.Parent == nil then
+			table.insert(gone, block)
+		end
+	end
+	for _, block in ipairs(gone) do
+		local box = self._active[block]
+		self._active[block] = nil
+		self._activeCount -= 1
+		box.count -= 1
+		if isDensityBox(box) then
+			self._densityCount -= 1
+		end
+	end
+end
+
 function BlockSpawner.start(self: BlockSpawner)
 	if self._destroyed then
 		log:warn(string.format("[%s] Cannot start a destroyed pool", self.arenaId))
@@ -642,6 +985,7 @@ function BlockSpawner.start(self: BlockSpawner)
 		log:warn(string.format("[%s] start() called while already running — no-op", self.arenaId))
 		return
 	end
+	self:_pruneGone()
 
 	-- Hook consumption BEFORE the initial fill so any destroys
 	-- triggered mid-fill (rare, but a rapid test could do it) still
@@ -656,11 +1000,15 @@ function BlockSpawner.start(self: BlockSpawner)
 			self._active[block] = nil
 			self._activeCount -= 1
 			box.count -= 1
-			if not box.quota then
+			if isDensityBox(box) then
 				self._densityCount -= 1
 			end
 			if self._running then
-				self:_scheduleRefill(box)
+				if box.kitLength then
+					self:_onKitLetterConsumed(box)
+				else
+					self:_scheduleRefill(box)
+				end
 			end
 		end
 	end)
@@ -710,6 +1058,8 @@ function BlockSpawner.destroy(self: BlockSpawner)
 	self._densityCount = 0
 	for _, box in ipairs(self._boxes) do
 		box.count = 0
+		-- Any kit roll still queued must find a newer token and do nothing.
+		box.kitToken += 1
 	end
 	for _, block in ipairs(snapshot) do
 		block:Destroy()
@@ -721,8 +1071,15 @@ end
 function BlockSpawner.rerollAll(self: BlockSpawner)
 	log:info(string.format("[%s] rerollAll triggered", self.arenaId))
 	-- Snapshot the keys first because :Destroy() fires the removed
-	-- signal synchronously and mutates `_active` mid-iteration.
-	local snapshot = self:getActiveBlocks()
+	-- signal synchronously and mutates `_active` mid-iteration. Kit
+	-- letters are left out: a kit comes back whole (below), not letter by
+	-- letter, and a gated one would not come back at all.
+	local snapshot: { Model } = {}
+	for block, box in self._active do
+		if box.kitLength == nil then
+			table.insert(snapshot, block)
+		end
+	end
 	for _, block in ipairs(snapshot) do
 		block:Destroy()
 	end
@@ -731,6 +1088,12 @@ function BlockSpawner.rerollAll(self: BlockSpawner)
 	-- box it came from (so a quota volume refills in place).
 	-- With a respawnDelay set, the whole field comes back one
 	-- cooldown later rather than immediately.
+	for _, box in ipairs(self._kitBoxes) do
+		self:_clearBox(box)
+		if self._running then
+			self:_scheduleKitRoll(box)
+		end
+	end
 end
 
 return BlockSpawner

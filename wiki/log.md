@@ -2109,3 +2109,7 @@ The user chose the cave's carrot: five or six one-colour letters guaranteed to a
 ## [2026-11-13] ingest | Mechanics ideation: fossil letters and hungry brain chosen
 
 A read-only Opus session proposed twelve level mechanics, objects and hazards for the boss island. The user picked two to build now: fossil letters (a breakable rock hides a letter, shown on crack, freed on break) and the hungry brain (the boss eats nearby letters and heals a little). Both contracts are on [[design/boss-arena]] and are Phase 8 stages 8 and 9 in [[design/build-plan]]; they start after the word-kit build because all three edit the spawner. The toppling spire and the riddle stone were filed in [[ideas]]. The session also found that the premium ring may carry little risk now that letters float high; recorded as unchecked on the design page.
+
+## [2026-11-13] ingest | Word kits built; the cave holds a ready-made word
+
+Phase 8 stage 7 landed: a `WordKit` spawn volume holds one curated 5- or 6-letter word in one colour and is replaced whole when its `KitGate` wall re-seals or a round starts ([[systems/BlockSpawner]] § Word kits). The build showed a straight 5-letter row needs 52 studs against a 32-stud cave, so the parent session added a zig-zag layout and amended the contract on [[design/boss-arena]]. The staged cave is tagged and rolled three different words in a playtest. `RunTests=all` gave 74/74; two earlier runs each had one unrelated intermittent failure, recorded on [[systems/Tests]].

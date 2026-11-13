@@ -24,6 +24,14 @@
 --   BlockQuota  (number)  hold exactly this many blocks, outside the
 --                         density pool
 -- A volume with none of them behaves as it always has.
+--
+-- Word kits (Phase 8 stage 7) add two more:
+--   WordKit (number)  the volume holds one shuffled word of this length,
+--                     laid out along the part's local X axis
+--   KitGate (string)  re-roll the kit when a BreakableWall whose GateId is
+--                     this string re-seals
+-- WordKitWatcher (a sibling module) is what notices re-seals and new rounds
+-- and asks the pools to re-roll; it only starts when some pool has a kit.
 ----------------------------------------------------------------------
 
 local CollectionService = game:GetService("CollectionService")
@@ -34,6 +42,7 @@ local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local BlockSpawner = require(ReplicatedStorage.Shared.BlockSpawner)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
+local WordKitWatcher = require(script.Parent.WordKitWatcher)
 
 local log = Logger.new("BlockSpawnerService")
 
@@ -87,6 +96,13 @@ local function collectVolumesByArena(): ArenaBoxes
 					letterTable = readAttribute(part, BlockSpawner.LETTER_TABLE_ATTRIBUTE, "string"),
 					colorOnly = readAttribute(part, BlockSpawner.COLOR_ONLY_ATTRIBUTE, "string"),
 					quota = readAttribute(part, BlockSpawner.BLOCK_QUOTA_ATTRIBUTE, "number"),
+					wordKit = readAttribute(part, BlockSpawner.WORD_KIT_ATTRIBUTE, "number"),
+					kitGate = readAttribute(part, BlockSpawner.KIT_GATE_ATTRIBUTE, "string"),
+					-- A kit is laid out along the part's own X axis, the one
+					-- case where rotation counts; ordinary boxes stay the
+					-- axis-aligned min/max above.
+					cframe = part.CFrame,
+					size = part.Size,
 					label = part:GetFullName(),
 				})
 		end
@@ -157,11 +173,26 @@ if next(pools) == nil then
 	pools[Arena.DEFAULT_ID] = pool
 end
 
+-- Word kits are replaced whole when their gate re-seals or a round starts;
+-- the watcher is what hears about either. Arenas with no kits never need it.
+local hasKits = false
+for _, pool in pools do
+	if pool:getKitTotal() > 0 then
+		hasKits = true
+	end
+end
+if hasKits then
+	WordKitWatcher.new(pools):start()
+end
+
 local summary: { string } = {}
 for arenaId, pool in pools do
 	local entry = string.format("%s=%d", arenaId, pool:getTargetCount())
-	if pool:getQuotaTotal() > 0 then
-		entry ..= string.format(" (%d density + %d quota)", pool:getDensityTarget(), pool:getQuotaTotal())
+	if pool:getQuotaTotal() > 0 or pool:getKitTotal() > 0 then
+		entry ..= string.format(
+			" (%d density + %d quota + %d kit)",
+			pool:getDensityTarget(), pool:getQuotaTotal(), pool:getKitTotal()
+		)
 	end
 	table.insert(summary, entry)
 end

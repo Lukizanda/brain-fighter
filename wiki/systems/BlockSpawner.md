@@ -14,6 +14,8 @@ Server-side populator that keeps a target count of [[systems/LetterBlock|LetterB
 
 - `src/shared/BlockSpawner/init.luau` — the pool class: `new` / start / disable / destroy / rerollAll / getActiveBlocks / pickers / tunables.
 - `src/shared/BlockSpawner/LetterTables.luau` — the named letter tables (`Standard`, `Common`, `Premium`, `Wildcard`) and the weighted pick. See § Letter zones.
+- `src/shared/BlockSpawner/WordKits.luau` — the curated 5- and 6-letter word lists and the kit shuffle. See § Word kits.
+- `src/server/BlockSpawner/WordKitWatcher.luau` — tells the pools when a kit must be replaced: its gate wall re-sealed, or a round started.
 - `src/server/BlockSpawner/BlockSpawnerService.server.luau` — server bootstrap that groups `BlockSpawnVolume`-tagged parts by arena and starts one pool per group, threading the `GameConfig` tunables.
 - `src/shared/GameMode/Arena.luau` — the shared `ArenaId` / `Default` vocabulary, also used by [[systems/GameMode]].
 - `src/shared/Tests/Suites/Phase3/blockspawner_respawn_delay.luau` — asserts the arena stays short mid-cooldown and returns to *exactly* target after, catching a refill-to-target regression.
@@ -30,8 +32,10 @@ Server-side populator that keeps a target count of [[systems/LetterBlock|LetterB
 | `:destroy()` | `() -> ()` | `:disable()`, then destroys this pool's blocks and clears its state. Permanent. |
 | `:rerollAll()` | `() -> ()` | Destroys this pool's blocks. Each queues its own replacement, so the field returns one cooldown later. **No callers** as of 2026-08-08 — it is a documented escape hatch from [[design/gameplay-loop]], not a shipped mechanic. |
 | `:getActiveBlocks()` | `() -> { Model }` | Snapshot of the blocks *this pool* tracks. Another arena's blocks are never included. |
-| `:getArenaId()` / `:getTargetCount()` | `() -> string` / `() -> number` | Identity and resolved target, for logging and assertions. Since letter zones the target is the density target **plus** every quota. |
-| `:getDensityTarget()` / `:getQuotaTotal()` | `() -> number` | The two halves of the target. |
+| `:getArenaId()` / `:getTargetCount()` | `() -> string` / `() -> number` | Identity and resolved target, for logging and assertions. Since letter zones the target is the density target **plus** every quota **plus** every kit's word length. |
+| `:getDensityTarget()` / `:getQuotaTotal()` / `:getKitTotal()` | `() -> number` | The three parts of the target. |
+| `:rerollKitsForGate(gate)` / `:rerollKits()` | `(string) -> number` / `() -> number` | Replace whole every kit gated on `gate`, or every kit. Return how many were rolled; 0 on a pool that is not running. |
+| `:getKitGates()` / `:getKitWords()` | `() -> { string }` | The gate ids the pool's kits listen for, and the word each kit currently shows. |
 | `.LETTER_FREQUENCIES` | `{ [string]: number }` | Scrabble-standard 98-tile distribution used for weighted letter picks. Module-level: derived from constants, so it is built once at require rather than per pool. |
 
 ### Opts type
@@ -121,6 +125,58 @@ wrong type logs a warning naming the part and falls back to the default.
 
 Verified by five new Phase 3 tests in a 55/55 run. Not yet exercised: reading the
 attributes off a real Studio volume, since none carries them until the greybox.
+
+## Word kits (Phase 8 stage 7, 2026-11-13)
+
+The reward in the boss island's cave ([[design/boss-arena]] § Word kits): a volume that
+holds the letters of **one ready-made word in one colour**, shuffled.
+
+| Attribute | On | Meaning |
+|---|---|---|
+| `WordKit` | a `BlockSpawnVolume` | number: the word length, 5 or 6. Another length warns and uses the nearer of the two |
+| `KitGate` | the same volume | string: replace the kit when a `BreakableWall` with this `GateId` re-seals |
+| `GateId` | a `BreakableWall` | string: names the wall. Read by the spawner side only; the walls system does not know it |
+
+**Layout.** The letters sit in equal cells along the part's **local X axis**, centred
+on the part. This is the one place a volume's rotation counts. If the cells are
+narrower than the block spacing (about 10.4 studs), the row **zig-zags**: alternate
+letters move front and back along local Z so neighbours stay a full spacing apart on
+the diagonal. A zig-zag needs `Size.X` of at least half a straight row and enough
+`Size.Z`; when neither layout fits, the pool warns once naming the part and what it
+needs. A straight 5-letter row needs 52 studs; the cave uses a 26.5 x 10 zig-zag.
+
+**Word and colour.** Words come from `WordKits.luau`: 69 five-letter and 76 six-letter
+common words, each accepted by the dictionary and worth 15 to 30 energy. A roll never
+repeats the previous word, never reads as the word forwards or backwards, and (without
+`ColorOnly`) never repeats the previous colour.
+
+**Replaced whole, never refilled.** A consumed kit letter does not come back. The kit
+is replaced when:
+
+- its gate re-seals (`WordKitWatcher` sees `WallState` go `broken` to `intact` on a
+  wall of the same arena with a matching `GateId`);
+- its arena's round starts (the watcher re-rolls every kit, so a half-eaten word never
+  carries over);
+- it has no `KitGate` and its last letter was consumed, one `respawnDelay` later;
+- `rerollAll()` is called.
+
+`BlockQuota` and `LetterTable` on a kit volume are ignored with a warning. Kit blocks
+count toward `getTargetCount()` and stay out of the density pool. The watcher starts
+only when some pool has a kit, so the shipped arenas never create one.
+
+**Also fixed in this build:** `start()` now forgets blocks that were destroyed while
+the pool was disabled. They used to stay in the counts, so the refill after a
+disable/start came up short.
+
+**Energy.** A single-colour kit word averages about 18 energy at either length, against
+a top-tier cast at 20. About a third of the words clear 20; the rest pay for a T2 plus
+a T1. Tightening the lists is the lever if a kit should always buy a T3.
+
+Verified 2026-11-13: ten Phase 3 tests in a clean 74/74 run, the shipped arenas still
+at `Default=40, Duel1=5, Duel2=5, Lobby=8`, and on the staged island the cave rolled
+WATCH in red, then JOLLY in blue and YUMMY in green on two re-seals. The re-seals were
+driven by setting `WallState` by hand; a real boss breaking the real plug is not yet
+seen.
 
 ## Design decisions
 
