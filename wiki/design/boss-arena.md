@@ -206,6 +206,7 @@ computed from the remaining volumes only.
 | 2 | `BlockSpawner` letter zones: per-volume table, colour and quota, suite | build session (Sonnet) | **built 2026-11-13**, 5 new tests — [[systems/BlockSpawner]] § Letter zones |
 | 3 | Greybox the layout in Studio: rim, cover, gates, balconies, vaults, retagged volumes | with the user, after the sketch is approved and 1–2 land | **staged 2026-11-13** beside the old arena (see § Greybox staging); the swap waits on the user's walk-through |
 | 4 | Playtest and tune: wall health against a 20-shot volley, letter height, quotas, boss reach to the outer ring | with the user | waiting |
+| 6 | Arrival beat: timed boss entrance keyed on the first arrival, brief arrival protection, suite | build session (Sonnet) | spawned 2026-11-13 |
 | 5 | Arena entry teleporter: `ArenaEntryPad` → `ArenaArrivalPoint`, suite | build session (Sonnet) | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]]. Physical touch not yet verified |
 
 Stage 3 is not fanned out. The build plan's rule is that work needing design judgment
@@ -264,6 +265,40 @@ pad, the `LobbyReturnPad` move and the bridge removal belong to the swap.
 to `Default` (or strip the attribute), rename `BossPoint_Island` over the old
 `BossPoint`, delete the old `Plaza`, bridge and the eight old volumes, place the
 `ArenaEntryPad` and return pad in the ready room, and move or seal the ready room.
+
+## After the first walk-through (2026-11-13)
+
+The user walked the staged island and reported two things: the first view on arrival
+was the back of the shielding rock, and from player height the level felt crowded and
+claustrophobic. Screenshots at player height agreed. The causes were tall, wide rocks
+(15–22 studs against a 5-stud character), letters lowered into the gaps between them
+(6–18 studs), and a ridge closing the horizon. All three came from asking cover to hide
+letters.
+
+The assistant proposed switching the risk from line of sight to a shorter pop reach,
+with head-high cover and a low ridge. **The user did not take that.** Decision: cover
+does not need to block letters all the time; raise the letters and see how it plays.
+Reach stays 200 and the rocks and ridge stay as built for now.
+
+Decided and applied to the staged greybox:
+
+- **Letters higher.** Open-ground zones now sit 18–28 studs above the floor and the
+  premium zone 14–22. Cave and ledge zones are unchanged, so those still hide.
+- **Overlook arrival.** The shielding rock is gone. `Overlook_Shelf`, a 16-stud-high
+  shelf against the east ridge, carries the arrival point; a raycast from eye height on
+  it to the boss spot is clear. Dropping off it is the way in and there is no way back
+  up.
+
+Decided, in build as stage 6:
+
+- **Timed boss entrance.** The countdown starts when the first player arrives for the
+  round, and the boss appears `entranceDelaySec` later. It cannot be measured from
+  round start: the `Default` PvE round starts at server boot with the player still in
+  the lobby.
+- **Brief spawn protection on arrival**, for players re-entering mid-fight.
+
+Still open from this pass: whether raising the letters is enough to fix the crowding,
+or whether the rocks and ridge also need to come down.
 
 ## Open questions
 

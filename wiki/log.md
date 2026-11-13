@@ -2081,3 +2081,7 @@ Two user decisions recorded on [[design/boss-arena]] and [[design/build-plan]] �
 ## [2026-11-13] ingest | Island greybox staged beside the old arena
 
 `Workspace.Arena.IslandGreybox` built through MCP, 500 studs +Z of the old plaza, under `ArenaId = IslandStaging` so the shipped arena is untouched: irregular floor, ridge with three regenerating gates, ten rock clusters, two caves, the Spit, the Stones, the Overhang, 17 quota letter zones. Sightlines and zone clearances checked by raycast; one playtest boot confirmed the zone attributes are read off real volumes (first time) and 26 walls register. Not walked, not fought on, not swapped in. Details in [[design/boss-arena]] § Greybox staging. Place file only.
+
+## [2026-11-13] ingest | First walk-through of the island: letters raised, overlook arrival
+
+The user walked the staged island through a temporary lobby pad and found the arrival view blocked and the level crowded at player height. Recorded on [[design/boss-arena]] § After the first walk-through: the assistant proposed a shorter pop reach with low cover and the user declined it, choosing to raise the letters and see. Applied in the place file: open-ground letter zones at 18-28 studs, the shielding rock replaced by a 16-stud overlook shelf carrying the arrival point. Stage 6 added to Phase 8 and handed to a build session: a boss entrance timed from the first arrival, and brief arrival protection.
