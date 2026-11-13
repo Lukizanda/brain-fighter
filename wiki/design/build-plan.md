@@ -380,7 +380,7 @@ Added 2026-11-13 at the user's request. Full design, measured arena, layout tabl
 | 2 | `BlockSpawner` letter zones (`LetterTable` / `ColorOnly` / `BlockQuota` per volume, suite) | with 1 | **built 2026-11-13** — [[systems/BlockSpawner]] § Letter zones |
 | 3 | Studio greybox of the layout | no, with the user | **staged 2026-11-13** as `Workspace.Arena.IslandGreybox` beside the old arena under `ArenaId = IslandStaging`; the swap waits on the user's walk-through. In the place file only |
 | 4 | Playtest and tune | no, with the user | waits on 3 |
-| 6 | Arrival beat: timed boss entrance from the first arrival, brief arrival protection (added 2026-11-13 after the user's first walk-through) | no | build session spawned 2026-11-13 |
+| 6 | Arrival beat: timed boss entrance from the first arrival, brief arrival protection (added 2026-11-13 after the user's first walk-through) | no | **built 2026-11-13**, 6 tests — [[systems/Boss]] § Entrance, [[systems/Health]] § Protection |
 | 5 | Arena entry teleporter (one-way pad from the ready room to the island; the bridge is removed, so leaving means dying or quitting) | with 1 | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]] |
 
 **Sequenced before the unlisted publish** (user, 2026-11-13); see § Current focus step 1a. "Quit" from the arena is the `LobbyReturnPad` in the ready room, not an in-fight button.

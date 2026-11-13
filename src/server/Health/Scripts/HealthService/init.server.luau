@@ -6,6 +6,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local HealthConstants = require(ReplicatedStorage.Shared.Health.HealthConstants)
 local DamageTypes = require(ReplicatedStorage.Shared.Health.DamageTypes)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local Protection = require(ReplicatedStorage.Shared.Health.Protection)
 local SkillEffects = require(ReplicatedStorage.Shared.Skills.SkillEffects)
 local applyDamage = require(script.applyDamage)
 
@@ -26,6 +27,10 @@ local SessionRegistry = require(ServerScriptService.Server.GameMode.Scripts.Sess
 
 -- A round going Active in some arena, with its roster (Phase 6 stage 6).
 local roundStartedEvent = ServerScriptService.Server.GameMode.Events.RoundStarted :: BindableEvent
+
+-- A player teleported onto an arena's island, fired by ArenaEntryService
+-- with `(player, arenaId)`.
+local playerEnteredEvent = ReplicatedStorage.Shared.Arena.ArenaEvents.PlayerEntered :: BindableEvent
 
 -- Every roster member goes Active at full health. A duellist arriving
 -- from a previous round at 30 HP would otherwise fight at a disadvantage
@@ -57,6 +62,21 @@ local function healRosterOnRoundStart(roster: { Player }?, arenaId: any)
 		log:info(string.format("[%s] Round start — %d of %d roster members healed to full",
 			tostring(arenaId), healed, #roster))
 	end
+end
+
+-- A player teleported onto an arena's island (ArenaEntryService announces,
+-- it does not know about health). They get a short protection window: a
+-- player who died re-enters mid-fight, when no entrance countdown is
+-- covering them. The window is a character attribute `applyDamage.process`
+-- consults, so this writes no Humanoid.Health.
+local function grantArrivalProtection(player: Player, arenaId: any)
+	local character = player.Character
+	if not character then
+		return
+	end
+	Protection.grant(character, HealthConstants.ARRIVAL_PROTECTION_SEC)
+	log:info(string.format("[%s] %s arrived — protected for %ds",
+		tostring(arenaId), player.Name, HealthConstants.ARRIVAL_PROTECTION_SEC))
 end
 
 local function initializeCharacterHealth(character: Model)
@@ -125,6 +145,9 @@ local function initialize()
 
 	-- Full health on every round start, for every mode.
 	roundStartedEvent.Event:Connect(healRosterOnRoundStart)
+
+	-- Brief protection for a player who has just teleported in.
+	playerEnteredEvent.Event:Connect(grantArrivalProtection)
 
 	-- Initialize players
 	for _, player in Players:GetPlayers() do

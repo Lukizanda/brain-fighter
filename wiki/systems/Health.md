@@ -1,7 +1,7 @@
 ---
 type: system
 description: Damage pipeline — one path. applyDamage.process / applyDamage.heal are the only Humanoid.Health writers; spells reach them through the DamageSink HealthService injects into SkillEffects; every request carries a cause id the kill feed credits; PvP is allowsPvP on the victim's mode, resolved through their session.
-updated: 2026-09-22
+updated: 2026-11-13
 ---
 
 # Health System
@@ -220,3 +220,30 @@ Consequences worth knowing:
 
 - Damage callers → see § Callers above; the spell side is [[systems/SkillPipeline]] § Damage paths. (The former firearm/TeamService friendly-fire path was deleted with the TPS stack in commit `6610291`.)
 - Kill feed rendering → `KillFeedGui` prints `[<cause>]` between killer and victim; env kills (no `sourcePlayer`) print the cause alone.
+
+## Protection (Phase 8 stage 6, 2026-11-13)
+
+Time-boxed invulnerability, owned by Health. `shared/Health/Protection.luau` keeps one
+character attribute, `_protectedUntil`, holding the `workspace:GetServerTimeNow()`
+instant the window closes. Nothing counts it down, so an expired window needs no
+cleanup, and the client reads the same value to draw its cue. `Protection.grant` is the
+attribute's only writer and never shortens a running window.
+
+`applyDamage.process` asks `Protection.isActive` and returns `nil` inside a window, the
+same way the PvP gate drops a hit, so no damage event, number or flash fires. The
+`DeathZone` cause is exempt, so a protected player cannot hang in the void.
+
+First user: arrival protection. `HealthService` listens to [[systems/ArenaEntry]]'s
+`PlayerEntered` and grants `ARRIVAL_PROTECTION_SEC` (2 s). The cue is a gold bubble
+drawn by `client/Vfx/ArrivalProtectionVfxController`; unlike the spell shield it is
+cosmetic and deflects nothing.
+
+Why not the spell shield: `_shield` is a pool that Skills grants and Health drains, with
+Skills as its only writer, and its bubble stops projectiles.
+
+Tests: `protect_blocks_in_window`, `protect_on_entry` (Arena suite).
+
+**Open, found by reading and not tested:** `GameModeService` gives a respawned player a
+3 s `ForceField`, but `applyDamage` writes `Humanoid.Health` directly, which a
+`ForceField` does not guard. Respawn protection may be doing nothing. Moving it onto
+this window is undecided.

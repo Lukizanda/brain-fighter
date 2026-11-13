@@ -31,6 +31,31 @@ local BossConstants = {
 	LABEL_OFFSET_ROOT = Vector3.new(0, 9, 0),
 
 	-- ============================================================
+	-- Entrance (the beat between the first arrival and the boss appearing)
+	-- ============================================================
+	-- While the entrance runs, BossService tags the BossPoint with this and
+	-- publishes the instant the boss appears on it as an attribute
+	-- (`workspace:GetServerTimeNow()` time, never os.clock: the clock has to
+	-- mean the same thing on the server and on every client). The client
+	-- draws the countdown from those two; the tag coming off ends the tell.
+	ENTRANCE_TAG = "BossEntranceTell",
+	ENTRANCE_APPEAR_AT_ATTRIBUTE = "BossAppearAt",
+
+	-- VfxConfig.EFFECTS ids played at the BossPoint through VfxBroadcast:
+	-- a stone rumble as the countdown starts, a heavy thud as the boss lands.
+	-- Reused stand-ins, not final art.
+	ENTRANCE_START_VFX = "wall_rise_rumble",
+	ENTRANCE_APPEAR_VFX = "aoe_boss_groundslam",
+
+	-- The client countdown billboard over the BossPoint.
+	ENTRANCE_LABEL_HEIGHT_STUDS = 40,
+	ENTRANCE_LABEL_SIZE = UDim2.fromOffset(320, 90),
+	ENTRANCE_LABEL_TEXT_COLOR = Color3.fromRGB(255, 90, 60),
+	ENTRANCE_LABEL_HEADER = "BOSS INCOMING",
+	-- How often the label redraws; the number only changes once a second.
+	ENTRANCE_LABEL_REFRESH_SEC = 0.1,
+
+	-- ============================================================
 	-- Attacks
 	-- ============================================================
 	-- Height above the root part that an attack is delivered from, so

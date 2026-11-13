@@ -18,6 +18,10 @@
 -- The server draws nothing: the depart and arrive cues go out through
 -- VfxBroadcast and every client draws them.
 --
+-- A successful teleport is announced on the `PlayerEntered` BindableEvent
+-- (`player, arenaId`). The service only announces; the boss entrance
+-- (BossService) and arrival protection (HealthService) listen.
+--
 -- A ModuleScript so the test suite can drive `handleTouch` directly;
 -- `ArenaEntryBoot.server.luau` starts it.
 ----------------------------------------------------------------------
@@ -34,6 +38,11 @@ local VfxBroadcast = require(ReplicatedStorage.Shared.Vfx.VfxBroadcast)
 local SessionRegistry = require(ServerScriptService.Server.GameMode.Scripts.SessionRegistry)
 
 local log = Logger.new("ArenaEntryService")
+
+-- Server-side fact: `(player, arenaId)` for each successful teleport. It
+-- lives in the Arena domain's shared folder, beside where BossDefeated sits
+-- for the Boss domain.
+local playerEnteredEvent = ReplicatedStorage.Shared.Arena.ArenaEvents.PlayerEntered :: BindableEvent
 
 local C = ArenaEntryConstants
 local Result = C.Result
@@ -64,6 +73,19 @@ function ArenaEntryService.arrivalsFor(arenaId: string): { BasePart }
 		end
 	end
 	return found
+end
+
+-- Does the arena have an entry pad, i.e. do players reach its island by
+-- teleporting rather than by walking in? Asked by whoever needs to know
+-- whether an arrival is coming (the boss entrance), so the definition of
+-- "a pad of this arena" stays here.
+function ArenaEntryService.hasPadFor(arenaId: string): boolean
+	for _, instance in CollectionService:GetTagged(C.PAD_TAG) do
+		if instance:IsA("BasePart") and instance:IsDescendantOf(workspace) and Arena.idOf(instance) == arenaId then
+			return true
+		end
+	end
+	return false
 end
 
 -- One arrival point of the arena, chosen at random; nil when there is none.
@@ -146,6 +168,9 @@ function ArenaEntryService.handleTouch(pad: BasePart, hit: Instance): string
 	rootPart.AssemblyLinearVelocity = Vector3.zero
 	VfxBroadcast.playAt(C.Vfx.Arrive, target.Position)
 	log:info(string.format("%s: %s -> %s", player.Name, pad:GetFullName(), arrival:GetFullName()))
+	-- Announce only. Who reacts (the boss entrance, arrival protection) is
+	-- their business; this service knows nothing about bosses or health.
+	playerEnteredEvent:Fire(player, arenaId)
 	return Result.Teleported
 end
 

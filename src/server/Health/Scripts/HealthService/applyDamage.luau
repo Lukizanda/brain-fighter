@@ -4,8 +4,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DamageTypes = require(ReplicatedStorage.Shared.Health.DamageTypes)
 local DamageModifierRegistry = require(ReplicatedStorage.Shared.Health.DamageModifierRegistry)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local Protection = require(ReplicatedStorage.Shared.Health.Protection)
 
 local log = Logger.new("HealthService")
+
+-- Seconds between "ignored a hit" lines for one protected character.
+local PROTECTED_LOG_THROTTLE_SEC = 1
 
 type DamageRequest = DamageTypes.DamageRequest
 type DamageResult = DamageTypes.DamageResult
@@ -50,6 +54,25 @@ function applyDamage.process(request: DamageRequest): DamageResult?
 				sourcePlayer.Name, targetPlayer.Name))
 			return nil
 		end
+	end
+
+	-- Protection gate: a character inside a protection window (arrival on the
+	-- island, today) takes no damage. Dropped like the PvP gate above rather
+	-- than resolved to a zero-damage hit, so no PlayerDamaged event, damage
+	-- number or flash fires for a hit that did nothing. The death zone is
+	-- exempt: it exists to remove a character that is somewhere it must not
+	-- be, and a window must not let one hang in the void.
+	local protectedCharacter = targetHumanoid:FindFirstAncestorOfClass("Model")
+	if protectedCharacter
+		and request.cause ~= DamageTypes.Cause.DeathZone
+		and Protection.isActive(protectedCharacter)
+	then
+		-- Throttled: a 20-shot volley landing in one window would otherwise
+		-- log twenty identical lines.
+		log:infoThrottled("protected_" .. protectedCharacter.Name, PROTECTED_LOG_THROTTLE_SEC, string.format(
+			"Protected: %s ignored %s (%s)",
+			protectedCharacter.Name, tostring(request.cause or "unknown cause"), tostring(request.baseDamage)))
+		return nil
 	end
 
 	local finalDamage, absorbed, modifiersApplied = DamageModifierRegistry.resolve(request)

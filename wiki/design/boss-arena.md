@@ -206,7 +206,7 @@ computed from the remaining volumes only.
 | 2 | `BlockSpawner` letter zones: per-volume table, colour and quota, suite | build session (Sonnet) | **built 2026-11-13**, 5 new tests — [[systems/BlockSpawner]] § Letter zones |
 | 3 | Greybox the layout in Studio: rim, cover, gates, balconies, vaults, retagged volumes | with the user, after the sketch is approved and 1–2 land | **staged 2026-11-13** beside the old arena (see § Greybox staging); the swap waits on the user's walk-through |
 | 4 | Playtest and tune: wall health against a 20-shot volley, letter height, quotas, boss reach to the outer ring | with the user | waiting |
-| 6 | Arrival beat: timed boss entrance keyed on the first arrival, brief arrival protection, suite | build session (Sonnet) | spawned 2026-11-13 |
+| 6 | Arrival beat: timed boss entrance keyed on the first arrival, brief arrival protection, suite | build session (Sonnet) | **built 2026-11-13**, 6 tests — [[systems/Boss]] § Entrance, [[systems/Health]] § Protection. Not yet seen end to end on the island |
 | 5 | Arena entry teleporter: `ArenaEntryPad` → `ArenaArrivalPoint`, suite | build session (Sonnet) | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]]. Physical touch not yet verified |
 
 Stage 3 is not fanned out. The build plan's rule is that work needing design judgment
@@ -261,6 +261,9 @@ That is also the first physical-touch check of [[systems/ArenaEntry]].
 **Not done:** nobody has walked it; no boss has fought on it. The ready room, the entry
 pad, the `LobbyReturnPad` move and the bridge removal belong to the swap.
 
+**The swap must give the ready-room pad `ArenaId = Default`**, or the boss entrance
+never engages and the boss spawns at once.
+
 **The swap**, once approved: move the Model onto the old centre, retag `IslandStaging`
 to `Default` (or strip the attribute), rename `BossPoint_Island` over the old
 `BossPoint`, delete the old `Plaza`, bridge and the eight old volumes, place the
@@ -301,8 +304,9 @@ Decided, in build as stage 6:
 
 - **Timed boss entrance.** The countdown starts when the first player arrives for the
   round, and the boss appears `entranceDelaySec` later. It cannot be measured from
-  round start: the `Default` PvE round starts at server boot with the player still in
-  the lobby.
+  round start: the round goes Active while the first player is still in the ready
+  room. (First recorded here as "starts at server boot", which was a misreading of the
+  boot log; the build session corrected it.)
 - **Brief spawn protection on arrival**, for players re-entering mid-fight.
 
 Still open from this pass: whether raising the letters is enough to fix the crowding,

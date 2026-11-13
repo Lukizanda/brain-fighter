@@ -16,6 +16,17 @@
 --   - Forward phase changes via BossPhaseChanged
 --   - Handle boss death: destroy controller, pause, respawn
 --   - Start the cycle on the arena's RoundStarted, stop it on RoundEnded
+--   - Entrance (Phase 8): in an arena whose players enter through an
+--     ArenaEntryPad, and for a boss type with `entranceDelaySec`, the FIRST
+--     spawn of a cycle is held until the first player arrives on the island
+--     (ArenaEntryService's `PlayerEntered`), then happens that many seconds
+--     later, with a countdown tell at the BossPoint. The trigger is the
+--     arrival, not the round start, because a round starts as soon as a
+--     player is in the ready room: the Default PvEBoss round waits for its
+--     first roster member (minPlayers 1), counts down 5 s, and goes Active
+--     while that player is still on the ready-room side of the teleporter.
+--     An arena with no pad, a type with no delay, and every respawn behave
+--     exactly as they did before.
 --
 -- Death handling: Boss is NOT tagged "Damageable" — BossService owns
 -- the full lifecycle so DeathHandler won't respawn or create templates.
@@ -43,14 +54,18 @@
 -- `wiki/design/lobby.md` § Broadcast audience.
 ----------------------------------------------------------------------
 
+local CollectionService   = game:GetService("CollectionService")
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
 local RunService          = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local BossConfig        = require(ReplicatedStorage.Shared.Boss.BossConfig)
+local BossConstants     = require(ReplicatedStorage.Shared.Boss.BossConstants)
+local BossTypes         = require(ReplicatedStorage.Shared.Boss.BossTypes)
 local Arena             = require(ReplicatedStorage.Shared.GameMode.Arena)
 local BroadcastAudience = require(ReplicatedStorage.Shared.GameMode.BroadcastAudience)
 local Logger            = require(ReplicatedStorage.Shared.Core.Logger)
+local VfxBroadcast      = require(ReplicatedStorage.Shared.Vfx.VfxBroadcast)
 
 local BossSpawner    = require(script.Parent.Scripts.BossSpawner)
 local BossController = require(script.Parent.Scripts.BossController)
@@ -59,6 +74,10 @@ local BossController = require(script.Parent.Scripts.BossController)
 -- reconcile. Called, never written to.
 local SessionRegistry = require(ServerScriptService.Server.GameMode.Scripts.SessionRegistry)
 
+-- Asked only "does this arena have an entry pad" — whether an arrival is
+-- coming. The Arena domain keeps the definition.
+local ArenaEntryService = require(ServerScriptService.Server.Arena.ArenaEntryService)
+
 local bossEvents        = ReplicatedStorage.Shared.Boss.BossEvents
 local BossHealthChanged = bossEvents.BossHealthChanged :: RemoteEvent
 local BossPhaseChanged  = bossEvents.BossPhaseChanged  :: RemoteEvent
@@ -66,6 +85,10 @@ local BossPhaseChanged  = bossEvents.BossPhaseChanged  :: RemoteEvent
 -- ends its round on it (Phase 6 stage 5). Fired after the client
 -- sentinels so the HUD and the mode see the same event order.
 local BossDefeated      = bossEvents.BossDefeated      :: BindableEvent
+
+-- Server-side fact from the Arena domain: a player teleported onto an
+-- arena's island, `(player, arenaId)`. Starts the entrance countdown.
+local playerEnteredEvent = ReplicatedStorage.Shared.Arena.ArenaEvents.PlayerEntered :: BindableEvent
 
 local gameModeEvents    = ServerScriptService.Server.GameMode.Events
 local roundStartedEvent = gameModeEvents.RoundStarted :: BindableEvent
@@ -85,6 +108,7 @@ local SPAWN_RETRY_SEC     = 5
 local DEATH_LINGER_SEC    = 1
 
 type BossControllerInstance = BossController.BossControllerInstance
+type BossTypeSpec = BossTypes.BossTypeSpec
 
 -- One arena's boss lifecycle: everything a stop has to undo.
 type Cycle = {
@@ -93,14 +117,34 @@ type Cycle = {
 	boss: Model?,
 	controller: BossControllerInstance?,
 	heartbeatConn: RBXScriptConnection?,
-	-- The pending retry or respawn timer, so a round ending mid-wait
-	-- doesn't spawn a boss into an arena with no round.
+	-- The pending retry, respawn or entrance timer, so a round ending
+	-- mid-wait doesn't spawn a boss into an arena with no round.
 	pendingThread: thread?,
+	-- Entrance: seconds to wait after the first arrival, and whether the
+	-- cycle is still holding for that arrival. Both unset for an arena that
+	-- spawns at once.
+	entranceDelaySec: number?,
+	awaitingArrival: boolean,
 	stopped: boolean,
 }
 
 local cycles: { [string]: Cycle } = {}
 local eventConns: { RBXScriptConnection } = {}
+
+-- Players who teleported onto an arena's island, per arena. An arrival can
+-- come before the round has started (a player is in the roster for the 5 s
+-- countdown, and the pad is already usable), so it is remembered rather
+-- than dropped. An entry stops counting the moment the player's session
+-- changes (their `ArenaId` attribute: going home and coming back is a
+-- pivot, not a reload, so the character alone cannot tell the two visits
+-- apart) or they respawn (a new character, back in the ready room). All of
+-- an arena's entries are dropped when its cycle stops.
+type Arrival = {
+	character: Model,
+	-- Watches the player's `ArenaId` attribute; any change retires the entry.
+	sessionConn: RBXScriptConnection,
+}
+local arrivals: { [string]: { [Player]: Arrival } } = {}
 
 -- ---------------------------------------------------------------
 -- BossPoint lookup
@@ -112,6 +156,15 @@ local function bossPointFor(arenaId: string): BasePart?
 		end
 	end
 	return nil
+end
+
+-- The boss type a BossPoint names, with the registry entry behind it.
+-- Read per cycle, so retagging the point takes effect on the next one.
+local function resolveBossType(bossPoint: BasePart): (string, BossTypeSpec)
+	local typeName = tostring(bossPoint:GetAttribute("BossType") or BossConfig.DEFAULT_TYPE)
+	local typeSpec = BossConfig.BOSS_TYPES[typeName]
+	assert(typeSpec, "Unknown boss type: " .. typeName)
+	return typeName, typeSpec
 end
 
 -- ---------------------------------------------------------------
@@ -137,9 +190,7 @@ local function startBossCycle(cycle: Cycle)
 
 	log:info(string.format("Starting boss cycle in arena %s", arenaId))
 
-	local typeName = tostring(bossPoint:GetAttribute("BossType") or BossConfig.DEFAULT_TYPE)
-	local typeSpec = BossConfig.BOSS_TYPES[typeName]
-	assert(typeSpec, "Unknown boss type: " .. typeName)
+	local _typeName, typeSpec = resolveBossType(bossPoint)
 
 	local boss = BossSpawner.spawn(bossPoint, typeSpec)
 	if not boss then
@@ -240,6 +291,96 @@ local function startBossCycle(cycle: Cycle)
 end
 
 -- ---------------------------------------------------------------
+-- Entrance
+-- A cycle that holds its first spawn for an arrival, then counts down.
+-- ---------------------------------------------------------------
+
+-- The world point the tell is drawn at: the top of the BossPoint, where the
+-- boss will stand.
+local function entrancePoint(bossPoint: BasePart): Vector3
+	return bossPoint.Position + Vector3.new(0, bossPoint.Size.Y / 2, 0)
+end
+
+-- Take the tell off the BossPoint: the tag coming off is what tells every
+-- client to drop its countdown. Safe to call when no tell is up.
+local function clearEntranceTell(bossPoint: BasePart)
+	CollectionService:RemoveTag(bossPoint, BossConstants.ENTRANCE_TAG)
+	bossPoint:SetAttribute(BossConstants.ENTRANCE_APPEAR_AT_ATTRIBUTE, nil)
+end
+
+-- The arrival is in: publish when the boss appears, play the start cue, and
+-- schedule the spawn. The timer lives in `pendingThread`, so `stopArena`
+-- cancels it exactly as it cancels a respawn.
+local function beginEntrance(cycle: Cycle)
+	if cycle.stopped or not cycle.awaitingArrival then
+		return
+	end
+	cycle.awaitingArrival = false
+
+	local delaySec = cycle.entranceDelaySec or 0
+	local bossPoint = cycle.bossPoint
+	local appearAt = workspace:GetServerTimeNow() + delaySec
+	-- Attribute before tag: the client reads the attribute the moment the
+	-- tag arrives, and a tag that landed first would find nothing to count to.
+	bossPoint:SetAttribute(BossConstants.ENTRANCE_APPEAR_AT_ATTRIBUTE, appearAt)
+	CollectionService:AddTag(bossPoint, BossConstants.ENTRANCE_TAG)
+	VfxBroadcast.playAt(BossConstants.ENTRANCE_START_VFX, entrancePoint(bossPoint))
+	log:info(string.format("[%s] First arrival — boss appears in %d s", cycle.arenaId, delaySec))
+
+	cycle.pendingThread = task.delay(delaySec, function()
+		-- A stop cancels this thread before it can run, but a cycle stopped in
+		-- the same frame the timer fires would otherwise spawn into a dead arena.
+		if cycle.stopped then
+			return
+		end
+		clearEntranceTell(bossPoint)
+		VfxBroadcast.playAt(BossConstants.ENTRANCE_APPEAR_VFX, entrancePoint(bossPoint))
+		startBossCycle(cycle)
+	end)
+end
+
+local function forgetArrival(arenaId: string, player: Player)
+	local arrived = arrivals[arenaId]
+	local entry = arrived and arrived[player]
+	if arrived and entry then
+		entry.sessionConn:Disconnect()
+		arrived[player] = nil
+	end
+end
+
+local function forgetArrivals(arenaId: string)
+	local arrived = arrivals[arenaId]
+	if not arrived then
+		return
+	end
+	arrivals[arenaId] = nil
+	for _, entry in arrived do
+		entry.sessionConn:Disconnect()
+	end
+end
+
+-- Has somebody already teleported onto this arena's island and is still
+-- there, i.e. in the same character, alive, and in the arena's session?
+local function hasArrivedPlayer(arenaId: string): boolean
+	local arrived = arrivals[arenaId]
+	if not arrived then
+		return false
+	end
+	for player, entry in arrived do
+		local character = entry.character
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		local session = SessionRegistry.forPlayer(player)
+		if player.Character == character
+			and humanoid ~= nil and humanoid.Health > 0
+			and session ~= nil and session:getArenaId() == arenaId
+		then
+			return true
+		end
+	end
+	return false
+end
+
+-- ---------------------------------------------------------------
 -- Per-arena start / stop
 -- ---------------------------------------------------------------
 local function startArena(arenaId: string)
@@ -254,6 +395,13 @@ local function startArena(arenaId: string)
 		return
 	end
 
+	local _typeName, typeSpec = resolveBossType(bossPoint)
+	local entranceDelaySec = typeSpec.entranceDelaySec or 0
+	-- Held only where an arrival is actually coming: the type asks for an
+	-- entrance AND the arena's players enter by teleporter. Everything else
+	-- (no pad, no delay) spawns at once, as it always did.
+	local holdForArrival = entranceDelaySec > 0 and ArenaEntryService.hasPadFor(arenaId)
+
 	local cycle: Cycle = {
 		arenaId = arenaId,
 		bossPoint = bossPoint,
@@ -261,10 +409,51 @@ local function startArena(arenaId: string)
 		controller = nil,
 		heartbeatConn = nil,
 		pendingThread = nil,
+		entranceDelaySec = if holdForArrival then entranceDelaySec else nil,
+		awaitingArrival = holdForArrival,
 		stopped = false,
 	}
 	cycles[arenaId] = cycle
-	startBossCycle(cycle)
+
+	if not holdForArrival then
+		startBossCycle(cycle)
+	elseif hasArrivedPlayer(arenaId) then
+		-- Somebody teleported in during the pre-round countdown.
+		beginEntrance(cycle)
+	else
+		log:info(string.format("[%s] Holding the boss for the first arrival", arenaId))
+	end
+end
+
+-- A player teleported onto an arena's island.
+local function onPlayerEntered(player: any, arenaId: any)
+	if typeof(player) ~= "Instance" or not (player :: Instance):IsA("Player") or type(arenaId) ~= "string" then
+		log:warn("PlayerEntered fired with a bad payload — ignored")
+		return
+	end
+	local character = (player :: Player).Character
+	if not character then
+		return
+	end
+
+	local who = player :: Player
+	forgetArrival(arenaId, who)
+	local arrived = arrivals[arenaId]
+	if not arrived then
+		arrived = {}
+		arrivals[arenaId] = arrived
+	end
+	arrived[who] = {
+		character = character,
+		sessionConn = who:GetAttributeChangedSignal(Arena.ID_ATTRIBUTE):Connect(function()
+			forgetArrival(arenaId, who)
+		end),
+	}
+
+	local cycle = cycles[arenaId]
+	if cycle and cycle.awaitingArrival then
+		beginEntrance(cycle)
+	end
 end
 
 -- Undo everything startBossCycle wired: the timer that would spawn the
@@ -272,12 +461,18 @@ end
 -- defeat sentinel so the arena's BossHudGui clears rather than freezing
 -- on the last health it saw.
 local function stopArena(arenaId: string)
+	-- Whatever happened, the round is over: arrivals belong to it.
+	forgetArrivals(arenaId)
+
 	local cycle = cycles[arenaId]
 	if not cycle then
 		return
 	end
 	cycles[arenaId] = nil
 	cycle.stopped = true
+	cycle.awaitingArrival = false
+	-- A countdown tell still up (round ended mid-entrance) comes off with it.
+	clearEntranceTell(cycle.bossPoint)
 
 	local pending = cycle.pendingThread
 	if pending then
@@ -388,6 +583,7 @@ end
 -- caught by the event, one that started before it by the reconcile.
 table.insert(eventConns, roundStartedEvent.Event:Connect(onRoundStarted))
 table.insert(eventConns, roundEndedEvent.Event:Connect(onRoundEnded))
+table.insert(eventConns, playerEnteredEvent.Event:Connect(onPlayerEntered))
 reconcile()
 game:BindToClose(BossService.destroy)
 

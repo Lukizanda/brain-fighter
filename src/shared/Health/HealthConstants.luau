@@ -20,6 +20,22 @@ local HealthConstants = {
 	ARMOR_ATTRIBUTE = "_armor",
 	SHIELD_ATTRIBUTE = "_shield",
 
+	-- Time-boxed invulnerability, owned by Health (`shared/Health/Protection`).
+	-- The attribute holds the `workspace:GetServerTimeNow()` instant the
+	-- window closes, never a flag plus a timer: it replicates as a plain
+	-- value, so the client cue needs no remote, and an expired window cannot
+	-- be left switched on by a timer that never ran.
+	PROTECTED_UNTIL_ATTRIBUTE = "_protectedUntil",
+	-- Seconds of protection a player gets on teleporting onto an arena's
+	-- island (ArenaEntryService's `PlayerEntered`). Long enough to find
+	-- footing, short enough that it cannot be camped in.
+	ARRIVAL_PROTECTION_SEC = 2,
+	-- The client cue: a gold bubble around the protected character. Cosmetic
+	-- only (CanQuery off), so unlike the spell shield it deflects nothing.
+	PROTECTION_BUBBLE_DIAMETER_STUDS = 7,
+	PROTECTION_BUBBLE_TRANSPARENCY = 0.6,
+	PROTECTION_BUBBLE_COLOR = Color3.fromRGB(255, 214, 90),
+
 	HEAD_PARTS = { "Head" },
 	TORSO_PARTS = { "UpperTorso", "LowerTorso" },
 

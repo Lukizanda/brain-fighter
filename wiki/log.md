@@ -2089,3 +2089,7 @@ The user walked the staged island through a temporary lobby pad and found the ar
 ## [2026-11-13] ingest | Island cover set to mixed heights
 
 On the user's suggestion the staged island's cover now mixes heights by role: inner clusters all low (6-8 studs), each outer cluster one tall landmark piece (16-20) with low companions; 5 tall and 23 low, down from 20 tall. Recorded on [[design/boss-arena]] § After the first walk-through. Place file only; not yet playtested.
+
+## [2026-11-13] ingest | Phase 8 stage 6 built: boss entrance and arrival protection
+
+A Sonnet build session added the arrival beat. [[systems/ArenaEntry]] now announces `PlayerEntered`; [[systems/Boss]] § Entrance holds a padded arena's first boss spawn for the first arrival and then counts down `entranceDelaySec` (Brain 8 s) with a client countdown; [[systems/Health]] § Protection adds a `_protectedUntil` window that `applyDamage` respects, granted for 2 s on arrival. Finding: the PvE round goes Active while the first player is still in the ready room, so the delay had to key on the arrival; an earlier note that the round starts at server boot was wrong and is corrected. `RunTests=all` 58 → 64, all passing. Not verified: the entrance end to end on the island, which needs the swap (the ready-room pad must carry `ArenaId = Default`). Open: the existing 3 s respawn `ForceField` may not block `applyDamage` at all.

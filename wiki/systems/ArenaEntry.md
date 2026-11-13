@@ -48,6 +48,20 @@ would let such a player use a `Default` pad.
 Cues are `impact_shield` on departure and `impact_buff` on arrival, sent with
 `VfxBroadcast.playAt`. They are stand-ins reused from spells.
 
+## Arrival signal (stage 6, 2026-11-13)
+
+After a successful teleport the service fires the server-side BindableEvent
+`shared/Arena/ArenaEvents/PlayerEntered(player, arenaId)`. It only announces. Two
+listeners today: `BossService` starts the boss entrance on the first arrival of a round
+([[systems/Boss]] § Entrance), and `HealthService` opens a 2 s protection window
+([[systems/Health]] § Protection).
+
+`ArenaEntryService.hasPadFor(arenaId)` answers whether an arena's players enter by
+teleporter. `BossService` asks it to decide whether to hold the boss for an arrival.
+
+**At the swap the real ready-room pad must carry `ArenaId = Default`.** Until a pad
+with that id exists, `Default` stays an immediate-spawn arena.
+
 ## Verification (2026-11-13)
 
 `RunTests=all` gave 58/58. The three tests cover matching by arena id, the no-arrival

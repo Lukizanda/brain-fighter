@@ -32,6 +32,9 @@ local bossTypes: { [string]: BossTypeSpec } = {
 		rigName          = "BossBrain",
 		hipHeight        = 6,
 		respawnDelaySec  = 5,
+		-- Time for arriving players to read the island and reach cover before
+		-- the boss appears; counted from the first arrival (see BossService).
+		entranceDelaySec = 8,
 		detectionRange   = 160,
 		attackRange      = 100,
 		attackWindupSec  = 0.5,

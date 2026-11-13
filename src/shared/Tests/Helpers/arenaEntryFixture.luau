@@ -13,6 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
+local HealthConstants = require(ReplicatedStorage.Shared.Health.HealthConstants)
 local NoOpMode = require(ReplicatedStorage.Shared.GameMode.Modes.NoOpMode)
 local SessionRegistry = require(ServerScriptService.Server.GameMode.Scripts.SessionRegistry)
 
@@ -58,6 +59,12 @@ function Fixture.enter(self: Fixture, player: Player): boolean
 end
 
 function Fixture.cleanup(self: Fixture, player: Player?)
+	-- A real teleport leaves the arrival protection window open on the
+	-- character; clear it so the next test's damage is not swallowed.
+	local character = player and player.Character
+	if character then
+		character:SetAttribute(HealthConstants.PROTECTED_UNTIL_ATTRIBUTE, nil)
+	end
 	if player and self.homeId and SessionRegistry.forPlayer(player) ~= SessionRegistry.forArena(self.homeId) then
 		SessionRegistry.transferPlayer(player, self.homeId)
 	end

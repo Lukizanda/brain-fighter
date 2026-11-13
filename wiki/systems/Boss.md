@@ -263,6 +263,42 @@ All boss constants are now per-type in `BossConfig.BOSS_TYPES[<name>]`. Brain's 
 
 Add a new boss type by adding another entry to `BOSS_TYPES`; switch the active boss by setting `workspace.BossPoint:SetAttribute("BossType", "<name>")`. Falls back to `BossConfig.DEFAULT_TYPE` when unset.
 
+## Entrance (Phase 8 stage 6, 2026-11-13)
+
+In an arena whose players enter through an `ArenaEntryPad`, a boss type with
+`entranceDelaySec` (Brain: 8) does not spawn on `RoundStarted`. `BossService` holds the
+first spawn of the cycle until the first player arrives on the island, then spawns that
+many seconds later. An arena with no pad, a type with no delay, and every respawn
+behave as before; the shipped `Default` arena still spawns at once.
+
+**Why the trigger is the arrival and not the round start.** The `Default` PvEBoss round
+waits for its first roster member, counts down 5 s and goes Active while that player is
+still in the ready room. Verified in a playtest: a portal join logged `Transferred
+Lobby → Default`, `Countdown: 5 seconds`, `Round started!`, `Starting boss cycle` with
+the player not yet on the island. (The `[Default] Started` line in the boot log is the
+round *loop* starting, not a round.)
+
+- The arrival is [[systems/ArenaEntry]]'s `PlayerEntered(player, arenaId)`. One during
+  the 5 s pre-round countdown is remembered. It stops counting if the player's
+  `ArenaId` attribute changes or they respawn: a session transfer keeps the same
+  character, and a stale arrival once started the next round's entrance with nobody
+  there (caught by a failing test).
+- **The tell.** `BossService` sets `BossAppearAt` on the `BossPoint`
+  (`workspace:GetServerTimeNow()` time, since `os.clock()` is per-VM) and tags it
+  `BossEntranceTell`. `client/Arena/BossEntranceCountdown` draws "BOSS INCOMING / N"
+  from those two; the tag coming off ends it. World cues go through
+  `VfxBroadcast.playAt`: `wall_rise_rumble` at the start, `aoe_boss_groundslam` when the
+  boss lands. Both are stand-ins.
+- **Cancel.** The timer lives in the cycle's `pendingThread`, so `RoundEnded` cancels it
+  through the existing `stopArena`, exactly as it cancels a respawn.
+- Only the first arrival of a round starts the countdown. Later arrivals and re-entries
+  get arrival protection only ([[systems/Health]]).
+
+Verified by `boss_holds_for_arrival`, `boss_instant_without_pad` and
+`boss_round_end_cancels` in a 64/64 run, and the countdown drew on a client from a
+probe part. Not verified: a real padded arena running the entrance end to end on a
+client, the cue audio, two clients.
+
 ## Future Work
 
 - **BossBrain visual iteration** — sphere + eyes is a first pass; the model lives in Studio (ServerStorage.AIWorldData.Rigs.BossBrain) and can be reshaped without any code changes.

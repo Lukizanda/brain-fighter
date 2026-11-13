@@ -27,6 +27,11 @@ export type BossTypeSpec = {
 	rigName: string?,
 	hipHeight: number?,
 	respawnDelaySec: number,
+	-- Seconds between the first player arriving on an arena's island and
+	-- the boss appearing, in an arena whose players enter through an
+	-- ArenaEntryPad. Absent or 0 = spawn immediately, as before. Applies
+	-- to the first spawn of a cycle only, not to a respawn.
+	entranceDelaySec: number?,
 	detectionRange: number,
 	attackRange: number,
 	attackWindupSec: number,
