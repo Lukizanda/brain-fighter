@@ -289,6 +289,14 @@ Decided and applied to the staged greybox:
   it to the boss spot is clear. Dropping off it is the way in and there is no way back
   up.
 
+- **Mixed cover heights** (the user's idea, same day). Height follows role. The five
+  inner clusters are all low, 6–8 studs, so the middle stays readable and you can watch
+  the boss from behind cover. Each of the five outer clusters keeps one tall piece,
+  16–20 studs and at most 12 wide, as a landmark and a place to hide fully; its
+  companions are low. That is 5 tall and 23 low pieces, down from 20 tall. Each piece
+  carries a `CoverHeight` attribute. Low cover still stops fireballs: the boss fires
+  from `ATTACK_ORIGIN_HEIGHT = 2`, close to ground level.
+
 Decided, in build as stage 6:
 
 - **Timed boss entrance.** The countdown starts when the first player arrives for the

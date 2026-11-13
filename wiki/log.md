@@ -2085,3 +2085,7 @@ Two user decisions recorded on [[design/boss-arena]] and [[design/build-plan]] �
 ## [2026-11-13] ingest | First walk-through of the island: letters raised, overlook arrival
 
 The user walked the staged island through a temporary lobby pad and found the arrival view blocked and the level crowded at player height. Recorded on [[design/boss-arena]] § After the first walk-through: the assistant proposed a shorter pop reach with low cover and the user declined it, choosing to raise the letters and see. Applied in the place file: open-ground letter zones at 18-28 studs, the shielding rock replaced by a 16-stud overlook shelf carrying the arrival point. Stage 6 added to Phase 8 and handed to a build session: a boss entrance timed from the first arrival, and brief arrival protection.
+
+## [2026-11-13] ingest | Island cover set to mixed heights
+
+On the user's suggestion the staged island's cover now mixes heights by role: inner clusters all low (6-8 studs), each outer cluster one tall landmark piece (16-20) with low companions; 5 tall and 23 low, down from 20 tall. Recorded on [[design/boss-arena]] § After the first walk-through. Place file only; not yet playtested.
