@@ -462,6 +462,47 @@ so the staged island stays as the comparison.
 - A review session works on the copy only. Its findings and the changes it made are
   recorded here when it reports.
 
+## Senior review of the copy (2026-11-14)
+
+A senior-level-designer session (Opus) reviewed `IslandReview` against the Brain's
+numbers and ran four designer sessions in two rounds. `IslandGreybox` is unchanged.
+The figures below are the reviewer's calculations from the config and code; none has
+been checked in a fight, and the parent session did not re-derive them.
+
+**Its main finding is about the boss, not the level.** The Brain stops walking as soon
+as its target is within `attackRange` (100) and fires from there. With a 10 degree
+spread the reviewer calculates that 52% of a volley hits a standing player at 30
+studs, 17% at 60 and 6% at 100, so a volley at the boss's chosen distance does about 6
+damage. With the boss at the centre, the rim, all three ways out, the cave mouth and
+the overlook (131 studs) are beyond 100 studs. A player is close to safe anywhere
+unless they choose to close in, and geometry cannot change that.
+
+Also found: fireballs leave about 9 studs up, not 2 (`hipHeight` 6 plus the origin
+offset), and still dip to torso height, so rocks of 6 studs or more block them. The
+boss sphere does not collide with rocks and pathfinds with a thin body. Hunger reaches
+about 4 of the 6 premium letters at the drop point and no ordinary letter along the
+boss's usual paths.
+
+Changed in the copy:
+
+| Area | Change |
+|---|---|
+| Ways out | Stone gaps were 9 to 10.3 studs with no way back; a player could be stranded behind a re-sealed gate. Now 7.0 with 1-stud drops, and each exit has a one-way rock stair back in. Jumps tested in a playtest |
+| Rim | 45 identical slabs became 34 merged leaning masses; about 45% is a low lip open to the sky. The invisible wall still stops falls |
+| Cover | Two even rings of five became 10 formations, 3 standalone rocks and open fields; two "brave" breakable rocks at 35 to 38 studs from the boss point. Floor within 15 studs of cover rose from 41% to 52% |
+| Spires | Flattened and leaning, health 60, one moved so they no longer frame the arrival like gateposts |
+| Boss spot | A plum dais of radius 22, the slam's reach |
+| Cave | Rises into a 30-stud spur on one side and breaks down to the lip on the other |
+
+Recommendations that need code or a decision, **none decided**:
+
+1. Make the boss threaten at its fighting range: a 4 degree spread (calculated 68% at
+   60 studs, 35% at 100) or an `attackRange` near 60.
+2. Shorter pop reach for premium letters (50 to 60 studs).
+3. Lower the letter band where the boss walks to 12 to 20 studs, if hunger should bite.
+4. Gates that do not re-seal while a player is beyond them, in place of the stairs.
+5. Widen the cave plug to 16 to 18 studs so it opens as fast as a gate.
+
 ## Pick up here (written 2026-11-13 at the end of the session)
 
 All code for stages 1, 2 and 5 to 9 is committed. What is left needs the user and
