@@ -28,12 +28,15 @@
 -- A broken wall stays in the DataModel, non-colliding and non-queryable,
 -- so it can re-seal and so taps and fireballs pass through it.
 --   RegenSec > 0 : re-seals that many seconds after breaking, but not
---                  while a character overlaps it (retried on an interval)
+--                  while a character overlaps it, nor while a living player
+--                  is inside a GateHoldZone with the wall's GateId in the
+--                  same arena (retried on an interval)
 --   otherwise    : stays broken until the arena's next RoundStarted
 -- Every wall of an arena returns to intact when that arena's round starts.
 ----------------------------------------------------------------------
 
 local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -146,12 +149,89 @@ local function characterOverlaps(part: BasePart): boolean
 	return false
 end
 
+-- The gate a part names, or nil when it has none (absent, not a string, or
+-- blank).
+local function gateIdOf(part: Instance): string?
+	local value = part:GetAttribute(C.Authored.GateId)
+	if type(value) == "string" and value ~= "" then
+		return value
+	end
+	return nil
+end
+
+-- Is `position` inside the zone's box? Done in the zone's own space so a
+-- rotated zone is honoured.
+local function insideZone(zone: BasePart, position: Vector3): boolean
+	local localPoint = zone.CFrame:PointToObjectSpace(position)
+	local half = zone.Size / 2
+	return math.abs(localPoint.X) <= half.X and math.abs(localPoint.Y) <= half.Y and math.abs(localPoint.Z) <= half.Z
+end
+
+-- A living player's character whose root part is inside the zone. Keys on
+-- Players (a Humanoid alone is not enough, unlike `characterOverlaps`):
+-- an NPC or the boss does not hold a gate.
+local function playerInside(zone: BasePart): boolean
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if humanoid and humanoid.Health > 0 and root and root:IsA("BasePart") and insideZone(zone, root.Position) then
+			return true
+		end
+	end
+	return false
+end
+
+-- Does any zone paired with this wall (same GateId, same arena) hold a
+-- player? Zones are read live so one tagged after boot counts.
+local function zoneHolds(part: BasePart): boolean
+	local gate = gateIdOf(part)
+	if gate == nil then
+		return false
+	end
+	local arenaId = Arena.idOf(part)
+	for _, instance in CollectionService:GetTagged(C.ZONE_TAG) do
+		if
+			instance:IsA("BasePart")
+			and gateIdOf(instance) == gate
+			and Arena.idOf(instance) == arenaId
+			and playerInside(instance)
+		then
+			return true
+		end
+	end
+	return false
+end
+
+-- A zone no wall pairs with does nothing; say so once, naming it.
+local warnedZones: { [Instance]: boolean } = {}
+
+local function warnIfOrphanZone(zone: Instance)
+	if warnedZones[zone] or not zone:IsA("BasePart") then
+		return
+	end
+	local gate = gateIdOf(zone)
+	local arenaId = Arena.idOf(zone)
+	if gate ~= nil then
+		for part in walls do
+			if gateIdOf(part) == gate and Arena.idOf(part) == arenaId then
+				return
+			end
+		end
+	end
+	warnedZones[zone] = true
+	log:warn(string.format(
+		"%s is a %s with GateId %q but no BreakableWall in arena %s shares it; it holds nothing",
+		zone:GetFullName(), C.ZONE_TAG, tostring(zone:GetAttribute(C.Authored.GateId)), arenaId
+	))
+end
+
 local function tryReseal(wall: Wall)
 	wall.regenThread = nil
 	if wall.state ~= State.Broken or not wall.part.Parent then
 		return
 	end
-	if characterOverlaps(wall.part) then
+	if characterOverlaps(wall.part) or zoneHolds(wall.part) then
 		wall.regenThread = task.delay(C.REGEN_RETRY_SEC, tryReseal, wall)
 		return
 	end
@@ -328,6 +408,16 @@ table.insert(tagConns, CollectionService:GetInstanceRemovedSignal(C.TAG):Connect
 for _, instance in CollectionService:GetTagged(C.TAG) do
 	register(instance)
 end
+-- Zones are read live at re-seal time; this only reports the ones that can
+-- never pair. Deferred so walls tagged in the same frame are registered.
+table.insert(tagConns, CollectionService:GetInstanceAddedSignal(C.ZONE_TAG):Connect(function(zone)
+	task.defer(warnIfOrphanZone, zone)
+end))
+task.defer(function()
+	for _, zone in CollectionService:GetTagged(C.ZONE_TAG) do
+		warnIfOrphanZone(zone)
+	end
+end)
 BreakableWallService.enable()
 game:BindToClose(BreakableWallService.destroy)
 

@@ -1,13 +1,13 @@
 --!strict
 
 ----------------------------------------------------------------------
--- hunger_spares_rewards — a kit letter and a freed fossil letter are never eaten
+-- hunger_spares_rewards — a kit letter and a freed fossil letter are never pulled
 ----------------------------------------------------------------------
 -- MODULE LEVEL: BossHunger on a stand-in boss, ticked by hand. A word-kit's
 -- letters and a timed block (the fossil letter's kind of block) sit right
 -- next to the boss; an ordinary block sits farther away. The ordinary one is
--- eaten even though it is farther; the rewards are untouched; with nothing
--- else eligible a second bite does nothing at all.
+-- the one pulled, though it is farther; the rewards are not touched. Then a
+-- pool with ONLY the rewards: nothing is pulled at all.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -28,6 +28,7 @@ local TIMED_LETTER = "A"
 local TIMED_COLOR = "red"
 local TIMED_LIFETIME_SEC = 60
 local NEVER_REFILL_SEC = 600
+local MOVED_TOLERANCE_STUDS = 0.01
 
 return {
 	name = "hunger_spares_rewards",
@@ -39,33 +40,60 @@ return {
 	run = function(ctx: any)
 		local hf = ctx.hf
 		local boss, humanoid, root = hf:fakeBoss(nil, START_HEALTH)
+		local kitAt = root.Position + KIT_OFFSET
 		local zoneAt = root.Position + ZONE_OFFSET
-		local pool = hf:pool({ hf:kit(root.Position + KIT_OFFSET), hf:zone(zoneAt) }, NEVER_REFILL_SEC)
+		local pool = hf:pool({ hf:kit(kitAt), hf:zone(zoneAt) }, NEVER_REFILL_SEC)
 		local timed = pool:spawnTimedBlock(
 			TIMED_LETTER, TIMED_COLOR, CFrame.new(root.Position + TIMED_OFFSET), TIMED_LIFETIME_SEC
 		)
 		ctx.timedMade = timed ~= nil
-		ctx.kitBefore = #pool:getActiveBlocks() - 1 -- minus the ordinary zone block
-		local hunger = BossHunger.new(boss, humanoid, root, hungerFixture.spec(INTERVAL_SEC, RADIUS_STUDS, FRACTION))
+		local kitBefore = {}
+		for _, block in pool:getActiveBlocks() do
+			if hf:blockAt(pool, zoneAt) ~= block then
+				kitBefore[block] = block:GetPivot().Position
+			end
+		end
+		ctx.kitBefore = 0
+		for _ in kitBefore do
+			ctx.kitBefore += 1
+		end
+		local hunger = BossHunger.new(boss, humanoid, root, hungerFixture.spec(
+			INTERVAL_SEC, RADIUS_STUDS, FRACTION, hungerFixture.FAST_PULL_SPEED, hungerFixture.REACH_STUDS
+		))
 		if not hunger then
 			return
 		end
 		ctx.enabled = true
 
-		-- The pool hears a removal one frame after Destroy (as for a pop), so
-		-- its counts are read after a yield.
+		hunger:tick(INTERVAL_SEC)
+		local towed = hf:towed(pool)
+		ctx.zoneTowed = #towed == 1 and towed[1] == hf:blockAt(pool, zoneAt)
+		ctx.timedUntouched = timed ~= nil and timed.Parent ~= nil and not pool:isTowed(timed)
+		ctx.kitUntouched = true
+		for block, position in kitBefore do
+			if block.Parent == nil or pool:isTowed(block)
+				or (block:GetPivot().Position - position).Magnitude > MOVED_TOLERANCE_STUDS then
+				ctx.kitUntouched = false
+			end
+		end
+
+		-- Eat the one ordinary block, then only rewards remain.
 		hunger:tick(INTERVAL_SEC)
 		task.wait()
 		ctx.zoneEaten = hf:blockAt(pool, zoneAt) == nil
-		ctx.healthAfterFirst = humanoid.Health
-		ctx.activeAfterFirst = #pool:getActiveBlocks()
-		ctx.timedAfterFirst = timed ~= nil and timed.Parent ~= nil
-
+		local healthAfterZone = humanoid.Health
+		hunger:tick(INTERVAL_SEC)
 		hunger:tick(INTERVAL_SEC)
 		task.wait()
-		ctx.activeAfterSecond = #pool:getActiveBlocks()
-		ctx.timedAfterSecond = timed ~= nil and timed.Parent ~= nil
-		ctx.healthAfterSecond = humanoid.Health
+		ctx.nothingElsePulled = #hf:towed(pool) == 0 and humanoid.Health == healthAfterZone
+		ctx.timedAfter = timed ~= nil and timed.Parent ~= nil
+		local kitAfter = 0
+		for _, block in pool:getActiveBlocks() do
+			if block.Parent ~= nil then
+				kitAfter += 1
+			end
+		end
+		ctx.kitAfter = kitAfter
 	end,
 
 	verify = function(ctx: any): (boolean, string?)
@@ -77,23 +105,20 @@ return {
 				"fixture: the kit holds %s letters, expected %d", tostring(ctx.kitBefore), hungerFixture.KIT_LENGTH
 			)
 		end
+		if not ctx.zoneTowed then
+			return false, "the ordinary block (farther away) was not the one pulled"
+		end
+		if not ctx.timedUntouched or not ctx.kitUntouched then
+			return false, "a reward (kit letter or timed block) was pulled or moved"
+		end
 		if not ctx.zoneEaten then
-			return false, "the ordinary block was not eaten (it is the only eligible one)"
+			return false, "the ordinary block was not eaten"
 		end
-		if ctx.activeAfterFirst ~= hungerFixture.KIT_LENGTH then
-			return false, string.format(
-				"%s pool blocks left after the first bite, expected the %d kit letters",
-				tostring(ctx.activeAfterFirst), hungerFixture.KIT_LENGTH
-			)
+		if not ctx.nothingElsePulled then
+			return false, "with only rewards left, something was pulled or the boss healed"
 		end
-		if not ctx.timedAfterFirst or not ctx.timedAfterSecond then
-			return false, "the timed (fossil-kind) block was eaten"
-		end
-		if ctx.activeAfterSecond ~= ctx.activeAfterFirst then
-			return false, "a kit letter was eaten on the second bite"
-		end
-		if ctx.healthAfterSecond ~= ctx.healthAfterFirst then
-			return false, "the boss healed on a bite with nothing eligible"
+		if not ctx.timedAfter or ctx.kitAfter ~= hungerFixture.KIT_LENGTH then
+			return false, "a reward was removed"
 		end
 		return true, nil
 	end,

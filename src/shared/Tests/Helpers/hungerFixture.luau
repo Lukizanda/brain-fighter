@@ -3,7 +3,7 @@
 ----------------------------------------------------------------------
 -- hungerFixture
 ----------------------------------------------------------------------
--- Runtime fixture for the hungry-brain tests (Arena suite, hunger_*).
+-- Runtime fixture for the hungry-brain / letter-pull tests (Arena suite, hunger_*).
 -- Everything lives in the test's own arena id and is removed by `destroy()`:
 --
 --   * a block pool of the test's own, built from tiny one-block volumes at
@@ -46,6 +46,10 @@ fixture.__index = fixture
 
 fixture.FAKE_BOSS_ORIGIN = FAKE_BOSS_ORIGIN
 fixture.KIT_LENGTH = KIT_LENGTH
+-- A pull so fast that one tick of a stand-in boss carries a letter all the
+-- way, and a reach small enough that "arrived" means "on the boss".
+fixture.FAST_PULL_SPEED = 1000
+fixture.REACH_STUDS = 3
 
 export type Fixture = typeof(setmetatable({} :: {
 	arenaId: string,
@@ -119,12 +123,31 @@ end
 
 -- A boss-type spec carrying only the eat values (BossHunger reads nothing
 -- else). Pass nil for a value to leave it out.
-function fixture.spec(intervalSec: number?, radius: number?, healFraction: number?): any
+function fixture.spec(
+	intervalSec: number?,
+	radius: number?,
+	healFraction: number?,
+	pullSpeed: number?,
+	reach: number?
+): any
 	return {
 		eatIntervalSec = intervalSec,
 		eatRadius = radius,
 		eatHealFraction = healFraction,
+		eatPullSpeed = pullSpeed,
+		eatReach = reach,
 	}
+end
+
+-- The pool's blocks that are in tow right now.
+function fixture.towed(_self: Fixture, pool: BlockSpawner.BlockSpawner): { Model }
+	local out: { Model } = {}
+	for _, block in pool:getActiveBlocks() do
+		if pool:isTowed(block) then
+			table.insert(out, block)
+		end
+	end
+	return out
 end
 
 -- A stand-in boss at `position` (default the fixture origin) in `arenaId`

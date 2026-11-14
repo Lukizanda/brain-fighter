@@ -11,7 +11,7 @@
 --   1. Perception.update(bb)         — observe nearest player / LOS
 --   2. BossPhaseManager.update()     — check HP thresholds, fire callback
 --   3. StateMachine.tick(bb)         — advance AI state
---   4. BossHunger.tick(dt)           — eat a nearby letter on a timer
+--   4. BossHunger.tick(dt)           — pull a nearby letter in and eat it, on a timer
 ----------------------------------------------------------------------
 
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
@@ -224,6 +224,12 @@ end
 function BossController:destroy()
 	if not self._alive then return end
 	self._alive = false
+
+	-- A letter in tow goes with the boss.
+	local hunger = self._hunger
+	if hunger then
+		hunger:destroy()
+	end
 
 	Perception.cleanup(asNPC(self._blackboard))
 	Actions.cleanup(asNPC(self._blackboard))

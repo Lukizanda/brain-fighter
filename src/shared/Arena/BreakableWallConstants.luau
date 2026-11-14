@@ -15,10 +15,19 @@ local BreakableWallConstants = {}
 -- A wall is one anchored BasePart carrying this tag.
 BreakableWallConstants.TAG = "BreakableWall"
 
+-- An invisible, non-colliding BasePart that covers the ground beyond a gate.
+-- A regenerating wall whose `GateId` matches the zone's (same arena) does not
+-- re-seal while a living player's character is inside it.
+BreakableWallConstants.ZONE_TAG = "GateHoldZone"
+
 -- Attributes the level author sets on the part (all optional).
 BreakableWallConstants.Authored = {
 	MaxHealth = "MaxHealth", -- number; absent = DEFAULT_MAX_HEALTH
 	RegenSec  = "RegenSec",  -- number; absent or 0 = gone for the round
+	-- string; names the gate. Also set on a GateHoldZone part to pair it with
+	-- the walls of the same id in the same arena, and read by the word-kit
+	-- watcher (a kit's `KitGate` refers to it). Absent or "" = no gate.
+	GateId    = "GateId",
 	-- The arena id attribute is `Arena.ID_ATTRIBUTE` ("ArenaId"), read with
 	-- `Arena.idOf` so absence means the Default arena, as everywhere else.
 }
@@ -72,8 +81,8 @@ BreakableWallConstants.CRITICAL_AT_FRACTION = 1 / 3
 ----------------------------------------------------------------------
 -- Regeneration
 ----------------------------------------------------------------------
--- A wall due to re-seal waits while any character overlaps it, and asks
--- again on this interval. Short enough that a player stepping clear sees
+-- A wall due to re-seal waits while any character overlaps it, or a living
+-- player is inside a hold zone paired with it, and asks again on this interval. Short enough that a player stepping clear sees
 -- the wall close almost at once; long enough that the overlap query is not
 -- a per-frame cost.
 BreakableWallConstants.REGEN_RETRY_SEC = 0.5

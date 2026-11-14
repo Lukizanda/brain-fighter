@@ -39,12 +39,20 @@ export type BossTypeSpec = {
 	-- When false (default) facing only happens during AttackPrep (windup telegraph).
 	continuousFacing: boolean?,
 	-- Hungry brain (Phase 8 stage 9): every `eatIntervalSec` the living boss
-	-- eats the nearest eligible letter block within `eatRadius` studs of itself
-	-- and heals `eatHealFraction` of its maximum health. A type that leaves any
-	-- of the first two out, or sets either to 0 or less, does not eat. A
-	-- fraction of 0 or absent still eats (pressure without healing).
+	-- picks the nearest eligible letter block within `eatRadius` studs of
+	-- itself (horizontal distance, height ignored) and pulls it toward itself
+	-- at `eatPullSpeed` studs a second; within `eatReach` studs (3D) of the
+	-- boss's root the letter is eaten and the boss heals `eatHealFraction` of
+	-- its maximum health. A player can pop the letter first.
+	-- A type that leaves out `eatIntervalSec` or `eatRadius`, or sets either
+	-- to 0 or less, does not eat at all. One that has both but no positive
+	-- `eatPullSpeed` or `eatReach` is a config mistake: it warns and does not
+	-- eat. A fraction of 0 or absent still pulls and eats (pressure without
+	-- healing).
 	eatIntervalSec: number?,
 	eatRadius: number?,
+	eatPullSpeed: number?,
+	eatReach: number?,
 	eatHealFraction: number?,
 	skills: { [string]: SkillTypes.SkillSpec },
 	phases: { PhaseSpec },

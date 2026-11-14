@@ -50,6 +50,10 @@
 -- outside every box, count and refill and removes itself after a lifetime;
 -- fossil letters are the user. See the section of that name below.
 --
+-- Tows (Phase 8 stage 9): beginTow / advanceTow / cancelTow draw one ordinary
+-- block toward a point (the boss pulls a letter to itself). The pool is the
+-- one writer of the block's position meanwhile. See the section of that name.
+--
 -- Letter selection is Scrabble-frequency-weighted (English vowels +
 -- common consonants dominate) — the SOFT-HEURISTIC the design defers
 -- "explicit dictionary-bag scan" complexity to (see
@@ -75,6 +79,7 @@ local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
 local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 local LetterTables = require(script.LetterTables)
+local TowConstants = require(script.TowConstants)
 local WordKits = require(script.WordKits)
 
 local log = Logger.new("BlockSpawner")
@@ -417,6 +422,9 @@ export type BlockSpawner = typeof(setmetatable(
 		-- Timed blocks (fossils): stamped like pool blocks but in no box, so
 		-- in no count and never refilled. See spawnTimedBlock.
 		_timed: { [Model]: boolean },
+		-- Pool blocks currently being pulled toward a point (see beginTow).
+		-- They stay in `_active` and in their box's count the whole time.
+		_towed: { [Model]: boolean },
 		_running: boolean,
 		_destroyed: boolean,
 		_removedConnection: RBXScriptConnection?,
@@ -475,6 +483,7 @@ function BlockSpawner.new(userOpts: Opts?): BlockSpawner
 		_quotaTotal = quotaTotal,
 		_kitTotal = kitTotal,
 		_timed = {},
+		_towed = {},
 		_running = false,
 		_destroyed = false,
 		_removedConnection = nil,
@@ -1016,34 +1025,75 @@ function BlockSpawner.getQuotaTotal(self: BlockSpawner): number
 	return self._quotaTotal
 end
 
--- What takeNearestEligible hands back: where the block was and what it was.
-export type TakenBlock = {
-	position: Vector3,
+----------------------------------------------------------------------
+-- Tows (Phase 8 stage 9: the boss pulls a letter to itself)
+----------------------------------------------------------------------
+-- A tow draws one ordinary pool block toward a point: "the nearest eligible
+-- block within R of here" (beginTow), then, each tick, "the point is now
+-- there, advance by dt" (advanceTow). The pool is the one writer of the
+-- block's position while it is in tow, and it knows nothing about who asks:
+-- the boss's hunger is the first caller, but the point is only a point.
+--
+-- The block stays a normal block throughout: in `_active` and its box's
+-- count (so a zone still counts it and does not refill early), same tag, same
+-- ArenaId stamp, poppable through the normal tap, validated by the server at
+-- its CURRENT position (BlockShootValidation reads the model's pivot, which
+-- advanceTow keeps). However the tow ends it ends by the block being
+-- destroyed, the one removal path, so the removed-signal handler refills the
+-- zone exactly as after a pop and the counts stay right.
+--
+-- What clients see is published on the block (TowConstants): a tag, the
+-- position the server has it at and the point it is pulled toward. The
+-- client animator follows the first; the tether script draws to the second.
+-- Nothing here draws.
+
+-- What beginTow hands back: the block and what it is.
+export type Tow = {
+	block: Model,
 	letter: string,
 	color: string,
 }
 
--- Removes the block nearest `point` within `radius` studs and returns what it
--- was, or nil when nothing eligible is in range (or the pool is destroyed).
--- Eligible means an ordinary field block: a word-kit letter is excluded
+-- What one advance of a tow came to.
+--   moving   the block moved toward the point and is still in tow
+--   arrived  it came within `reach` and the pool removed it (eaten)
+--   gone     it is no longer in tow because it left the world some other
+--            way: popped by a player, or removed by a teardown. The pool
+--            cannot tell those apart, and the caller does not need it to.
+export type TowStep = "moving" | "arrived" | "gone"
+
+local TOW_MOVING: TowStep = "moving"
+local TOW_ARRIVED: TowStep = "arrived"
+local TOW_GONE: TowStep = "gone"
+
+-- Distance ignoring height.
+local function horizontalDistance(a: Vector3, b: Vector3): number
+	return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
+end
+
+-- Publishes where the block is and where it is heading.
+local function publishTow(block: Model, position: Vector3, target: Vector3)
+	block:SetAttribute(TowConstants.POSITION_ATTRIBUTE, position)
+	block:SetAttribute(TowConstants.TARGET_ATTRIBUTE, target)
+end
+
+-- Starts towing the eligible block nearest `point` by HORIZONTAL distance
+-- (height ignored) within `radius`, or returns nil when there is none (or
+-- the pool is destroyed, or radius is 0 or less). Eligible means an ordinary
+-- field block that is not already in tow: a word-kit letter is excluded
 -- because its box has a kitLength, and a timed block (a freed fossil letter)
--- is excluded because it is not in `_active` at all. Both are rewards a
--- player earned. Quota-zone blocks are eligible.
---
--- The block leaves by Destroy(), the same way a pop removes it, so the
--- removed-signal handler does the bookkeeping and queues the refill: the
--- zone refills after `respawnDelay` exactly as after a pop, and the counts
--- stay right. A radius of 0 or less takes nothing. Ties go to whichever the
--- iteration reaches first.
-function BlockSpawner.takeNearestEligible(self: BlockSpawner, point: Vector3, radius: number): TakenBlock?
+-- because it is not in `_active` at all; both are rewards a player earned.
+-- Quota-zone blocks are eligible. Ties go to whichever the iteration reaches
+-- first.
+function BlockSpawner.beginTow(self: BlockSpawner, point: Vector3, radius: number): Tow?
 	if self._destroyed or radius <= 0 then
 		return nil
 	end
 	local nearest: Model? = nil
 	local nearestDistance = radius
 	for block, box in self._active do
-		if box.kitLength == nil and block.Parent ~= nil then
-			local distance = (block:GetPivot().Position - point).Magnitude
+		if box.kitLength == nil and block.Parent ~= nil and not self._towed[block] then
+			local distance = horizontalDistance(block:GetPivot().Position, point)
 			if distance <= nearestDistance then
 				nearest = block
 				nearestDistance = distance
@@ -1053,13 +1103,72 @@ function BlockSpawner.takeNearestEligible(self: BlockSpawner, point: Vector3, ra
 	if nearest == nil then
 		return nil
 	end
-	local taken: TakenBlock = {
-		position = nearest:GetPivot().Position,
-		letter = tostring(nearest:GetAttribute(LetterBlocks.LETTER_ATTRIBUTE)),
-		color = tostring(nearest:GetAttribute(LetterBlocks.COLOR_ATTRIBUTE)),
+	local block: Model = nearest
+	self._towed[block] = true
+	-- However it ends (eaten, popped, torn down), forget it.
+	block.Destroying:Connect(function()
+		self._towed[block] = nil
+	end)
+	local position = block:GetPivot().Position
+	publishTow(block, position, point)
+	CollectionService:AddTag(block, TowConstants.TAG)
+	return {
+		block = block,
+		letter = tostring(block:GetAttribute(LetterBlocks.LETTER_ATTRIBUTE)),
+		color = tostring(block:GetAttribute(LetterBlocks.COLOR_ATTRIBUTE)),
 	}
-	nearest:Destroy()
-	return taken
+end
+
+-- Moves a block in tow `speed * dt` studs straight toward `target` (3D),
+-- following the point as the caller moves it, and publishes where it now is.
+-- Once it is within `reach` studs of `target` (3D) the pool removes it, by
+-- the same Destroy a pop uses, and says so. A block that is not (or no
+-- longer) in tow is "gone"; nothing is moved or removed.
+function BlockSpawner.advanceTow(
+	self: BlockSpawner,
+	block: Model,
+	target: Vector3,
+	speed: number,
+	reach: number,
+	dt: number
+): TowStep
+	if not self._towed[block] or block.Parent == nil then
+		self._towed[block] = nil
+		return TOW_GONE
+	end
+	local pivot = block:GetPivot()
+	local toTarget = target - pivot.Position
+	local distance = toTarget.Magnitude
+	local newPosition = pivot.Position
+	if distance > 0 then
+		newPosition += toTarget.Unit * math.min(speed * dt, distance)
+	end
+	if (target - newPosition).Magnitude <= reach then
+		self._towed[block] = nil
+		block:Destroy()
+		return TOW_ARRIVED
+	end
+	block:PivotTo(CFrame.new(newPosition) * pivot.Rotation)
+	publishTow(block, newPosition, target)
+	return TOW_MOVING
+end
+
+-- Ends a tow by removing the block (the boss died, the round ended). It goes
+-- by Destroy like any other, so the zone refills as after a pop. Does nothing
+-- for a block that is not in tow.
+function BlockSpawner.cancelTow(self: BlockSpawner, block: Model)
+	if not self._towed[block] then
+		return
+	end
+	self._towed[block] = nil
+	block:Destroy()
+end
+
+-- Is `block` being pulled right now? A block that has left the world is not,
+-- even in the moment before its Destroying handler (which runs deferred)
+-- clears the entry: a popped block must read as out of tow at once.
+function BlockSpawner.isTowed(self: BlockSpawner, block: Model): boolean
+	return self._towed[block] == true and block.Parent ~= nil
 end
 
 function BlockSpawner.getActiveBlocks(self: BlockSpawner): { Model }
@@ -1194,10 +1303,12 @@ function BlockSpawner.rerollAll(self: BlockSpawner)
 	-- Snapshot the keys first because :Destroy() fires the removed
 	-- signal synchronously and mutates `_active` mid-iteration. Kit
 	-- letters are left out: a kit comes back whole (below), not letter by
-	-- letter, and a gated one would not come back at all.
+	-- letter, and a gated one would not come back at all. A block in tow is
+	-- left out too: it ends by arriving, being popped or being cancelled, not
+	-- by being re-rolled somewhere else.
 	local snapshot: { Model } = {}
 	for block, box in self._active do
-		if box.kitLength == nil then
+		if box.kitLength == nil and not self._towed[block] then
 			table.insert(snapshot, block)
 		end
 	end

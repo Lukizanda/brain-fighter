@@ -1,12 +1,14 @@
 --!strict
 
 ----------------------------------------------------------------------
--- hunger_switched_off — no interval or no radius means no appetite
+-- hunger_switched_off — no interval, radius, pull speed or reach means no appetite
 ----------------------------------------------------------------------
 -- MODULE LEVEL, on the spec only: BossHunger builds no hunger (so the
 -- controller holds no timer) for an interval or radius of 0, a negative one,
--- or one that is missing. It also pins the shipped config: Brain eats at the
--- starting values and Wizard (which has none) does not.
+-- or one that is missing. A type that has both but no positive pull speed or
+-- reach is a config mistake: also no hunger (it warns). It also pins the
+-- shipped config: Brain eats at the starting values and Wizard (which has
+-- none) does not.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,23 +20,36 @@ local hungerFixture = require(ReplicatedStorage.Shared.Tests.Helpers.hungerFixtu
 
 local ARENA_ID = "HungerOff"
 local INTERVAL_SEC = 5
-local RADIUS_STUDS = 25
+local RADIUS_STUDS = 60
 local FRACTION = 0.01
+local PULL_SPEED = 12
+local REACH_STUDS = 8
 local BRAIN_INTERVAL_SEC = 5
-local BRAIN_RADIUS_STUDS = 25
+local BRAIN_RADIUS_STUDS = 60
+local BRAIN_PULL_SPEED = 12
+local BRAIN_REACH_STUDS = 8
 local BRAIN_FRACTION = 0.01
 local NEGATIVE = -1
 
 type Case = { label: string, spec: any, shouldEat: boolean }
 
+local function spec(interval: number?, radius: number?, fraction: number?, pull: number?, reach: number?): any
+	return hungerFixture.spec(interval, radius, fraction, pull, reach)
+end
+
 local CASES: { Case } = {
-	{ label = "interval 0", spec = hungerFixture.spec(0, RADIUS_STUDS, FRACTION), shouldEat = false },
-	{ label = "radius 0", spec = hungerFixture.spec(INTERVAL_SEC, 0, FRACTION), shouldEat = false },
-	{ label = "negative interval", spec = hungerFixture.spec(NEGATIVE, RADIUS_STUDS, FRACTION), shouldEat = false },
-	{ label = "negative radius", spec = hungerFixture.spec(INTERVAL_SEC, NEGATIVE, FRACTION), shouldEat = false },
-	{ label = "no interval", spec = hungerFixture.spec(nil, RADIUS_STUDS, FRACTION), shouldEat = false },
-	{ label = "no radius", spec = hungerFixture.spec(INTERVAL_SEC, nil, FRACTION), shouldEat = false },
-	{ label = "all three present", spec = hungerFixture.spec(INTERVAL_SEC, RADIUS_STUDS, FRACTION), shouldEat = true },
+	{ label = "interval 0", spec = spec(0, RADIUS_STUDS, FRACTION, PULL_SPEED, REACH_STUDS), shouldEat = false },
+	{ label = "radius 0", spec = spec(INTERVAL_SEC, 0, FRACTION, PULL_SPEED, REACH_STUDS), shouldEat = false },
+	{ label = "negative interval", spec = spec(NEGATIVE, RADIUS_STUDS, FRACTION, PULL_SPEED, REACH_STUDS), shouldEat = false },
+	{ label = "negative radius", spec = spec(INTERVAL_SEC, NEGATIVE, FRACTION, PULL_SPEED, REACH_STUDS), shouldEat = false },
+	{ label = "no interval", spec = spec(nil, RADIUS_STUDS, FRACTION, PULL_SPEED, REACH_STUDS), shouldEat = false },
+	{ label = "no radius", spec = spec(INTERVAL_SEC, nil, FRACTION, PULL_SPEED, REACH_STUDS), shouldEat = false },
+	{ label = "no pull speed", spec = spec(INTERVAL_SEC, RADIUS_STUDS, FRACTION, nil, REACH_STUDS), shouldEat = false },
+	{ label = "pull speed 0", spec = spec(INTERVAL_SEC, RADIUS_STUDS, FRACTION, 0, REACH_STUDS), shouldEat = false },
+	{ label = "no reach", spec = spec(INTERVAL_SEC, RADIUS_STUDS, FRACTION, PULL_SPEED, nil), shouldEat = false },
+	{ label = "reach 0", spec = spec(INTERVAL_SEC, RADIUS_STUDS, FRACTION, PULL_SPEED, 0), shouldEat = false },
+	{ label = "all five present", spec = spec(INTERVAL_SEC, RADIUS_STUDS, FRACTION, PULL_SPEED, REACH_STUDS), shouldEat = true },
+	{ label = "no fraction", spec = spec(INTERVAL_SEC, RADIUS_STUDS, nil, PULL_SPEED, REACH_STUDS), shouldEat = true },
 }
 
 return {
@@ -60,6 +75,8 @@ return {
 		ctx.brainOk = brain ~= nil
 			and brain.eatIntervalSec == BRAIN_INTERVAL_SEC
 			and brain.eatRadius == BRAIN_RADIUS_STUDS
+			and brain.eatPullSpeed == BRAIN_PULL_SPEED
+			and brain.eatReach == BRAIN_REACH_STUDS
 			and brain.eatHealFraction == BRAIN_FRACTION
 			and BossHunger.isEnabledFor(brain)
 		local wizard = BossConfig.BOSS_TYPES.Wizard

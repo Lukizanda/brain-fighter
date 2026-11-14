@@ -511,8 +511,8 @@ Recommendations that need code or a decision, **none decided**:
 |---|---|---|
 | 1 | Make the boss dangerous at its fighting range | **Tighten the spread.** `FireballVolley.spreadDegrees` 10 to 4 in `BossConfig`. `attackRange` stays 100 |
 | 2 | Shorter pop reach for premium letters | **Deferred** to the balancing pass, once there is real play time |
-| 3 | Lower the letters so hunger bites | **Replaced by the user's idea: the boss sucks letters to it.** See § Letter pull |
-| 4 | Gates do not re-seal while a player is beyond them | **Try it.** See § Gate hold zones |
+| 3 | Lower the letters so hunger bites | **Replaced by the user's idea: the boss sucks letters to it.** See § Letter pull. **Built 2026-11-14**, 13 tests; not yet watched on a client |
+| 4 | Gates do not re-seal while a player is beyond them | **Built 2026-11-14**, 7 tests, and placed on the review copy: `Hold_Stones`, `Hold_Spit`, `Hold_Overhang`, `Hold_CaveRidge`. Seen working live on the Spit. The stairs back in are still there |
 | 5 | Widen the cave plug | **Done on the review copy**: `Gate_CaveRidge` 12 to 17 studs wide, jambs narrowed to match; 5 of 5 rays from the boss point at muzzle height hit the plug first |
 
 Known side effect of 1, not yet measured: gates open only when shots miss the player

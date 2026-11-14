@@ -30,6 +30,7 @@ local TweenService = game:GetService("TweenService")
 
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
+local TowConstants = require(ReplicatedStorage.Shared.BlockSpawner.TowConstants)
 
 local NEAR_THRESHOLD_STUDS = 60
 local FAR_THRESHOLD_STUDS  = 150
@@ -454,8 +455,24 @@ RunService.Heartbeat:Connect(function(dt)
 				end
 			end
 
+			-- A block the server is pulling (BlockSpawner's tow) has a base
+			-- position that moves. The model's own pivot is rewritten here
+			-- every frame, so the server's position cannot be read back
+			-- from it; the pool publishes it as an attribute instead. Ease
+			-- toward it (it arrives at the network rate, the screen redraws
+			-- faster) and, like the intro, opt out of distance culling: a
+			-- held-still pivot is very visible on a block that is moving.
+			local towPosition = block:GetAttribute(TowConstants.POSITION_ATTRIBUTE)
+			local towed = typeof(towPosition) == "Vector3"
+			if towed then
+				state.basePosition = state.basePosition:Lerp(
+					towPosition :: Vector3,
+					1 - math.exp(-TowConstants.FOLLOW_RATE_PER_SEC * dt)
+				)
+			end
+
 			local shouldUpdate: boolean
-			if intro then
+			if intro or towed then
 				-- Distance culling holds a block's pivot still for whole
 				-- frames. That is invisible on a settled block and very
 				-- visible on one mid-pop, so the intro opts out.

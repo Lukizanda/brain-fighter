@@ -2137,3 +2137,7 @@ A senior-designer session reviewed `IslandReview` around the Brain's numbers and
 ## [2026-11-14] ingest | Decisions after the senior review; measured layout page
 
 The user decided the review's five recommendations: tighten the Brain's volley spread (10 to 4 degrees, done in `BossConfig`), defer the premium reach rule to the balancing pass, replace "lower the letters" with the boss pulling letters to itself, try gates that stay open while a player is beyond them, and widen the cave plug (done on the review copy, 12 to 17 studs). Contracts for the letter pull and gate hold zones are on [[design/boss-arena]] and two build sessions were started. A new page, `design/boss-arena-review-layout.html`, draws the review copy top-down from geometry exported from Studio; the old concept sketch now points to it.
+
+## [2026-11-14] ingest | Letter pull and gate hold zones built
+
+Two builds from the user's decisions landed. The Brain now pulls the nearest letter within 60 studs toward itself and eats it on arrival; a player can pop it in flight ([[systems/Boss]] § Hunger, [[systems/BlockSpawner]] § Tows). A regenerating wall now waits while a player is inside a `GateHoldZone` with its `GateId` ([[systems/BreakableWalls]]); four zones were placed on the review copy and the Spit gate was seen held open and released. Both sessions reported unverified test fixes; the parent's full run was 101/102, the failure a real one-step lag in `isTowed`, fixed, then Arena 37/37. Nobody has watched a tow on a client.

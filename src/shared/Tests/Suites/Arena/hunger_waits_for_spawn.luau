@@ -5,8 +5,8 @@
 ----------------------------------------------------------------------
 -- REAL BOSS, in a padded arena with a 1 s entrance delay and a very short eat
 -- interval. A block sits beside the BossPoint. While the round runs with
--- nobody arrived there is no boss and the block stays; after the arrival the
--- boss appears and then eats it.
+-- nobody arrived there is no boss and the block stays put, untowed; after the
+-- arrival the boss appears, pulls it in and eats it.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,7 +18,9 @@ local DELAY_SEC = 1
 local INTERVAL_SEC = 0.2
 -- Generous: the block is a few studs from the BossPoint and the boss stands on it.
 local RADIUS_STUDS = 40
-local BLOCK_OFFSET = Vector3.new(4, 4, 0)
+local PULL_SPEED = 200
+local REACH_STUDS = 4
+local BLOCK_OFFSET = Vector3.new(12, 4, 0)
 -- Several intervals of hold with nobody arrived.
 local HOLD_OBSERVE_SEC = INTERVAL_SEC * 4
 local SPAWN_TIMEOUT_SEC = DELAY_SEC + 2
@@ -44,6 +46,8 @@ return {
 			configureSpec = function(spec: any)
 				spec.eatIntervalSec = INTERVAL_SEC
 				spec.eatRadius = RADIUS_STUDS
+				spec.eatPullSpeed = PULL_SPEED
+				spec.eatReach = REACH_STUDS
 				spec.eatHealFraction = 0
 			end,
 		})
@@ -58,7 +62,7 @@ return {
 		bf:startRound()
 		task.wait(HOLD_OBSERVE_SEC)
 		ctx.bossDuringHold = bf:boss() ~= nil
-		ctx.keptDuringHold = hf:blockAt(pool, blockAt) ~= nil
+		ctx.keptDuringHold = hf:blockAt(pool, blockAt) ~= nil and #hf:towed(pool) == 0
 
 		ctx.touch = bf:arrive(player)
 		ctx.spawned = bf:waitFor(function() return bf:boss() ~= nil end, SPAWN_TIMEOUT_SEC) ~= nil
@@ -75,7 +79,7 @@ return {
 			return false, "the boss spawned with nobody on the island"
 		end
 		if not ctx.keptDuringHold then
-			return false, "a block was eaten during the entrance hold"
+			return false, "a block was pulled or eaten during the entrance hold"
 		end
 		if ctx.touch ~= "teleported" then
 			return false, "the arrival touch returned " .. tostring(ctx.touch)

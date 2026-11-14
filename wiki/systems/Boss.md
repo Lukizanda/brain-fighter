@@ -300,41 +300,54 @@ Verified by `boss_holds_for_arrival`, `boss_instant_without_pad` and
 probe part. Not verified: a real padded arena running the entrance end to end on a
 client, the cue audio, two clients.
 
-## Hunger (Phase 8 stage 9, 2026-11-13)
+## Hunger (Phase 8 stage 9; letter pull since 2026-11-14)
 
-The "hungry brain" ([[design/boss-arena]] § Hungry brain): the boss eats the nearest
-letter block on a timer and heals a little, so letters near it are urgent.
+The "hungry brain" ([[design/boss-arena]] § Letter pull): on a timer the boss pulls the
+nearest letter block to itself and eats it on arrival, healing a little. A player can
+pop the letter in flight and take it.
 
-| `BossConfig` value (Brain) | Start | Meaning |
+The first version (2026-11-13) ate a letter already within 25 studs in 3D. A level
+review found it could reach almost nothing, because letters float well above the boss,
+and the user asked for the boss to suck letters to it instead.
+
+| `BossConfig` value (Brain) | Value | Meaning |
 |---|---|---|
-| `eatIntervalSec` | 5 | Seconds between bites. 0 or less, or absent, switches hunger off |
-| `eatRadius` | 25 | Studs from the boss's root, measured in 3D. 0 or less, or absent, switches it off |
-| `eatHealFraction` | 0.01 | Share of maximum health healed per bite. 0 still eats, heals nothing and sends no heal cue |
+| `eatIntervalSec` | 5 | Seconds between pulls, counted from the end of the last tow. 0 or less, or absent, switches hunger off |
+| `eatRadius` | 60 | Studs from the boss, measured **horizontally**. 0 or less, or absent, switches it off |
+| `eatPullSpeed` | 12 | Studs a second the letter travels |
+| `eatReach` | 8 | Studs (3D) from the boss's root at which the letter is eaten |
+| `eatHealFraction` | 0.01 | Share of maximum health healed per letter eaten. 0 still pulls and eats, heals nothing and sends no heal cue |
+
+A type with an interval and radius but no positive `eatPullSpeed` or `eatReach` is
+treated as a config mistake: it does not eat, and warns.
 
 - `Boss/Scripts/BossHunger.luau` is one small object per boss, ticked by
   `BossController` beside the state machine. It is a timer and not an AI state,
-  because the boss eats whatever else it is doing.
-- No controller exists before the boss spawns and it stops ticking at death, which
-  covers "not during the entrance" and "not when dead".
-- It does not eat while the character carries `_frozen`, and the interval does not run
-  while frozen. **No stun status exists in the code**, so freeze is the only hold.
-- The boss never touches blocks. It asks `BlockPoolRegistry.takeNearestEligible`
-  ([[systems/BlockSpawner]] § Pool registry); the pool excludes word-kit letters and
-  freed fossil letters.
+  because hunger runs whatever else the boss is doing.
+- One letter in tow at a time. The letter follows the boss as the boss moves.
+- **Popped in flight:** the player gets the letter through the normal pop, the boss
+  does not heal, and the interval starts again from zero.
+- **Frozen:** the letter hangs where it is and the interval does not run. No stun
+  status exists in the code, so freeze is the only hold.
+- **Ending:** a letter in tow is removed when the boss dies, its controller is
+  destroyed or the round ends.
+- The boss never touches blocks. It asks the pool, through `BlockPoolRegistry`, to
+  begin a tow, advance it each tick toward the boss's current position, or cancel it
+  ([[systems/BlockSpawner]] § Tows). The pool never tows word-kit letters or freed
+  fossil letters.
 - The heal goes through Health's `applyDamage.heal` with cause `BossHunger`.
-- **What a player sees:** the existing laser beam from where the block was to the boss
-  (the collect stream is bound to a player, so it was not reused), and the
-  `impact_heal` cue on the boss when a bite actually healed. Both are stand-ins sent
-  with `VfxBroadcast`; `impact_heal` carries its own sound.
+- **What a player sees:** a curved tether from the letter to the boss, tinted with the
+  letter's colour, for as long as it is in tow (`client/Vfx/LetterTowTether`), and the
+  `impact_heal` cue on the boss when a letter eaten actually healed. No new audio.
 
-Verified 2026-11-13: nine `hunger_*` tests in the Arena suite; `RunTests=all` gave
-89/90 with only the intermittent `NPC_deals_damage` failing; shipped block counts
-unchanged.
+Verified 2026-11-14: thirteen `hunger_*` tests in a 37/37 Arena run; the full run
+before one last fix was 101/102 with only `hunger_tow_poppable` failing (a popped
+block read as still in tow for one deferred step; `isTowed` now also checks the block
+is still in the world). Shipped block counts unchanged.
 
-**Not seen on a real Brain.** In the shipped `Default` arena the nearest letter is
-about 63 studs from the boss, so it never eats there. On the staged island 4 letters
-sit within 25 studs of the boss point, so it should bite there, but that waits on the
-swap. Radius and heal are stage 4 tuning.
+**Not seen on a real Brain, and nobody has watched a tow on a client.** The tether, the
+client animator following a moving block, and a real tap on a letter in flight are
+untested outside module-level tests.
 
 ## Future Work
 

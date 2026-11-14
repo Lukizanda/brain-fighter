@@ -12,10 +12,11 @@
 -- bound, and a test can register a pool in its own arena id without touching
 -- the game's.
 --
--- It holds references and forwards one question; it owns no block state. The
+-- It holds references and forwards questions; it owns no block state. The
 -- pool owns the blocks and decides what is eligible.
 --
--- Today's only asker is the boss's hunger (Boss/Scripts/BossHunger).
+-- Today's only asker is the boss's hunger (Boss/Scripts/BossHunger), through
+-- the pool's tow API: begin a tow, advance it each tick, cancel it.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -26,7 +27,8 @@ local pools: { [string]: BlockSpawner.BlockSpawner } = {}
 
 local BlockPoolRegistry = {}
 
-export type TakenBlock = BlockSpawner.TakenBlock
+export type Tow = BlockSpawner.Tow
+export type TowStep = BlockSpawner.TowStep
 
 function BlockPoolRegistry.register(arenaId: string, pool: BlockSpawner.BlockSpawner)
 	pools[arenaId] = pool
@@ -40,15 +42,40 @@ function BlockPoolRegistry.unregister(arenaId: string, pool: BlockSpawner.BlockS
 	end
 end
 
--- Take the nearest eligible block within `radius` of `point` out of `arenaId`'s
--- pool, through the pool's normal removal path. nil when the arena has no pool
--- or nothing eligible is in range.
-function BlockPoolRegistry.takeNearestEligible(arenaId: string, point: Vector3, radius: number): TakenBlock?
+-- Start towing the nearest eligible block within `radius` (horizontal) of
+-- `point` in `arenaId`'s pool. nil when the arena has no pool or nothing
+-- eligible is in range.
+function BlockPoolRegistry.beginTow(arenaId: string, point: Vector3, radius: number): Tow?
 	local pool = pools[arenaId]
 	if pool == nil then
 		return nil
 	end
-	return pool:takeNearestEligible(point, radius)
+	return pool:beginTow(point, radius)
+end
+
+-- One tick of a tow begun in `arenaId`. "gone" when the arena has no pool
+-- (the block went with it).
+function BlockPoolRegistry.advanceTow(
+	arenaId: string,
+	block: Model,
+	target: Vector3,
+	speed: number,
+	reach: number,
+	dt: number
+): TowStep
+	local pool = pools[arenaId]
+	if pool == nil then
+		return "gone"
+	end
+	return pool:advanceTow(block, target, speed, reach, dt)
+end
+
+-- End a tow by removing the block.
+function BlockPoolRegistry.cancelTow(arenaId: string, block: Model)
+	local pool = pools[arenaId]
+	if pool ~= nil then
+		pool:cancelTow(block)
+	end
 end
 
 return BlockPoolRegistry

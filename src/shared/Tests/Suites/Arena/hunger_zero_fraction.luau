@@ -1,12 +1,14 @@
 --!strict
 
 ----------------------------------------------------------------------
--- hunger_zero_fraction — a heal fraction of 0 still eats, and heals nothing
+-- hunger_zero_fraction — a heal fraction of 0 still pulls and eats, but heals nothing
 ----------------------------------------------------------------------
--- MODULE LEVEL: BossHunger on two stand-in bosses (fraction 0, and fraction
--- left out of the spec), ticked by hand. Each takes a block and neither
--- raises its health. Not covered: that no heal cue is sent (a VfxBroadcast
--- payload is not observable from the server; a client view is needed).
+-- MODULE LEVEL: BossHunger on a stand-in boss, ticked by hand, once with the
+-- fraction at 0 and once with it absent. Both pull the letter and eat it on
+-- arrival (the pressure stays) and neither changes the boss's health.
+--
+-- NOT covered: that no heal cue is sent. The cue is a VfxBroadcast to
+-- clients; the server has nothing to read back (vfx-sfx.md).
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,12 +17,12 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local BossHunger = require(ServerScriptService.Server.Boss.Scripts.BossHunger)
 local hungerFixture = require(ReplicatedStorage.Shared.Tests.Helpers.hungerFixture)
 
-local ARENA_ID = "HungerZeroHeal"
+local ARENA_ID = "HungerZero"
 local INTERVAL_SEC = 5
 local RADIUS_STUDS = 25
-local START_HEALTH = 400
-local FIRST_OFFSET = Vector3.new(5, 0, 0)
-local SECOND_OFFSET = Vector3.new(0, 0, 8)
+local START_HEALTH = 500
+local BLOCK_OFFSET = Vector3.new(8, 4, 0)
+local ARRIVE_DT_SEC = 0.1
 local NEVER_REFILL_SEC = 600
 
 return {
@@ -32,46 +34,54 @@ return {
 
 	run = function(ctx: any)
 		local hf = ctx.hf
-		local bossA, humanoidA, rootA = hf:fakeBoss(nil, START_HEALTH)
-		local bossB, humanoidB, rootB = hf:fakeBoss(nil, START_HEALTH)
-		local firstAt = rootA.Position + FIRST_OFFSET
-		local secondAt = rootA.Position + SECOND_OFFSET
-		local pool = hf:pool({ hf:zone(firstAt), hf:zone(secondAt) }, NEVER_REFILL_SEC)
-		local zero = BossHunger.new(bossA, humanoidA, rootA, hungerFixture.spec(INTERVAL_SEC, RADIUS_STUDS, 0))
-		local absent = BossHunger.new(bossB, humanoidB, rootB, hungerFixture.spec(INTERVAL_SEC, RADIUS_STUDS, nil))
-		ctx.enabled = zero ~= nil and absent ~= nil
-		if not zero or not absent then
+		local boss, humanoid, root = hf:fakeBoss(nil, START_HEALTH)
+		local zoneAt = root.Position + BLOCK_OFFSET
+		local pool = hf:pool({ hf:zone(zoneAt) }, NEVER_REFILL_SEC)
+		local hunger = BossHunger.new(boss, humanoid, root, hungerFixture.spec(
+			INTERVAL_SEC, RADIUS_STUDS, 0, hungerFixture.FAST_PULL_SPEED, hungerFixture.REACH_STUDS
+		))
+		if not hunger then
 			return
 		end
+		ctx.enabled = true
 
-		-- The pool hears a removal one frame after Destroy (as for a pop), so
-		-- its counts are read after a yield.
-		zero:tick(INTERVAL_SEC)
-		task.wait()
-		ctx.activeAfterZero = #pool:getActiveBlocks()
-		ctx.healthAfterZero = humanoidA.Health
+		hunger:tick(INTERVAL_SEC)
+		ctx.pulled = #hf:towed(pool) == 1
+		hunger:tick(ARRIVE_DT_SEC)
+		ctx.eaten = hf:blockAt(pool, zoneAt) == nil
+		ctx.health = humanoid.Health
 
-		absent:tick(INTERVAL_SEC)
-		task.wait()
-		ctx.activeAfterAbsent = #pool:getActiveBlocks()
-		ctx.healthAfterAbsent = humanoidB.Health
+		-- An absent fraction behaves the same. The first object's letter is
+		-- gone, so a second pool gives the second object one.
+		local pool2 = hf:pool({ hf:zone(zoneAt) }, NEVER_REFILL_SEC)
+		local hungerNoFraction = BossHunger.new(boss, humanoid, root, hungerFixture.spec(
+			INTERVAL_SEC, RADIUS_STUDS, nil, hungerFixture.FAST_PULL_SPEED, hungerFixture.REACH_STUDS
+		))
+		if not hungerNoFraction then
+			return
+		end
+		hungerNoFraction:tick(INTERVAL_SEC)
+		ctx.pulled2 = #hf:towed(pool2) == 1
+		hungerNoFraction:tick(ARRIVE_DT_SEC)
+		ctx.eaten2 = hf:blockAt(pool2, zoneAt) == nil
+		ctx.health2 = humanoid.Health
 	end,
 
 	verify = function(ctx: any): (boolean, string?)
 		if not ctx.enabled then
-			return false, "a spec with a 0 or missing heal fraction was switched off (it must still eat)"
+			return false, "BossHunger.new returned nil for a spec with a 0 or absent heal fraction"
 		end
-		if ctx.activeAfterZero ~= 1 then
-			return false, string.format("fraction 0 left %s blocks, expected 1 (it must eat one)", tostring(ctx.activeAfterZero))
+		if not ctx.pulled or not ctx.eaten then
+			return false, "with fraction 0 the letter was not pulled and eaten"
 		end
-		if ctx.healthAfterZero ~= START_HEALTH then
-			return false, "fraction 0 raised health"
+		if ctx.health ~= START_HEALTH then
+			return false, "fraction 0 changed the boss's health"
 		end
-		if ctx.activeAfterAbsent ~= 0 then
-			return false, string.format("a missing fraction left %s blocks, expected 0", tostring(ctx.activeAfterAbsent))
+		if not ctx.pulled2 or not ctx.eaten2 then
+			return false, "with no fraction the letter was not pulled and eaten"
 		end
-		if ctx.healthAfterAbsent ~= START_HEALTH then
-			return false, "a missing fraction raised health"
+		if ctx.health2 ~= START_HEALTH then
+			return false, "an absent fraction changed the boss's health"
 		end
 		return true, nil
 	end,

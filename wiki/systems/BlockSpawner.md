@@ -39,7 +39,7 @@ Server-side populator that keeps a target count of [[systems/LetterBlock|LetterB
 | `:rollLetter(table)` | `(string) -> (string, string)` | A letter and colour drawn as a volume would draw them (wildcards gold), spawning nothing. |
 | `:spawnTimedBlock(letter, color, cframe, lifetimeSec)` | `-> Model?` | A poppable block of this arena that sits in no box: not in the target, never refilled, left alone by `rerollAll()`. Removes itself after the lifetime. |
 | `:getTimedBlocks()` / `:clearTimedBlocks()` | `() -> { Model }` / `() -> number` | The live timed blocks, and remove them all. `destroy()` clears them too. |
-| `:takeNearestEligible(point, radius)` | `(Vector3, number) -> TakenBlock?` | Removes the nearest ordinary block within `radius` through the normal removal path (so its zone refills as after a pop) and returns its position, letter and colour. Kit letters and timed blocks are never eligible. |
+| `:beginTow(point, radius)` / `:advanceTow(...)` / `:cancelTow(block)` / `:isTowed(block)` | see § Tows | Pull one ordinary block toward a moving point. Replaced `takeNearestEligible` on 2026-11-14. |
 | `:getKitGates()` / `:getKitWords()` | `() -> { string }` | The gate ids the pool's kits listen for, and the word each kit currently shows. |
 | `.LETTER_FREQUENCIES` | `{ [string]: number }` | Scrabble-standard 98-tile distribution used for weighted letter picks. Module-level: derived from constants, so it is built once at require rather than per pool. |
 
@@ -226,15 +226,36 @@ time; `FossilExpiresAt` is published for `LetterBlockAnimator` to use); popping 
 block through the real remote; the glyph on the island's own rocks; any of it under
 real boss fire.
 
-## Pool registry (Phase 8 stage 9, 2026-11-13)
+## Pool registry and tows (Phase 8 stage 9, 2026-11-13; tows 2026-11-14)
 
 `src/server/BlockSpawner/BlockPoolRegistry.luau` is how another server system reaches
 an arena's pool. The pools are built inside `BlockSpawnerService`, a Script that cannot
 be required, so the service registers each pool here. It is a module and not a
 BindableFunction, following `SessionRegistry`: typed calls, no yield when nothing is
 bound, and a test can register a pool under its own arena id. It holds references and
-forwards one question, `takeNearestEligible(arenaId, point, radius)`; it owns no block
-state. The only asker today is the boss's hunger ([[systems/Boss]] § Hunger).
+forwards questions; it owns no block state. The only asker today is the boss's hunger
+([[systems/Boss]] § Hunger).
+
+### Tows
+
+A tow pulls one block toward a point that may move. The pool knows nothing about
+bosses: the target is just a point.
+
+- `beginTow(point, radius)` picks the nearest eligible block within `radius` measured
+  horizontally and marks it towed. Kit letters, timed blocks (freed fossil letters) and
+  blocks already in tow are never eligible; quota-zone blocks are.
+- `advanceTow` moves it toward the given target by speed times dt and reports whether
+  it is still moving, has arrived within the given reach (and was removed), or is gone.
+- `cancelTow` removes the block. However a towed block ends, it leaves through the
+  normal removal path, so its zone refills as after a pop and the counts stay right.
+- `rerollAll()` leaves a block in tow alone.
+- **The pool is the one writer of a towed block's position.** It moves the model on
+  the server, so the pop's server-side range check reads the current position, and
+  publishes `Block.TowPosition` and `Block.TowTarget` with the tag `LetterBlockTowed`
+  (`TowConstants.luau`). `LetterBlockAnimator` rewrites a block's pivot every frame,
+  so for a towed block it follows the published position instead of its spawn point.
+- `isTowed(block)` is false for a block that has left the world, even before its
+  deferred `Destroying` handler clears the entry.
 
 ## Design decisions
 

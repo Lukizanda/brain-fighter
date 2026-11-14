@@ -46,10 +46,9 @@ local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local log = Logger.new("WordKitWatcher")
 
 -- The wall-side half of the word-kit contract: a BreakableWall part names
--- itself with this attribute and a kit volume's `KitGate` refers to it. It
--- lives here, not in BreakableWallConstants, because the walls system does
--- not read it.
-local GATE_ID_ATTRIBUTE = "GateId"
+-- itself with this attribute and a kit volume's `KitGate` refers to it. The
+-- walls system owns the name (it reads it for gate hold zones too).
+local GATE_ID_ATTRIBUTE = BreakableWallConstants.Authored.GateId
 
 local WALL_STATE_ATTRIBUTE = BreakableWallConstants.Published.State
 local STATE_BROKEN = BreakableWallConstants.State.Broken

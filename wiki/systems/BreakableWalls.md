@@ -75,8 +75,22 @@ the volley fails a test instead of quietly thinning every wall.
 
 - `RegenSec > 0`: re-seals that long after breaking, unless a character overlaps the
   part, in which case it asks again every `REGEN_RETRY_SEC` (0.5 s).
+- **Gate hold zones (2026-11-14):** it also waits while a living player's root part
+  is inside any part tagged `GateHoldZone` whose `GateId` equals the wall's, in the
+  same arena. This keeps a gate open while someone is on the ledge beyond it
+  ([[design/boss-arena]] § Gate hold zones). Only players count, unlike the in-wall
+  check, which counts any character: an NPC or the boss in a zone holds nothing.
+  A rotated zone is honoured. Zones are read live at re-seal time. A zone no wall
+  pairs with warns once. `GateId` now lives in `BreakableWallConstants.Authored`;
+  word kits read the same attribute.
 - Otherwise it stays broken.
 - Every wall of an arena returns to intact on that arena's `RoundStarted`.
+
+Verified 2026-11-14: seven `gate_*` tests in a 37/37 Arena run, and live on the review
+island: with `RegenSec` cut to 3 for the check, the Spit gate stayed broken for 7 s
+while the player stood on the ledge beyond it and re-sealed within 2 s of the player
+returning. Hits were fired on the `WorldImpact` event with a Boss-tagged stand-in, not
+by a real boss.
 
 ## Client look (greybox)
 
