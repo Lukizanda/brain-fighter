@@ -2133,3 +2133,7 @@ The pages under `wiki/systems/`, `wiki/concepts/`, `wiki/reference/` and the non
 ## [2026-11-14] ingest | Senior review of the island copy
 
 A senior-designer session reviewed `IslandReview` around the Brain's numbers and ran four designer sessions: exits made jumpable with stairs back in, the rim broken up, cover regrouped into formations, spires reshaped, a dais at the boss spot, the cave reshaped. Its main finding is that the Brain is nearly harmless at the 100 studs where it stops to fire, which geometry cannot fix; five recommendations await the user. Recorded on [[design/boss-arena]] § Senior review of the copy. Place file only.
+
+## [2026-11-14] ingest | Decisions after the senior review; measured layout page
+
+The user decided the review's five recommendations: tighten the Brain's volley spread (10 to 4 degrees, done in `BossConfig`), defer the premium reach rule to the balancing pass, replace "lower the letters" with the boss pulling letters to itself, try gates that stay open while a player is beyond them, and widen the cave plug (done on the review copy, 12 to 17 studs). Contracts for the letter pull and gate hold zones are on [[design/boss-arena]] and two build sessions were started. A new page, `design/boss-arena-review-layout.html`, draws the review copy top-down from geometry exported from Studio; the old concept sketch now points to it.

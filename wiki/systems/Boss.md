@@ -259,6 +259,7 @@ All boss constants are now per-type in `BossConfig.BOSS_TYPES[<name>]`. Brain's 
 | attackWindupSec | 0.5 s | `BOSS_TYPES.Brain.attackWindupSec` |
 | continuousFacing | true | `BOSS_TYPES.Brain.continuousFacing` — boss tracks player in all non-moving states; `false`/nil = AttackPrep only |
 | FireballVolley count / speed / damage | 20 / 90 / 5 HP | `BOSS_TYPES.Brain.skills.FireballVolley.deliveryParams` + `.onImpact[1].amount` |
+| FireballVolley spread | 4 degrees sideways, 0.4 of that vertically (tightened from 10 on 2026-11-14: at 10 a volley from the boss's stopping distance mostly missed, see [[design/boss-arena]] § Decisions after the senior review) | `...FireballVolley.deliveryParams.spreadDegrees` |
 | GroundSlam radius / damage / knockup | 22 / 25 HP / 60 | `BOSS_TYPES.Brain.skills.GroundSlam.deliveryParams` + `.onImpact[*]` |
 
 Add a new boss type by adding another entry to `BOSS_TYPES`; switch the active boss by setting `workspace.BossPoint:SetAttribute("BossType", "<name>")`. Falls back to `BossConfig.DEFAULT_TYPE` when unset.

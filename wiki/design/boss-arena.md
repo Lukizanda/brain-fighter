@@ -7,7 +7,9 @@ updated: 2026-11-13
 # Boss Arena Layout
 
 Companion to [[systems/Boss]], [[systems/BlockSpawner]] and [[systems/SkillPipeline]].
-Layout sketch: [boss-arena-layout.html](boss-arena-layout.html) (top-down, to scale).
+Current layout, drawn from the review copy's measured geometry:
+[boss-arena-review-layout.html](boss-arena-review-layout.html). The original concept
+sketch is [boss-arena-layout.html](boss-arena-layout.html) (v3, out of date).
 
 ## Why
 
@@ -503,6 +505,58 @@ Recommendations that need code or a decision, **none decided**:
 4. Gates that do not re-seal while a player is beyond them, in place of the stairs.
 5. Widen the cave plug to 16 to 18 studs so it opens as fast as a gate.
 
+## Decisions after the senior review (user, 2026-11-14)
+
+| # | Recommendation | Decision |
+|---|---|---|
+| 1 | Make the boss dangerous at its fighting range | **Tighten the spread.** `FireballVolley.spreadDegrees` 10 to 4 in `BossConfig`. `attackRange` stays 100 |
+| 2 | Shorter pop reach for premium letters | **Deferred** to the balancing pass, once there is real play time |
+| 3 | Lower the letters so hunger bites | **Replaced by the user's idea: the boss sucks letters to it.** See § Letter pull |
+| 4 | Gates do not re-seal while a player is beyond them | **Try it.** See § Gate hold zones |
+| 5 | Widen the cave plug | **Done on the review copy**: `Gate_CaveRidge` 12 to 17 studs wide, jambs narrowed to match; 5 of 5 rays from the boss point at muzzle height hit the plug first |
+
+Known side effect of 1, not yet measured: gates open only when shots miss the player
+in front of them, and a tighter spread misses less, so baiting a gate from range will
+be slower than the reviewer's "about 3 volleys".
+
+### Letter pull (replaces the hunger reach rule)
+
+The hungry brain could reach almost nothing, because letters float well above it. The
+boss now draws a letter to itself, so height stops mattering and the player can see
+the meal coming and take it away.
+
+- Every `eatIntervalSec` the living, unfrozen boss with no letter already in tow picks
+  the nearest eligible letter within `eatRadius`, measured **horizontally**, and starts
+  pulling it. `eatRadius` starts at 60.
+- The letter travels toward the boss at `eatPullSpeed` (start 12 studs a second),
+  following the boss as it moves, with a visible tether.
+- **A letter in tow can still be popped.** The player who pops it gets it and the boss
+  goes hungry; the interval starts again.
+- When it comes within `eatReach` of the boss (start 8 studs) it is eaten: removed,
+  and the boss heals `eatHealFraction` as before.
+- One letter at a time. While the boss is frozen the letter hangs where it is. If the
+  boss dies or the round ends, a letter in tow is removed.
+- However a towed letter ends, its zone refills as after a pop. Word-kit letters and
+  freed fossil letters are never pulled.
+- Ownership as before: the Boss system decides when and whom; BlockSpawner owns the
+  block, including its position while in tow.
+
+### Gate hold zones
+
+A player beyond a gate could be sealed out when it regenerated. The review copy got
+stairs back in; the rule below is the cleaner fix and is being tried alongside them.
+
+| Thing | Meaning |
+|---|---|
+| tag `GateHoldZone` | on an invisible, non-colliding part that covers the ground beyond a gate |
+| `GateId` | string on the zone and on the `BreakableWall`; they pair when equal and in the same arena |
+
+A regenerating wall that is due to re-seal waits while a living player's character is
+inside any hold zone paired with it, and asks again on the existing retry interval,
+exactly as it already waits for a character standing in the wall itself. `GateId` is
+the attribute word kits already use, so the cave plug's kit still re-rolls when the
+plug finally re-seals.
+
 ## Pick up here (written 2026-11-13 at the end of the session)
 
 All code for stages 1, 2 and 5 to 9 is committed. What is left needs the user and
@@ -522,7 +576,8 @@ word-kit tags and the rocks' fossil tags live only in it.
    (premium letters reachable from the rim; premium patch left behind by the boss).
 4. **Small follow-ups:** a fade on a freed fossil letter before it disappears
    (`FossilExpiresAt` is published for it); the layout sketch
-   `boss-arena-layout.html` still shows the removed second cave and the old cover;
+   the concept sketch is superseded by `boss-arena-review-layout.html` (2026-11-14),
+   which must be regenerated from Studio if the level changes again;
    the `NPC_deals_damage` test failed in two of four full runs.
 
 ## Open questions

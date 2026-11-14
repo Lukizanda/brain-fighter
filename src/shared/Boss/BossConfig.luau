@@ -39,11 +39,17 @@ local bossTypes: { [string]: BossTypeSpec } = {
 		attackRange      = 100,
 		attackWindupSec  = 0.5,
 		continuousFacing = true,
-		-- Hungry brain: the letters around the boss are urgent. At these
-		-- values it heals at most 12% of its health a minute. Setting
-		-- eatHealFraction to 0 keeps the pressure and drops the heal.
+		-- Hungry brain: every eatIntervalSec the boss pulls the nearest
+		-- letter within eatRadius studs (horizontal; height ignored) toward
+		-- itself at eatPullSpeed studs a second, and eats it on coming within
+		-- eatReach, healing eatHealFraction of its health. A player can pop
+		-- the letter first. At these values it heals at most about 12% a
+		-- minute, less in practice since a pull takes several seconds.
+		-- Setting eatHealFraction to 0 keeps the pressure and drops the heal.
 		eatIntervalSec   = 5,
-		eatRadius        = 25,
+		eatRadius        = 60,
+		eatPullSpeed     = 12,
+		eatReach         = 8,
 		eatHealFraction  = 0.01,
 		skills = {
 			FireballVolley = {
@@ -53,7 +59,10 @@ local bossTypes: { [string]: BossTypeSpec } = {
 				deliveryParams = {
 					count            = 20,
 					speed            = 90,
-					spreadDegrees    = 10,
+					-- Tightened from 10 on 2026-11-14: at 10 a volley fired from the
+					-- boss's own stopping distance (attackRange) mostly missed a
+					-- standing player, so nothing on the island was dangerous.
+					spreadDegrees    = 4,
 					lifetimeSec      = 3,
 					proximityRadius  = 3,
 					size             = 2,
