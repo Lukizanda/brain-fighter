@@ -1,7 +1,7 @@
 ---
 type: system
-description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu as circular hold-to-charge panels with concentric tier rings, MemorizeButton, MindFullIndicator), the mobile DashButton, and the seven own-ScreenGui elements (DeathScreen, DamageFeedback, GameState, Scoreboard, BossHud, KillFeed, RoundTimer — the last ported 2026-09-19). Round-over copy comes from the payload's outcome id via RoundOutcomeCopy. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291. SettingsMenu cut 2026-09-15, refactor chunk 12.)
-updated: 2026-10-15
+description: Code-driven HUD — Builder + Config + LayoutManager pattern. Attribute bars, BuffTray, the Phase 4 gameplay widgets (BufferDisplay, SpellMenu as circular hold-to-charge panels with concentric tier rings, MemorizeButton, MindFullIndicator), the mobile DashButton, and the seven ported-in-chunk-12 elements (six own-ScreenGui: DeathScreen, DamageFeedback, GameState, Scoreboard, BossHud, RoundTimer — the last ported 2026-09-19 — plus KillFeed, which registers into TopRight), the lobby-only SettingsGui (2026-09-20). Round-over copy comes from the payload's outcome id via RoundOutcomeCopy. (WeaponRolodex + LoadoutDropClient removed 2026-06-22, commit 6610291. SettingsMenu cut 2026-09-15, refactor chunk 12.)
+updated: 2026-11-14
 ---
 
 # HUD System
@@ -24,7 +24,7 @@ flowchart LR
     PS["PlayerSession.get()<br/>wordBuffer · energyReservoirs · mindFullManager"]:::state
     HUM["Character.Humanoid<br/>HealthChanged"]:::state
     REM["Server RemoteEvents<br/>KillFeed · ScoreUpdate"]:::state
-    CFG["GameConfig flags<br/>TEAMS_ENABLED · ROUND_TIMER_ENABLED"]:::state
+    RND["Round payload<br/>timeLimit"]:::state
   end
 
   subgraph LM["HudLayoutManager (singleton, src/shared/Hud/HudLayoutManager.luau)"]
@@ -104,8 +104,8 @@ flowchart LR
   PS -- "energyReservoirs.changed" --> SMG
   PS -- "mindFull / mindFreed" --> MFI
   HUM -- "HealthChanged" --> GHUD
-  REM -- "OnClientEvent" --> KFG & TSG
-  CFG -. "GameConfig gate" .-> RTG
+  REM -- "OnClientEvent" --> KFG
+  RND -. "timeLimit present" .-> RTG
 ```
 
 Legend: blue = Coordinator LocalScript, orange = pure-module Builder, green = game-state source, purple = modal/own-ScreenGui (bypasses HudLayoutManager), gray = layout region. Solid arrows = mount/register. Dashed arrows = own ScreenGui parented directly to `PlayerGui`.
@@ -218,6 +218,8 @@ A new surface, not the old one restored: `SettingsGui` (gear button in the `TopR
 src/shared/Hud/
   HudLayoutManager.luau           — places elements at named regions (BottomLeft, BottomRight, TopRight, etc.)
   HudConstants.luau               — shared sizes / colors / margins
+  HudGate.luau                    — per-element policy (Always / ArenaOnly / LobbyOnly); see [[concepts/HudGate]]
+  PortalPanelBuilder/Config.luau, NameplateBuilder/Config.luau — world-space BillboardGuis (see § World-space builders)
   AttributeBarBuilder.luau        — Health / Stamina / Shield bars
   AttributeBarConfig.luau
   BuffTrayBuilder.luau            — top-right buff icons (scaffold)
@@ -273,6 +275,10 @@ src/client/UI/
   GameStateGui.client.luau        — own ScreenGui at HudConstants.LAYERS.Modal; end-of-round results overlay
   ScoreboardGui.client.luau       — own ScreenGui at HudConstants.LAYERS.Scoreboard; Y toggles the Tab-style panel
   KillFeedGui.client.luau         — TopRight coordinator; forwards KillFeed remote entries to KillFeedBuilder
+  BuffTrayGui.client.luau         — TopRight; empty tray awaiting a BuffAdapter
+  SettingsGui.client.luau         — gear in TopRight + panel at LAYERS.Modal, both LobbyOnly (see [[systems/Settings]])
+  PortalGui.client.luau           — Center region; the portal confirm panel
+  NameplateGui.client.luau        — drives NameplateBuilder over players and TrainingDummy rigs
 ```
 
 ## Phase 4 gameplay widgets

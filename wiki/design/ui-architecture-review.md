@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phase 4.8 — pre-Phase-5 UI architecture audit; findings, severity, go/no-go. Re-audited 2026-06-05 after the mobile/DASH + VFX + Phase 4.7 reorder work.
-updated: 2026-06-05
+updated: 2026-11-14
 ---
 
 # UI Architecture Review — Phase 4.8
@@ -19,6 +19,8 @@ The full layout & data-flow diagram is on the system page: [[systems/HUD]] § Sy
 - **Cleanup landed 2026-06-05:** R-1, R-2, R-3, R-4 **RESOLVED** and verified in a boot playtest (see § Cleanup verification). Remaining open: R-6, R-7 (Medium, magic-number extraction), R-5, R-8, R-9 (Low). **No High findings remain open.**
 - **Phase 5 gate: GO.** Zero correctness defects that block polish work; the structural High (R-1) is now closed.
 - **Since the 2026-05-20 audit:** F-5 (WeaponRolodex misplaced) and F-7 (stale `LayoutOrder = 2`) were already RESOLVED. Three new findings surfaced from the mobile/DASH work and SpellMenu growth (R-4 resolved; R-5/R-6/R-7 logged).
+
+> **Status check against `src/` (2026-11-14).** Several findings still marked OPEN above have since closed, and the file names have changed: **R-5** is resolved for TopRight (`stackVertical` + `stackPadding = 8` in `HudConstants`, refactor chunk 3; `TeamScoreGui` was deleted, so TopCenter now holds only `MindFullIndicatorGui` and `RoundTimer` lives in its own ScreenGui). **R-9** is resolved: every `_G.PlayerHud.*` write was deleted in chunk 3 and `grep _G.PlayerHud src/` finds nothing. **R-7**: `BuffTrayBuilder` now reads its padding/inset values from `BuffIconConfig` (`ICON_IMAGE_INSET`, `COUNTDOWN_BAR_HEIGHT`, ...), so the literals named here look moved (not line-by-line verified). **R-6** was not re-checked. `SettingsMenuBuilder` (R-1) was cut in chunk 12 and a new `SettingsBuilder` replaced it on 2026-09-20; `WeaponRolodex` and `LoadoutDropClient` are gone (see [[systems/HUD]]). `src/shared/Hud/` holds 39 `.luau` files today (including `__tests.luau`; not 24) and `src/client/UI/` 15 scripts.
 
 ## Pass/fail per dimension
 

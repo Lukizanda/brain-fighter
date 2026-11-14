@@ -1,14 +1,14 @@
 ---
 type: system
 description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. One boss cycle per arena session, started on RoundStarted and stopped on RoundEnded; HUD remotes, perception and skill targets are all scoped to the BossPoint's arena (Phase 6 stage 3 + refactor chunk 9).
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # Boss
 
 Server-authoritative boss lifecycle: spawn → AI tick → death → respawn. Each boss type specifies its own rig template via `rigName`; the Brain boss uses `BossBrain` — an invisible R15 Patroller skeleton (for Humanoid physics) with a red sphere body and glowing yellow eyes welded on top. State machine: Idle → Patrol → AttackPrep → Attack → Cooldown. Client health HUD at TopCenter.
 
-Supersedes [[systems/BossAdapter]] (Phase 3 static Model). The `src/server/BossAdapter/BossService.server.luau` file has been renamed to `.disabled` and is no longer active.
+Supersedes [[systems/BossAdapter]] (Phase 3 static Model). The old `src/server/BossAdapter/` directory no longer exists under `src/` (no `.disabled` copy either).
 
 ## Files
 
@@ -127,11 +127,11 @@ Implementations live in [[systems/SkillPipeline|SkillDelivery]] (`handlers.proje
 
 ### FireballVolley (`delivery = "projectile"`)
 
-Part projectiles in spread. Each is `CanCollide = false` with a `LinearVelocity` constraint — Touched doesn't fire so hit detection is a per-Heartbeat proximity check (`≤ 3 studs`). 0.15 s stagger between projectiles; `attackComplete` set via `ctx.onComplete` after all are in flight. Brain's tuning: `count=20`, `speed=90`, damage `15 HP` (`onImpact = [{kind="damage", amount=15}]`). SFX hooks added 2026-08-04, both Brain and Wizard: `deliveryParams.launchEffectId = "projectile_boss_fireball"` (fired at the muzzle on every client) and `deliveryParams.impactEffectId = "impact_damage"`. Both `VfxConfig.EFFECTS` entries are audible reused-asset stubs, not final art. The launch cue was initially hung on `cosmeticEffectId` and was inaudible for two compounding reasons — see [[systems/AudioSFX]] § "Two traps that make a world SFX inaudible"; the short version is that a Sound is a child of its anchor (so the shot's death truncated it) and default 3D rolloff scales a 100-stud-away sound to roughly a tenth volume.
+Part projectiles in spread. Each is `CanCollide = false` with a `LinearVelocity` constraint — Touched doesn't fire so hit detection is a per-Heartbeat proximity check (`≤ 3 studs`). 0.15 s stagger between projectiles; `attackComplete` set via `ctx.onComplete` after all are in flight. Brain's tuning: `count=20`, `speed=90`, damage `5 HP` (`onImpact = [{kind="damage", amount=5}]`). SFX hooks added 2026-08-04, both Brain and Wizard: `deliveryParams.launchEffectId = "projectile_boss_fireball"` (fired at the muzzle on every client) and `deliveryParams.impactEffectId = "impact_damage"`. Both `VfxConfig.EFFECTS` entries are audible reused-asset stubs, not final art. The launch cue was initially hung on `cosmeticEffectId` and was inaudible for two compounding reasons — see [[systems/AudioSFX]] § "Two traps that make a world SFX inaudible"; the short version is that a Sound is a child of its anchor (so the shot's death truncated it) and default 3D rolloff scales a 100-stud-away sound to roughly a tenth volume.
 
 ### GroundSlam (`delivery = "aoe"`)
 
-0.8 s windup delay, then AOE within `radius=22` studs. Spawns a flat Cylinder shockwave visual (Neon yellow, Debris 0.5 s). All humanoids in radius take damage and receive a knockup. `attackComplete` set via `ctx.onComplete` after total cycle. Brain's tuning: `onImpact = [{kind="damage", amount=25}, {kind="knockup", force=60}]` — multi-effect composition. `deliveryParams.cosmeticEffectId = "aoe_boss_groundslam"` (added 2026-08-04) gives the shockwave a sound stub (reuses `SFX.impactHeavy` pitched down) — was previously silent.
+0.8 s windup delay, then AOE within `radius=22` studs. The skill has `minRange = 18`, and `AttackPrep` only offers it when the target is at or inside 18 studs (`dist <= minRange`), so at longer range the boss picks FireballVolley. Spawns a flat Cylinder shockwave visual (Neon yellow, Debris 0.5 s). All humanoids in radius take damage and receive a knockup. `attackComplete` set via `ctx.onComplete` after total cycle. Brain's tuning: `onImpact = [{kind="damage", amount=25}, {kind="knockup", force=60}]` — multi-effect composition. `deliveryParams.cosmeticEffectId = "aoe_boss_groundslam"` (added 2026-08-04) gives the shockwave a sound stub (reuses `SFX.impactHeavy` pitched down) — was previously silent.
 
 ## Client HUD
 
@@ -236,7 +236,7 @@ No changes needed in other systems:
 ## Lifecycle
 
 1. An arena's `RoundStarted` fires (or its session is already Active at boot); `BossService` finds that arena's `BossPoint` by name + `ArenaId`.
-2. `BossSpawner.spawn(bossPoint)` clones the Patroller rig, scales it 3×, places it; `BossService` stamps it with the arena's `ArenaId`.
+2. `BossSpawner.spawn(bossPoint)` clones the rig named by `typeSpec.rigName` (Patroller if unset), applies `typeSpec.bodyScale` (1 for Brain; Wizard is 2), places it; `BossService` stamps it with the arena's `ArenaId`.
 3. `BossController.new(boss, onPhaseChanged)` wires Perception + StateMachine + BossPhaseManager.
 4. `RunService.Heartbeat` drives `controller:tick(dt)` each frame.
 5. `humanoid.HealthChanged` fires `BossHealthChanged` (throttled 0.1 s).
@@ -258,7 +258,7 @@ All boss constants are now per-type in `BossConfig.BOSS_TYPES[<name>]`. Brain's 
 | attackRange | 100 studs | `BOSS_TYPES.Brain.attackRange` |
 | attackWindupSec | 0.5 s | `BOSS_TYPES.Brain.attackWindupSec` |
 | continuousFacing | true | `BOSS_TYPES.Brain.continuousFacing` — boss tracks player in all non-moving states; `false`/nil = AttackPrep only |
-| FireballVolley count / speed / damage | 20 / 90 / 15 HP | `BOSS_TYPES.Brain.skills.FireballVolley.deliveryParams` + `.onImpact[1].amount` |
+| FireballVolley count / speed / damage | 20 / 90 / 5 HP | `BOSS_TYPES.Brain.skills.FireballVolley.deliveryParams` + `.onImpact[1].amount` |
 | GroundSlam radius / damage / knockup | 22 / 25 HP / 60 | `BOSS_TYPES.Brain.skills.GroundSlam.deliveryParams` + `.onImpact[*]` |
 
 Add a new boss type by adding another entry to `BOSS_TYPES`; switch the active boss by setting `workspace.BossPoint:SetAttribute("BossType", "<name>")`. Falls back to `BossConfig.DEFAULT_TYPE` when unset.

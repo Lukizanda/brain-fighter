@@ -1,7 +1,7 @@
 ---
 type: concept
 description: A `.client.luau` only auto-runs when Rojo places it in a runnable container. ReplicatedStorage is not one of them.
-updated: 2026-04-30
+updated: 2026-11-14
 ---
 
 # LocalScript Placement
@@ -26,11 +26,12 @@ Rojo turns `.client.luau` files into LocalScripts and places them at whatever pa
 | `src/client/` | `StarterPlayer.StarterPlayerScripts.Client` | ✅ |
 | `src/shared/` | `ReplicatedStorage.Shared` | ❌ |
 | `src/server/` | `ServerScriptService.Server` | ❌ for `.client.luau`; ✅ for `.server.luau` |
+| `src/StarterCharacterScripts/` | `StarterPlayer.StarterCharacterScripts` | ✅ (per character; holds `Health.client.luau`) |
 
 ## When to use which folder
 
 - **Top-level client handler that should run for every player on join** → `src/client/`. Examples: HUD scripts, remote-event listeners, input handlers, replication consumers.
-- **Tool-specific client logic that ships with a Tool template** → `src/shared/Weapon/Templates/<Name>/Scripts/<Name>.client.luau`. These work because the Tool gets parented to `Backpack`/`Character` at runtime, which auto-runs LocalScripts inside.
+- **Tool-specific client logic that ships with a Tool template** → was `src/shared/Weapon/Templates/<Name>/Scripts/<Name>.client.luau`; the weapon stack and `Weapon/Templates` are gone (see [[systems/Weapon]]) and no Tool exists in `src/` today, but the rule still holds for any future Tool. These work because the Tool gets parented to `Backpack`/`Character` at runtime, which auto-runs LocalScripts inside.
 - **Module of shared logic** that some other script `require`s → `src/shared/` as a `ModuleScript` (no `.client` or `.server` suffix).
 
 The rule of thumb: **a `.client.luau` directly under `src/shared/` (not inside a Tool template) is wrong.** It will never run.

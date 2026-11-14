@@ -1,12 +1,12 @@
 ---
 type: system
 description: Weapon system (REMOVED 2026-06-22, commit 6610291; last Luau removed 2026-09-14, refactor chunk 11) — firearm/melee TPS stack deleted. No code remains under src/shared/Weapon; the folder survives only as a Studio-side container for Objects (LaserBeam, impact parts) and ViewModels. Retained as historical record.
-updated: 2026-09-14
+updated: 2026-11-14
 ---
 
 # Weapon System
 
-> **REMOVED 2026-06-22 (commit `6610291`).** The TPS weapon stack this page describes — firearm controllers, weapon templates (Pistol/Rifle/Sword/LaserPistol), the shared state machine, AimAssist, WeaponRolodex, and player-melee swing — was deleted, not gated. Brain Fighter is a spelling-combat game (the [[systems/LetterBlaster]] Spelling Staff is the only Tool). This page is retained for historical context — do not wire new gameplay against anything below.
+> **REMOVED 2026-06-22 (commit `6610291`).** The TPS weapon stack this page describes — firearm controllers, weapon templates (Pistol/Rifle/Sword/LaserPistol), the shared state machine, AimAssist, WeaponRolodex, and player-melee swing — was deleted, not gated. Brain Fighter is a spelling-combat game (the [[systems/LetterBlaster]] Spelling Staff was the only Tool until Phase 5.7 removed it; the player now holds no Tool). This page is retained for historical context — do not wire new gameplay against anything below.
 >
 > **Final removal 2026-09-14 (refactor chunk 11).** The three files that had outlived the stack are gone too:
 > - `MeleeHitDetector`, `MeleeConstants`, `MeleeTypes` — **deleted**. Their only caller was `Actions.MeleeAttack`, a framework hook no archetype ever wired up, deleted in the same commit. The melee suite that covered them went in chunk 1.

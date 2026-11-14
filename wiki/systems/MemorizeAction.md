@@ -1,7 +1,7 @@
 ---
 type: system
 description: Phase 2 action — validates the buffered word, deposits value-weighted per-color energy into the reservoirs, and clears the buffer. Fizzle on empty (no mutation) or invalid (buffer cleared — letters consumed regardless).
-updated: 2026-07-27
+updated: 2026-11-14
 ---
 
 # MemorizeAction
@@ -14,7 +14,7 @@ Phase 2 ([[design/build-plan]]) — tracker [NIM-6](tracker://NIM-6).
 
 ## Files
 
-- `src/shared/MemorizeAction/init.luau` — the module (single function `tryMemorize`).
+- `src/shared/MemorizeAction/init.luau` — the module (`tryMemorize`, plus `scoreTiles`, the pure resolve-and-split half that `tryMemorize` wraps and that the server's `EnergyLedger` also calls so client and server price a word identically).
 - `src/shared/MemorizeAction/__tests.luau` — smoke suite covering the four behaviors below; exports `M.run()`.
 
 ## API
@@ -26,6 +26,9 @@ MemorizeAction.tryMemorize(
     buffer: WordBuffer,
     reservoirs: EnergyReservoirs
 ) -> Result
+
+-- Pure: no buffer, no reservoirs. nil if `tiles` is empty or spells no word.
+MemorizeAction.scoreTiles(tiles: { Tile }) -> { word: string, energyByColor: { [Color]: number } }?
 
 export type Reason = "empty" | "invalid"
 
@@ -57,12 +60,12 @@ export type Result = {
 
 ### Success path
 
-The success path runs in this order:
+The success path runs in this order (steps 2–5 live in `scoreTiles`, which `tryMemorize` calls with `buffer:tiles()`; `scoreTiles` builds a fresh tile list rather than mutating the one it is given):
 
 1. Compute `pattern = buffer:asWord()` (uppercase). With [[systems/Wildcard]] tiles in the buffer this is a pattern like `D*G`, not necessarily a word.
 2. `word = Dictionary.resolve(pattern, EnergyEconomy.computeWordEnergy)` — collapses the pattern to the concrete match worth the most energy, or `nil` to fail. Every candidate is the same length, so maximizing whole-word energy is exactly maximizing the letters the stars stand in for. A wildcard-free pattern resolves to itself via an O(1) lookup, so this is also the plain path.
 3. Snapshot tiles via `buffer:tiles()` (defensive copy — caller mutation is safe).
-4. **Stamp the resolved letter onto every tile** (`tile.letter = word:sub(i, i)`), so wildcards score as the letter they became. Colors are deliberately left alone — a wild tile stays `"wild"` so the split still spreads its energy across all three reservoirs rather than banking it in one.
+4. **Stamp the resolved letter onto every tile** (a new `{ letter = word:sub(i, i), color = tile.color }` per tile), so wildcards score as the letter they became. Colors are deliberately left alone — a wild tile stays `"wild"` so the split still spreads its energy across all three reservoirs rather than banking it in one.
 5. Split via `EnergyEconomy.splitByColor(tiles)` — the floor-reconciled algorithm that guarantees `Σ split values == computeWordEnergy(word)` exactly. See [[systems/EnergyEconomy#splitByColor]].
 6. For each `(color, amount)` in the split: `reservoirs:add(color, amount)`. Per [[systems/EnergyReservoirs]] each add caps at 60 silently; overshoot is design-intentional.
 7. `buffer:clear()` AFTER the split has been computed.
@@ -84,10 +87,11 @@ See [[systems/EnergyReservoirs#Signal semantics]] and `WordBuffer`'s "Why a Bind
 
 ## Consumers
 
-- **HUD: MemorizeButton** (shipped — [[systems/HUD]]) — calls `tryMemorize`, dispatches to the shake/flash animation on `ok = false`, and emits the visible letters-flowing-into-bars effect on `ok = true`.
+- **`client/EconomyReport`** — the one client call site of `tryMemorize` (snapshots the tiles first, then reports the claimed word to the server's `ReportMemorize`); the HUD memorize button goes through it ([[systems/HUD]]).
+- **`server/Economy/EnergyLedger`** — calls `scoreTiles` to price the word the client claims ([[systems/SpellCastService]] § Validated memorize).
 - **Tutorial / first-cast prompt** — may inspect the returned `word` to confirm the player Memorized the tutorial-target word.
 
-This module deliberately does **not** call any other system. It does not emit signals, does not touch the HUD, does not write to attributes — the HUD reads `Result` from the caller. Per [[concepts/SingleOwnership]], the HUD listens to `WordBuffer.changed` / `EnergyReservoirs.changed` to repaint, NOT to anything from MemorizeAction.
+This module deliberately does **not** call any other system beyond its four data dependencies. It does not emit signals, does not touch the HUD, does not write to attributes — the HUD reads `Result` from the caller. Per [[concepts/SingleOwnership]], the HUD listens to `WordBuffer.changed` / `EnergyReservoirs.changed` to repaint, NOT to anything from MemorizeAction.
 
 ## Verification
 

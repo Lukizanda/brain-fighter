@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server relay for client-initiated spell casts. Applies effects server-side because client Humanoid.Health writes don't replicate for server-owned rigs. Hardened in 5.4; affordability is checked and, since 2026-09-08, enforced by the validated-memorize ledger.
-updated: 2026-09-23
+updated: 2026-11-14
 ---
 
 # SpellCastService
@@ -33,8 +33,11 @@ Hardened in Phase 5.4. Checks run cheapest-first; every failure drops the reques
 | 1 | `RateLimiter:consume(player)` | Cast loops (flood guard — **not** a price check, see below) |
 | 2 | `resolveSpec(color, tier)` | Non-string colours, non-number / NaN / fractional / out-of-range tiers, and roster gaps |
 | 3 | `checkCaster(player.Character)` | Casters that aren't a living Model in the workspace |
+| 3b | `EnergyLedger.checkCast` + `debitCast` (see § Server-side affordability) | Casts the player has not earned the energy for; enforced (`EconomyConstants.ENFORCE = true`) and debited **before** the target checks, so a later-dropped cast is still charged |
 | 4 | `checkTarget(target, caster)` | Non-Model targets, targets outside the world, targets beyond `MAX_TARGET_DISTANCE_STUDS` |
 | 5 | Target liveness | Dropped **silently** — a target dying mid-flight is ordinary play, not an exploit |
+
+(A target-less cast of a spell that needs an enemy is rejected as `<name> sent with no target` between 3b and 4. The table was written before the ledger check landed; 3b is the order in `SpellCastService.server.luau` today.)
 
 Check 2 closes a latent crash as well as an exploit. `SpellRegistry.getSpell` accepted any tier in 1–4 while only red defined a T4, so `green/4` returned `nil` and the old handler then errored indexing it — killing that invocation. `resolveSpec` nil-checks the lookup rather than trusting the tier range. Since **T4 was parked on 2026-09-23** the registry's range is 1–3 and `red/4` *errors* rather than returning nil, so the same check now rejects it through the pcall branch as `unknown spell red/4` — verified live. Both branches still matter: the nil branch is what catches a school shorter than the ladder, which is a shape the roster is allowed to have again at any time.
 
@@ -56,7 +59,7 @@ The `ChargeState` remote itself lives in `server/SpellCast/ChargeStateService.se
 
 ### Server-side affordability
 
-> **Resolved 2026-09-08 (refactor chunk 6). The server-side affordability check exists and is ENFORCED.** `EnergyLedger.checkCast` prices every cast at `SpellCastService.server.luau:122` from blocks the server watched that player take and words it validated them spelling, and `EconomyConstants.ENFORCE = true` makes an unaffordable cast return rather than merely log. What follows is the record of how it got there; it is written in the present tense of 2026-08-10, when the server genuinely could not price a cast.
+> **Resolved 2026-09-08 (refactor chunk 6). The server-side affordability check exists and is ENFORCED.** `EnergyLedger.checkCast` prices every cast at `SpellCastService.server.luau:127` from blocks the server watched that player take and words it validated them spelling, and `EconomyConstants.ENFORCE = true` makes an unaffordable cast return rather than merely log. What follows is the record of how it got there; it is written in the present tense of 2026-08-10, when the server genuinely could not price a cast.
 
 **The server still takes the client's word that the caster could afford the spell.** This is the one item of the 5.4 brief that was not delivered, and it is an architecture decision rather than an oversight.
 

@@ -1,7 +1,7 @@
 ---
 type: system
-description: Phase 2 transition watcher over WordBuffer — emits rising-edge `mindFull` / falling-edge `mindFreed` signals so the shoot-gate and HUD only react when buffer fullness flips.
-updated: 2026-05-14
+description: Phase 2 transition watcher over WordBuffer — emits rising-edge `mindFull` / falling-edge `mindFreed` signals so the HUD indicator only reacts when buffer fullness flips; the tap-to-pop shoot gate polls `isMindFull()` instead.
+updated: 2026-11-14
 ---
 
 # MindFullManager
@@ -30,17 +30,17 @@ Downstream consumers don't want to re-evaluate `buffer:isFull()` on every reorde
 ## Semantics
 
 - **Transitions only, not level-triggered.** The manager tracks `_wasFull` internally; each `buffer.changed` fire computes `nowFull = buffer:isFull()` and emits only if `nowFull ≠ _wasFull`. Reorders, interior removes, and any append/remove that leaves the size on the same side of the cap produce **no** signal.
-- **Two signals, not one.** Splitting rising-edge from falling-edge means downstream wiring is direct — BlockShoot connects `mindFull` to disable input and `mindFreed` to re-enable, no `if isMindFull()` branch needed. The HUD: MindFullIndicator does the same for show/hide.
+- **Two signals, not one.** Splitting rising-edge from falling-edge means downstream wiring is direct — the HUD MindFullIndicator connects `mindFull` / `mindFreed` for show/hide, no `if isMindFull()` branch needed. (The shoot gate does not use the signals; it polls `:isMindFull()` per pop — see Consumers.)
 - **Deferred dispatch.** Both signals are `BindableEvent.Event` instances; Roblox runs these in Deferred mode by default, so handlers fire on the next resumption cycle, not synchronously inside the buffer mutation that triggered the transition. Smoke tests `task.wait()` between mutating the buffer and asserting on fire counts. Handlers that need the current state should re-read `:isMindFull()` — do not assume the signal arrived "because of" any specific preceding `:append` / `:remove` call.
 - **Born-full is silent.** Constructing the manager over an already-full buffer seeds `_wasFull = true`. The first observed transition is therefore a genuine falling edge (when the player frees a slot), not a phantom rising edge on the next `.changed` fire.
 - **Over-cap append is silent.** [[systems/WordBuffer|WordBuffer]]`:append` returns `false` without firing `.changed` when the buffer is full. The manager therefore observes no event at all — `mindFull` is not re-fired on the 13th, 14th, 15th attempts. This is correct: rising-edge semantics only count the first one.
 
 ## Consumers
 
-- **BlockShoot** (Phase 3) — subscribes to `mindFull` / `mindFreed` to gate shoot input. When `mindFull` fires, the shoot pipeline rejects hits with diegetic feedback (fizzle, greyed crosshair); `mindFreed` restores normal input.
-- **HUD: MindFullIndicator** (Phase 4) — subscribes to both signals to flash and persist a "mind full" visual cue. Re-reads `:isMindFull()` on construction to render correct initial state.
+- **BlockShoot** (`src/client/BlockTapController.client.luau`) — does **not** subscribe to the signals. `tryPop` calls `session.mindFullManager:isMindFull()` on each tap and, if full, plays the fizzle sound and returns; the hover highlight reads it too.
+- **HUD: MindFullIndicator** (`src/client/UI/MindFullIndicatorGui.client.luau`) — subscribes to both signals to flash and persist a "mind full" visual cue. Re-reads `:isMindFull()` on construction to render correct initial state.
 
-Both consumers are write-once — the manager is constructed once per local player session, and `mgr.mindFull` / `mgr.mindFreed` are `:Connect`'d for the manager's lifetime.
+The manager is constructed once per local player session (`client/PlayerSession`), and the indicator's `:Connect`s live for its lifetime.
 
 ## Construction pattern
 

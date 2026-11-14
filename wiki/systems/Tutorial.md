@@ -2,7 +2,7 @@
 type: system
 description: Tutorial system — teaches the core Brain Fighter loop (pop blocks → buffer word → memorize → cast spell) through guided in-world steps
 status: planning
-updated: 2026-08-10
+updated: 2026-11-14
 ---
 
 # Tutorial System
@@ -57,13 +57,13 @@ TutorialConstants (shared)      — IDs, DataStore key prefix, magic numbers.
 | System | Interaction | Modification needed? |
 |---|---|---|
 | BlockTapController | None — tutorial just guides where to point. | No |
-| BlockShoot (shared) | Add `blockConsumed: RBXScriptSignal` exposed from the shared module; fired by BlockShootService after successful destroy. | **Yes** — small addition |
+| BlockShoot (server) | A server-side `BlockConsumed` BindableEvent already exists (`src/server/BlockShoot/Events/BlockConsumed.model.json`, fired by `BlockShootService` with `(player, letter, color, arenaId)`; `AnalyticsReporter` listens). The tutorial would connect to it rather than add a new `blockConsumed` signal to the shared module. | No (the signal exists; payload is `(player, letter, color, arenaId)`, not `(player, block)`) |
 | WordBuffer | Tutorial counts ConsumeBlock events server-side (≥3 → advance from `fill_buffer`); doesn't need WordBuffer state directly since WordBuffer lives on the client. | No |
 | MemorizeAction | Client fires `memorize_success` claim after `tryMemorize` returns `ok=true`. Server trusts the claim (no independent validation in MVP). | No (claim from `GameplayHudGui` call site) |
 | CastAction | Client fires `cast_success` claim after `tapReservoir`/`castSpecific` returns `ok=true`. | No (claim from `SpellMenuGui` call site) |
 | SpellExecutor | Untouched — damage happens via existing path. | No |
 | [[systems/Boss]] | TutorialService connects to the boss health-changed signal to detect the first-damage event. | No |
-| HUD (existing builders) | Builders already expose their root `gui` Frame and are registered in `_G.PlayerHud.*`. TutorialController reads `_G.PlayerHud.MemorizeButton.gui` etc. to position tooltips. | No |
+| HUD (existing builders) | Builders expose their root `gui` Frame, but the `_G.PlayerHud.*` registry this spec assumed was deleted in refactor chunk 3 (see [[systems/HUD]] § The dash bridge) — nothing in `src/` writes it. TutorialController would need a named seam (like `DashApi`) to reach the BufferDisplay / MemorizeButton / SpellMenu frames. | **Yes** — a named seam |
 
 ## TutorialConfig — Step Table
 
@@ -140,7 +140,7 @@ TutorialConfig.STEPS = {
 }
 
 TutorialConfig.HIGHLIGHT_RESOLUTION = {
-    -- UI ids: looked up via _G.PlayerHud.<id>.gui
+    -- UI ids: looked up via _G.PlayerHud.<id>.gui  (NOTE: _G.PlayerHud no longer exists; see Systems the Tutorial Touches)
     BufferDisplay = "_G.PlayerHud.BufferDisplay.gui",
     MemorizeButton = "_G.PlayerHud.MemorizeButton.gui",
     SpellMenu = "_G.PlayerHud.SpellMenu.gui",
@@ -223,11 +223,11 @@ end)
 
 ### Overlay structure
 
-A single full-screen ScreenGui at `DisplayOrder = HudConstants.OVERLAY_DISPLAY_ORDER` (20, already > HUD's 10). This is **its own ScreenGui**, NOT registered into `HudLayoutManager` regions, because:
+A single full-screen ScreenGui at a `DisplayOrder` from `HudConstants.LAYERS` (there is no `OVERLAY_DISPLAY_ORDER`; the tiers are Hud 10, Overlay 15, Feedback 20, Scoreboard 25, Modal 30 — the dim layer would use `Modal` or a new tier). This is **its own ScreenGui**, NOT registered into `HudLayoutManager` regions, because:
 
 - Tutorial needs a dim layer covering everything (including HUD).
 - Region-based layout doesn't fit screen-spanning overlays.
-- HudConstants already reserves `OVERLAY_DISPLAY_ORDER = 20` for exactly this use.
+- `HudConstants.LAYERS` names the DisplayOrder tiers for own-ScreenGui elements.
 
 ### Layers (z-order, bottom to top)
 
@@ -388,7 +388,7 @@ Ordered for implementation. Tasks within a phase are roughly parallelizable; pha
 - [ ] `src/shared/Tutorial/TutorialConstants.luau` — DataStore name `"BrainFighterTutorial"`, key prefix, idle-timeout seconds, completion-flag value.
 - [ ] `src/shared/Tutorial/TutorialConfig.luau` — STEPS table (6 entries) + `HighlightTarget`/`StepDef` types per spec above.
 - [ ] `src/server/Tutorial/Remotes.model.json` — Folder containing `TutorialStepChanged`, `TutorialClientEvent`, `TutorialSkipRequested` (all `RemoteEvent`).
-- [ ] Modify `src/shared/BlockShoot/init.luau` — expose `BlockShoot.blockConsumed` (BindableEvent.Event). Modify `src/server/BlockShoot/BlockShootService.server.luau` to fire it after successful `block:Destroy()` with `(player, block)` payload.
+- [x] Server-side consume signal already exists as `src/server/BlockShoot/Events/BlockConsumed` (fired by `BlockShootService` with `(player, letter, color, arenaId)`); no shared-module change needed.
 
 ### Phase B — Overlay UI
 
@@ -407,7 +407,7 @@ Ordered for implementation. Tasks within a phase are roughly parallelizable; pha
 
 ### Phase D — Client wiring
 
-- [ ] `src/client/UI/TutorialController.client.luau` — listens to `TutorialStepChanged`, resolves highlight targets (via `_G.PlayerHud.*` + workspace lookups), drives the overlay. Emits skip + continue claims. `:disable()`/`:destroy()`.
+- [ ] `src/client/UI/TutorialController.client.luau` — listens to `TutorialStepChanged`, resolves highlight targets (originally via `_G.PlayerHud.*`, which no longer exists, + workspace lookups), drives the overlay. Emits skip + continue claims. `:disable()`/`:destroy()`.
 - [ ] Modify `src/client/UI/GameplayHudGui.client.luau` — on `MemorizeAction.tryMemorize` ok, `FireServer({event="memorize_success"})`.
 - [ ] Modify `src/client/UI/SpellMenuGui.client.luau` — on `CastAction.tapReservoir` ok, `FireServer({event="cast_success"})`.
 

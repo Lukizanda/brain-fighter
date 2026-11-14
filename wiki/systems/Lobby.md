@@ -1,7 +1,7 @@
 ---
 type: system
 description: The hub and the portals — LobbyService owns who may use a portal, the per-portal queue that fills sessions (one session by TargetArenaId, or every session running a TargetMode), and the Occupancy/Capacity/Waiting counts the signs read; PortalGui draws the signs and the confirm panel client-side and decides nothing. Player state (InLobby/Queued/InArena) is published by SessionRegistry; HUD suppression is HudGate. Written 2026-09-20 as Phase 6 stage 7.
-updated: 2026-09-22
+updated: 2026-11-14
 ---
 
 # Lobby System
@@ -168,8 +168,8 @@ guarded it was cleared, and `Tween:Cancel()` re-firing `Completed`.
 session's mode (`runsRounds` → `InArena`); `Queued` is pushed in by
 `LobbyService`, since a queued player is standing in the hub like everyone
 else. Entering an arena clears the flag. Readers: `HudGate` (HUD
-suppression), `PortalGui` (button copy), `BlockTapController` (not a
-`GuiObject`, so it reads the attribute directly).
+suppression) and `PortalGui` (button copy). `BlockTapController` does not
+read it.
 
 What hides in the hub and what stays live is the per-element policy table in
 [[concepts/HudGate]] § Triage. The short version: round and competition chrome

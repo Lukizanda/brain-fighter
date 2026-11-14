@@ -1,7 +1,7 @@
 ---
 type: concept
 description: HUD architecture — Builder constructs, Config tunes, LayoutManager places. No .rbxmx GUI templates checked into the repo.
-updated: 2026-09-15
+updated: 2026-11-14
 ---
 
 # Builder + Config + LayoutManager
@@ -39,7 +39,8 @@ Builder output (AttributeBar instance from AttributeBarBuilder)
 - AttributeBar (Health) — [[systems/HUD]]
 - BufferDisplay, MemorizeButton, SpellMenu, MindFullIndicator, DashButton (Phase 4 gameplay widgets)
 - BuffTray
-- TouchControl (mobile)
+- RoundTimer, Settings (gear + panel), Nameplate and PortalPanel (world-space) — also Builder + Config pairs in `src/shared/Hud/`
+- (`TouchControl` and `Reticle` were deleted as dead code in refactor chunk 0 — see [[systems/HUD]])
 - DeathScreen, DamageFeedback, GameState, Scoreboard, BossHud, KillFeed —
   the six own-ScreenGui elements ported to this pattern in refactor chunk 12
   (see [[systems/HUD]])

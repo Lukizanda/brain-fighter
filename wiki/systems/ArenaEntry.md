@@ -1,7 +1,7 @@
 ---
 type: system
-description: One-way teleporter from an arena's ready room onto its island (Phase 8 stage 5, 2026-11-13). A player of the pad's arena who touches a part tagged ArenaEntryPad is moved onto a random ArenaArrivalPoint of the same ArenaId. Nothing leads back; dying respawns the player in the ready room. Server-owned, cues through VfxBroadcast. 3 tests; the physical Touched signal and the client cues are not yet verified, and no pad exists in the place yet.
-updated: 2026-11-13
+description: One-way teleporter from an arena's ready room onto its island (Phase 8 stage 5, 2026-11-13). A player of the pad's arena who touches a part tagged ArenaEntryPad is moved onto a random ArenaArrivalPoint of the same ArenaId. Nothing leads back; dying respawns the player in the ready room. Server-owned, cues through VfxBroadcast. 5 tests; the physical Touched signal and the client cues are not yet verified, and no pad exists in the place yet.
+updated: 2026-11-14
 ---
 
 # ArenaEntry

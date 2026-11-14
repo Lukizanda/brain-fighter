@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # Wiki Index
@@ -31,7 +31,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/Health]] — damage types, hit zones, modifiers, HealthService, DeathHandler
 - [[systems/Character]] — **mostly REMOVED (commit 6610291)**; Camera/Locomotion controllers deleted, only DashController + CharacterSystemsLoader survive
 - [[systems/NPC]] — Perception → StateMachine → Actions, Patroller archetype, WorldDataManager
-- [[systems/HUD]] — Builder + Config + LayoutManager pattern, attribute bars, Phase 4 gameplay widgets (WeaponRolodex + LoadoutDropClient removed in 6610291); all seven own-ScreenGui elements on Builder+Config since 2026-09-19 (`RoundTimerGui` last), round-over copy via `RoundOutcomeCopy`
+- [[systems/HUD]] — Builder + Config + LayoutManager pattern, attribute bars, Phase 4 gameplay widgets (WeaponRolodex + LoadoutDropClient removed in 6610291); six own-ScreenGui elements plus KillFeed (which registers into TopRight) on Builder+Config since 2026-09-19 (`RoundTimerGui` last), round-over copy via `RoundOutcomeCopy`
 - [[systems/Settings]] — client-side preferences (2026-09-20, BRA.21): SFX volume (one `SoundGroup`, every Sound routed in), Reduced effects (`spawnEffect`/`ScreenImpact` read the flag), letter palette (`Colors.PALETTES` default / Okabe–Ito high-contrast, drawn through `Colors.tint` on blocks, tiles and menu discs). Pure `Settings` module over `Settings_*` LocalPlayer attributes; `SettingsGui` gear + panel are the first `LobbyOnly` HUD elements. Not persisted until 5.5
 - [[systems/Analytics]] — Phase 5.4 analytics (2026-09-22): onboarding funnel joined → first_pop → first_memorize → first_cast → first_boss_damage → boss_kill (once, strictly in order, per player) + loop-health custom events (word_memorized, memorize_fizzle, spell_cast, round_played, blocks_popped, session_length) on Roblox `AnalyticsService`. Domains fire `BlockConsumed` / `WordMemorized` / `MemorizeFizzled` / `SpellCast` BindableEvents on their accept branch; `AnalyticsReporter` only listens; `AnalyticsSink` budgets + pcalls. `Analytics_FunnelStep` / `Analytics_Events` on the Player. Suite 2/2, live pop + cast probed
 - [[systems/Loadout]] — **REMOVED (commit 6610291)**; pedestal pickup / RespawnPedestalManager / drop remote all deleted
@@ -46,7 +46,7 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/SpellRegistry]] — Phase 1 config layer for the spell roster (R/G/B × T1–T3; **T4 parked 2026-09-23** — red's Volley was the only one and it was never designed, `MAX_ENABLED_TIER = 3`); tier costs 5/10/20/40 with the fourth rung inert, name/color/cost/targeting/`skill:SkillSpec`; consumed by SpellExecutor + SpellMenu HUD
 - [[systems/SpellExecutor]] — Phase 2 effect runner; dispatches `damage`/`heal`/`freeze`/`knockup`/`shield`/`buff` against caster/target (all real as of 5.2)
 - [[systems/MindFullManager]] — Phase 2 transition watcher over WordBuffer: rising-edge `mindFull` / falling-edge `mindFreed` signals for the shoot gate + HUD indicator
-- [[systems/CastAction]] — Phase 2 cast pipeline: `castSpecific` (the production path since 5.8) + `resolveSpecAtCharge` (hold duration → tier); `tapReservoir` retired but kept for its tests. Drains the reservoir, fires `spellResolved`
+- [[systems/CastAction]] — Phase 2 cast pipeline: `castSpecific` (the production path since 5.8) + `resolveSpecAtCharge` (hold duration → tier); `tapReservoir` is gone from the module. Checks `canCast`, then drains the reservoir, fires `spellResolved`
 - [[systems/ChargeCast]] — Phase 5.8 (2026-08-12): press-hold-release on a colour panel picks the spell tier. Mana flows at 5/sec so T1 is a tap and T3 — the top of the ladder since T4 was parked 2026-09-23 — is a 3 s commitment; the charge clamps at what you can afford; nothing is drained until release, so cancelling is free. The panels are circles that fill outward from the centre with concentric tier rings, a reserve annulus and a centred numeral; a character orb, with the spell's name over it, makes the windup a PvP tell. Supersedes the never-built drag-from-reservoir tier menu
 - [[systems/LetterBlock]] — Phase 3 entity: floating block prefab with `Block.Letter` + `Block.Color` attributes; chunky 4×4×4 cube with 6-face SurfaceGui letter glyph + colored ParticleEmitter; CollectionService tag drives the client animator (sinusoidal bob + 28°/s tumble on a tilted axis). 2026-08-20 face treatment: dark border + inset panel + light-tinted glyph, and a value tell scaling the emitter with the letter's Scrabble value
 - [[systems/BlockSpawner]] — **Fossil letters (2026-11-13):** a `FossilTable` breakable wall hides a letter, shown when it cracks and freed as a 20 s block when it breaks. **Word kits (2026-11-13):** a `WordKit` volume holds one ready-made word in one colour, replaced whole when its `KitGate` wall re-seals or a round starts. Phase 3 server-side populator: Scrabble-weighted letter picks (plus a 27th wildcard roll at ~4%), configurable color weights, auto-refill via CollectionService removed signal. Arena bounds come from tagged `BlockSpawnVolume` parts, **not** the 40×8×40 figure in the config — that is only the fallback default; the shipped arena measures 219×20×248 and holds 40 blocks. **Letter zones (2026-11-13):** optional per-volume `LetterTable` (Standard / Common / Premium / Wildcard), `ColorOnly` and `BlockQuota`; untagged volumes unchanged
@@ -59,9 +59,9 @@ Start here. See [[WIKI]] for conventions and operations.
 - [[systems/BossAdapter]] — Phase 3 MVP (**REMOVED commit 6610291**, previously superseded by Boss): static Humanoid-bearing Model; module + Phase 3 tests now deleted
 - [[systems/SkillPipeline]] — Unified `SkillSpec` + `SkillEffects` + `SkillDelivery` shared by player spells and boss attacks; pure data-driven dispatch, multi-effect `onImpact` arrays, reserved hooks for VFX/SFX/status-effects
 - [[systems/LetterBlaster]] — **REMOVED (Phase 5.7, commit 14881d9)**; historical record of the Spelling Staff Tool and its controller, which owned block input from 4.6 until tap-to-pop replaced it
-- [[systems/AudioSFX]] — Sound effect inventory, two-backend overview (Sound vs AudioPlayer), wiring patterns, placeholder locations, gap priority list
-- [[systems/Tutorial]] — Phase 5 guided first-play sequence: shoot → buffer → memorize → cast → boss hit; step machine, overlay builder, skip flag (planning)
-- [[systems/VisualEffects]] — world spell cast/impact particles; the caster's client predicts the cast cue (VfxController ← SpellResolved), the authoritative run broadcasts cast + impact cues over the one VfxBroadcast → WorldVfxEvent lane (client relay deleted 2026-09-08); per-color (R/G/B) theming; PERF guardrails shipped
+- [[systems/AudioSFX]] — Sound effect inventory, `Sound`-based wiring (nothing uses `AudioPlayer`), the 12 interim `VfxConfig.SFX` entries on 6 reused asset ids, gap priority list
+- [[systems/Tutorial]] — Phase 5 guided first-play sequence: tap/pop → buffer → memorize → cast → boss hit; step machine, overlay builder, skip flag (planning)
+- [[systems/VisualEffects]] — world spell cast/impact particles; the caster's client predicts the cast cue (VfxController ← SpellResolved), the authoritative run broadcasts cast + impact cues over the one VfxBroadcast → WorldVfxEvent lane (client relay deleted 2026-09-08); per-color (R/G/B) theming; PERF guardrails only partly built (`allowLights`, `reducedVfxEmitScale`, `maxBlockPops` are read; the caps and fps throttle are not)
 
 ## Concepts (recurring patterns)
 

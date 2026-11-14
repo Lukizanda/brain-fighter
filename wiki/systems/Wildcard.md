@@ -1,7 +1,7 @@
 ---
 type: system
 description: The gold ★ wildcard letter block — stands in for any letter when spelling. Covers the char/glyph split, spawn rarity, dictionary resolution, and the three-way energy spread.
-updated: 2026-07-27
+updated: 2026-11-14
 ---
 
 # Wildcard
@@ -18,7 +18,7 @@ The single most important detail: **the internal representation is ASCII `*`, ne
 |---|---|---|
 | `Wildcard.CHAR` | `"*"` | `Block.Letter` attribute, `WordBuffer:asWord()`, log lines, Lua patterns |
 | `Wildcard.GLYPH` | `"★"` | block face SurfaceGui, HUD buffer tile — **presentation only** |
-| `Wildcard.COLOR` | `"wild"` | `Block.Color` attribute, `WordBuffer` tile color, HUD `TILE_COLORS` key |
+| `Wildcard.COLOR` | `"wild"` | `Block.Color` attribute, `WordBuffer` tile color, HUD tile colour key (`Colors.tint`) |
 
 `★` never round-trips back into game logic. `Wildcard.toDisplay(letter)` is the one-way door — the block face and the HUD tile both call it, so they cannot disagree about how a star looks.
 
@@ -45,7 +45,7 @@ These were settled explicitly; each has a cheaper alternative that was rejected.
 
 **No cap on wildcards per word.** This is what forces the matcher design below — 26<sup>k</sup> letter expansion is not viable past k≈2.
 
-**Gold, not one of the three reservoir colors.** A player scanning a field of ~24 blocks can pick a star out at a glance. The cost is a 4th color threaded through `WordBuffer.VALID_COLORS`, `LetterBlocks.COLOR_TINTS`, and `BufferDisplayConfig.TILE_COLORS`.
+**Gold, not one of the three reservoir colors.** A player scanning a field of ~24 blocks can pick a star out at a glance. The cost is a 4th color threaded through `WordBuffer.VALID_COLORS`, `Colors.PALETTES` (which `LetterBlocks.COLOR_TINTS` aliases and the HUD tiles read through `Colors.tint`).
 
 **Wild energy splits evenly across all three reservoirs.** Gold is not a reservoir, so a wild tile's value has to go somewhere. Thirds keep it thematically "wild" and never waste earned energy. Rejected: routing to the word's majority color (swingy, needs a tiebreak rule).
 
@@ -86,7 +86,7 @@ The `Σ split == computeWordEnergy` invariant is unchanged — the last present 
 ## Flow
 
 ```
-BlockSpawner    rolls "*" as a 27th letter (weight 4 vs the 98-tile Scrabble bag)
+BlockSpawner    rolls "*" as a 27th letter (Standard table: weight 4 vs the 98-tile Scrabble bag)
                 → pairs it with COLOR, never a rolled reservoir color
 LetterBlocks    tints gold, paints GLYPH on all six faces
 BlockShoot      reads Block.Letter="*" / Block.Color="wild" — no special-casing
@@ -103,9 +103,9 @@ The step that makes this work is MemorizeAction stamping the resolved letter ont
 
 | constant | file | value |
 |---|---|---|
-| `WILDCARD_FREQUENCY` | `BlockSpawner/init.luau` | `4` → 4/102 ≈ 3.9%; set `0` to disable wildcards entirely |
-| gold tint | `LetterBlocks/init.luau` `COLOR_TINTS.wild` | `#eab308` |
-| HUD tile gold | `Hud/BufferDisplayConfig.luau` `TILE_COLORS.wild` | `Color3.fromRGB(225, 180, 60)` |
+| `STANDARD_WILDCARD_FREQUENCY` | `BlockSpawner/LetterTables.luau` (re-exposed as `BlockSpawner.WILDCARD_FREQUENCY`) | `4` → 4/102 ≈ 3.9% in the `Standard` table; set `0` to disable. `Premium` uses `3` (3/18 ≈ 17%), `Common` none, `Wildcard` table is wildcard-only |
+| gold tint | `Core/Colors.luau` `PALETTES.default.wild` (`LetterBlocks.COLOR_TINTS.wild` aliases it) | `#eab308`; `high_contrast` palette uses `RGB(240, 228, 66)` |
+| HUD tile gold | `Hud/BufferDisplayBuilder.luau` draws tiles through `Colors.tint(tile.color)` | same palette gold as the block (`#eab308` by default); the old `BufferDisplayConfig.TILE_COLORS` key no longer exists |
 
 ## Verification
 

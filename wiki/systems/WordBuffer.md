@@ -1,7 +1,7 @@
 ---
 type: system
 description: 12-slot color-tagged word buffer — pure-Luau state container for the word being spelled. Append-on-shot, drag-to-reorder, double-tap-to-destroy. Drains on Memorize.
-updated: 2026-09-08
+updated: 2026-11-14
 ---
 
 # WordBuffer
@@ -24,6 +24,7 @@ Capacity is **12 tiles** (`DEFAULT_CAP`), wide enough for any word a curated K-1
 | `.new(cap?: number)` | constructor | Default cap `12`. Returns a fresh `WordBuffer` instance. |
 | `:append(letter, color)` | `(string, "red" \| "green" \| "blue" \| "wild") -> boolean` | Returns `false` if full or color invalid. Fires `.changed` on success. `"wild"` is the [[systems/Wildcard]] tile. |
 | `:remove(index)` | `(number) -> ()` | 1-based. Out-of-range = warn + no-op. Subsequent tiles shift down. |
+| `:removeLastMatching(letter, color)` | `(string, color) -> boolean` | Removes the most recent tile with that letter **and** color; `false` if none. Fires `.changed` on success. The rollback for an optimistic append the server rejected (`BlockTapController.onRejected`). |
 | `:reorder(fromIdx, toIdx)` | `(number, number) -> ()` | 1-based on both sides. Out-of-range = warn + no-op. `from == to` is a no-op (no fire). |
 | `:clear()` | `() -> ()` | Empties all slots. Fires `.changed` only if there was something to clear. |
 | `:asWord()` | `() -> string` | Concatenates letters in order, uppercased. Empty buffer → `""`. A wildcard tile contributes its raw `*`, so this may be a **pattern** (`"D*G"`) rather than a word — pass it through `Dictionary.resolve`. |
@@ -48,7 +49,7 @@ Capacity is **12 tiles** (`DEFAULT_CAP`), wide enough for any word a curated K-1
 - [[systems/MemorizeAction]] — reads `asWord()` for dictionary lookup, reads `tiles()` for color-split, calls `clear()` on valid commit.
 - [[systems/MindFullManager]] — subscribes to `.changed` to flip the "mind full" HUD indicator when `isFull()` flips.
 - HUD: BufferDisplay — subscribes to `.changed`, reads `tiles()` for tile rendering, wires the drag-to-reorder + double-tap-to-destroy gestures to `:reorder` / `:remove`.
-- [[systems/BlockShoot]] — calls `:append(letter, color)` on each successful letter-block hit.
+- [[systems/BlockShoot]] — `BlockTapController` calls `:append(letter, color)` optimistically on each tap, and `:removeLastMatching` if the server rejects the pop.
 
 ## Test
 
@@ -59,7 +60,7 @@ local runTests = require(ReplicatedStorage.Shared.WordBuffer.__tests)
 runTests()  -- throws on assertion failure, prints "[TEST PASS]" otherwise
 ```
 
-Covers: empty-state queries, three-append change-count, color-bag, reorder, remove, clear, fill-to-cap rejection, out-of-range guards, invalid-color rejection, destroy.
+Covers: empty-state queries, three-append change-count, color-bag, reorder, remove, `removeLastMatching`, clear, fill-to-cap rejection, out-of-range guards, invalid-color rejection, destroy.
 
 ## Why a BindableEvent and not a custom Signal class
 

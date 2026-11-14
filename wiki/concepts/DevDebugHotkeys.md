@@ -1,7 +1,7 @@
 ---
 type: concept
 description: Keyboard hotkeys available in DevDebug.client.luau for playtesting word buffer, energy reservoirs, and mobile-input simulation.
-updated: 2026-09-23
+updated: 2026-11-14
 ---
 
 # Dev Debug Hotkeys
@@ -57,4 +57,4 @@ updated: 2026-09-23
   hands out energy may not be one config flag away from being live. The ready
   log says which way it resolved.
 - **Remove before shipping** — none of these bindings should reach production.
-- `;` is listed here for discoverability, but the `Enum.KeyCode.Semicolon` binding and the phase-label toggle it drives both live in `src/client/UI/BossHudGui.client.luau`, not in `DevDebug.client.luau` — this file only prints it in the ready-log hint. A stale in-code comment in `BossHudGui.client.luau` said "toggle with P"; fixed to `;` in refactor chunk 0 (2026-09-08).
+- `;` is listed here for discoverability, but the `Enum.KeyCode.Semicolon` binding and the phase-label toggle it drives both live in `src/client/UI/BossHudGui.client.luau` (key constant `BossHudConfig.PHASE_DEBUG_KEY`), not in `DevDebug.client.luau` — this file only prints it in the ready-log hint. A stale in-code comment in `BossHudGui.client.luau` said "toggle with P"; fixed to `;` in refactor chunk 0 (2026-09-08).

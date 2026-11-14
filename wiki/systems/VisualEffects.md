@@ -2,7 +2,7 @@
 type: system
 description: Visual effects — particle effects for spell casts/impacts (the caster's client predicts the cast cue off SpellResolved; the authoritative run broadcasts cast + impact cues over the one VfxBroadcast → WorldVfxEvent lane), projectile bodies and trails, persistent status visuals (shield / freeze / burn / charge orb) bound by one shared CharacterAttributeWatcher, boss windup telegraphs, UI feedback animations, and per-color theming. Core, PERF guardrails and the block-pop collect stream are all shipped.
 status: implemented
-updated: 2026-09-23
+updated: 2026-11-14
 ---
 
 # Visual Effects
@@ -15,7 +15,7 @@ updated: 2026-09-23
 > - `src/client/Vfx/VfxController.client.luau` — **the prediction layer**: listens on the `CastAction/Remotes/SpellResolved` BindableEvent (no `CastAction` require) and draws the caster's cast cue on the frame they cast, via `SkillVisuals.spawnCastCue`. Nothing at the target. (Refactor chunk 7, 2026-09-08; it used to also predict impact bursts and relay both through a client-trusted remote — see § Architecture below.)
 > - `src/shared/Vfx/VfxBroadcast.luau` + `src/client/Vfx/WorldVfxController.client.luau` — **the server's only legal way to make a player see or hear something** (2026-08-04), and since chunk 7 the *only* cross-client VFX lane. Kinds: `point`, `attached`, `beam`, `collect`, `shockwave`, `projectile`, `telegraph` (the last added by chunk 10, 2026-09-11, which retired `BossWindupEvent`). See § "Nothing player-facing runs on the server" below.
 > - `src/shared/Vfx/Remotes/WorldVfxEvent.model.json` — the one remote. `BroadcastSpellVfx`, `SpellVfxEvent`, `ProjectileVfxEvent` and `server/Vfx/VfxBroadcastService` were deleted 2026-09-08; `Boss/BossEvents/BossWindupEvent` and `client/BossWindupClient` followed on 2026-09-11 (refactor chunk 10) — the windup telegraph is now a `telegraph` payload on this lane.
-> - `src/shared/Vfx/CharacterAttributeWatcher.luau` — **the binding half of every attribute-driven status visual** (chunk 10). One factory the four status controllers share: rig table keyed by Model, cached Humanoid, both exits (`Humanoid.Died` + `AncestryChanged`), the `initial` refresh a late joiner needs, and the tagged-rig retry for a rig tagged before its Humanoid is parented. `enable()` / `disable()` / `destroy()`; `disable()` detaches every rig so the handlers take their geometry off. It holds the **one** `Skills` require left in `src/shared/Vfx` (`SkillConstants`, for `DAMAGEABLE_TAGS`) — see § "The Vfx layer does not depend on the Skills layer".
+> - `src/shared/Vfx/CharacterAttributeWatcher.luau` — **the binding half of every attribute-driven status visual** (chunk 10). One factory the five status controllers share (Freeze, Inferno, Shield, ChargeOrb, and `ArrivalProtectionVfxController` — the gold bubble driven by the `_protectedUntil` attribute, owned by [[systems/Health]]): rig table keyed by Model, cached Humanoid, both exits (`Humanoid.Died` + `AncestryChanged`), the `initial` refresh a late joiner needs, and the tagged-rig retry for a rig tagged before its Humanoid is parented. `enable()` / `disable()` / `destroy()`; `disable()` detaches every rig so the handlers take their geometry off. It holds the **one** `Skills` require left in `src/shared/Vfx` (`SkillConstants`, for `DAMAGEABLE_TAGS`) — see § "The Vfx layer does not depend on the Skills layer".
 > - `src/shared/Vfx/MotePath.luau` — the curved flight of a mote toward a *moving* destination (quadratic Bézier, bowed control point in a random roll, per-mote flight jitter), shared by `ChargeOrbVfx` and `collectStream`, which each had their own drifting copy. The numbers (ring radius, size, curve amount, flight length) stay with the callers: the two effects are not supposed to look the same.
 > - `src/shared/Vfx/CosmeticProjectile.luau` — the *seen* projectile, launched by `WorldVfxController`'s `projectile` handler (the former `ProjectileVfxController` was folded in). The authoritative shot is server-simulated and invisible; each client replays the broadcast launch parameters locally so a blocked shot dies on the shield bubble rather than ~12 studs short of it. See [[systems/SkillPipeline]] § "Projectile visuals are client-local". Since 2026-08-10 it also builds the shot's *body* (sphere or stretched comet head, Trail, light) from **`VfxConfig.PROJECTILE_BODIES`** — see § "Projectiles" below.
 > - `src/shared/Vfx/StatusVisuals/FreezeVfx.luau` — the freeze ice-shard status visual (see [[systems/SkillPipeline]] § VFX Layers).
@@ -28,7 +28,7 @@ updated: 2026-09-23
 >
 > **Does NOT exist (fictional in the plan below):** `UiVfxController` (UI VFX live inline inside the HUD builders, not a standalone module), `src/shared/Vfx/init.luau` barrel, and `src/shared/Vfx/Templates/` (the `VfxTemplates` folder is Studio/MCP-managed, not Rojo `.model.json`).
 >
-> **Corrected contract facts:** the `impactEffectIds` / `MAX_TIER` / `MAX_IMPACT_EFFECT_IDS` relay contract described below went with `VfxBroadcastService` in refactor chunk 7 — `VfxBroadcast` messages carry one `effectId` per `kind` (`point` / `attached` / `beam` / `collect` / `shockwave` / `projectile` / `telegraph`), and the cast tier is validated by [[systems/SpellCastService]] through `SpellRegistry.getSpell` (`MAX_ENABLED_TIER = 3` since T4 was parked 2026-09-23). Lifetime cleanup is **`Debris:AddItem` only** today — the §"PERF guardrails" cap/evict/throttle table and the `"VfxInstance"` Heartbeat sweep are **not implemented** (`PERF` data exists but `spawnEffect` reads none of it). The LetterBlock collect-pop is still unbuilt. Green cast entries **were** unbuilt until 2026-08-03 — `cast_green_t1..t3` now exist, and `spawnEffect` plays `EffectSpec.sound` (it previously consumed only `emitters`, so every spell was silent). **`.light` is implemented as of 2026-08-08** — a `PointLight` at full brightness on the landing frame, tweened to 0 over `durationSec` and honouring `PERF.allowLights`; `impact_damage_t3` is its first and so far only consumer. `.beam` is still ignored.
+> **Corrected contract facts:** the `impactEffectIds` / `MAX_TIER` / `MAX_IMPACT_EFFECT_IDS` relay contract described below went with `VfxBroadcastService` in refactor chunk 7 — `VfxBroadcast` messages carry one `effectId` per `kind` (`point` / `attached` / `beam` / `collect` / `shockwave` / `projectile` / `telegraph`), and the cast tier is validated by [[systems/SpellCastService]] through `SpellRegistry.getSpell` (`MAX_ENABLED_TIER = 3` since T4 was parked 2026-09-23). Lifetime cleanup is **`Debris:AddItem` only** today — the §"PERF guardrails" cap/evict/throttle table and the `"VfxInstance"` Heartbeat sweep are **not implemented**. Of `PERF`, only `allowLights` (read by `spawnEffect`, `CosmeticProjectile`, `ChargeOrbVfx`, `InfernoVfx`), `reducedVfxEmitScale` (read by `spawnEffect` when Reduced effects is on) and `maxBlockPops` (the stream cap in `collectStream`) are read anywhere; `maxEmitters`, `maxBeams`, `maxLights`, `maxVfxInstances` and the three fps fields have no reader, and nothing ever writes `allowLights = false` (the frame-budget throttle that comment in `spawnEffect` refers to does not exist). The LetterBlock collect-pop is built differently from §2.5: the server fires `block_pop_<colour>` via `VfxBroadcast.playAt` and a `collect` stream via `VfxBroadcast.collect` (`BlockShootService`), drawn by `collectStream`; `LetterBlockAnimator`'s `onRemoved` does not spawn an emitter. Green cast entries **were** unbuilt until 2026-08-03 — `cast_green_t1..t3` now exist, and `spawnEffect` plays `EffectSpec.sound` (it previously consumed only `emitters`, so every spell was silent). **`.light` is implemented as of 2026-08-08** — a `PointLight` at full brightness on the landing frame, tweened to 0 over `durationSec` and honouring `PERF.allowLights`; `impact_damage_t3` was its first consumer; `impact_damage_t2` also sets `light` now, and `CosmeticProjectile` bodies (Fireball) have their own `light`. `.beam` is still ignored.
 
 ## VfxTemplates and the third-party texture trap
 
@@ -154,7 +154,7 @@ Both VMs deliberately still *write* the flag. The server's write is the one that
 
 ### Who each status watches (refactor chunk 10, 2026-09-11)
 
-The four controllers are now handler pairs over one `CharacterAttributeWatcher`, so "which rigs" is a flag rather than forty duplicated lines each. The flags are not uniform, and the asymmetry is the design:
+The controllers (four in the table; `ArrivalProtectionVfxController`, reading `_protectedUntil`, is a fifth that is not tabulated) are now handler pairs over one `CharacterAttributeWatcher`, so "which rigs" is a flag rather than forty duplicated lines each. The flags are not uniform, and the asymmetry is the design:
 
 | Controller | Attribute(s) | Tagged rigs? | Local player? | Why |
 |---|---|---|---|---|
@@ -640,6 +640,8 @@ Every new method that creates Instances or Tweens must:
 
 ## 5. Performance Guardrails
 
+> **Mostly unimplemented (checked against `src/` 2026-11-14).** Only `PERF.allowLights`, `PERF.reducedVfxEmitScale` and `PERF.maxBlockPops` are read by code; the evict / drop / fps-EMA / sound-throttle behaviours below were never built. See the banner at the top.
+
 Conservative defaults; tunable in `VfxConfig.PERF`.
 
 | Guardrail | Cap | Behaviour at cap |
@@ -683,10 +685,10 @@ Ordered so each step is independently testable; **bold** items are blocking for 
 
 ### Phase D — UI VFX (parallelizable; each is independent of the other)
 10. ~~**Edit `src/shared/Hud/BufferDisplayBuilder.luau`** + `BufferDisplayConfig.luau`~~ **Done** — `popTile`, `setMindFullPulse`, `playMemorizeOk`, `playMemorizeFail` implemented; constants in `BufferDisplayConfig.luau`.
-11. ~~**Edit `src/shared/Hud/AttributeBarBuilder.luau`** + `AttributeBarConfig.luau`~~ **Done** — `playGainSweep`, `playDrainRipple`, `setCapGlow` implemented; constants in `AttributeBarConfig.luau`.
+11. ~~**Edit `src/shared/Hud/AttributeBarBuilder.luau`** + `AttributeBarConfig.luau`~~ **Done** — `playGainSweep`, `playDrainRipple`, `setCapGlow` implemented; constants in `AttributeBarConfig.luau`. (As of 2026-11-14 nothing outside `AttributeBarBuilder` calls them; the only `AttributeBarBuilder` consumer is `GameplayHudGui`'s health bar.)
 12. ~~**Edit `src/shared/Hud/ReservoirBarsBuilder.luau`**~~ **Done** — per-color delta tracking + bar routing implemented; `lastEnergy` cache on handle.
 13. ~~**Edit `src/shared/Hud/SpellMenuBuilder.luau`** + `SpellMenuConfig.luau`~~ **Done** — `playAffordBounce`, `playFiredFlash`, `wasAffordable` map implemented; constants in `SpellMenuConfig.luau`.
-14. **Edit `src/client/UI/GameplayHudGui.client.luau`** to wire `:playMemorizeOk/Fail` and `:setMindFullPulse` into the existing memorize / MindFull listeners.
+14. **Edit `src/client/UI/GameplayHudGui.client.luau`** to wire `:playMemorizeOk/Fail` and `:setMindFullPulse` into the existing memorize / MindFull listeners. **Not done as of 2026-11-14** — the handle methods exist on `BufferDisplayBuilder`, but nothing in `src/` calls `popTile`, `playMemorizeOk`, `playMemorizeFail` or `setMindFullPulse` (`GameplayHudGui` only calls `setTiles`, `setValidWordGlow`, `setSparkle`).
 15. **Edit `src/client/UI/SpellMenuGui.client.luau`** to call `menu:playFiredFlash(color)` on `result.ok`.
 
 ### Phase E — Validation

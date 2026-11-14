@@ -1,7 +1,7 @@
 ---
 type: system
-description: Phase 2 action — the cast pipeline. castSpecific fires an explicitly-picked tier (the production path since 5.8's hold-to-charge); resolveSpecAtCharge picks that tier from a hold duration; tapReservoir is the retired highest-affordable rule, kept for its tests. Drains the reservoir on cast and fires the client-local `spellResolved` signal on success.
-updated: 2026-09-23
+description: Phase 2 action — the cast pipeline. castSpecific fires an explicitly-picked tier (the production path since 5.8's hold-to-charge); resolveSpecAtCharge picks that tier from a hold duration. Checks the cast can resolve, then drains the reservoir and fires the client-local `spellResolved` signal on success. (The tap-era `tapReservoir` / `resolveTapSpec` have been removed.)
+updated: 2026-11-14
 ---
 
 # CastAction
@@ -12,7 +12,7 @@ Phase 2 ([[design/build-plan]]) — tracker [NIM-10](tracker://NIM-10). Sequenti
 
 ## Files
 
-- `src/shared/CastAction/init.luau` — the module (two functions, no state).
+- `src/shared/CastAction/init.luau` — the module (`resolveSpecAtCharge` and `castSpecific`, no state).
 - `src/shared/CastAction/__tests.luau` — smoke suite; exports `M.run()`.
 
 ## API
@@ -43,10 +43,8 @@ CastAction.resolveSpecAtCharge(
     heldSec: number
 ) -> Spec?
 
--- Which tier would a tap fire? Pure. The pre-5.8 selection rule.
-CastAction.resolveTapSpec(color: Color, reservoirs: EnergyReservoirs) -> Spec?
-
--- Fire a specific tier. THE production entry point since 5.8.
+-- Fire a specific tier. THE production entry point since 5.8 (and the only one:
+-- resolveTapSpec and tapReservoir no longer exist).
 CastAction.castSpecific(
     color: Color,
     tier: number,          -- 1 | 2 | 3  (T4 parked 2026-09-23; the registry errors on it)
@@ -55,74 +53,69 @@ CastAction.castSpecific(
     target: Humanoid | Model | Vector3 | nil
 ) -> CastResult
 
--- Fire the highest currently-affordable tier. NO production caller since
--- 5.8; kept because __tests scenarios 1–4 pin the selection rule.
-CastAction.tapReservoir(
-    color: Color,
-    reservoirs: EnergyReservoirs,
-    caster: Humanoid | Model,
-    target: Humanoid | Model | Vector3 | nil
-) -> CastResult
+CastAction.spellResolved: RBXScriptSignal   -- (spec, caster, target), see Signal
 ```
 
 ## Tier selection (Phase 5.8)
 
 `resolveSpecAtCharge` is the rule behind [[systems/ChargeCast]]. It returns the highest tier that is **both** time-reached (`SpellRegistry.chargeTimeFor(tier) <= heldSec`) **and** currently affordable — so the charge stops dead at the affordability ceiling rather than climbing into a fizzle — and `nil` below T1, which the caller surfaces as a cancel rather than a failed cast.
 
-It lives here for the same reason `resolveTapSpec` does: the HUD has to know the tier *before* the release in order to draw it, and a second copy of the selection rule in the builder would drift from the one `castSpecific` is actually handed. (`SpellMenuBuilder` does keep its own `tierAtHold` for the per-frame path — it cannot require this module without dragging `EnergyReservoirs` and `SpellExecutor` into the HUD layer — but both read the same two `SpellRegistry` functions, and scenario 15 pins that contract.)
+It lives here because the HUD has to know the tier *before* the release in order to draw it, and a second copy of the selection rule in the builder would drift from the one `castSpecific` is actually handed. (`SpellMenuBuilder` does keep its own `tierAtHold` for the per-frame path — it cannot require this module without dragging `EnergyReservoirs` and `SpellExecutor` into the HUD layer — but both read the same two `SpellRegistry` functions, and scenario 15 pins that contract.)
 
 `Color` is the three-color string union shared with [[systems/EnergyReservoirs]] and [[systems/SpellRegistry]].
 
-## The two entry points
+## The entry point
 
-- **`castSpecific(color, tier, ...)`** — the production path since Phase 5.8. The player chose this tier deliberately, by holding the colour panel until the charge reached it (see [[systems/ChargeCast]]); the "save big, fire small" case is a short hold on a full reservoir. Returns `{ ok = false, reason = "cannot afford <Name> (cost ..., have ...)" }` if the chosen tier is above the current energy, and `{ ok = false, reason = "invalid color/tier: ..." }` if the caller passed garbage (handled gracefully, see [Errors](#errors)).
-- **`tapReservoir(color, ...)`** — the gesture that preceded it: one touch fires the highest currently-affordable tier, returning `{ ok = false, reason = "no affordable tier" }` below T1. **No production caller since 5.8.** Deliberately not deleted — scenarios 1–4 of `__tests` pin the highest-affordable rule through it, and that rule is still what `SpellMenuBuilder` uses to place the charge ceiling.
+- **`castSpecific(color, tier, ...)`** — the production path since Phase 5.8, and the only cast function. The player chose this tier deliberately, by holding the colour panel until the charge reached it (see [[systems/ChargeCast]]); the "save big, fire small" case is a short hold on a full reservoir. Returns `{ ok = false, reason = "cannot afford <Name> (cost ..., have ...)" }` if the chosen tier is above the current energy, and `{ ok = false, reason = "invalid color/tier: ..." }` if the caller passed garbage (handled gracefully, see [Errors](#errors)).
+- The tap-era `tapReservoir` ("fire the highest affordable tier") and `resolveTapSpec` were retired and are gone from the module; `SpellMenuBuilder` places the charge ceiling with `listAffordableSpells` instead.
 
-Both gestures resolve into the same internal pipeline:
+`castSpecific` resolves into this internal pipeline:
 
 1. Look up the [[systems/SpellRegistry|Spec]].
 2. Verify affordability (`canAfford` / `get`).
-3. Drain the cost (`drain`).
-4. Run the effect ([[systems/SpellExecutor|SpellExecutor.cast]]).
-5. On success, fire `CastAction.spellResolved` (see [Signal](#signal)); on executor failure, **refund** the cost (see below).
+3. Ask `SpellExecutor.canCast(spec, caster, target)` whether the cast would resolve; if not, fail with its reason **before touching the reservoir**.
+4. Drain the cost (`drain`).
+5. Run the effect ([[systems/SpellExecutor|SpellExecutor.cast]], `mode = "predicted"`).
+6. On success, fire `CastAction.spellResolved` (see [Signal](#signal)); on executor failure (should be unreachable after step 3), **refund** the cost (see below).
 
 ## Signal
 
-`CastAction.spellResolved` is the `.Event` of the Rojo-versioned BindableEvent at `CastAction/Remotes/SpellResolved` (since refactor chunk 7, so `VfxController` can listen on the Instance without requiring this module and the executor chain behind it), fired with `(spec, caster, target)` after every **successful** cast (`init.luau:115`). It is the seam the VFX layer hooks: on the casting client's VM, `VfxController` connects to it to draw the cast cue locally with zero RTT — and nothing at the target; every other client, and the caster's impact cue, come from the authoritative run over `VfxBroadcast` (see [[systems/VisualEffects]]). The server VM constructs the same BindableEvent but nothing connects there. The signal does **not** fire on fizzle or refund — a `spellResolved` fire reliably means a spell actually went off.
+`CastAction.spellResolved` is the `.Event` of the Rojo-versioned BindableEvent at `CastAction/Remotes/SpellResolved` (since refactor chunk 7, so `VfxController` can listen on the Instance without requiring this module and the executor chain behind it), fired with `(spec, caster, target)` after every **successful** cast (`drainAndCast` in `init.luau`). It is the seam the VFX layer hooks: on the casting client's VM, `VfxController` connects to it to draw the cast cue locally with zero RTT — and nothing at the target; every other client, and the caster's impact cue, come from the authoritative run over `VfxBroadcast` (see [[systems/VisualEffects]]). The server VM constructs the same BindableEvent but nothing connects there. The signal does **not** fire on fizzle or refund — a `spellResolved` fire reliably means a spell actually went off.
 
-## Refund on SpellExecutor failure
+## Refuse before draining; refund as a backstop
 
-If `SpellExecutor.cast` returns `{ ok = false, ... }` — for instance because a damage spell was tapped with no target — CastAction **adds the cost back** to the reservoir via `reservoirs:add(color, spec.cost)` and propagates the executor's reason. Rationale:
+The order is **check, then drain** (changed from drain → execute → refund): every reason a cast can be refused is knowable up front from `(spec, target)`, so `SpellExecutor.canCast` runs first and a refused cast (e.g. a damage spell with no target) returns `{ ok = false, reason }` having never touched the reservoir. Logged as `cast refused — <Name> (<reason>)`.
+
+The refund path still exists as a backstop and should be unreachable: if `SpellExecutor.cast` returns `{ ok = false, ... }` after `canCast` said yes, CastAction **adds the cost back** via `reservoirs:add(color, spec.cost)`, propagates the executor's reason, and logs a `warn` (a precondition has drifted from its handler). Rationale for never keeping the player's mana on a failed cast:
 
 - The player paid mana for an action that didn't actually happen. Losing energy to a downstream rejection would feel like a punishment for a UI/contract issue rather than a player mistake.
 - The refund keeps the cast pipeline's invariant clean: **a non-`ok` `CastResult` means no observable world change AND no observable reservoir change**.
-- The cost is small — one `:add` call — and the alternative (an empty try-cast handshake before the real drain) would double-call into SpellExecutor and is far more error-prone.
+- A `canCast` pre-check (`SkillDelivery.canDeliver` over the same preconditions the effect handlers use) replaced the old empty-handshake idea without double-running the cast.
 
-Pinned to a `reason` line in the resulting `CastResult` so the HUD can surface why nothing happened. The current refunding case the project actually hits is **projectile spells (Firebolt/Fireball) tapped with no resolvable target** ([[systems/SpellExecutor]] / SkillDelivery returns a `"…requires a target…"` reason); future targeting-mode work may add more.
+The `reason` is carried in the resulting `CastResult` so the HUD can surface why nothing happened. The case the project actually hits is **projectile spells (Firebolt/Fireball) with no resolvable target** ([[systems/SpellExecutor]] / SkillDelivery returns a `"…requires a target…"` reason) — now refused by the pre-check, not refunded.
 
-The refund does NOT fire if the affordability check at step 2 fails — in that case `drain` was never called, so there's nothing to add back.
+Neither the refusal nor the refund touches the reservoir if the affordability check at step 2 fails — `drain` was never called.
 
 ## Errors
 
 - Invalid `color` / `tier` to `castSpecific`: SpellRegistry raises; CastAction catches via `pcall` and returns `{ ok = false, reason = "invalid color/tier: ..." }`. The wrap is deliberate — callers benefit from a uniform `CastResult` failure shape rather than having to wrap every `castSpecific` call in their own pcall.
-- Invalid `color` to `tapReservoir`: `reservoirs:get(color)` will raise per the [[systems/EnergyReservoirs]] contract. Not pcall-wrapped — the HUD will only ever pass the three known colors here (a tap originates from a known reservoir bar), so a bad color is a programmer error rather than a user input.
 - An affordability-checked drain that returns false: this is a contract violation by [[systems/EnergyReservoirs]] and raises rather than fizzling — silent fizzling here would hide a real bug.
 
 ## Logging
 
 `Logger.new("CastAction")` emits one info line per terminal state:
 
-- `tap fizzle — <color> reservoir below T1 (energy=<n>)`
 - `castSpecific fizzle — invalid color/tier: <err>`
 - `castSpecific fizzle — cannot afford <Name> (cost <n>, have <n>)`
+- `cast refused — <Name> (<reason>)` (the `canCast` pre-check; nothing drained)
 - `cast ok — <Name> (color=<color> tier=<n> cost=<n>)`
-- `cast refunded — <Name> (<reason>)`
+- `cast refunded — <Name> (<reason>). canCast passed but the cast refused; ...` (logged at `warn`)
 
 No throttling — casts are rare-per-frame.
 
 ## Consumers
 
-- **HUD: SpellMenu** (shipped — [[systems/HUD]], [[systems/ChargeCast]]) — `SpellMenuBuilder` owns the press-hold-release gesture and hands `SpellMenuGui` a `castRequested(color, tier)`; the coordinator resolves the enemy lock **at release** (a 3 s T3 charge is long enough for the world to move) and calls `castSpecific`. Reads `CastResult.cast` to relay the cast to [[systems/SpellCastService]] and to flash the panel; placement-target hand-off for `targetingMode == "placement"` still pending.
+- **HUD: SpellMenu** (shipped — [[systems/HUD]], [[systems/ChargeCast]]) — `SpellMenuBuilder` owns the press-hold-release gesture and hands `SpellMenuGui` a `castRequested(color, tier)`, which `SpellMenuGui` forwards to `SpellCastController`'s `RequestCast` BindableFunction; the controller resolves the enemy lock **at release** (a 3 s T3 charge is long enough for the world to move), calls `castSpecific`, and relays every accepted cast (reading `CastResult.cast`) to [[systems/SpellCastService]]; the GUI flashes the panel from the result. Placement-target hand-off for `targetingMode == "placement"` still pending (the controller passes `target = nil`).
 - **VFX: VfxController** — listens on `Remotes/SpellResolved` and draws the caster's **cast cue only** (see [Signal](#signal)). Impact cues and the copy other players see come from the authoritative run over `VfxBroadcast`; the client-originated relay was deleted 2026-09-08 ([[design/client-server-boundary]]).
 - **Tutorial / scripted first cast** — may call either entry point directly to drive a scripted cast in an intro level.
 
@@ -138,7 +131,7 @@ require(game.ReplicatedStorage.Shared.CastAction.__tests).run()
 
 A passing run prints `[CastAction.__tests] all scenarios passed`. A failed assertion errors with the scenario's message.
 
-The fifteen scenarios (costs pinned to `TIER_COSTS = { 5, 10, 20, 40 }`, cap 60):
+The table below is the older fifteen-scenario list (costs pinned to `TIER_COSTS = { 5, 10, 20, 40 }`, cap 60); see the numbering note under it for what `__tests.luau` holds today:
 
 | # | Scenario | Pinned outcome |
 |---|---|---|
@@ -149,7 +142,7 @@ The fifteen scenarios (costs pinned to `TIER_COSTS = { 5, 10, 20, 40 }`, cap 60)
 | 5 | castSpecific(red, 1), energy=80 (caps at 60) | Firebolt fires (save-big); red=55 |
 | 6 | castSpecific(red, 3), energy=15 | `ok=false, reason mentions "cannot afford Inferno"` (cost 20); red unchanged |
 | 7 | castSpecific("yellow", 1) | `ok=false, reason mentions "invalid"`; red unchanged (60) |
-| 8 | tap red, energy=15, target=nil | Fireball projectile has no resolvable target → executor refuses, **refund**: red back to 15, `ok=false, reason mentions "target"` |
+| 8 | tap red, energy=15, target=nil | Fireball projectile has no resolvable target → `canCast` refuses before the drain (this row predates that; it used to be drain-then-**refund**): red stays 15, `ok=false, reason mentions "target"` |
 | 9 | castSpecific(green, 1), energy=15, target=nil (heal fallback) | Mend fires on caster (self-heal), drain 5, green=10; caster HP 50→65 |
 | 10 | `resolveSpecAtCharge(red, energy=0, held=10 s)` | `nil` — a hold on an empty reservoir never reaches T1, however long |
 | 11 | `resolveSpecAtCharge(red, energy=60, held=0)` | Firebolt (T1) — a tap is T1, **not** the highest affordable; the 5.8 behaviour change |
@@ -171,7 +164,7 @@ Tests are synchronous — CastAction itself is synchronous, and `EnergyReservoir
 - [[design/gameplay-loop]] — § "Cast (reservoir-driven)": dual-gesture surface, tier menu, placement-mode markers.
 - [[design/build-plan]] — Phase 2, gated on [[systems/SpellExecutor]].
 - [[systems/EnergyReservoirs]] — drained via `:drain(color, cost)`; refunded via `:add(color, cost)` on executor failure.
-- [[systems/SpellRegistry]] — spec lookup via `getSpell` (explicit) and `listAffordableSpells` (tap fast-path).
+- [[systems/SpellRegistry]] — spec lookup via `getSpell` (explicit) and `listAffordableSpells` (used by `resolveSpecAtCharge`).
 - [[systems/SpellExecutor]] — `cast(spec, caster, target)`; its `CastResult.reason` propagates through ours.
 - [[systems/MemorizeAction]] — sibling action; only writer to reservoirs via `:add`. Same module style.
 - [[concepts/SingleOwnership]] — `:drain` is CastAction's alone; `:add` is shared with MemorizeAction (deposits) and CastAction's own refund path.

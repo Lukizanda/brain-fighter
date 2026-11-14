@@ -1,7 +1,7 @@
 ---
 type: system
 description: Shared helpers and server handler for block consumption. Client input is BlockTapController (Phase 5.7 — click/tap a block directly). Server-trust validation added in 5.4 and unchanged by the input migration.
-updated: 2026-09-22
+updated: 2026-11-14
 ---
 
 # BlockShoot
@@ -185,7 +185,7 @@ Check 3 also makes a double-consume race a no-op for free: the first `Destroy` u
 
 ### Tuning
 
-`MAX_CONSUME_DISTANCE_STUDS` = `BlockShoot.MAX_RAYCAST_DISTANCE` (1400) + 100. The client raycasts from the *camera*, which sits behind the character, so the camera-to-character gap has to be added back or a legitimate long tap would be rejected. The allowance does not scale with reach — it is a property of the camera rig.
+`MAX_CONSUME_DISTANCE_STUDS` = `BlockShoot.MAX_RAYCAST_DISTANCE` (200) + 100 = 300. The client raycasts from the *camera*, which sits behind the character, so the camera-to-character gap has to be added back or a legitimate long tap would be rejected. The allowance does not scale with reach — it is a property of the camera rig.
 
 ### Reach
 

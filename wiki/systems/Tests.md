@@ -1,7 +1,7 @@
 ---
 type: system
 description: In-Studio test harness — TestRunner module + Suites/{NPC,Multiplayer,Phase3,Skills,Hardening,Economy,Unit,Analytics,Arena}, one Suites/Unit wrapper per pure-Luau __tests module. MCP-driven via test-runner subagent.
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # Test System
@@ -80,6 +80,7 @@ src/shared/Tests/
   Helpers/
     ensurePatroller.luau         — NPC suite fixture: reuse-or-clone Patroller_1
     restoreToSafeSpawn.luau      — teardown-only: put a moved player back on solid ground
+    arenaEntryFixture · bossEntranceFixture · breakableWallFixture · fossilFixture · hungerFixture · wordKitFixture  — Arena and Phase3 fixtures (Phase 8)
   Suites/
     NPC/
       combat_engages.luau
@@ -96,6 +97,9 @@ src/shared/Tests/
     Phase3/
       blockspawner_{fills_to_target,autorefills,bounds_check,respawn_delay}.luau
       blockshoot_helpers.luau · blockshoot_remote_exists.luau · phase3_invariants.luau
+      blockspawner_{color_only,no_attributes_unchanged,premium_table,quota_density_split,quota_refills}.luau (letter zones)
+      wordkit_*.luau ×10 · fossil_*.luau ×7
+    Arena/  (26: wall_* ×7, entry_* ×5, hunger_* ×9, protect_* ×2, boss_* ×3 — see Suite table)
     Skills/
       castaction_tests.luau · spellexecutor_tests.luau · skillinterrupt_smoke.luau
       cast_rejected_before_drain.luau · predicted_run_writes_nothing.luau
@@ -176,7 +180,7 @@ Requiring any `__tests.luau` must be side-effect-free — the assertions only ru
 | Economy | LIVE (3 tests) | [[systems/EnergyEconomy]] ledger: prices a cast, refuses over-cap memorize, resets on round start (ENFORCE=true since chunk 6) |
 | Unit | LIVE (9 tests) | WordBuffer, EnergyEconomy, EnergyReservoirs, Dictionary, SpellRegistry, MemorizeAction, MindFullManager, Settings (all real runs) + Hud (server-VM skip, real on client) |
 | Analytics | LIVE (2 tests) | `analytics_wires_domain_events` (the domain BindableEvents reach `AnalyticsReporter`), `onboarding_funnel_rules` (steps log once, strictly in order) — [[systems/Analytics]] |
-| Arena | LIVE (26 tests, added 2026-11-13; 9 `hunger_*` tests for [[systems/Boss]] § Hunger on `Helpers/hungerFixture`) | `wall_*` ×7 — [[systems/BreakableWalls]]: break count, default health outlasts a volley, non-boss sources ignored, slam radius, regen only with `RegenSec`, regen waits for a character, round-start reset. `entry_*` ×3 — [[systems/ArenaEntry]]: matching by arena id, no-arrival warning, touch moves the character, `entry_fires_event`. Stage 6: `protect_blocks_in_window`, `protect_on_entry` — [[systems/Health]] § Protection; `boss_holds_for_arrival`, `boss_instant_without_pad`, `boss_round_end_cancels` — [[systems/Boss]] § Entrance |
+| Arena | LIVE (26 tests, added 2026-11-13; 9 `hunger_*` tests for [[systems/Boss]] § Hunger on `Helpers/hungerFixture`) | `wall_*` ×7 — [[systems/BreakableWalls]]: break count, default health outlasts a volley, non-boss sources ignored, slam radius, regen only with `RegenSec`, regen waits for a character, round-start reset. `entry_*` ×5 — [[systems/ArenaEntry]]: matching by arena id, no-arrival warning, touch moves the character, `entry_fires_event`, `entry_link_routes` (the `EntryLink` attribute, added 2026-11-14). Stage 6: `protect_blocks_in_window`, `protect_on_entry` — [[systems/Health]] § Protection; `boss_holds_for_arrival`, `boss_instant_without_pad`, `boss_round_end_cancels` — [[systems/Boss]] § Entrance |
 | Melee | **deleted** (chunk 1, 2026-09-08) | Was: MeleeHitDetector sweep. Dead code — [[systems/Weapon]] melee path is unused; chunk 11 removes the modules |
 
 **91 tests total** (the 91st, `entry_link_routes`, was added 2026-11-14 and passed in a 26/26 Arena run; no full run since). `RunTests="all"` last ran **89/90 on 2026-11-13** with only the intermittent `NPC_deals_damage` failing (it failed in two of that day's four full runs, so it is worth a proper look). Earlier the same day it ran **79/80** (before the 81st test, `fossil_other_arena`, was added; Phase3 alone then ran 29/29) with only the intermittent `NPC_deals_damage` failing; the last fully clean runs were 80/80 (before the island carried fossils) and 74/74 the same day (Phase 8: +22 Phase3, +25 Arena). **A test that starts its own watcher shares the scene with the game's**: see [[systems/BlockSpawner]] § Fossil letters for the interference that caused. Two runs earlier that day each ended 72/73 with a different unrelated failure (`Multiplayer_pve_round_ends_on_boss_defeated`: "RoundEnded fired 0 times"; `NPC_NPC_deals_damage_to_player_in_Combat`: "no damage"); both passed in the next run, so treat them as intermittent and re-run before investigating. **Test names must be short:** the result is written to a `TestResult_<Suite>_<name>` attribute, attribute names cap at 100 characters, and a longer one crashes the autorunner. Before Phase 8 the total was 43, last verified **43/43 on 2026-09-23** — twice that day: the T4-park playtest and the post-refactor sanity check (see [[log]]), the latter with the Health event folders collapsed to their Rojo-versioned copies. Any other total means a suite folder lost or gained a module — check for `[AUTORUN WARN] Skipped` lines first.

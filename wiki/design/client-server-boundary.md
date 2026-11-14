@@ -1,7 +1,7 @@
 ---
 type: design
 description: Audit of which systems run gameplay code on both VMs, and the staged plan to replace the accidental client-side prediction in the Skills pipeline with an explicit authority / prediction / presentation split.
-updated: 2026-09-14
+updated: 2026-11-14
 ---
 
 # Client/Server Boundary
@@ -49,7 +49,7 @@ Evidence is from `require` graph traversal plus per-file guard inspection, not f
 | **BlockTapController** | ✅ only | ❌ | ✅ yes | fires `ConsumeBlock` at `src/client/BlockTapController.client.luau:194`. Server owns the destroy. Correct request/authority split. Replaced `LetterBlaster` in Phase 5.7 — the split survived the input migration unchanged, which is the row's actual point. |
 | **BlockSpawner** | ❌ | ✅ only | ✅ yes | required only by `server/BlockSpawner/BlockSpawnerService.server.luau:8` |
 | `LetterBlocks` | ✅ | ✅ | ✅ yes | tag + attribute names only |
-| `WordBuffer`, `EnergyReservoirs`, `MindFullManager`, `MemorizeAction`, `EnergyEconomy`, `Dictionary` | ✅ only | ❌ | ⚠️ known hole | all via `client/PlayerSession.luau:14-16`. The server has no reservoir — this is the client-trusted affordability gap already tracked in [[systems/SpellCastService]] § Trust model. |
+| `WordBuffer`, `EnergyReservoirs`, `MindFullManager`, `MemorizeAction`, `EnergyEconomy`, `Dictionary` | ✅ only | ❌ | ⚠️ known hole | all via `client/PlayerSession.luau:14-16`. The server has no reservoir — this was the client-trusted affordability gap tracked in [[systems/SpellCastService]] § Trust model. **Closed 2026-09-08 (refactor chunk 6):** the server-side `EnergyLedger` prices every cast and `EconomyConstants.ENFORCE = true`; the reservoirs themselves are still client-only, so the row's client-only marks remain accurate. |
 | `Health` / `applyDamage` / `DeathHandler` | ❌ | ✅ only | ✅ yes | `ServerScriptService` |
 | `Boss` | ❌ | ✅ only | ✅ yes | `server/Boss/*` |
 | `Vfx` (`VfxConfig`, `spawnEffect`, `StatusVisuals`) | ✅ draws | refuses | ✅ yes | `spawnEffect` refuses server-side by design |

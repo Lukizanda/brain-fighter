@@ -1,12 +1,12 @@
 ---
 type: system
 description: Floating letter-block prefab — the in-world entity the player shoots to spell words. Spawn API, color tints, CollectionService tag for the animator, and the spawn-in intro.
-updated: 2026-09-20
+updated: 2026-11-14
 ---
 
 # LetterBlock
 
-The in-world entity the player shoots to spell words. A small Model with a `Cube` BasePart, six SurfaceGuis (one glyph per face), and a colored ParticleEmitter. Two attributes drive everything: `Block.Letter` (the glyph) and `Block.Color` (`"red" | "green" | "blue" | "wild"`). Spawned by the upcoming [[systems/BlockShoot|BlockSpawner]] / [[design/build-plan|Phase 3]] pipeline.
+The in-world entity the player shoots to spell words. A small Model with a `Cube` BasePart, six SurfaceGuis (one glyph per face), and a colored ParticleEmitter. Two attributes drive everything: `Block.Letter` (the glyph) and `Block.Color` (`"red" | "green" | "blue" | "wild"`). Spawned by [[systems/BlockSpawner]] and consumed by [[systems/BlockShoot]] ([[design/build-plan|Phase 3]] pipeline, shipped).
 
 `"wild"` is the gold wildcard block, whose `Block.Letter` is the ASCII `*` and whose faces render `★`. See [[systems/Wildcard]].
 
@@ -235,10 +235,10 @@ Two dead ends worth not repeating: MCP `execute_luau` calls issued in one messag
 
 Blocks are server-spawned but their motion is purely cosmetic. Animating server-side would replicate every CFrame update across the wire 60 times a second per block — pure waste. The client animator is deterministic from the block's identity, so every player sees a slightly different phase but the same wobble shape, which is fine.
 
-## Consumers (planned)
+## Consumers
 
 - **[[systems/BlockShoot]]** (Phase 3 / NIM-12) — the shoot/click handler that detects a hit on a tagged block, reads `Block.Letter` + `Block.Color`, calls `:append(letter, color)` on the player's [[systems/WordBuffer]], and destroys the block.
-- **BlockSpawner** (Phase 3 / NIM-9) — picks letters from [[systems/Dictionary]] and places blocks in the arena at intervals.
+- **[[systems/BlockSpawner]]** (Phase 3 / NIM-9) — picks letters from Scrabble-weighted letter tables (not from [[systems/Dictionary]]; word kits use a curated list) and places blocks in the arena.
 
 ## See also
 

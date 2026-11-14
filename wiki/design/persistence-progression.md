@@ -1,14 +1,14 @@
 ---
 type: design
 description: Persistence & progression strategy — mastery-first progression, ProfileStore-backed PlayerData, analytics in the 5.4 release gate, implementation as Phase 5.5
-updated: 2026-07-27
+updated: 2026-11-14
 ---
 
 # Persistence & Progression
 
 Decided 2026-07-27 in a dedicated design session, spun off from the release-readiness discussion that set the Phase 5.4 soft-launch bar. Companion to [[design/build-plan]] (Phase 5.4 analytics item + Phase 5.5) and [[design/gameplay-loop]] (the stats this page persists all fall out of the core loop).
 
-**Context:** the game currently has zero persistence — no DataStores, no analytics, nothing survives a session. That is deliberate for the soft launch: persistence does **not** gate Phase 5.4. This page defines what comes immediately after, plus the one exception pulled forward (analytics).
+**Context:** when this page was written the game had zero persistence — no DataStores, no analytics, nothing survived a session. As of 2026-11-14 analytics exist ([[systems/Analytics]], built 2026-09-22); there is still no DataStore, ProfileStore or `PlayerData` code anywhere in `src/`. That is deliberate for the soft launch: persistence does **not** gate Phase 5.4. This page defines what comes immediately after, plus the one exception pulled forward (analytics).
 
 ## Decisions
 
@@ -16,7 +16,7 @@ Decided 2026-07-27 in a dedicated design session, spun off from the release-read
 
 The game stays fully open — no content is gated behind session-to-session unlocks. Retention comes from self-improvement: personal bests, cumulative stats, and (later) leaderboards.
 
-**Rationale:** Brain Fighter's core loop is already a skill loop (spell better words → more energy → bigger casts). Spell tiers are gated by in-run energy (5/10/20/40), which is the game's own difficulty curve; retro-gating spells behind meta unlocks would distort SpellRegistry/EnergyEconomy balance and remove the "full toolkit from minute one" feel. Meta unlocks were considered and **rejected** for the first wave.
+**Rationale:** Brain Fighter's core loop is already a skill loop (spell better words → more energy → bigger casts). Spell tiers are gated by in-run energy (5/10/20/40 in `SpellRegistry.TIER_COSTS`; T4 is parked, so the live tiers are 5/10/20), which is the game's own difficulty curve; retro-gating spells behind meta unlocks would distort SpellRegistry/EnergyEconomy balance and remove the "full toolkit from minute one" feel. Meta unlocks were considered and **rejected** for the first wave.
 
 ### 2. What persists (first wave, Phase 5.5)
 

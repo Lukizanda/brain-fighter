@@ -1,12 +1,12 @@
 ---
 type: system
 description: Game mode framework — SessionRegistry (the session tables, as a module) over per-session RoundManager instances that each own a ScoreTracker; per-arena SpawnManager scored against the session roster; mode config carries allowsPvP / timeLimit / countdownSec instead of global flags; BroadcastAudience scopes the remaining screen-space remotes. Registered modes are PvEBoss (default), PvPDuel, NoOp and Lobby. Rewritten 2026-09-09 (refactor chunk 8, the Phase 6 stage-7 rewrite).
-updated: 2026-09-22
+updated: 2026-11-14
 ---
 
 # GameMode System
 
-The server runs **sessions**. A session is one mode definition bound to one arena slot, with its own roster, its own round state machine and its own scores. Two exist at boot — the hub (`Lobby`, running `LobbyMode`, never starts a round) and the arena (`Default`, running the mode named by `workspace.ActiveGameMode`, `NoOp` today) — and players move between them by transfer. See [[design/lobby]] § Session model for why this shape.
+The server runs **sessions**. A session is one mode definition bound to one arena slot, with its own roster, its own round state machine and its own scores. The code creates two at boot — the hub (`Lobby`, running `LobbyMode`, never starts a round) and the arena (`Default`, running the mode named by `workspace.ActiveGameMode`; unset or unknown means `PvEBoss`), then one more per `ArenaSlot`-tagged scene instance (the two duel pads, § Modes) — and players move between them by transfer. See [[design/lobby]] § Session model for why this shape.
 
 > The competitive template modes (`FFADeathmatch`, `TeamDeathmatch`, `TeamService`) were deleted in `6610291` (2026-06-22). Refactor chunk 8 (2026-09-09) removed the last of the team plumbing that survived them — `TEAMS_ENABLED`, the friendly-fire branch, nametag team colour, `winnerTeamName`, `getTeamConfig`, `GameModeTypes` — and the three global round flags. Nothing about teams is left to flip.
 

@@ -1,7 +1,7 @@
 ---
 type: design
 description: Canonical core loop — aim, shoot letter blocks, spell words in a 12-slot buffer, cast color-typed spells that drain per-color energy reservoirs to defeat the level monster
-updated: 2026-09-23
+updated: 2026-11-14
 ---
 
 # Gameplay Loop
@@ -40,7 +40,7 @@ Pacing tension — slow spelling vs urgent combat — is the central design risk
 - **Block color determines spell type. Spell element is derived from blocks used, NOT word theme.** *Why:* spelling "ROCK" with red blocks is a damage spell, not an earth spell — because "ROCK" with green blocks is a heal. This keeps the system orthogonal: letters are a typing-puzzle layer, color is the spell-school layer, and they don't fight. Word theme is flavor, not mechanics.
 - **Three colors at launch — Red=Damage, Green=Healing/Walls, Blue=Utility.** *Why:* a three-school roster is the smallest set that can express the offense/defense/control rock-paper-scissors monsters can be designed around. More colors can be added later if they earn their place; starting wider risks each school feeling thin.
 - **Three tiers per color, gated by per-color energy thresholds.** *Why:* tiering gives the player a tangible "is this worth casting now or saving for the big one?" decision every cast, which is the choice the loop is built around. One tier per color would flatten that to "press button when bar full."
-- **T4 is parked (2026-09-23).** Red's Volley was the only spell that ever reached the fourth tier, and it was authored as a proof that the projectile delivery could fire a staggered burst — not as a designed spell. Its payload (3 × flat 12) is worth less than the Inferno one rung below it, so the top of the ladder was strictly worse than the middle. *Why park rather than rebalance:* what a fourth tier is *for* is the open question — a finisher, a school ultimate, a shared cross-colour cast — and picking numbers before answering that is how Volley happened the first time. The ladder stops at T3 until a T4 has a design. Code: `SpellRegistry.MAX_ENABLED_TIER = 3`; the spec and its 40-mana rung stay in the file, so re-enabling is one constant.
+- **T4 is parked (2026-09-23).** Red's Volley was the only spell that ever reached the fourth tier, and it was authored as a proof that the projectile delivery could fire a staggered burst — not as a designed spell. Its payload (3 × flat 12) is worth less than the Inferno one rung below it, so the top of the ladder was strictly worse than the middle. *Why park rather than rebalance:* what a fourth tier is *for* is the open question — a finisher, a school ultimate, a shared cross-colour cast — and picking numbers before answering that is how Volley happened the first time. The ladder stops at T3 until a T4 has a design. Code: the file-local `MAX_ENABLED_TIER = 3` in `SpellRegistry` (it sets the exported `NUM_TIERS`); the spec and its 40-mana rung stay in the file, so re-enabling is one constant.
 
 ### Spell economy
 
@@ -61,7 +61,7 @@ Word commit and spell cast are decoupled (revised 2026-05-13, supersedes an earl
 An icon-only button next to the buffer converts the buffered word into mana.
 
 - **Valid word** → energy transmutes into the matching color reservoirs (value-weighted by tile color per the formula). Buffer clears. The letters visibly flow into the bars as feedback.
-- **Invalid word** → the button shakes, the buffer flashes red, and the buffer is **cleared** — the letters are consumed regardless (`MemorizeAction` `init.luau:76`). A soft fizzle sound communicates the failure. *(Revised 2026-05/06 from the original "letters preserved for typo correction" rule: consuming on a bad commit makes Memorize a real decision with stakes rather than a free retry. If playtest shows it's too punishing for young players, this is a one-line revert in `MemorizeAction`.)*
+- **Invalid word** → the button shakes, the buffer flashes red, and the buffer is **cleared** — the letters are consumed regardless (`MemorizeAction.tryMemorize`, `init.luau:138`). A soft fizzle sound communicates the failure. *(Revised 2026-05/06 from the original "letters preserved for typo correction" rule: consuming on a bad commit makes Memorize a real decision with stakes rather than a free retry. If playtest shows it's too punishing for young players, this is a one-line revert in `MemorizeAction`.)*
 - The button is **icon-only** (sparkle / swirl glyph). No text label → no localization burden, and the action is taught in tutorial copy ("tap to absorb the word into mana") rather than baked into the button itself.
 
 *Why:* the prior design coupled word commit with spell fire — every commit forced a cast decision. Decoupling them turns stockpiling into a real strategy (commit several words first, then choose when and what to cast) and removes the awkward "what color does an empty Cast tap default to?" question.
@@ -94,13 +94,13 @@ Each color's reservoir is the cast surface for that color. **Press it, hold to c
 
 - **Constrained-random with soft heuristics + escape hatches, not a hard "always spellable" guarantee.** *Why:* a hard guarantee is brittle (what counts as "spellable" depends on what's already in the buffer, what tier the player is going for, etc.) and expensive to compute. Soft bias + "if stuck, spawn extras" + "player can reroll" covers the same failure mode with much less code. Don't over-engineer this up front.
 - **Shot blocks vanish, spawner replenishes; blocks float and require player movement.** *Why:* movement-gated letter pickup is what couples the TPS template's locomotion to the spelling layer — without it, the player roots and the game becomes a typing test with no shooter texture.
-- **~24 blocks floating at once in a moderate arena, framed as density-per-area in code.** *Why:* 8 blocks per color is just enough for a 5-letter same-color word to be findable without the search dominating; 24 total keeps the arena legible rather than soup. Storing as `BLOCKS_PER_100_SQ_STUDS` (≈ 0.4) means the number tracks level size automatically — no per-level hand-tuning of an absolute count.
+- **~24 blocks floating at once in a moderate arena, framed as density-per-area in code.** *Why:* 8 blocks per color is just enough for a 5-letter same-color word to be findable without the search dominating; 24 total keeps the arena legible rather than soup. The shipped knob is `GameConfig.BLOCK_SPAWN_DENSITY` (blocks per 1000 cubic studs of spawn volume, currently `0.1`; `BlockSpawner`'s own fallback when given neither a density nor a count is a flat `DEFAULT_TARGET_COUNT = 24`), so the number tracks level size automatically — no per-level hand-tuning of an absolute count. The `BLOCKS_PER_100_SQ_STUDS` name used in earlier drafts does not exist in code.
 - **Letter selection within a color is Scrabble-frequency-weighted, independent of color weighting.** *Why:* English vowels and common consonants (E, A, I, O, N, R, T, L, S, U) carry most words; an even letter distribution would over-represent rare letters and make the pool feel unspellable. Frequency-weighting also makes Q/Z/J/X feel like treasure moments — exactly because they're worth more energy AND rarer to spawn.
 - **Color weighting defaults to 33/33/33, but is per-level configurable via `colorWeights`.** *Why:* equal-weight is the right neutral for tutorialization and most encounters. The per-level override is what unlocks future encounter design (a boss balanced around scarce green = "no easy healing, plan offensively") and costs nothing to plumb now vs adding it later as a refactor. **No adaptive spawning** based on player state — it erodes player agency and is over-engineering for first prototype.
 
 ### Dictionary
 
-- **Local Luau ModuleScript hashtable, ~10–30k curated entries.** *Why:* the reason to curate is *not* memory (Roblox handles 5–8 MB fine) — it's age-appropriateness (Scrabble lists contain obscure/offensive 2–3 letter words) and game feel (you want "FLAME" to feel earned, not "QAT"). Local + hashtable gives O(1) lookup with zero network dependency. Possible future direction: tier the dictionary by level to scaffold a learning curve.
+- **Local Luau ModuleScript hashtable, curated entries (the shipped list under `src/shared/Dictionary/words/` is about 80,000 words, generated by `tools/generate_wordlist.py`; the original target was ~10–30k).** *Why:* the reason to curate is *not* memory (Roblox handles 5–8 MB fine) — it's age-appropriateness (Scrabble lists contain obscure/offensive 2–3 letter words) and game feel (you want "FLAME" to feel earned, not "QAT"). Local + hashtable gives O(1) lookup with zero network dependency. Possible future direction: tier the dictionary by level to scaffold a learning curve.
 
 ### Win condition
 
@@ -170,18 +170,20 @@ All ten are implemented as of Phase 5.2 (2026-08-03). Two notes where the shippe
 
 Spot-check the formula end-to-end. `Σ letter_values × length_multiplier`, rounded to integer.
 
-| Word | Letter sum | Length | Multiplier | Energy | Tier reached on this cast |
+| Word | Letter sum | Length | Multiplier | Energy | Highest tier it affords (costs 5 / 10 / 20, all one colour) |
 |---|---|---|---|---|---|
-| CAT | 3+1+1 = 5 | 3 | 1× | **5** | — (below T1) |
-| FIRE | 4+1+1+1 = 7 | 4 | 1× | **7** | — (below T1) |
-| ROCK | 1+1+3+5 = 10 | 4 | 1× | **10** | T1 |
-| FLAME | 4+1+1+3+1 = 10 | 5 | 1.5× | **15** | T1 |
-| DRAGON | 2+1+1+2+1+1 = 8 | 6 | 1.5× | **12** | T1 |
-| FROZEN | 4+1+1+10+1+1 = 18 | 6 | 1.5× | **27** | T1 |
-| FIREBALL | 4+1+1+1+3+1+1+1 = 13 | 8 | 2× | **26** | T1 |
-| LIGHTNING | 1+1+2+4+1+1+1+1+2 = 14 | 9 | 3× | **42** | T2 |
-| EARTHQUAKES | 1+1+1+1+4+10+1+1+5+1+1 = 27 | 11 | 3× | **81** | T3 |
-| CHARACTERIZE | 3+4+1+1+1+3+1+1+1+1+10+1 = 28 | 12 | 3× | **84** | T3 |
+| CAT | 3+1+1 = 5 | 3 | 1× | **5** | T1 |
+| FIRE | 4+1+1+1 = 7 | 4 | 1× | **7** | T1 |
+| ROCK | 1+1+3+5 = 10 | 4 | 1× | **10** | T2 |
+| FLAME | 4+1+1+3+1 = 10 | 5 | 1.5× | **15** | T2 |
+| DRAGON | 2+1+1+2+1+1 = 8 | 6 | 1.5× | **12** | T2 |
+| FROZEN | 4+1+1+10+1+1 = 18 | 6 | 1.5× | **27** | T3 |
+| FIREBALL | 4+1+1+1+3+1+1+1 = 13 | 8 | 2× | **26** | T3 |
+| LIGHTNING | 1+1+2+4+1+1+1+1+2 = 14 | 9 | 3× | **42** | T3 |
+| EARTHQUAKES | 1+1+1+1+4+10+1+1+5+1+1 = 27 | 11 | 3× | **81** | T3 (a single reservoir keeps only 60) |
+| CHARACTERIZE | 3+4+1+1+1+3+1+1+1+1+10+1 = 28 | 12 | 3× | **84** | T3 (a single reservoir keeps only 60) |
+
+(The last column used to read T1 / T1 / T2 / T3 from the earlier 10 / 30 / 80 thresholds. With today's costs a one-colour 5-energy word already affords a Firebolt, and the 42, 81 and 84 totals all land on T3.)
 
 If anything in this table drifts from what code returns at runtime, the code has a bug — these are pinned.
 
@@ -202,7 +204,7 @@ The Red+Blue Z-padding-exploit ("stuff a Z into red, pad with cheap blue letters
 All major design decisions are now resolved (see the resolved-decisions sections above). What remains is **tuning** — every concrete number in this doc is an educated starting point, and the first playable prototype is what tells us whether the curve feels right. The list below names the levers most likely to need adjustment.
 
 - **Energy curve.** `Σ letter_values × length_multiplier` produces (CAT, FIRE, FLAME, LIGHTNING, EARTHQUAKES) → (5, 7, 15, 42, 81). Are short words rewarding enough to not feel wasteful? Are long words rewarding enough to justify the build-up time? Does `CHARACTERIZE`=84 trivialize a boss in one cast, or is that the desired payoff moment?
-- **Spell tier thresholds (10 / 30 / 80).** Is T1 reachable within ~10 sec of combat starting? Does T3 feel earned rather than constantly out of reach? If players are firing T1 spam exclusively, T1's cost may be too low (or its payoff too high).
+- **Spell tier thresholds (5 / 10 / 20).** Is T1 reachable within ~10 sec of combat starting? Does T3 feel earned rather than constantly out of reach? If players are firing T1 spam exclusively, T1's cost may be too low (or its payoff too high).
 - **Spawn density (~24 blocks, ~8 per color).** Is the player ever starved for >5 sec between word attempts (too few)? Does the arena read as "block soup" (too many)? Tune via the `BLOCKS_PER_100_SQ_STUDS` constant.
 - **Color weighting.** Default 33/33/33. Per-level designers may want to lean specific colors scarce for encounter shape; the first signal will come when monster designs are concrete.
 - **Mind Full pacing.** With a 12-slot buffer, how often does the player actually hit the cap? If it's a rare emergency, the cap is well-placed; if "destroy a letter to keep shooting" becomes a constant mode, the cap is too low or the Memorize gesture isn't being used enough.

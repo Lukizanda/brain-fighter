@@ -51,8 +51,9 @@ your own Fireball removes the baiting.
   so a player behind cover still draws fire and the cover takes it.
 - **Ground Slam is a plain radius**, players only, no occlusion (`handlers.aoe`).
 - Brain's volley is `count = 20`, `speed = 90`, `lifetimeSec = 3` in `BossConfig`
-  (270 studs of travel, further than the plaza is wide). [[systems/Boss]] quotes both
-  30 and 3; the config is the truth.
+  (270 studs of travel, further than the plaza is wide). [[systems/Boss]] once quoted
+  both 30 and 3 for the count; it was corrected, and the config is the truth. Each
+  fireball does 5 damage, so a full volley is 100.
 
 ## Measured arena (Studio, 2026-11-13)
 
@@ -270,7 +271,7 @@ letters around the boss are urgent instead of merely valuable.
 - Every `eatIntervalSec` (start at 5) the living boss takes the nearest letter block
   within `eatRadius` (start at 25 studs), and heals `eatHealFraction` of its maximum
   health (start at 0.01). At most 12% a minute at these values.
-- It does not eat during the entrance, while frozen or stunned, or when no block is in
+- It does not eat during the entrance, while frozen (the code has no stun status), or when no block is in
   range. It never eats a word-kit letter or a freed fossil letter: both are rewards a
   player earned.
 - The block is removed through the spawner's normal removal path, so its zone refills
@@ -297,7 +298,7 @@ letters around the boss are urgent instead of merely valuable.
 | 8 | Fossil letters: `FossilTable` on a wall, glyph on crack, freed timed letter on break, suite | build session (Sonnet) | **built 2026-11-13**, 7 tests — [[systems/BlockSpawner]] § Fossil letters. Island rocks tagged (15 `Standard`, 2 `Premium`, 3 `Wildcard`). The fade tell on the freed block is not built; not yet seen under boss fire |
 | 9 | Hungry brain: boss eats the nearest letter on a timer and heals, suite | build session (Sonnet) | **built 2026-11-13**, 9 tests — [[systems/Boss]] § Hunger. Never seen on a real Brain: nothing is in reach in the old arena |
 | 6 | Arrival beat: timed boss entrance keyed on the first arrival, brief arrival protection, suite | build session (Sonnet) | **built 2026-11-13**, 6 tests — [[systems/Boss]] § Entrance, [[systems/Health]] § Protection. Not yet seen end to end on the island |
-| 5 | Arena entry teleporter: `ArenaEntryPad` → `ArenaArrivalPoint`, suite | build session (Sonnet) | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]]. Physical touch not yet verified |
+| 5 | Arena entry teleporter: `ArenaEntryPad` → `ArenaArrivalPoint`, suite | build session (Sonnet) | **built 2026-11-13**, 5 `entry_*` tests since `EntryLink` — [[systems/ArenaEntry]]. Physical touch verified with a walking character |
 
 Stage 3 is not fanned out. The build plan's rule is that work needing design judgment
 is done with the user, and it needs the Studio place, which the two build sessions also

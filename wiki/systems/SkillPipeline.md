@@ -1,7 +1,7 @@
 ---
 type: system
 description: Unified data + dispatch pipeline shared by player spells and boss attacks. SkillSpec (data) + SkillEffects (effects) + SkillDelivery (deliveries), with caller-resolved origin so any caster (player, boss, future NPC) plugs in the same way.
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # Skill Pipeline
@@ -14,7 +14,7 @@ Shipped in commit `03b6080` (replaces the old boss-only `BossAttacks.luau` and t
 
 - **`SkillSpec`** = pure data: `{ delivery, deliveryParams, onImpact: { EffectSpec } }`
 - **`SkillDelivery`** = how the skill reaches its target (`instant`, `projectile`, `aoe`, `world_spawn`)
-- **`SkillEffects`** = what happens on impact (`damage`, `heal`, `freeze`, `knockup`, `shield`, `buff` — all real as of Phase 5.2; the `wall` stub was deleted, see [Defensive layer](#defensive-layer-shield--buff--wall-phase-52))
+- **`SkillEffects`** = what happens on impact (`damage`, `heal`, `freeze`, `burn`, `knockup`, `shield`, `buff` — all real as of Phase 5.2, `burn` being a render-only flag that deals no damage; the `wall` stub was deleted, see [Defensive layer](#defensive-layer-shield--buff--wall-phase-52))
 - **Wrappers** ([[systems/SpellRegistry]], `BossConfig.BOSS_TYPES`) add context-specific fields (cost/color/tier or phase/cooldown)
 - Adding a new effect kind once makes it available to every spell and every boss attack — no caller changes
 
@@ -34,7 +34,7 @@ graph LR
         direction TB
         ST["SkillTypes.luau<br/>SkillSpec, EffectSpec, DeliveryCtx"]
         DR["SkillDelivery.luau<br/>instant / projectile / aoe / world_spawn"]
-        ER["SkillEffects.luau<br/>damage / heal / freeze / knockup / shield / buff"]
+        ER["SkillEffects.luau<br/>damage / heal / freeze / burn / knockup / shield / buff"]
         BR["SkillBuffs.luau<br/>damageAmp registry + shield pool"]
         ER --> BR
         ST -.types.-> DR
@@ -57,7 +57,7 @@ graph LR
 
 The registries are **pure**: they never branch on caster type, don't know about staffs vs boss rigs, don't touch cost or cooldown. Each caller ([[systems/SpellExecutor]], `BossStates`) resolves its own context (origin CFrame, source instance) and passes it via `DeliveryCtx`.
 
-Every effect and delivery handler is real as of Phase 5.2. The refund path that Phase 5.1 built for stubs is still load-bearing — [[systems/CastAction]] drains before executing, so any genuine rejection (a targeted spell cast with no target, an unknown effect kind) hands the mana back rather than charging for a no-op.
+Every effect and delivery handler is real as of Phase 5.2. [[systems/CastAction]] no longer drains and then refunds on a refusal: `drainAndCast` first asks `SpellExecutor.canCast` (which runs the `preconditions` tables in `SkillDelivery`/`SkillEffects`), so a genuine rejection (a targeted spell cast with no target, an unknown effect kind) never touches the reservoir. The refund (`reservoirs:add`) survives only as a backstop for when `canCast` passed and the cast still refused, and it logs a warning because that means a precondition has drifted from its handler.
 
 ## Data Shape
 
@@ -78,8 +78,8 @@ graph LR
         SD["delivery:<br/>'instant' | 'projectile'<br/>| 'aoe' | 'world_spawn'"]
         SDP["deliveryParams:<br/>count, speed, radius, ..."]
         SOI["onImpact: { EffectSpec }"]
-        SVF["vfxName? (reserved)"]
-        SSF["sfxName? (reserved)"]
+        SVF["minRange?"]
+        SSF["windupVfx? / windupAnimId?"]
     end
 
     subgraph Effects["EffectSpec entries (composable)"]
@@ -89,6 +89,7 @@ graph LR
         E4["kind='knockup'<br/>force"]
         E5["kind='shield'<br/>amount"]
         E6["kind='buff'<br/>buffKind, magnitude, durationSec"]
+        E7["kind='burn'<br/>durationSec"]
     end
 
     S1 --> SkillCore
@@ -99,6 +100,7 @@ graph LR
     SOI --> E4
     SOI --> E5
     SOI --> E6
+    SOI --> E7
 ```
 
 `onImpact` is an **array** — a single skill can apply multiple effects in sequence (e.g., GroundSlam does damage + knockup). Sanctuary is `{ heal, shield }` again as of 5.2; its `shield` entry had been removed in 5.1 because a failing stub after a *real* full heal would have triggered the refund path, making it a free full heal.
@@ -136,7 +138,7 @@ sequenceDiagram
     participant ER as SkillEffects
 
     P->>CA: castSpecific(red, 4, target)
-    Note over CA: getSpell(red, 4) → drain(red, 75)
+    Note over CA: getSpell(red, 4) → drain(red, 40)
     CA->>SE: cast(spec, caster, target)
     SE->>DR: deliver(spec.skill, ctx { origin=StaffTip, target, source })
     Note over DR: handlers.projectile → spawn 3 projectiles
@@ -217,7 +219,7 @@ The pool projects a **spherical shell**, `SkillBuffs.SHELL_RADIUS_STUDS` (4.2) c
 - The radius is **fixed, not measured off the live rig**. A bounding box breathes with the walk animation, and a hit volume that grows and shrinks per frame is neither testable nor fair.
 - The shell is **inflated by the projectile's half-extent**, so contact is measured surface-to-surface rather than centre-to-centre. Without this, Brain's 2-stud fireballs whose bodies visibly clipped the bubble but whose centres passed outside it flew straight through — on screen, a shot hitting the shield and not being destroyed.
 - A blocked shot is **destroyed outright**. No splash, no effect handlers — which means a shielded player also covers whoever is standing next to them.
-- The pool is charged a **flat `SkillBuffs.SHELL_BLOCK_COST`** (5) per deflection, *not* the shot's damage. The shell is a barrier that destroys projectiles, not a damage sponge that happens to stop them — charging full damage made a 40 pool worth 2.6 of Brain's fireballs, which inside a 30-shot volley is indistinguishable from having no shield. At 5 a shield is worth **8 deflections**, tunable by that constant alone.
+- The pool is charged a **flat `SkillBuffs.SHELL_BLOCK_COST`** (5) per deflection, *not* the shot's damage. The shell is a barrier that destroys projectiles, not a damage sponge that happens to stop them — charging full damage made a 40 pool worth 2.6 of Brain's fireballs, which inside a 30-shot volley is indistinguishable from having no shield. At 5 a shield is worth **8 deflections**, tunable by that constant alone. (The 2.6 figure used Brain's fireball damage at the time; `BossConfig` now has Brain's fireball at 5 and Wizard's at 10, so for Brain the flat cost equals the shot's damage and only the Wizard's shot is still cheaper to deflect than to absorb.)
 - The asymmetry is the point: **deflection is cheap, absorption is not.** Damage that actually reaches the body — GroundSlam, melee, anything non-projectile — still drains the pool at full value through `shieldModifier`, untouched.
 
 ### Shield — why projectiles are server-simulated
@@ -246,7 +248,7 @@ Server simulation fixed the penetration but introduced the mirror problem: clien
 | Does | Raycast, shell block, damage, pool drain | Nothing but fly, die, and *sound* its death |
 | Physics | `LinearVelocity`, `SetNetworkOwner(nil)` | Anchored, hand-stepped per Heartbeat |
 
-The cosmetic owning the **death cue** (2026-08-04) follows from the same split: boss fire never runs a client `detonate`, so the cosmetic is the only thing that can make a shot audible to someone who can't see it. See [[systems/AudioSFX]] § "Projectile death cue" for the per-cause suppression table and the which-VM-plays-it rule — the trap being that `projectile` runs on both VMs, so an unguarded cue double-plays for the caster.
+The cosmetic owning the **death cue** (2026-08-04) follows from the same split: boss fire never runs a client `detonate`, so the cosmetic is the only thing that can make a shot audible to someone who can't see it. See [[systems/AudioSFX]] § "Projectile death cue" for the per-cause suppression table and the which-VM-plays-it rule — the trap being that `projectile` once ran on both VMs, so an unguarded cue double-plays for the caster (the predicted run now returns before spawning anything).
 
 ### `consumeOnHit` — does the shot end on the rig it hits?
 
@@ -269,7 +271,7 @@ The server broadcasts launch parameters as the `projectile` kind of `VfxBroadcas
 
 `SkillBuffs.shellEntry` is shared by both paths deliberately — a second copy of the intersection maths on the other VM is a desync waiting to happen.
 
-**This also fixed a latent duplicate.** `projectile` delivery runs on *both* VMs — unlike `world_spawn`, which guards for exactly this reason — so a player cast always produced a server Part *and* a client Part. It went unnoticed because the caster's client owned and simulated both in lockstep, drawing them on top of each other; `SetNetworkOwner(nil)` broke that lockstep and would have shown the caster two fireballs. With the server copy invisible the caster sees one. The casting client skips its own broadcast (`casterUserId`, the same pattern `VfxController` uses for bursts) since its local shot is already frame-perfect.
+**This also fixed a latent duplicate.** `projectile` delivery used to run on *both* VMs — unlike `world_spawn`, which guards for exactly this reason — so a player cast always produced a server Part *and* a client Part. It went unnoticed because the caster's client owned and simulated both in lockstep, drawing them on top of each other; `SetNetworkOwner(nil)` broke that lockstep and would have shown the caster two fireballs. With the server copy invisible the caster saw one, and the casting client skipped its own broadcast since its local shot was frame-perfect. **That is no longer the code:** `handlers.projectile` now returns early for any run that is not `"authoritative"`, so the caster's predicted run spawns no Part, and the broadcast goes to every client including the caster (`ctx.predictedBy` is deliberately not consulted there). The caster's own cosmetic is the same `CosmeticProjectile` everyone else draws.
 
 Measured client-side across the same boss engagement:
 
@@ -313,7 +315,7 @@ The same choice buys cross-client replication for free — the authoritative poo
 
 `SkillBuffs` stores timed modifiers per Humanoid and evaluates expiry **on read**, not on a timer. An expired entry on a living humanoid is harmless (filtered at read) and bounded by the number of buff kinds, while death and despawn are covered by purge — which removes a whole class of timer/death races of the kind 5.1 had to fix for freeze. Re-applying the same `buffKind` overwrites rather than stacks, so re-casting Stasis refreshes the window instead of squaring the multiplier.
 
-`SkillEffects.damage` multiplies by `SkillBuffs.damageAmp(target)` once, ahead of the branch, so all three damage paths (applyDamage, MaxHP fraction, flat) honour it identically.
+`SkillEffects.handlers.damage` multiplies the base by `SkillBuffs.damageAmp(target)` once, after choosing between `fractionOfMaxHP` and flat `amount`, so both forms honour it identically.
 
 ### Stone Wall — server-only spawn
 
@@ -401,9 +403,9 @@ The rule now lives in the registry:
 
 - `SpellRegistry.Spec.selfTarget: boolean?` marks caster-resolved spells (Mend, Shield, Sanctuary).
 - `SpellRegistry.needsEnemyTarget(spec)` is the single predicate — false for self-buffs *and* placement spells. Nothing should branch on colour again.
-- `CastAction.resolveTapSpec(color, reservoirs)` lets the HUD see which spell a tap will fire *before* casting, so it knows whether to hunt for a target. Keeping the selection rule in CastAction stops the HUD drifting from what `tapReservoir` actually picks.
+- `CastAction.resolveSpecAtCharge(color, reservoirs, heldSec)` (it replaced `resolveTapSpec`) lets the HUD see which spell releasing a charge of that length will fire *before* casting, so it knows whether to hunt for a target. Keeping the selection rule in CastAction stops the HUD drifting from what `castSpecific` is actually handed.
 
-`SpellCastService` accepts `target = nil` and validates it against `needsEnemyTarget` — a targeted spell arriving with no target is rejected as malformed. This is still client-trusted overall (the client picks the spell and the server takes its word on affordability); Phase 5.4 is where that gets validated.
+`SpellCastService` accepts `target = nil` and validates it against `needsEnemyTarget` — a targeted spell arriving with no target is rejected as malformed. Phase 5.4 hardening has since landed in `SpellCastService`: the spell must exist in `SpellRegistry`, the caster must be a living character, a named target must be a real Model within auto-target range, and the player has a cast-token budget. Affordability is checked against `EnergyLedger.checkCast`, and `EconomyConstants.ENFORCE` is `true` in code; see [[systems/SpellCastService]]. Energy itself still lives in `client/PlayerSession`.
 
 ### Damage paths — unified (2026-09-08)
 
@@ -429,9 +431,9 @@ is [[systems/BreakableWalls]].
 ## Testing
 
 - `src/shared/Skills/__tests.luau` — smoke suite (`.run()` harness): token lifecycle, cancel/finish, silence/unsilence, all four death/despawn purge races, plus the 5.2 defensive scenarios (shield absorb through `DamageModifierRegistry`, additive stacking + death purge, damageAmp multiplication, lazy buff expiry). 11 scenarios.
-- `src/shared/Tests/Suites/Skills/` — autorunner suite (`workspace:SetAttribute("RunTests", "Skills")`): wraps the smoke suite plus `SpellExecutor.__tests`, `CastAction.__tests`, and `cast_refund_on_failure`. 4/4 as of 2026-08-03.
+- `src/shared/Tests/Suites/Skills/` — autorunner suite (`workspace:SetAttribute("RunTests", "Skills")`): five test files today — `skillinterrupt_smoke` (wraps the smoke suite), `spellexecutor_tests` (`SpellExecutor.__tests`), `castaction_tests` (`CastAction.__tests`), `cast_rejected_before_drain` and `predicted_run_writes_nothing`. (The 2026-08-03 count was 4/4 with `cast_refund_on_failure`, which `cast_rejected_before_drain` has since superseded.)
 
-`cast_refund_on_failure` replaces 5.1's `stub_cast_refunds`, which drove the refund path through the shield stub. With the stubs gone it drives the same drain → refuse → refund guarantee through a genuine rejection instead (Frost Nip cast with no target).
+`cast_refund_on_failure` replaced 5.1's `stub_cast_refunds`; it was itself superseded by `cast_rejected_before_drain` (Phase 5.6 stage 5), which asserts a refused cast never fires `EnergyReservoirs.changed` at all (never drained) instead of drain-then-refund.
 
 The shield-absorb scenario is the load-bearing one: it asserts that Skills and Health still agree on where the pool lives. If they ever diverge, the shield silently stops working and nothing else notices.
 
@@ -452,15 +454,15 @@ graph LR
 | Path | Role | Owns |
 |---|---|---|
 | `src/shared/Skills/SkillTypes.luau` | Pure types | `SkillSpec`, `EffectSpec`, `DeliveryCtx` |
-| `src/shared/Skills/SkillEffects.luau` | Effect handlers | `apply(spec, target, source, cause?)`, `setDamageSink(sink)`, `isFrozen(target)`, `handlers.{damage, heal, freeze, knockup, shield, buff}`, freeze death-cleanup |
+| `src/shared/Skills/SkillEffects.luau` | Effect handlers | `apply(spec, target, source, cause?)`, `canApply`, `setDamageSink(sink)`, `isFrozen(target)`, `isBurning(target)`, `handlers.{damage, heal, freeze, burn, knockup, shield, buff}`, freeze death-cleanup |
 | `src/shared/Skills/SkillBuffs.luau` | Per-Humanoid status registry | `applyBuff`, `damageAmp`, `hasBuff`, `grantShield`, `getShield`, `purge`; owns the `_shield` grant side and buff death-cleanup |
-| `src/shared/Skills/SkillDelivery.luau` | Delivery handlers | `deliver(skill, ctx)`, `handlers.{instant, projectile, aoe, world_spawn}` |
+| `src/shared/Skills/SkillDelivery.luau` | Delivery handlers | `deliver(skill, ctx)`, `canDeliver`, `handlers.{instant, projectile, aoe, world_spawn}` |
 | `src/shared/Skills/SkillVisuals.luau` | Shared visual primitives | `spawnShockwave` (cosmetic), `spawnBarrier` (the Stone Wall body — the only collidable primitive here) |
 | `src/shared/Skills/SkillInterrupt.luau` | Per-Humanoid cast interrupt registry | `begin(caster)`, `finish(caster, token)`, `cancelCastsBy(target)`, `silence(target)`, `unsilence(target)`, death-cleanup hooks |
 | `src/shared/Skills/__tests.luau` | Smoke suite | Token lifecycle, death/despawn purge races, shield + buff scenarios (`.run()`) |
 | `src/shared/SpellRegistry/init.luau` | Player spell wrapper | `Spec { name, color, tier, cost, targetingMode, selfTarget?, skill }`, `needsEnemyTarget(spec)` |
-| `src/shared/SpellExecutor/init.luau` | Player cast entry | `cast(spec, caster, target)`, `resolveSpellOrigin(caster)` |
-| `src/shared/CastAction/init.luau` | Player resource gate | drain → cast → refund |
+| `src/shared/SpellExecutor/init.luau` | Player cast entry | `canCast(spec, caster, target)`, `cast(spec, caster, target, run)` (`run` = `{ mode, predictedBy? }`); `resolveSpellOrigin` is file-local |
+| `src/shared/CastAction/init.luau` | Player resource gate | canCast → drain → cast (refund only as a backstop) |
 | `src/shared/Boss/BossConfig.luau` | Boss type registry | `BOSS_TYPES`, `DEFAULT_TYPE` |
 | `src/shared/Boss/BossTypes.luau` | Boss wrapper types | `BossTypeSpec`, `PhaseSpec`, `BossBlackboard` |
 | `src/server/Boss/BossService.server.luau` | Boss lifecycle | Resolves type from `BossPoint:GetAttribute("BossType")` |
@@ -511,9 +513,9 @@ These are load-bearing. If you find yourself wanting to violate one, stop and re
 
 - [[systems/SpellRegistry]] — player spell wrapper (cost / color / tier)
 - [[systems/SpellExecutor]] — thin adapter that resolves origin and delegates to SkillDelivery
-- [[systems/CastAction]] — drain → cast → refund pipeline for player spells
+- [[systems/CastAction]] — canCast → drain → cast pipeline for player spells (refund is a backstop)
 - [[systems/Boss]] — boss attacks dispatched through the same pipeline
 - [[systems/Health]] — `applyDamage.process` path used by damage effects
-- [[systems/VisualEffects]] — VFX system that will consume `SkillSpec.vfxName`
-- [[systems/AudioSFX]] — SFX inventory; future SFX module will consume `SkillSpec.sfxName`
+- [[systems/VisualEffects]] — VFX system (`SkillSpec` has no `vfxName`; skills name their effects through `deliveryParams` ids and `windupVfx`)
+- [[systems/AudioSFX]] — SFX inventory (`SkillSpec` has no `sfxName` field)
 - [[concepts/SingleOwnership]] — the invariant that keeps registry handlers conflict-free

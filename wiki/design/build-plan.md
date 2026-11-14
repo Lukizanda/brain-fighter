@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # Build Plan
@@ -168,8 +168,8 @@ Make the full spell roster and AV feedback real.
 | Item | Detail | Status |
 |---|---|---|
 | **Implement shield / wall / buff** | Replace the 5.1 `ok=false` stubs with real effects (design pass with user on behavior first). | ✅ 2026-08-03 — see below |
-| **Real SFX assets** | Replace `rbxassetid://0` placeholders (SpellMenuGui, GameplayHudGui, VfxConfig fizzle sites); work the [[systems/AudioSFX]] gap priority list. | open |
-| **VFX gaps** | Green cast effects + PERF guardrails from [[systems/VisualEffects]]. | open |
+| **Real SFX assets** | Replace `rbxassetid://0` placeholders (SpellMenuGui, GameplayHudGui, VfxConfig fizzle sites); work the [[systems/AudioSFX]] gap priority list. | open — no `rbxassetid://0` remains in `VfxConfig.SFX` (2026-08-03/04 swapped in reused interim assets: 12 entries, 6 distinct ids), but none is purpose-made |
+| **VFX gaps** | Green cast effects + PERF guardrails from [[systems/VisualEffects]]. | Green cast effects exist (`cast_green_t1..t3`, 2026-08-03). The PERF cap/evict/throttle guardrails are still not implemented (only `allowLights`, `reducedVfxEmitScale` and `maxBlockPops` are read), so this stays open |
 
 #### shield / wall / buff — design pass + implementation (2026-08-03)
 
@@ -197,7 +197,7 @@ The three stubs resolved into two real effects and one deletion — `wall` had n
 | Item | Detail |
 |---|---|
 | **Tuning passes** | Energy curve, spawn density, tier thresholds. |
-| **UI review leftovers** | R-5..R-9 from [[design/ui-architecture-review]] (2 Medium / 3 Low). |
+| **UI review leftovers** | R-5..R-9 from [[design/ui-architecture-review]] (2 Medium / 3 Low). R-5 and R-9 are closed in `src/` (see the status check on that page); R-7 looks closed, R-6 not re-checked. |
 | **Tier 3 debt (opportunistic)** | ~~Color type dedup ×4~~ (closed 2026-09-20 — one palette table in `Colors`, see below), Skills/Vfx magic-number extraction — as polish touches each area. |
 | **Settings surface** | ✅ **2026-09-20** (BRA.21, user call: build all three). SFX volume, Reduced effects, letter palette with an Okabe–Ito high-contrast option. [[systems/Settings]]. Persistence waits for 5.5. |
 | **Tutorial** | Guided first-play sequence per [[systems/Tutorial]] (shoot → buffer → memorize → cast → boss hit). The "seen it" flag lives in a minimal `PlayerData` pulled forward from 5.5 (decided 2026-11-04). |
@@ -323,9 +323,9 @@ Added 2026-08-20. Full plan in [[design/lobby]]. Prompted by the decision to add
 | Stage | Item | Gate |
 |---|---|---|
 | 1 | ✅ **Done 2026-08-20 (`b38a99c`).** `RoundManager.new(deps)` with `arenaId` + roster + `:disable()`/`:destroy()`; `GameModeService` owns `sessions[arenaId]` + `playerSessions[player]`. Per-roster `FireClient` landed with it. `task.cancel` **removed** rather than kept — the old `stop()` never cleared `roundThread` on natural exit, so a second `stop()` would have thrown; a `_generation` counter covers the overlap case. Verified by a client-side listener + a two-session disjoint-roster cross-talk test. | — |
-| 2 | **Arena binding.** `ArenaId` on `BlockSpawnVolume` + per-arena block pools; `LobbySpawn` / `PvEArenaSpawn` / `PvPArenaSpawn` tags. `SpawnManager.filterSpawnsForPlayer` already resolves by tag, so this is data. | — |
-| 3 | **Broadcast audience** *(added 2026-08-20)*. Nine HUD sites: `ScoreTracker`'s `ScoreUpdate` ×1 + `KillFeed` ×2, `BossService`'s `BossPhaseChanged` ×3 + `BossHealthChanged` ×3. Copy stage 1's roster pattern. VFX lane (8 sites) out of scope — see [[design/lobby]] § Broadcast audience. | Before stage 6 |
-| 4 | **Hub greybox + player state.** Lobby zone, two portals, practice blocks, `InLobby/Queued/InArena` and the HUD suppression table. Still `NoOp` behind the portals. | — |
+| 2 | ✅ **Done 2026-08-20 (per [[design/lobby]] stage table).** **Arena binding.** `ArenaId` on `BlockSpawnVolume` + per-arena block pools; `LobbySpawn` / `PvEArenaSpawn` / `PvPArenaSpawn` tags. `SpawnManager.filterSpawnsForPlayer` already resolves by tag, so this is data. | — |
+| 3 | ✅ **Done 2026-08-20 (per [[design/lobby]] stage table).** **Broadcast audience** *(added 2026-08-20)*. Nine HUD sites: `ScoreTracker`'s `ScoreUpdate` ×1 + `KillFeed` ×2, `BossService`'s `BossPhaseChanged` ×3 + `BossHealthChanged` ×3. Copy stage 1's roster pattern. VFX lane (8 sites) out of scope — see [[design/lobby]] § Broadcast audience. | Before stage 6 |
+| 4 | ✅ **Done 2026-09-07 (4a/4b/4c, per [[design/lobby]] § Stage 4 detail).** **Hub greybox + player state.** Lobby zone, two portals, practice blocks, `InLobby/Queued/InArena` and the HUD suppression table. Still `NoOp` behind the portals. | — |
 | 5 | ✅ **Done 2026-09-19.** `Modes/PvEBoss.luau` runs the shipped `Default` arena — co-op, 5 s countdown, 300 s clock as the fail state, ends on a new server-side `BossDefeated(arenaId)` Bindable or an emptied roster, roster transferred home after the intermission through a `RoundManager.onIntermissionEnd` hook owned by `SessionRegistry`. Mode callbacks now carry the arena id. Verified by suite (7/7) and one playtest of the full loop; details in [[design/lobby]] § Stage 5 detail. | — |
 | 6 | ✅ **Done 2026-09-19.** `Modes/PvPDuel.luau` on two scene-authored duel pads (`ArenaSlot` tag + `ArenaId`/`Mode` attributes → sessions at boot). Exactly two — `minPlayers`/`maxPlayers` on the mode config, and a capped round fills before it starts — `allowsPvP = true`, kill limit and clock as Workspace tunables (`DuelKillLimit`, `DuelTimeLimitMin`), leaving or disconnecting mid-round is a forfeit. The portal queue became real (pool portals via `TargetMode`, intake only when a pad can start, 1 s flush; the PvE PostRound refusal now queues). Round outcome ids ride `RoundEnded` and the PostRound payload so the card reads `BOSS DEFEATED` / `OPPONENT LEFT` / `DUEL OVER` instead of `No winner`; `RoundTimerGui` ported to Builder+Config; every round starts at full health. Suite 10/10, one client-verified playtest; the 1v1 itself is a user-driven two-client check ([[design/lobby]] § Stage 6 detail). | — |
 | 7 | ✅ **Done 2026-09-20.** [[systems/Lobby]] written (portals, queue, validation, counts, PortalGui, hub geometry); the [[systems/GameMode]] rewrite and the session lifecycle tests (`sessions_isolate_scores`, `transfer_moves_roster_and_attributes`, `registry_views_agree`) had already landed with refactor chunk 8. **Phase 6 closed.** | — |
@@ -333,8 +333,8 @@ Added 2026-08-20. Full plan in [[design/lobby]]. Prompted by the decision to add
 **The lobby does not unblock PvP, and shipping it must not be mistaken for shipping PvP.** Three live blockers, recorded in full in [[design/lobby]] § What this does *not* unblock:
 
 - ~~**`PLAYER_VS_PLAYER_ENABLED` does not gate the damage path players actually use.**~~ Closed 2026-09-08 by refactor chunk 4: every spell goes through `applyDamage.process`, and the gate is `allowsPvP` on the mode config, resolved through the victim's session ([[design/lobby]] § PvP gate).
-- **Client-trusted affordability** (5.4 validated memorize). Already re-judged on 2026-08-10 for exactly this reason; in a 1v1 it is the most visible cheat there is.
-- **`ROUND_TIMER_ENABLED` / `ROUND_COUNTDOWN_ENABLED` are both `false`.** A duel with no clock does not end.
+- ~~**Client-trusted affordability** (5.4 validated memorize).~~ Closed 2026-09-08 by refactor chunk 6: the server `EnergyLedger` prices every cast and `EconomyConstants.ENFORCE = true` (checked in `src/server/Economy/EconomyConstants.luau`).
+- ~~**`ROUND_TIMER_ENABLED` / `ROUND_COUNTDOWN_ENABLED` are both `false`.**~~ Both flags were deleted in refactor chunk 8; the timer and countdown are `timeLimit` / `countdownSec` on each mode config (`PvPDuel` sets a clock via `DUEL_TIME_LIMIT_MIN = 3`).
 
 Hence the gate column: stages 1–5 are safe against the current trust model (PvE co-op cheating is self-cheating); stage 6 lands after Phase 5.4.
 

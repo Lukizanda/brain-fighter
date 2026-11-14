@@ -1,7 +1,7 @@
 ---
 title: Audio SFX
 description: Sound effect inventory, wiring patterns, placeholder locations, and gap list for Brain Fighter
-updated: 2026-11-04
+updated: 2026-11-14
 ---
 
 # Audio SFX
@@ -13,6 +13,8 @@ Central reference for all in-game sound effects: what exists, where it's wired, 
 ## Audio Backend
 
 Every live sound uses the old `Sound` class (`Instance.new("Sound")`): BlockTapController, SpellMenuGui, GameplayHudGui and `Vfx/spawnEffect`. The new `AudioPlayer` + `Wire` + `AudioEmitter` API had two consumers, the firearm and melee replication scripts, and both were deleted with the weapon stack ([[systems/Weapon]]). Its wrappers `playSoundFromSource` / `playRandomSoundFromSource` went with them. Nothing in `src/` uses `AudioPlayer` as of 2026-11-04.
+
+All `Sound`s that appear under `SoundService` or `workspace` on a client (`SettingsController`'s `DescendantAdded` hook) are routed into one `Sfx` `SoundGroup` under `SoundService`, which is how the SFX volume setting applies ([[systems/Settings]]).
 
 ---
 
@@ -43,7 +45,7 @@ Every spell cast and impact burst carries a `SoundSpec` in its
 1. **`spawnEffect` never read `effectSpec.sound` at all.** `sound`, `light`
    and `beam` were declared in `EffectSpec` but only `emitters` was ever
    consumed, so *all 10 spells were silent* regardless of what the config
-   said. `sound` is now played; `light` and `beam` are still unimplemented.
+   said. `sound` is now played; `light` was implemented 2026-08-08 (`PointLight` flash, honours `PERF.allowLights` and Reduced effects); `beam` is still unimplemented.
 2. The early `if not effectSpec.emitters then return end` guard sat *above*
    the sound, so particle-less effects would have stayed silent anyway.
    Audio now happens before that guard.
@@ -190,9 +192,9 @@ The firearm, melee and loadout-drop sections were removed 2026-11-04: those syst
 
 | Priority | Gap | Effort |
 |----------|-----|--------|
-| **High** | **Source a real spell SFX pack and replace every `VfxConfig.SFX` id.** All 6 are stand-ins; `impactFreeze` (a sword hit standing in for an ice crack) is the weakest match. Needs a purchased/commissioned pack — the free library has nothing usable. | 1 line per entry once assets exist |
+| **High** | **Source a real spell SFX pack and replace every `VfxConfig.SFX` id.** All 12 entries (6 distinct assets) are stand-ins; `impactFreeze` (a sword hit standing in for an ice crack) is the weakest match. Needs a purchased/commissioned pack — the free library has nothing usable. | 1 line per entry once assets exist |
 | ~~High~~ | ~~FizzleSound SoundId in Studio (LetterBlaster)~~ — **resolved 5.7**: the Studio-side Sound is gone; the cue is built from `VfxConfig.SFX.fizzle` in code | done |
-| Medium | `EffectSpec.light` and `.beam` are declared but still unimplemented in `spawnEffect` (only `emitters` + `sound` are consumed) | moderate |
+| Medium | `EffectSpec.beam` is declared but still unimplemented in `spawnEffect` (`emitters`, `sound` and, since 2026-08-08, `light` are consumed) | moderate |
 | Medium | Projectile trails (`projectile_red_t1/t2/t4`) — 2026-08-04: now play a quiet one-shot `SFX.cast` layer at launch (no looping path in `spawnEffect`) instead of nothing; still no real continuous in-flight whoosh | needs a loopable asset |
 | Medium | Boss `FireballVolley` launch (`projectile_boss_fireball`, `SFX.bossProjectileLaunch`) and impact (`impactEffectId = "impact_damage"`) — 2026-08-04: both hooks now wired in `BossConfig` (Brain + Wizard) with an audible reused-asset stand-in, no longer `UNSET`/silent | needs purpose-made launch + hit assets |
 | Medium | Boss `GroundSlam` shockwave (`aoe_boss_groundslam`, reuses `SFX.impactHeavy`) — 2026-08-04: wired in `BossConfig.Brain`, was previously silent | needs a ground-thud asset |

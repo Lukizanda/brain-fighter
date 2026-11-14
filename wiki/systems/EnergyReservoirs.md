@@ -1,7 +1,7 @@
 ---
 type: system
 description: Pure-Luau state container for the three per-color energy bars (red/green/blue). Caps at 60 per color, emits a `changed(color)` signal on every value change.
-updated: 2026-09-23
+updated: 2026-11-14
 ---
 
 # EnergyReservoirs
@@ -24,6 +24,7 @@ EnergyReservoirs.new() -> instance
 :canAfford(color, n: number) -> boolean
 :drain(color, n: number) -> boolean -- false if can't afford; value unchanged on failure
 :snapshot() -> { red, green, blue } -- defensive copy
+:reset()                            -- zero every color; fires changed once per color that moved
 :destroy()
 .changed: RBXScriptSignal           -- fires :Fire(color) on every value change
 EnergyReservoirs.CAP_PER_COLOR = 60
@@ -37,7 +38,7 @@ EnergyReservoirs.COLORS = { "red", "green", "blue" }
 `CAP_PER_COLOR = 60` = **3× the T3 cost (20)**. This holds enough headroom to bank a few big casts while still
 
 - *blocking* indefinite stockpiling — anyone who keeps Memorizing same-color words past 60 starts dropping energy on the floor, the design's deliberate brake on "hoard letters then nuke," and
-- *keeping casts frequent* — with the rebalanced tier costs (5/10/20/40), a full bar was one T4 (40) plus change, so players cast often rather than saving up. **Weakened since T4 was parked (2026-09-23):** the top live cast is T3 at 20, so a full bar is three of them and the top 40 mana no longer buys anything a player could not already afford. Whether the cap follows the ladder down is open — see [[design/gameplay-loop]] § "Spell economy".
+- *keeping casts frequent* — with the rebalanced tier costs (5/10/20/40; `CAP_PER_COLOR` is `60` in `EnergyReservoirs/init.luau`), a full bar was one T4 (40) plus change, so players cast often rather than saving up. **Weakened since T4 was parked (2026-09-23):** the top live cast is T3 at 20, so a full bar is three of them and the top 40 mana no longer buys anything a player could not already afford. Whether the cap follows the ladder down is open — see [[design/gameplay-loop]] § "Spell economy".
 
 Pinned in `wiki/design/gameplay-loop.md` "Spell economy". The number is a tuning lever, not a load-bearing invariant — if playtest shows the cap is too tight or too loose, bump or pin it in code, then update both this page and the design doc.
 
@@ -72,6 +73,8 @@ No Roblox-instance dependencies beyond the internal `BindableEvent`. No knowledg
 - **MemorizeAction** — deposits via `:add` on every valid word.
 - **CastAction** — drains via `:drain` on every spell cast (and re-`:add`s on the refund path when the executor fails); precomputes affordable tiers via `:canAfford`.
 - **HUD: SpellMenu** — the per-color mana fill subscribes to `.changed` and repaints the affected color. (The standalone `ReservoirBarsBuilder` was deleted in Phase 4.8 R-2 — the SpellMenu panels own the fill; see [[systems/HUD]].)
+- **client/EnergyRoundReset** — calls `:reset()` when the local player's round goes Active, so round 2 does not inherit round 1's mana (the server ledger clears its matching ceiling on `RoundStarted`; see [[systems/SpellCastService]]).
+- **client/DevDebug** — the 1–4 dev keys `:add` / `:drain` directly to fill or set a bar (Studio cheat; the server half is `DevGrantEnergy`).
 - **SpellRegistry** — does not consume; owns the tier-threshold numbers (5 / 10 / 20 / 40) that callers compare against `:get(color)` and `:canAfford(color, threshold)`.
 
 ## Verification
@@ -94,4 +97,4 @@ A failed scenario raises `error([EnergyReservoirs.__tests] <scenario> — <messa
 - [[design/gameplay-loop]] — Spell economy: per-color persistence, cap rationale, value-weighted color split.
 - [[design/build-plan]] — Phase 1 foundation modules.
 - [[systems/SpellRegistry]] — sibling foundation; owns the tier thresholds (5 / 10 / 20 / 40) callers compare against.
-- [[concepts/SingleOwnership]] — only `MemorizeAction` writes via `:add`, only `CastAction` writes via `:drain`; HUD listens but never writes.
+- [[concepts/SingleOwnership]] — in production only `MemorizeAction` writes via `:add` (plus `CastAction`'s refund backstop), only `CastAction` writes via `:drain`, and `EnergyRoundReset` calls `:reset()`; HUD listens but never writes. The `DevDebug` hotkeys are the one dev-only exception.

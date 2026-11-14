@@ -1,21 +1,22 @@
 ---
 type: system
 description: Thin origin-resolver that delegates spell casting to SkillDelivery (delivery) and SkillEffects (effects). All damage/heal/freeze/shield/buff logic lives in src/shared/Skills/. Damage against server-owned targets (boss, NPCs) must run server-side — SpellCastService relays client casts via RemoteEvent, including target-less self-buffs and placements.
-updated: 2026-08-03
+updated: 2026-11-14
 ---
 
 # SpellExecutor
 
 The runtime side of the spell roster. Given a [[systems/SpellRegistry|Spec]] plus a caster and a target, resolves the origin `CFrame` (Tip attachment → Handle → HumanoidRootPart) and delegates to `SkillDelivery.deliver(spec.skill, ctx)`. **All effect and delivery logic lives in `src/shared/Skills/`** — SpellExecutor is now a thin adapter. Boss attacks go through the same `SkillDelivery` path. See [[design/build-plan|build-plan]] Phase 2 and the Skills pipeline ingest in `wiki/log.md`.
 
-The module is otherwise pure — the only per-cast state it keeps is a per-Humanoid freeze table so back-to-back freezes don't clobber the saved `WalkSpeed`. The caller (eventually [[systems/CastAction]]) owns cast cost, dictionary validation, and targeting UX; SpellExecutor trusts the Spec.
+The module keeps no state of its own (the per-Humanoid freeze and burn tables that stop back-to-back freezes clobbering the saved `WalkSpeed` live in `SkillEffects`). The callers ([[systems/CastAction]] on the client, [[systems/SpellCastService]] on the server) own cast cost, dictionary validation, and targeting UX; SpellExecutor trusts the Spec.
 
 ## Files
 
 - `src/shared/SpellExecutor/init.luau` — thin adapter: origin resolution + `DeliveryCtx` construction
 - `src/shared/SpellExecutor/__tests.luau` — pure-Luau smoke tests (`runAll() -> (passed, failed)`)
-- `src/shared/Skills/SkillTypes.luau` — types: `SkillSpec`, `EffectSpec`, `DeliveryCtx`
-- `src/shared/Skills/SkillEffects.luau` — effect handlers: `damage`, `heal`, `freeze`, stubs
+- `src/shared/Skills/SkillTypes.luau` — types: `SkillSpec`, `EffectSpec`, `DeliveryCtx`, `RunContext`
+- `src/shared/Skills/SkillEffects.luau` — effect handlers: `damage`, `heal`, `freeze`, `burn`, `knockup`, `shield`, `buff` (plus the matching `preconditions` that back `canCast`)
+- `src/shared/Skills/SkillBuffs.luau`, `SkillInterrupt.luau` — shield/buff state and cast interruption used by the handlers
 - `src/shared/Skills/SkillDelivery.luau` — delivery handlers: `instant`, `projectile`, `aoe`, `world_spawn`
 
 ## API
@@ -23,17 +24,20 @@ The module is otherwise pure — the only per-cast state it keeps is a per-Human
 ```lua
 local SpellExecutor = require(ReplicatedStorage.Shared.SpellExecutor)
 
-export type CastResult = {
-  ok: boolean,
-  reason: string?,  -- present only on failure
-}
+export type CastResult = SkillDelivery.Result  -- { ok: boolean, reason: string? }
 
 SpellExecutor.cast(
   spec: SpellRegistry.Spec,
   caster: Humanoid | Model,
-  target: Humanoid | Model | Vector3 | nil
+  target: Humanoid | Model | Vector3 | nil,
+  run: SkillTypes.RunContext   -- required: { mode = "authoritative" | "predicted", predictedBy = number? }
 ): CastResult
+
+-- Pure "would this cast be refused?" probe; CastAction calls it BEFORE draining mana.
+SpellExecutor.canCast(spec, caster, target): CastResult
 ```
+
+On an `authoritative` run (the server, via [[systems/SpellCastService]]) `cast` also raises the cast cue once through `SkillVisuals.spawnCastCue(spec.color, spec.tier, casterRoot, predictedBy)`; a `predicted` run (the caster's client, via [[systems/CastAction]]) has no damage sink, so effects that need one refuse there.
 
 `caster` is the entity producing the spell (the wizard's character). `target` is what the spell affects — its expected shape depends on `spec.skill.onImpact[1].kind`:
 
@@ -42,6 +46,7 @@ SpellExecutor.cast(
 | `damage` | `Humanoid` (or `Model` containing one) | Required. `nil` → `ok=false`. |
 | `heal` | `Humanoid` / `Model` / `nil` | `nil` falls back to the caster's Humanoid (self-heal). |
 | `freeze` | `Humanoid` (or `Model` containing one) | Required. `nil` → `ok=false`. |
+| `burn` | `Humanoid` (or `Model` containing one) | Required. `nil` → `ok=false`. |
 | `knockup` | `Humanoid` (or `Model` containing one) | Required. Launches the target's HumanoidRootPart upward. |
 | `shield` | `Humanoid` / `Model` / `nil` | `nil` falls back to the caster (self-shield), same as `heal`. |
 | `buff` | `Humanoid` / `Model` / `nil` | `nil` falls back to the caster. |
@@ -54,9 +59,10 @@ See `SkillEffects.luau` for the implementation. `SpellExecutor` no longer contai
 
 | `kind` | Behaviour | Reads from `onImpact` entry |
 |---|---|---|
-| `damage` | `target.Health -= fraction × target.MaxHealth`; clamp to ≥ 0 | `fractionOfMaxHP` |
-| `heal` | `target.Health += fraction × target.MaxHealth`; clamp to ≤ MaxHealth | `fractionOfMaxHP` |
-| `freeze` | Save `target.WalkSpeed`, set to 0; restore via `task.delay(durationSec, …)`. Re-freeze extends the existing freeze. On the fresh-freeze branch: also calls `SkillInterrupt.cancelCastsBy(target)` to abort pending scheduled volley shots, and `SkillInterrupt.silence(target)` so any new casts started while frozen are born cancelled. | `durationSec` |
+| `damage` | Sends `fractionOfMaxHP × target.MaxHealth` (or a flat `amount`), times any `damageAmp` buff on the target, to the `DamageSink` that `HealthService` injects (`applyDamage` on the server). Nothing here writes `Humanoid.Health`; with no sink (the client's predicted run) it returns `ok=false, reason="no damage sink on this VM"`. | `fractionOfMaxHP` (or `amount`) |
+| `heal` | Sends `fraction × target.MaxHealth` to the same sink's `heal`; same no-sink refusal. | `fractionOfMaxHP` |
+| `burn` | Render flag only: sets `SkillConstants.BURNING_ATTRIBUTE` on the target's character for `durationSec` (default 3.0), then clears it. No damage, no debuff — Inferno's damage is its own `damage` entry. Re-burn extends the deadline. | `durationSec` |
+| `freeze` | Save `target.WalkSpeed`, set to 0, raise the frozen attribute flag; restore via `task.delay(durationSec, …)` (to the rig's published `BASE_WALK_SPEED_ATTRIBUTE` if it has one, else the saved speed; Died/HealthChanged/Destroying purge the entry too). Re-freeze extends the existing freeze. On the fresh-freeze branch: also calls `SkillInterrupt.cancelCastsBy(target)` to abort pending scheduled volley shots, and `SkillInterrupt.silence(target)` so any new casts started while frozen are born cancelled. | `durationSec` |
 | `knockup` | **Real handler.** Sets the target HRP's `AssemblyLinearVelocity.Y = force` (default 50) — launches the target straight up. No registry spell uses it yet, but it's callable end-to-end. | `force` |
 | `shield` | Adds `amount` to the target's `_shield` absorb pool via `SkillBuffs.grantShield`. Additive, no expiry — drained by [[systems/Health]]'s `DamageModifierRegistry` inside `applyDamage`. | `amount` |
 | `buff` | Applies a timed stat modifier via `SkillBuffs.applyBuff`. Currently only `buffKind = "damageAmp"`, read by the `damage` handler. Re-applying the same kind refreshes rather than stacks. | `buffKind`, `magnitude`, `durationSec` |
@@ -70,7 +76,7 @@ When a Humanoid is re-frozen while already frozen, the existing entry's expiry i
 
 The chosen "extend, don't replace" semantics is slightly richer than the build-plan's allowed "last-write-wins" shortcut. Cost is ~6 lines; benefit is that a Frost Nip → Stasis chain on the same target behaves intuitively (longer expiry wins) rather than potentially shortening the freeze.
 
-Internally the restore is a self-rescheduling `task.delay` closure: when it fires it compares `_freezeState[target]` against its captured state, and if expiry has been pushed forward, re-arms via `task.delay(remaining, …)`. If the Humanoid was destroyed in the meantime, the `Parent == nil` check skips the WalkSpeed write.
+Internally each extension schedules its own `task.delay` for the new deadline; every timer re-checks `_freezeState[target].restoreAt` when it fires and only purges once the deadline has passed, so a superseded earlier timer is harmless. If the Humanoid dies or is destroyed meanwhile, the Died/HealthChanged/Destroying connections purge the entry without writing `WalkSpeed`.
 
 ## Freeze interrupts in-progress casts
 
@@ -111,10 +117,10 @@ Test dummies are `Instance.new("Model")` with a child `Humanoid` parented to `sc
 - Spec source → [[systems/SpellRegistry]]
 - Pinned design → [[design/gameplay-loop]] § "Spell roster (prototype)", § "Targeting", § "Spell economy"
 - Caller → [[systems/CastAction]] (shipped; wires reservoir drain + executor invocation)
-- Damage path comparison → [[systems/Health]] (uses `HealthService.applyDamage` for player/NPC hits; SpellExecutor writes `Humanoid.Health` directly for now since spells don't need hit-zone classification or damage modifiers)
-- Server relay → `src/server/SpellCastService.server.luau` — receives `SpellCastServer` RemoteEvent from `SpellMenuGui`, re-executes `SpellExecutor.cast` server-side so boss/NPC HP writes actually stick (client writes don't replicate for server-owned Humanoids)
+- Damage path → [[systems/Health]] (spell `damage` / `heal` effects go through the `DamageSink` that `HealthService` injects into `SkillEffects`, i.e. `applyDamage`; `damageType` defaults to Spell and hit zone to Torso)
+- Server relay → `src/server/SpellCastService.server.luau` — receives `SpellCastServer` RemoteEvent from `SpellCastController`, re-executes `SpellExecutor.cast` server-side (`mode = "authoritative"`) so boss/NPC HP changes actually stick (client writes don't replicate for server-owned Humanoids)
 - Build plan → [[design/build-plan]] (Phase 2 — action systems)
 
 ## Client/server boundary
 
-`SpellExecutor.cast` runs wherever it is required — client for VFX/energy, server for real HP writes. `Humanoid.Health` writes from a LocalScript **do not replicate** for server-owned characters (boss, NPCs). `SpellCastService` closes this: `SpellMenuGui` fires `SpellCastServer` (RemoteEvent at `ReplicatedStorage.Shared.SpellCast.Remotes.SpellCastServer`) after every successful non-self cast; the service validates and calls `SpellExecutor.cast` server-side. Green (self-heal) spells skip the relay — the player owns their own character so local Health writes do replicate.
+`SpellExecutor.cast` runs wherever it is required — client for VFX/energy, server for real HP writes. `Humanoid.Health` writes from a LocalScript **do not replicate** for server-owned characters (boss, NPCs). `SpellCastService` closes this: `SpellCastController` (the client cast path; `SpellMenuGui` hands it the request) fires `SpellCastServer` (RemoteEvent at `ReplicatedStorage.Shared.SpellCast.Remotes.SpellCastServer`) after **every** accepted cast, including self-buffs and placements with `target = nil`; the service validates and calls `SpellExecutor.cast` server-side. No spell skips the relay — the client's predicted run has no damage sink, so heals and shields only land on the server.

@@ -1,7 +1,7 @@
 ---
 type: system
 description: NPC AI — three-layer Perception → Decision → Action architecture, Patroller archetype shipped (MVP). One NPC set per arena session since refactor chunk 9; Perception scans only the NPC's own arena roster via the shared Hittables definition. The three generic layers live in server/AI since chunk 11 and are shared with the boss.
-updated: 2026-09-14
+updated: 2026-11-14
 ---
 
 # NPC System
@@ -30,7 +30,7 @@ NPCs used to be spawned once at boot from every `NPCSpawn` marker in the place a
 
 - **`NPCService` listens to the GameMode `RoundStarted(roster, arenaId)` / `RoundEnded(winnerId, winnerName, arenaId)` BindableEvents** (the `arenaId` argument was added by chunk 9) and keeps `sets[arenaId]`. On start it spawns every `WorldDataManager.getSpawns()` snapshot whose `attributes.ArenaId` resolves to that arena (absent = `Default`, mirroring `Arena.idOf`), stamps each Model with `ArenaId` and `Archetype`, and ticks the set after a 2 s settle. On end it destroys the set. A boot reconcile over `SessionRegistry.all()` covers the Default round, which starts before this Script's `WorldDataManager.waitForInit()` returns.
 - **`NPCService.disable()` / `enable()` / `destroy()`** — pause the tick, resume it, tear everything down (bound to `game:BindToClose`).
-- **Perception reads `Arena.idOf(bb.npc)`** and scans `Hittables.collect(BroadcastAudience.forArena(id), id)`, keeping only entries with a `player`. One target definition (`src/shared/Skills/Hittables.luau`) is shared with `SkillDelivery` and `CosmeticProjectile`; `grep Players:GetPlayers() src/shared/Skills src/server/NPC` is empty. A hub player is never an NPC target because nothing hostile carries `Lobby`.
+- **Perception reads `Arena.idOf(bb.npc)`** and scans `Hittables.collect(BroadcastAudience.forArena(id), id)`, keeping only entries with a `player`. One target definition (`src/shared/Skills/Hittables.luau`) is shared with `SkillDelivery` and the client `WorldVfxController` (which supplies it to `CosmeticProjectile`); `grep Players:GetPlayers() src/shared/Skills src/server/NPC` is empty. A hub player is never an NPC target because nothing hostile carries `Lobby`.
 - **Kill-feed cause.** `Actions.Shoot` passes `cause = <Archetype attribute>` on its `DamageRequest`, so an NPC kill reads "Patroller" instead of "Unknown" (the chunk 4 note).
 - **Tests.** `Helpers/ensurePatroller.ensure(player)` clones its own `Patroller_Fixture` next to the harness player, stamped with the player's `ArenaId` and `Archetype`; `teardown` destroys it.
 
