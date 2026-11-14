@@ -7,7 +7,10 @@
 -- BasePart tagged `ArenaEntryPad` is watched; a living player of the pad's
 -- arena who touches it is moved to a random `ArenaArrivalPoint` of the same
 -- arena (matched by `Arena.idOf`), standing on top of it and facing the way
--- the part faces. Nothing leads back: the player leaves the island by dying
+-- the part faces. A pad carrying an `EntryLink` attribute reaches only the
+-- arrival points carrying the same value, and a pad without one reaches only
+-- those without, so one arena can hold several independent pad-to-island
+-- routes. Nothing leads back: the player leaves the island by dying
 -- (the respawn already returns them to the ready room).
 --
 -- "Which arena is this player in" is the session registry's answer, the same
@@ -62,13 +65,29 @@ local ArenaEntryService = {}
 -- Matching
 ----------------------------------------------------------------------
 
+-- A pad's or arrival point's EntryLink; nil when absent, blank or not a string.
+function ArenaEntryService.linkOf(instance: Instance): string?
+	local link = instance:GetAttribute(C.LINK_ATTRIBUTE)
+	if type(link) == "string" and link ~= "" then
+		return link
+	end
+	return nil
+end
+
 -- Every live arrival point of the arena. Read from CollectionService on each
 -- call rather than cached, so a point tagged (or removed) after boot is
 -- honoured with no bookkeeping.
-function ArenaEntryService.arrivalsFor(arenaId: string): { BasePart }
+-- `link` is the pad's EntryLink (nil for a pad without one); only arrival
+-- points with the same link, or equally none, are returned.
+function ArenaEntryService.arrivalsFor(arenaId: string, link: string?): { BasePart }
 	local found: { BasePart } = {}
 	for _, instance in CollectionService:GetTagged(C.ARRIVAL_TAG) do
-		if instance:IsA("BasePart") and instance:IsDescendantOf(workspace) and Arena.idOf(instance) == arenaId then
+		if
+			instance:IsA("BasePart")
+			and instance:IsDescendantOf(workspace)
+			and Arena.idOf(instance) == arenaId
+			and ArenaEntryService.linkOf(instance) == link
+		then
 			table.insert(found, instance)
 		end
 	end
@@ -90,8 +109,8 @@ end
 
 -- One arrival point of the arena, chosen at random; nil when there is none.
 -- `random` is injectable so a test can pin the choice.
-function ArenaEntryService.pickArrival(arenaId: string, random: Random?): BasePart?
-	local arrivals = ArenaEntryService.arrivalsFor(arenaId)
+function ArenaEntryService.pickArrival(arenaId: string, random: Random?, link: string?): BasePart?
+	local arrivals = ArenaEntryService.arrivalsFor(arenaId, link)
 	if #arrivals == 0 then
 		return nil
 	end
@@ -152,11 +171,15 @@ function ArenaEntryService.handleTouch(pad: BasePart, hit: Instance): string
 	end
 
 	local arenaId = Arena.idOf(pad)
-	local arrival = ArenaEntryService.pickArrival(arenaId)
+	local link = ArenaEntryService.linkOf(pad)
+	local arrival = ArenaEntryService.pickArrival(arenaId, nil, link)
 	if not arrival then
 		if not warnedPads[pad] then
 			warnedPads[pad] = true
-			log:warn(string.format("%s has no ArenaArrivalPoint for arena '%s'", pad:GetFullName(), arenaId))
+			log:warn(string.format(
+				"%s has no ArenaArrivalPoint for arena '%s'%s",
+				pad:GetFullName(), arenaId, if link then string.format(" with %s '%s'", C.LINK_ATTRIBUTE, link) else ""
+			))
 		end
 		return Result.NoArrival
 	end

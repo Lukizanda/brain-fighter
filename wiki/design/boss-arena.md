@@ -446,6 +446,21 @@ The session's view, which the assistant shares: the island's geometry is at the 
 of what a first-time player can read on arrival, so new rules on existing objects are
 preferable to new props.
 
+## Review copy (2026-11-14)
+
+The user asked for a senior-level-designer review of the island, carried out on a copy
+so the staged island stays as the comparison.
+
+- `Workspace.Arena.IslandReview` is a clone of `IslandGreybox`, 700 studs along +X
+  (`CenterX = 753.4`, `CenterZ = 528.2`), every `ArenaId` set to `IslandReview`. It has
+  its own letter pool (58 blocks), cave word and fossils. Like the staged island it has
+  no session, so no boss fights there.
+- Lobby pads, side by side under `Workspace.TEMP_IslandWalkthrough`: `TempIslandPad`
+  (base island, untouched) and the orange `TempReviewPad` (review copy), told apart
+  with `EntryLink` ([[systems/ArenaEntry]]).
+- A review session works on the copy only. Its findings and the changes it made are
+  recorded here when it reports.
+
 ## Pick up here (written 2026-11-13 at the end of the session)
 
 All code for stages 1, 2 and 5 to 9 is committed. What is left needs the user and

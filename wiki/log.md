@@ -2121,3 +2121,7 @@ Phase 8 stage 8 landed: a `FossilTable` breakable wall publishes a hidden letter
 ## [2026-11-13] ingest | Hungry brain built; Phase 8 code complete
 
 Phase 8 stage 9 landed: the Brain eats the nearest letter within 25 studs every 5 s and heals 1% ([[systems/Boss]] § Hunger), reaching the pool through the new `BlockPoolRegistry` ([[systems/BlockSpawner]] § Pool registry). `RunTests=all` gave 89/90, the failure being the intermittent NPC damage test. It was never seen on a real Brain because no letter is in reach in the old arena. Every code stage of Phase 8 is now committed; [[design/boss-arena]] gained § Pick up here listing what is left: the walk-through, the swap and tuning.
+
+## [2026-11-14] ingest | Review copy of the boss island; entry pads gain EntryLink
+
+The user asked for a senior level-design review on a copy of the island. `Workspace.Arena.IslandReview` was cloned 700 studs along +X under `ArenaId = IslandReview`, with its own orange lobby pad. Two lobby pads would have picked at random between both islands, so [[systems/ArenaEntry]] gained an optional `EntryLink` attribute that pairs a pad with its arrival points; one new test, Arena 26/26, both pads walked. Recorded on [[design/boss-arena]] § Review copy. The clone is in the place file only.

@@ -30,6 +30,22 @@ moving the `LobbyReturnPad` into the ready room are Phase 8 stage 3.
   on top of the arrival part, facing the way the part faces. With several arrival points
   one is picked at random.
 
+## Several routes in one arena (`EntryLink`, 2026-11-14)
+
+A pad and its arrival points may carry an optional string attribute **`EntryLink`**.
+A pad with a link reaches only arrival points with the same link; a pad without one
+reaches only arrival points without one. A blank value counts as none.
+
+It exists because pad and arrival match by `ArenaId`, and the pad's `ArenaId` must be
+the arena the player's session is in. Two pads in the lobby, each meant for a
+different island, are therefore both `Lobby` pads and would otherwise each pick at
+random between both islands' arrival points. The temporary pad to the designers' review
+copy of the boss island uses `EntryLink = IslandReview`
+([[design/boss-arena]] § Review copy).
+
+Verified 2026-11-14: `entry_link_routes` in a 26/26 Arena run, and a character walked
+onto each lobby pad and landed on the right island.
+
 ## Rules
 
 | Touch by | Result |

@@ -17,6 +17,11 @@ ArenaEntryConstants.PAD_TAG = "ArenaEntryPad"
 -- A BasePart on the island. Pad and arrival match by `Arena.idOf`.
 ArenaEntryConstants.ARRIVAL_TAG = "ArenaArrivalPoint"
 
+-- Optional string on a pad and on arrival points. A pad with a link reaches
+-- only arrival points with the same link; a pad without one reaches only
+-- those without. Lets one arena hold several independent routes.
+ArenaEntryConstants.LINK_ATTRIBUTE = "EntryLink"
+
 -- One touch is one teleport: Touched fires once per colliding limb, and the
 -- player is still standing on the arrival pad's neighbourhood a moment after.
 ArenaEntryConstants.COOLDOWN_SEC = 2
