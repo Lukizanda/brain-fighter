@@ -557,28 +557,35 @@ exactly as it already waits for a character standing in the wall itself. `GateId
 the attribute word kits already use, so the cave plug's kit still re-rolls when the
 plug finally re-seals.
 
-## Pick up here (written 2026-11-13 at the end of the session)
+## Pick up here (rewritten 2026-11-14 at the end of the session)
 
-All code for stages 1, 2 and 5 to 9 is committed. What is left needs the user and
-Studio. **The place file was unsaved when the session ended**: the island, the cave's
-word-kit tags and the rocks' fossil tags live only in it.
+All code is committed. Two islands sit in the place file: `IslandGreybox` (the
+baseline) and `IslandReview` (the senior review's copy, plus the wider cave plug and
+the gate hold zones). Each has a pad in the lobby. **The place file had unsaved changes
+when the session ended**; check both models still exist before assuming they do.
 
-1. **Walk the island and approve it** (temporary pad in the lobby). Things nobody has
-   looked at yet: the higher letters, the overlook arrival, mixed cover heights, the
-   spires, the clad cave, the cave's five-letter word.
-2. **The swap** (§ Greybox staging lists the steps). Until then no boss fights on the
-   island, so none of the following has been seen under real boss fire: walls
-   breaking, gates re-sealing, the cave word re-rolling, fossil glyphs and freed
-   letters, the boss entrance, the hungry brain.
-3. **First real fight, then tune (stage 4):** wall health against a volley, letter
-   height, quotas, hunger radius and heal, the glyph size on real rocks, whether the
-   cave word should always buy a top-tier cast, and the two ideation findings above
-   (premium letters reachable from the rim; premium patch left behind by the boss).
-4. **Small follow-ups:** a fade on a freed fossil letter before it disappears
-   (`FossilExpiresAt` is published for it); the layout sketch
-   the concept sketch is superseded by `boss-arena-review-layout.html` (2026-11-14),
-   which must be regenerated from Studio if the level changes again;
-   the `NPC_deals_damage` test failed in two of four full runs.
+1. **The user walks both islands and picks one.** The review copy is the candidate.
+   Nobody but the review session has looked at it. Decide then whether the stairs back
+   in stay now that gates hold open.
+2. **Watch a letter being pulled, on a client.** Built and tested server-side only:
+   the tether, the letter's motion and tapping it in flight have never been seen. No
+   boss spawns on either island, so this needs the swap or a boss in the old arena
+   with a letter within 60 studs.
+3. **The swap** (§ Greybox staging lists the steps; apply them to whichever island was
+   picked, and delete the other and `TEMP_IslandWalkthrough`). Until then nothing has
+   been seen under real boss fire: walls breaking, gates re-sealing and holding, the
+   cave word, fossil glyphs and freed letters, the boss entrance, the letter pull, the
+   4 degree spread.
+4. **First real fight, then tune (stage 4).** The spread's effect on hit rate and on
+   how fast gates can be baited open; wall and spire health; pull radius, speed and
+   heal; letter height; quotas; glyph size; whether the cave word should always buy a
+   top-tier cast. Deferred to this pass by the user: a shorter pop reach for premium
+   letters.
+5. **Small follow-ups:** a fade on a freed fossil letter (`FossilExpiresAt` is
+   published for it); `boss-arena-review-layout.html` is a snapshot and must be
+   regenerated from Studio if the level changes; the `NPC_deals_damage` test fails
+   intermittently; the possible code issues the wiki reconcile listed in [[log]]
+   (2026-11-14) are unexamined; no full 102-test run since the last `isTowed` fix.
 
 ## Open questions
 

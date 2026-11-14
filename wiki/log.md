@@ -2141,3 +2141,7 @@ The user decided the review's five recommendations: tighten the Brain's volley s
 ## [2026-11-14] ingest | Letter pull and gate hold zones built
 
 Two builds from the user's decisions landed. The Brain now pulls the nearest letter within 60 studs toward itself and eats it on arrival; a player can pop it in flight ([[systems/Boss]] § Hunger, [[systems/BlockSpawner]] § Tows). A regenerating wall now waits while a player is inside a `GateHoldZone` with its `GateId` ([[systems/BreakableWalls]]); four zones were placed on the review copy and the Spit gate was seen held open and released. Both sessions reported unverified test fixes; the parent's full run was 101/102, the failure a real one-step lag in `isTowed`, fixed, then Arena 37/37. Nobody has watched a tow on a client.
+
+## [2026-11-14] ingest | End of session: pick-up list rewritten
+
+[[design/boss-arena]] § Pick up here now reflects the day's work: two islands in the place file, the review copy as the candidate, and what is still unseen (a letter pull on a client, anything under real boss fire). No code changed.
