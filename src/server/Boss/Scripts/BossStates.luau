@@ -22,6 +22,11 @@
 --   Cooldown ──(timer + in range)─────────────► AttackPrep
 --   Cooldown ──(timer + out of range)─────────► Patrol
 --   Cooldown ──(timer + no player)────────────► Idle
+--
+-- Attack range vs stop range: the boss attacks whenever its target is within
+-- attackRange (no path required) and walks toward it until within stopRange
+-- (BossTypeSpec.stopRange, default attackRange). Patrol and Cooldown walk;
+-- AttackPrep and Attack stand still.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
@@ -247,6 +252,23 @@ local AttackState: StateDefinition = {
 	end,
 }
 
+-- Boss blackboards currently walking toward their target during Cooldown,
+-- so the walk can be cancelled exactly once when the boss arrives.
+local closingInCooldown: { [Blackboard]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+
+-- True when this boss type separates stopRange from attackRange and its
+-- target is still farther than stopRange. A type without stopRange (or with
+-- stopRange >= attackRange) never walks in Cooldown: it stands still, as
+-- before.
+local function wantsToClose(bb: Blackboard): boolean
+	local spec = bossOf(bb).bossTypeSpec
+	local stopRange = spec.stopRange
+	return stopRange ~= nil
+		and stopRange < spec.attackRange
+		and bb.nearestPlayer ~= nil
+		and bb.distanceToNearest > stopRange
+end
+
 local CooldownState: StateDefinition = {
 	name = S.Cooldown,
 
@@ -256,10 +278,36 @@ local CooldownState: StateDefinition = {
 	end,
 
 	update = function(bb)
+		-- A type with a stopRange keeps closing on its target between
+		-- attacks until it is within that range, so it can fire from afar
+		-- without standing off at attackRange. Walking hands facing back to
+		-- the Humanoid (the AlignOrientation and the walk would fight);
+		-- standing, including the tick it arrives, takes it back.
+		if wantsToClose(bb) then
+			local targetRootPart = bb.targetRootPart
+			if targetRootPart and targetRootPart.Parent then
+				Actions.ReleaseFacing(bb)
+				Actions.MoveToWithPath(bb, targetRootPart.Position)
+				closingInCooldown[bb] = true
+				return
+			end
+		end
+
+		if closingInCooldown[bb] then
+			closingInCooldown[bb] = nil
+			Actions.StopMoving(bb)
+		end
+
 		-- Wait; transitions check the timer.
 		if bossOf(bb).bossTypeSpec.continuousFacing then
 			faceTarget(bb)
 		end
+	end,
+
+	onExit = function(bb)
+		-- Leaving mid-walk: the next state (AttackPrep stops; Patrol and Idle
+		-- set their own movement) must not inherit a stale marker.
+		closingInCooldown[bb] = nil
 	end,
 }
 

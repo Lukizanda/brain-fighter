@@ -21,6 +21,8 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CollectionService = game:GetService("CollectionService")
+local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
 local SkillBuffs             = require(ReplicatedStorage.Shared.Skills.SkillBuffs)
 local SkillEffects           = require(ReplicatedStorage.Shared.Skills.SkillEffects)
 local SkillInterrupt         = require(ReplicatedStorage.Shared.Skills.SkillInterrupt)
@@ -290,6 +292,49 @@ function M.run()
 		model:Destroy()
 	end
 	print("[Skills.__tests] buff-expiry ok")
+
+	-- 12. Boss freeze immunity: once a freeze on a Boss-tagged rig ends, a
+	-- new freeze is refused (quietly, ok = true) until the window passes;
+	-- an untagged rig can be re-frozen at once. UNRUN at authoring time.
+	do
+		local SHORT_FREEZE_SEC = 0.2
+		local IMMUNITY_MARGIN_SEC = 0.3
+
+		local bossModel, bossHumanoid = makeDummy()
+		CollectionService:AddTag(bossModel, SkillConstants.BOSS_TAG)
+		SkillEffects.apply({ kind = "freeze", durationSec = SHORT_FREEZE_SEC } :: any, bossHumanoid)
+		if not SkillEffects.isFrozen(bossHumanoid) then
+			fail("boss-immunity", "first freeze on a boss should land")
+		end
+		if not pollUntil(function() return not SkillEffects.isFrozen(bossHumanoid) end, DIED_TIMEOUT_SEC) then
+			fail("boss-immunity", "first freeze should lapse")
+		end
+		local refused = SkillEffects.apply({ kind = "freeze", durationSec = SHORT_FREEZE_SEC } :: any, bossHumanoid)
+		if not refused.ok then
+			fail("boss-immunity", "a refused freeze must still report ok")
+		end
+		if SkillEffects.isFrozen(bossHumanoid) then
+			fail("boss-immunity", "a second freeze inside the window should be refused")
+		end
+		task.wait(SkillConstants.BOSS_FREEZE_IMMUNITY_SEC + IMMUNITY_MARGIN_SEC)
+		SkillEffects.apply({ kind = "freeze", durationSec = SHORT_FREEZE_SEC } :: any, bossHumanoid)
+		if not SkillEffects.isFrozen(bossHumanoid) then
+			fail("boss-immunity", "a freeze after the window should land")
+		end
+		bossModel:Destroy()
+
+		local plainModel, plainHumanoid = makeDummy()
+		SkillEffects.apply({ kind = "freeze", durationSec = SHORT_FREEZE_SEC } :: any, plainHumanoid)
+		if not pollUntil(function() return not SkillEffects.isFrozen(plainHumanoid) end, DIED_TIMEOUT_SEC) then
+			fail("boss-immunity", "untagged freeze should lapse")
+		end
+		SkillEffects.apply({ kind = "freeze", durationSec = SHORT_FREEZE_SEC } :: any, plainHumanoid)
+		if not SkillEffects.isFrozen(plainHumanoid) then
+			fail("boss-immunity", "an untagged rig should be re-freezable at once")
+		end
+		plainModel:Destroy()
+	end
+	print("[Skills.__tests] boss-immunity ok")
 
 	print("[Skills.__tests] all scenarios passed")
 end

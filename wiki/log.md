@@ -2169,3 +2169,7 @@ New `design/ai-playtest` (Phase 9): fun pillars, an 18-metric matrix and six bot
 ## [2026-11-17] ingest | AI playtest: the real bot built and run once
 
 `design/ai-playtest` gains § Tier 2. A client bot and a server recorder play a persona through the production path (portal, entry pad, `RequestPop`, `EconomyReport.memorize`, `RequestCast`) and write the same events the simulator does. One real fight as Average on `IslandReview`: lost on the clock with 12 deaths, the boss healed 44% by eating letters, five real words spelled. It agrees with the simulator for a player who stands still; the strafing hit rate is still unchecked. `BlockTapController` gained a Studio-only `RequestPop` bindable.
+
+## [2026-11-17] ingest | Tuning fixes 1, 2 and 4 built; gate redesign proposed
+
+Decided by the user from the AI playtest and built: boss `attackRange` 150 with a new `stopRange` 70 (it now walks during Cooldown), spell damage 7 / 16 / 32% with a 1.5x Stasis amp and a 4 s boss freeze immunity, a 5-energy floor on a valid word's largest colour, `eatHealFraction` 0.005. `systems/Boss` (new § Range split), `design/gameplay-loop`, `systems/SpellRegistry`, `systems/EnergyEconomy` and `systems/Tests` (103 tests, 101/103 with the two known intermittents) updated. `design/ai-playtest` gains the designer's three gate options (key letters recommended, not decided) and a note that Edit mode's require cache hides config changes from the simulator until Studio restarts.

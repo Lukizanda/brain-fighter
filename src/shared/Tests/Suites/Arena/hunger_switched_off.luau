@@ -28,7 +28,7 @@ local BRAIN_INTERVAL_SEC = 5
 local BRAIN_RADIUS_STUDS = 60
 local BRAIN_PULL_SPEED = 12
 local BRAIN_REACH_STUDS = 8
-local BRAIN_FRACTION = 0.01
+local BRAIN_FRACTION = 0.005
 local NEGATIVE = -1
 
 type Case = { label: string, spec: any, shouldEat: boolean }

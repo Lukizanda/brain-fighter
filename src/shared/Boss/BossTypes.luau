@@ -33,7 +33,12 @@ export type BossTypeSpec = {
 	-- to the first spawn of a cycle only, not to a respawn.
 	entranceDelaySec: number?,
 	detectionRange: number,
+	-- The boss may attack a target within this many studs.
 	attackRange: number,
+	-- Distance at which the boss stops walking toward its target. A type that
+	-- omits it stops at attackRange (the old behaviour). Set below attackRange
+	-- to let the boss fire from afar while still closing in.
+	stopRange: number?,
 	attackWindupSec: number,
 	-- When true the boss smoothly rotates toward its target in all non-moving states.
 	-- When false (default) facing only happens during AttackPrep (windup telegraph).

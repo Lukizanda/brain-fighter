@@ -94,7 +94,7 @@ States defined in `BossStates.luau`, instantiated via `StateMachine.new()` (shar
 
 ```
 Idle ──(player ≤ 160 studs)─────────────→ Patrol
-Patrol ──(player ≤ 100 studs)───────────→ AttackPrep
+Patrol ──(player ≤ attackRange, 150)────→ AttackPrep
 Patrol ──(no player in range)────────────→ Idle
 AttackPrep ──(0.5 s windup elapsed)──────→ Attack
 Attack ──(attackComplete = true)─────────→ Cooldown
@@ -255,7 +255,8 @@ All boss constants are now per-type in `BossConfig.BOSS_TYPES[<name>]`. Brain's 
 | hipHeight | 6 (config intent) | `BOSS_TYPES.Brain.hipHeight` (currently overridden by Roblox rig physics to ~2) |
 | respawnDelaySec | 5 | `BOSS_TYPES.Brain.respawnDelaySec` |
 | detectionRange | 160 studs | `BOSS_TYPES.Brain.detectionRange` |
-| attackRange | 100 studs | `BOSS_TYPES.Brain.attackRange` |
+| attackRange | 150 studs (100 until 2026-11-17) | `BOSS_TYPES.Brain.attackRange` |
+| stopRange | 70 studs (new 2026-11-17; absent means "stop at attackRange") | `BOSS_TYPES.Brain.stopRange` |
 | attackWindupSec | 0.5 s | `BOSS_TYPES.Brain.attackWindupSec` |
 | continuousFacing | true | `BOSS_TYPES.Brain.continuousFacing` — boss tracks player in all non-moving states; `false`/nil = AttackPrep only |
 | FireballVolley count / speed / damage | 20 / 90 / 5 HP | `BOSS_TYPES.Brain.skills.FireballVolley.deliveryParams` + `.onImpact[1].amount` |
@@ -316,7 +317,7 @@ and the user asked for the boss to suck letters to it instead.
 | `eatRadius` | 60 | Studs from the boss, measured **horizontally**. 0 or less, or absent, switches it off |
 | `eatPullSpeed` | 12 | Studs a second the letter travels |
 | `eatReach` | 8 | Studs (3D) from the boss's root at which the letter is eaten |
-| `eatHealFraction` | 0.01 | Share of maximum health healed per letter eaten. 0 still pulls and eats, heals nothing and sends no heal cue |
+| `eatHealFraction` | 0.005 (0.01 until 2026-11-17) | Share of maximum health healed per letter eaten. 0 still pulls and eats, heals nothing and sends no heal cue |
 
 A type with an interval and radius but no positive `eatPullSpeed` or `eatReach` is
 treated as a config mistake: it does not eat, and warns.
@@ -348,6 +349,28 @@ is still in the world). Shipped block counts unchanged.
 **Not seen on a real Brain, and nobody has watched a tow on a client.** The tether, the
 client animator following a moving block, and a real tap on a letter in flight are
 untested outside module-level tests.
+
+## Range split (2026-11-17)
+
+Decided from the automated playtest ([[design/ai-playtest]] § Decisions, fix 1). The
+Brain used to stop walking and start firing at the same distance (100), which is
+shorter than a spell's reach (150), so a player between the two, or on the overlook
+shelf the boss cannot path to, was never attacked.
+
+- `attackRange` (150) is how far it fires. `stopRange` (70) is how close it walks.
+- It still walks in `Patrol`. It now also walks during `Cooldown` while the target is
+  beyond `stopRange`, handing facing back to the Humanoid for that walk
+  (`Actions.ReleaseFacing`) and stopping when the state ends or the target is close
+  enough. It stands still in `AttackPrep` and `Attack` as before.
+- Nothing requires a path before an attack, so a player on the overlook (131 studs,
+  `NoPath`) is now fired at.
+- **A boss cannot be frozen again for 4 s after a freeze ends**
+  (`SkillConstants.BOSS_FREEZE_IMMUNITY_SEC`, in `SkillEffects`' freeze handler,
+  Boss-tagged rigs only). A refused freeze still reports ok and the spell's other
+  effects land.
+
+Verified by `boss_cooldown_closes_in` and the boss-immunity case in the Skills tests,
+in a 101/103 run. Not yet watched in a real fight.
 
 ## Future Work
 

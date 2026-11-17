@@ -119,7 +119,7 @@ end
 
 local cases: { { any } } = {
 	{
-		"damage 20% (Fireball) projectile hits tagged target, 100 -> 80",
+		"damage 16% (Fireball) projectile hits tagged target, 100 -> 84",
 		function()
 			-- Projectile delivery skips the caster, aims at the target's
 			-- HumanoidRootPart, and only detects models carrying a
@@ -147,10 +147,10 @@ local cases: { { any } } = {
 			expectEq(res.ok, true, "ok")
 
 			local deadline = os.clock() + PROJECTILE_HIT_TIMEOUT_SEC
-			while targetHumanoid.Health > 80 + HEALTH_TOLERANCE and os.clock() < deadline do
+			while targetHumanoid.Health > 84 + HEALTH_TOLERANCE and os.clock() < deadline do
 				task.wait(PROJECTILE_HIT_POLL_SEC)
 			end
-			expectNear(targetHumanoid.Health, 80, HEALTH_TOLERANCE, "Health after Fireball impact")
+			expectNear(targetHumanoid.Health, 84, HEALTH_TOLERANCE, "Health after Fireball impact")
 
 			casterModel:Destroy()
 			targetModel:Destroy()

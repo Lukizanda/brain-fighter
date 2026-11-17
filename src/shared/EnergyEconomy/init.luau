@@ -17,9 +17,11 @@
 --
 -- Mixed-color words: each tile's contribution flows to its OWN color
 -- reservoir (value-weighted, not count-weighted). The per-color split
--- still sums exactly to computeWordEnergy(asWord) so the bookkeeping
--- never drifts; rounding shortfall is absorbed by the last present
--- color in canonical RGB order.
+-- sums exactly to computeWordEnergy(asWord) so the bookkeeping never
+-- drifts; rounding shortfall is absorbed by the last present color in
+-- canonical RGB order. The one exception is the word floor (see
+-- splitByColor): a word whose biggest bucket is under MIN_WORD_ENERGY
+-- has it raised, so a short word's split can exceed computeWordEnergy.
 --
 -- Wild tiles (the gold ★ blocks — see [[Wildcard]]) have no reservoir
 -- of their own, so their contribution is spread evenly across all three
@@ -101,6 +103,14 @@ local LENGTH_MULTIPLIER_SHORT = 1
 local LENGTH_MULTIPLIER_MEDIUM = 1.5
 local LENGTH_MULTIPLIER_LONG = 2
 local LENGTH_MULTIPLIER_EPIC = 3
+
+----------------------------------------------------------------------
+-- Word floor
+----------------------------------------------------------------------
+-- Least energy a valid word's biggest colour bucket may carry; see
+-- splitByColor. Equals the Tier-1 spell cost on purpose, so any word
+-- buys at least one cast.
+local MIN_WORD_ENERGY = 5
 
 ----------------------------------------------------------------------
 -- Color ordering
@@ -213,6 +223,13 @@ end
 --
 -- Colors with zero tiles are omitted from the result.
 --
+-- Floor: after the split, if the largest bucket is below MIN_WORD_ENERGY it
+-- is raised to MIN_WORD_ENERGY (ties go to the first colour in red, green,
+-- blue order). So for short words Σ buckets may EXCEED computeWordEnergy;
+-- computeWordEnergy stays the raw formula pinned by the worked examples, and
+-- this split is what MemorizeAction.scoreTiles credits (client and server
+-- both go through it, so they always agree).
+--
 -- Wild tiles are the exception: they belong to no reservoir, so their
 -- value is divided evenly across all three (the design's "wild energy
 -- feeds every color" rule). A word containing any wild tile therefore
@@ -278,6 +295,23 @@ function EnergyEconomy.splitByColor(tiles: { Tile }): ColorEnergy
 			result[color] = share
 			assignedSoFar += share
 		end
+	end
+
+	-- Word floor: a word is always worth at least MIN_WORD_ENERGY to its
+	-- biggest bucket, so a short word still buys a Tier-1 cast. The first
+	-- colour in canonical order wins a tie (strict > below). An empty tile
+	-- list has no buckets and stays empty.
+	local largestColor: string? = nil
+	local largestAmount = 0
+	for _, color in presentInOrder do
+		local amount = result[color]
+		if largestColor == nil or amount > largestAmount then
+			largestColor = color
+			largestAmount = amount
+		end
+	end
+	if largestColor ~= nil and largestAmount < MIN_WORD_ENERGY then
+		result[largestColor] = MIN_WORD_ENERGY
 	end
 
 	return result

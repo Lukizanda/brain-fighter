@@ -90,7 +90,8 @@ local COLOR_SPLIT_CASES: { ColorSplitCase } = {
 	-- Tiles arrive here already carrying the letter their star resolved
 	-- to (MemorizeAction stamps it on), but keeping color = "wild" — so
 	-- the value is spread across all three reservoirs instead of banked.
-	-- Every case must still satisfy Σ split == computeWordEnergy.
+	-- Every case must still satisfy Σ split == computeWordEnergy, except
+		-- where the word floor lifts a short word (see the floor cases).
 	{
 		-- The design's headline example: D★G resolved to DOG. O is worth
 		-- 1, so each reservoir is owed 1/3 — red floors to its own 2,
@@ -101,8 +102,9 @@ local COLOR_SPLIT_CASES: { ColorSplitCase } = {
 			{ letter = "O", color = "wild" },
 			{ letter = "G", color = "blue" },
 		},
-		expectedSplit = { red = 2, green = 0, blue = 3 },
-		expectedTotal = 5,
+		-- Blue was the largest bucket at 3, so the word floor lifts it to 5.
+		expectedSplit = { red = 2, green = 0, blue = 5 },
+		expectedTotal = 7,
 	},
 	{
 		-- No reservoir-colored tiles at all: every color still appears,
@@ -113,8 +115,9 @@ local COLOR_SPLIT_CASES: { ColorSplitCase } = {
 			{ letter = "A", color = "wild" },
 			{ letter = "T", color = "wild" },
 		},
-		expectedSplit = { red = 1, green = 1, blue = 3 },
-		expectedTotal = 5,
+		-- Raw split is 1/1/3; the floor lifts blue (largest) to 5.
+		expectedSplit = { red = 1, green = 1, blue = 5 },
+		expectedTotal = 7,
 	},
 	{
 		-- Exercises the 1.5x length tier with a wild tile present. This
@@ -130,6 +133,58 @@ local COLOR_SPLIT_CASES: { ColorSplitCase } = {
 		},
 		expectedSplit = { red = 12, green = 2, blue = 1 },
 		expectedTotal = 15,
+	},
+
+	------------------------------------------------------------------
+	-- Word floor (MIN_WORD_ENERGY = 5)
+	------------------------------------------------------------------
+	-- The split may exceed computeWordEnergy for short words; these pin
+	-- the floor itself.
+	{
+		label = "floor: 2-letter one-colour word -> 5",
+		tiles = {
+			{ letter = "A", color = "red" },
+			{ letter = "T", color = "red" },
+		},
+		expectedSplit = { red = 5 },
+		expectedTotal = 5,
+	},
+	{
+		label = "floor: mixed 3-letter worth 3 -> majority colour 5",
+		tiles = {
+			{ letter = "A", color = "red" },
+			{ letter = "T", color = "red" },
+			{ letter = "E", color = "green" },
+		},
+		expectedSplit = { red = 5, green = 1 },
+		expectedTotal = 6,
+	},
+	{
+		label = "floor: word worth 7 unchanged",
+		tiles = {
+			{ letter = "F", color = "red" },
+			{ letter = "I", color = "red" },
+			{ letter = "R", color = "red" },
+			{ letter = "E", color = "red" },
+		},
+		expectedSplit = { red = 7 },
+		expectedTotal = 7,
+	},
+	{
+		label = "floor: tie goes to red",
+		tiles = {
+			{ letter = "A", color = "blue" },
+			{ letter = "T", color = "red" },
+			{ letter = "E", color = "green" },
+		},
+		expectedSplit = { red = 5, green = 1, blue = 1 },
+		expectedTotal = 7,
+	},
+	{
+		label = "floor: empty tiles stay empty",
+		tiles = {},
+		expectedSplit = {},
+		expectedTotal = 0,
 	},
 }
 

@@ -23,6 +23,7 @@
 -- feed can credit a spell kill (see wiki/systems/Health.md).
 ----------------------------------------------------------------------
 
+local CollectionService = game:GetService("CollectionService")
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -65,6 +66,18 @@ type FreezeState = {
 	conns: { RBXScriptConnection },
 }
 local _freezeState: { [Humanoid]: FreezeState } = {}
+
+-- Boss freeze immunity: the os.clock() time before which a Boss-tagged rig
+-- refuses a new freeze, stamped when its last freeze ended. Weak-keyed so a
+-- despawned boss leaves nothing behind. See SkillConstants.BOSS_FREEZE_IMMUNITY_SEC.
+local _freezeImmuneUntil: { [Humanoid]: number } = setmetatable({}, { __mode = "k" }) :: any
+
+-- Shared code cannot read BossSpawner, so a boss is recognised by the tag
+-- SkillConstants mirrors from it.
+local function isBossRig(h: Humanoid): boolean
+	local character = h.Parent
+	return character ~= nil and CollectionService:HasTag(character, SkillConstants.BOSS_TAG)
+end
 
 -- Timer callbacks fire a hair early; treat "within epsilon of the
 -- deadline" as expired so an extend-then-restore race can't strand state.
@@ -109,6 +122,10 @@ local function purgeFreeze(h: Humanoid, restoreSpeed: boolean)
 	local state = _freezeState[h]
 	if not state then return end
 	_freezeState[h] = nil
+	-- Boss rigs earn a re-freeze lockout the moment a freeze ends.
+	if isBossRig(h) then
+		_freezeImmuneUntil[h] = os.clock() + SkillConstants.BOSS_FREEZE_IMMUNITY_SEC
+	end
 	for _, conn in state.conns do
 		conn:Disconnect()
 	end
@@ -223,6 +240,15 @@ SkillEffects.handlers = {
 		local duration: number = spec.durationSec or SkillConstants.DEFAULT_FREEZE_DURATION_SEC
 		local now = os.clock()
 		local state = _freezeState[h]
+		-- Boss immunity window: a fresh freeze inside it is refused quietly.
+		-- ok = true (not a failure) so the cast neither refunds nor errors and
+		-- the spell's other effects still land.
+		if not state then
+			local immuneUntil = _freezeImmuneUntil[h]
+			if immuneUntil and now < immuneUntil then
+				return { ok = true }
+			end
+		end
 		if state then
 			-- Extend the freeze; reschedule cleanup only if the deadline moved
 			local extended = math.max(state.restoreAt, now + duration)

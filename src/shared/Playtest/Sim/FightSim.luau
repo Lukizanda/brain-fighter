@@ -239,7 +239,7 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 	local vocab = vocabularyFor(persona)
 
 	local attackRange: number = tune.attackRange or boss.attackRange
-	local stopRange: number = tune.stopRange or attackRange
+	local stopRange: number = tune.stopRange or boss.stopRange or attackRange
 	local timeLimit: number = tune.timeLimit or GameModeConstants.PVE_ROUND_TIME_LIMIT_SEC
 	local eatHeal: number = tune.eatHealFraction or boss.eatHealFraction
 	local manaCap = EnergyReservoirs.CAP_PER_COLOR

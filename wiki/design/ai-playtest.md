@@ -336,6 +336,30 @@ and the hit rate are missing from a real fight.
 Build order: tuning fixes, then spores, then the ward (one after another: all three
 edit the Boss system). The gate redesign is a separate design pass.
 
+## Gate redesign (designer proposal, 2026-11-17, **not decided**)
+
+Asked for by decision 4. Three options; boss baiting stays as a second way in for all.
+
+| Option | Rule | For | Against |
+|---|---|---|---|
+| **Key letters** (recommended) | Three dim letters are carved on the gate and the same three float in front of it, poppable only from 40 studs. Pop them and the gate breaks. They spell a ready-made 3-letter word the player keeps. The cave plug takes 4 keys, in the cave word's colour | Found by accident; the verb is "pop"; helps the novice, whose limit is word search; reuses word kits, glyphs, `WallState` and hold zones (about 120 lines, 6 tests, plus a per-volume `PopReach`) | Opening may be too cheap, moving all the cost onto the ledge |
+| Password | A 4-letter word is written on the gate; memorize it and the gate opens, taking the word's energy | Pure spelling | Locks out the novice; needs a guarantee the letters exist |
+| Colour key | The gate glows a colour; cast that colour within 30 studs | Cheap for a strong player | Fights spell auto-target; a mana toll on the player with least mana |
+
+Simulator keys the designer asked for before a build: `gateKeyCount` 3, `caveKeyCount`
+4, `keyPopReach` 40 (sweep 40 / 70 / 200), a per-persona chance of noticing a gate
+(Novice 30%, Average 60%, Strong 90%), and a run with noticing at 0 to see whether
+gates open by accident in at least 20% of fights.
+
+## Simulator and config changes
+
+`FightSim` reads the game's config modules, but **Edit mode caches `require`**, so
+after `BossConfig`, `SpellRegistry` or `EnergyEconomy` change on disk the simulator
+keeps the old numbers until Studio restarts (seen 2026-11-17: the synced source had
+`stopRange = 70`, the cached module still said `attackRange = 100`). Until a restart,
+pass the new values as `tuning`. The "Fixes 1 + 2 + 4" rows above are the prediction
+for the game as now built.
+
 ## Stages
 
 | Stage | Item | Status |
@@ -346,7 +370,7 @@ edit the Boss system). The gate redesign is a separate design pass.
 | 4 | Sweep the tuning fixes; model spore letters and the word ward | **done 2026-11-17** except fix 6 (premium reach, gate health, wildcard split), which is not swept |
 | 5 | Decisions for the user | **decided 2026-11-17**, § Decisions |
 | 6 | Tier 2 bot and recorder; calibrate the simulator from 2 to 3 real fights | **built and run once 2026-11-17**; dodging, cover and tow stealing not in the bot; calibration of the strafing hit rate still open |
-| 7 | Build the chosen fixes, re-measure in both tiers, then the human playtest | **in progress**: 7a tuning fixes, 7b spores, 7c ward, 7d gate redesign (design first) |
+| 7 | Build the chosen fixes, re-measure in both tiers, then the human playtest | **in progress**: 7a tuning fixes **built 2026-11-17** (suites 101/103, the two known intermittents); 7b spores, 7c ward not started; 7d gate redesign has a designer proposal, § Gate redesign, waiting on the user |
 
 ## How to run the simulator
 
@@ -373,8 +397,13 @@ keys are listed above `FightSim.run`.
 
 Updated 2026-11-17 after the first real bot fight. All code is committed.
 
-1. **Build stage 7** in the order under § Decisions. After each: its suite, then one
-   bot fight. Check this page's stage table and `git log` for how far it got.
+1. **The user picks a gate rule** (§ Gate redesign). The question was on screen when
+   the session restarted; no answer was recorded.
+1a. **Build 7b (spore letters), then 7c (the word ward)**, one after the other. Spec:
+   § Decisions and the `tune.spore` / `tune.ward` code in `FightSim`. After each: its
+   suite, then one bot fight.
+1b. **One bot fight on the tuning fixes** (not yet run): Turtle on the overlook should
+   now be fired at, and the boss should close to 70 studs.
 2. **Next sweep in `FightSim`**: bring Average back to 150 to 220 s and Novice
    deaths under 2.5 with spores on (spore damage 2 to 3%, count 2 to 3, burst damage,
    the stop range); then fix 6 (`popReach` and `gateHealth` are tuning keys already;

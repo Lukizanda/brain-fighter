@@ -146,18 +146,18 @@ Bar cap per color: **60** (3×T3). Energy above the cap is discarded. (Rebalance
 
 | Color | Tier | Spell | Effect (prototype) | Delivery | Targeting |
 |---|---|---|---|---|---|
-| Red | T1 | Firebolt | ~5% boss HP damage | projectile | `auto` |
-| Red | T2 | Fireball | ~20% boss HP damage | projectile | `auto` |
-| Red | T3 | Inferno | ~50% boss HP damage | instant | `auto` |
+| Red | T1 | Firebolt | 7% boss HP damage | projectile | `auto` |
+| Red | T2 | Fireball | 16% boss HP damage | projectile | `auto` |
+| Red | T3 | Inferno | 32% boss HP damage | instant | `auto` |
 | ~~Red~~ | ~~T4~~ | ~~Volley~~ | ~~3 × flat-12 damage projectiles~~ | ~~projectile~~ | **parked 2026-09-23** |
 | Green | T1 | Mend | ~15% self-heal | instant | `auto` |
 | Green | T2 | Stone Wall | 6 s solid barrier, blocks everything | world_spawn | `placement` |
 | Green | T3 | Sanctuary | Full heal + 40 absorb | instant | self |
 | Blue | T1 | Frost Nip | 3 s freeze + 5% damage on target | instant | `auto` |
 | Blue | T2 | Shield | 40 damage absorbed on self, no expiry | instant | self |
-| Blue | T3 | Stasis | 5 s freeze + 2× damage amp | instant | `auto` |
+| Blue | T3 | Stasis | 5 s freeze + 1.5× damage amp | instant | `auto` |
 
-Numbers are starting points for first-prototype tuning, not final balance.
+Numbers are starting points for first-prototype tuning, not final balance. **Retuned 2026-11-17** from 5 / 20 / 50% and a 2× amp after the automated playtest ([[design/ai-playtest]]): the old curve let a strong speller kill the boss in under 50 s and paid a tap 2.5 times less per mana than a 3 s hold. Same pass: **a valid word gives its largest colour at least 5 energy** (`EnergyEconomy.MIN_WORD_ENERGY`, applied in `splitByColor`; ties go red, green, blue), so every valid word buys a cast. `computeWordEnergy` and the worked examples below are the raw formula and are unchanged.
 
 All ten are implemented as of Phase 5.2 (2026-08-03). Two notes where the shipped behavior differs from the original sketch:
 

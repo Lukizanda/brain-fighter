@@ -1,7 +1,7 @@
 ---
 type: system
 description: Pure-Luau config layer for the spell roster (R/G/B × T1–T3; T4 parked 2026-09-23) — name, color, tier, cost, targeting mode, skill:SkillSpec. Single source of truth consumed by SpellExecutor and the cast-menu HUD.
-updated: 2026-09-23
+updated: 2026-11-17
 ---
 
 # SpellRegistry
@@ -86,9 +86,9 @@ Declared as `TIER_COSTS = { 5, 10, 20, 40 }` in `init.luau`; the fourth rung is 
 
 | Color | Tier | Name | Targeting | Delivery | onImpact |
 |---|---|---|---|---|---|
-| Red | T1 | Firebolt | `auto` | `projectile` | `damage fractionOfMaxHP=0.05` |
-| Red | T2 | Fireball | `auto` | `projectile` | `damage fractionOfMaxHP=0.20` |
-| Red | T3 | Inferno | `auto` | `instant` | `damage fractionOfMaxHP=0.50 + burn durationSec=3` |
+| Red | T1 | Firebolt | `auto` | `projectile` | `damage fractionOfMaxHP=0.07` |
+| Red | T2 | Fireball | `auto` | `projectile` | `damage fractionOfMaxHP=0.16` |
+| Red | T3 | Inferno | `auto` | `instant` | `damage fractionOfMaxHP=0.32 + burn durationSec=3` |
 | ~~Red~~ | ~~T4~~ | ~~Volley~~ | — | — | **parked** — spec still in the file, trimmed out of the roster |
 | Green | T1 | Mend | self | `instant` | `heal fractionOfMaxHP=0.15` |
 | Green | T2 | Stone Wall | `placement` | `world_spawn` | _(none; the barrier Part is the effect — `durationSec=6`)_ |

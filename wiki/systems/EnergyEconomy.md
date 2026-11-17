@@ -1,7 +1,7 @@
 ---
 type: system
 description: Pure-Luau formula module — converts a Memorized word into per-color mana. Scrabble letter values × length multiplier; mixed-color words split value-weighted with floor-reconciled rounding so per-color totals always sum exactly to whole-word energy.
-updated: 2026-07-27
+updated: 2026-11-17
 ---
 
 # EnergyEconomy System
@@ -53,6 +53,8 @@ Tier table from [[design/gameplay-loop|gameplay-loop "Tuning numbers"]]:
 ### `splitByColor(tiles)`
 
 Each tile contributes `letter_value × length_multiplier` to its OWN color. Length multiplier is derived from total tile count, NOT per-color count — `FLAME` is a 5-letter word for multiplier purposes whether it's all-red or mixed.
+
+**Word floor (2026-11-17).** After the split, if the largest colour bucket is under `MIN_WORD_ENERGY` (5) it is raised to 5; ties go to the first of red, green, blue. A valid word therefore always buys a T1 cast. The client and the server ledger both call `splitByColor`, so they credit the same amount. `computeWordEnergy` is the raw formula and does not apply the floor. From [[design/ai-playtest]] fix 4.
 
 **Rounding reconciliation.** With `1.5×` words, a 50/50 split between two colors would lose 1 point of energy to `floor()` on each side. To avoid that drift, the algorithm walks colors in canonical RGB order, floors each color's raw share, and assigns the integer shortfall to the LAST present color. So:
 

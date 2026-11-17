@@ -95,7 +95,7 @@ local FIREBOLT_SPEED = 80
 local FIREBOLT_LIFETIME_SEC = 1.5
 local FIREBOLT_PROXIMITY_RADIUS = 3
 local FIREBOLT_SIZE = 0.5
-local FIREBOLT_DAMAGE_FRAC = 0.05
+local FIREBOLT_DAMAGE_FRAC = 0.07
 local FIREBOLT_COLOR = Color3.fromRGB(255, 140, 40)
 
 local FIREBALL_SPEED = 55
@@ -103,7 +103,7 @@ local FIREBALL_LIFETIME_SEC = 2.0
 local FIREBALL_PROXIMITY_RADIUS = 3
 local FIREBALL_SIZE = 1.0
 local FIREBALL_IMPACT_RADIUS = 7
-local FIREBALL_DAMAGE_FRAC = 0.20
+local FIREBALL_DAMAGE_FRAC = 0.16
 local FIREBALL_COLOR = Color3.fromRGB(255, 90, 30)
 
 -- Inferno (T3) tuning. The damage fraction is the spell's entire payload
@@ -112,7 +112,7 @@ local FIREBALL_COLOR = Color3.fromRGB(255, 90, 30)
 -- the impact eruption (impact_damage_t3, ~1.8 s) so the flames are still
 -- going when the blast clears, without lingering long enough to read as a
 -- damage-over-time the spell does not have.
-local INFERNO_DAMAGE_FRAC = 0.50
+local INFERNO_DAMAGE_FRAC = 0.32
 local INFERNO_BURN_SEC = 3.0
 
 -- Defensive tuning (Phase 5.2). The shield is a flat absorb pool with no
@@ -130,10 +130,10 @@ local STONE_WALL_COLOR = Color3.fromRGB(120, 118, 110)
 
 local STASIS_FREEZE_SEC = 5
 -- Stasis's payload is the amp, not the freeze: damage dealt to the frozen
--- target is doubled for the duration. Delivered as a separate `buff`
+-- target is amplified (x1.5) for the duration. Delivered as a separate `buff`
 -- effect rather than a freeze parameter so the multiplier is reusable by
 -- any future spell that amplifies without freezing.
-local STASIS_DAMAGE_AMP = 2.0
+local STASIS_DAMAGE_AMP = 1.5
 
 local VALID_COLORS: { [string]: true } = {
 	red = true,

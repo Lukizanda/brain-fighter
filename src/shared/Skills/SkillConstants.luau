@@ -91,6 +91,18 @@ local CHARGE_TIER_ATTR = "_chargeTier"
 -- and burnable but never draw shards or flames.
 local DAMAGEABLE_TAGS: { string } = { "Damageable", "NPC", "Boss" }
 
+-- The CollectionService tag BossSpawner puts on every boss rig. Mirrors
+-- `BossSpawner.BOSS_TAG` (server code, which shared modules must not
+-- require); the Boss entry of DAMAGEABLE_TAGS above is the same string.
+local BOSS_TAG = "Boss"
+
+-- After a freeze on a Boss-tagged rig ENDS, that rig cannot be frozen
+-- again for this long (design: wiki/design/ai-playtest.md, Fix 2). Stops
+-- Frost Nip / Stasis chaining a boss into permanent lock. Players are
+-- exempt, so PvP freezes are unchanged. A refused freeze is a silent
+-- no-op that still reports ok, so the rest of the spell lands.
+local BOSS_FREEZE_IMMUNITY_SEC = 4
+
 -- On every barrier slab `SkillVisuals.spawnBarrier` puts in the world.
 -- `client/Vfx/BarrierCrumbleController` watches it and owns the rubble.
 --
@@ -162,6 +174,8 @@ return {
 	CHARGE_COLOR_ATTR  = CHARGE_COLOR_ATTR,
 	CHARGE_TIER_ATTR   = CHARGE_TIER_ATTR,
 	DAMAGEABLE_TAGS    = DAMAGEABLE_TAGS,
+	BOSS_TAG           = BOSS_TAG,
+	BOSS_FREEZE_IMMUNITY_SEC = BOSS_FREEZE_IMMUNITY_SEC,
 	BARRIER_TAG        = BARRIER_TAG,
 	BARRIER_EXPIRES_AT = BARRIER_EXPIRES_AT,
 
