@@ -2165,3 +2165,7 @@ New `design/ai-playtest` (Phase 9): fun pillars, an 18-metric matrix and six bot
 ## [2026-11-17] ingest | AI playtest: spore letters and the word ward modelled
 
 `design/ai-playtest` gains the mechanics sweep. Spores that only hand out letters leave the Novice at 0%; spores that do 3% to the boss when popped (3 a lob) give Novice 96% wins in 226 s, Strong 85 s and a 2.7 skill ratio, with Average now too fast at 117 s. The word ward is the only variant that brings the 5 s burst under 50%. Simulated only; the spore pop rates are the parent session's guess.
+
+## [2026-11-17] ingest | AI playtest: the real bot built and run once
+
+`design/ai-playtest` gains § Tier 2. A client bot and a server recorder play a persona through the production path (portal, entry pad, `RequestPop`, `EconomyReport.memorize`, `RequestCast`) and write the same events the simulator does. One real fight as Average on `IslandReview`: lost on the clock with 12 deaths, the boss healed 44% by eating letters, five real words spelled. It agrees with the simulator for a player who stands still; the strafing hit rate is still unchecked. `BlockTapController` gained a Studio-only `RequestPop` bindable.

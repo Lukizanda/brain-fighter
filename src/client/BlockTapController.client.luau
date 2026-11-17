@@ -107,17 +107,87 @@ local function livingCharacter(): Model?
 	return character
 end
 
-local function tryPop(screenPosition: Vector2)
+-- The cooldown and mind-full gate every pop passes, tap or bot. Starts the
+-- cooldown when it lets one through.
+local function beginPop(): boolean
 	local now = os.clock()
 	if now - lastPopped < BlockTapConfig.COOLDOWN then
 		log:infoThrottled("cooldown", 1, "on cooldown — skipping")
-		return
+		return false
 	end
 	lastPopped = now
 
 	if session.mindFullManager:isMindFull() then
 		fizzleSound:Play()
 		log:info("blocked: mind is full")
+		return false
+	end
+	return true
+end
+
+-- Everything after the block is found: append, pending, FireServer and the
+-- predicted burst. Returns true if the pop was sent.
+local function sendPop(block: Model): boolean
+	local letter, color = BlockShoot.readBlock(block)
+	if not letter or not color then
+		log:warn(string.format("block '%s' missing Letter/Color attrs", block.Name))
+		return false
+	end
+
+	-- Read before firing: the server destroys the block, and the burst
+	-- needs to start from where it stood, not from a Model mid-teardown.
+	local blockPos = block:GetPivot().Position
+
+	local appended = session.wordBuffer:append(letter, color)
+	if not appended then
+		fizzleSound:Play()
+		log:info(string.format("buffer rejected '%s' (%s)", letter, color))
+		return false
+	end
+
+	-- The append above is optimistic — the server has not agreed yet. Record
+	-- what we owe back so a rejection can undo exactly this letter.
+	requestSeq += 1
+	local requestId = requestSeq
+	pending[requestId] = { letter = letter, color = color, firedAt = os.clock() }
+
+	consumeRemote:FireServer(block, requestId)
+	log:info(string.format("popped %s (%s)", letter, color))
+
+	-- Predict the burst, but NOT the stream. The split is the point.
+	--
+	-- The burst is a spark: it says a block came apart here. That stays
+	-- true even when we lose a race for it, because the block really did
+	-- pop — the winner popped it — so drawing it immediately is honest and
+	-- the tap feels instant.
+	--
+	-- The stream is an attribution claim: "that letter came to *me*". That
+	-- is the same class of thing as a hit marker, which CastAction's
+	-- prediction contract explicitly forbids this layer from asserting. So
+	-- it is drawn only once the server has confirmed the consume — which is
+	-- why BlockShootService broadcasts `collect` to everyone *including*
+	-- the popper, with no drawnLocallyBy exclusion. A stream you did not
+	-- earn is never drawn rather than drawn and retracted.
+	SkillVisuals.spawnEffectAtPoint(blockPos, VfxConfig.resolveBlockPopId(color))
+	return true
+end
+
+-- Pop a block that is already known, skipping the screen-ray lookup.
+-- Studio only: the playtest bot reaches this through `RequestPop` below.
+-- Takes the same cooldown and mind-full gate and the same send path as a tap.
+local function popBlock(block: Model): boolean
+	if not beginPop() then
+		return false
+	end
+	if not livingCharacter() then
+		log:infoThrottled("no_character", 5, "no living character — ignoring pop")
+		return false
+	end
+	return sendPop(block)
+end
+
+local function tryPop(screenPosition: Vector2)
+	if not beginPop() then
 		return
 	end
 
@@ -167,47 +237,7 @@ local function tryPop(screenPosition: Vector2)
 		return
 	end
 
-	local letter, color = BlockShoot.readBlock(block)
-	if not letter or not color then
-		log:warn(string.format("block '%s' missing Letter/Color attrs", block.Name))
-		return
-	end
-
-	-- Read before firing: the server destroys the block, and the burst
-	-- needs to start from where it stood, not from a Model mid-teardown.
-	local blockPos = block:GetPivot().Position
-
-	local appended = session.wordBuffer:append(letter, color)
-	if not appended then
-		fizzleSound:Play()
-		log:info(string.format("buffer rejected '%s' (%s)", letter, color))
-		return
-	end
-
-	-- The append above is optimistic — the server has not agreed yet. Record
-	-- what we owe back so a rejection can undo exactly this letter.
-	requestSeq += 1
-	local requestId = requestSeq
-	pending[requestId] = { letter = letter, color = color, firedAt = os.clock() }
-
-	consumeRemote:FireServer(block, requestId)
-	log:info(string.format("popped %s (%s)", letter, color))
-
-	-- Predict the burst, but NOT the stream. The split is the point.
-	--
-	-- The burst is a spark: it says a block came apart here. That stays
-	-- true even when we lose a race for it, because the block really did
-	-- pop — the winner popped it — so drawing it immediately is honest and
-	-- the tap feels instant.
-	--
-	-- The stream is an attribution claim: "that letter came to *me*". That
-	-- is the same class of thing as a hit marker, which CastAction's
-	-- prediction contract explicitly forbids this layer from asserting. So
-	-- it is drawn only once the server has confirmed the consume — which is
-	-- why BlockShootService broadcasts `collect` to everyone *including*
-	-- the popper, with no drawnLocallyBy exclusion. A stream you did not
-	-- earn is never drawn rather than drawn and retracted.
-	SkillVisuals.spawnEffectAtPoint(blockPos, VfxConfig.resolveBlockPopId(color))
+	sendPop(block)
 end
 
 ----------------------------------------------------------------------
@@ -381,5 +411,19 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessedEv
 	-- see the note there before changing either.
 	tryPop(Vector2.new(input.Position.X, input.Position.Y))
 end)
+
+-- Automation hook for the Studio playtest bot (src/client/Playtest). Created
+-- at runtime and only in Studio, so a published game has no such entry point.
+if RunService:IsStudio() then
+	local requestPop = Instance.new("BindableFunction")
+	requestPop.Name = "RequestPop"
+	requestPop.OnInvoke = function(block: any): boolean
+		if typeof(block) ~= "Instance" or not block:IsA("Model") then
+			return false
+		end
+		return popBlock(block)
+	end
+	requestPop.Parent = script
+end
 
 log:info("BlockTapController started — tap a block to pop it")

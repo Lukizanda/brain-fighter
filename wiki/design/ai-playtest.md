@@ -281,6 +281,49 @@ every 3 s and walks at 9.
   so this should matter little.
 - Co-op.
 
+## Tier 2: the real bot (built and run once, 2026-11-17)
+
+`src/client/Playtest/` holds the bot (`PlaytestBot`, `BotVocabulary`,
+`BotConstants`) and `src/server/Playtest/` the recorder (`PlaytestRecorder`,
+`RecorderConstants`). `BlockTapController` gained a Studio-only `RequestPop`
+bindable so the bot pops through the same checks as a tap; a human tap is unchanged.
+
+**To run:** in Edit mode set `workspace:SetAttribute("PlaytestBot", "<persona>")` and
+`"PlaytestArena"` (default `IslandReview`), take the playtest lock, press Play. The
+bot takes the lobby portal, walks onto the entry pad and fights. At round end the
+recorder writes `workspace.PlaytestReport.Fight_<n>` (a `StringValue` holding JSON:
+persona, metrics, events) and sets `PlaytestFightsDone`. Read it from the Server
+DataModel, stop Play, and **clear both attributes**: they persist in the place file.
+
+This version does not use cover, react to windups, steal tows or keep wildcards, and
+the recorder has no signal for tow starts or for boss shots fired, so the steal rate
+and the hit rate are missing from a real fight.
+
+### First real fight (Average persona, one fight, the game as it is today)
+
+| | Real bot | Simulator, Average | Simulator, a player who stands still (Novice / Rusher) |
+|---|---|---|---|
+| Outcome | lost on the clock, boss at 64% | wins 85% | loses |
+| Deaths | 12 | 2.0 | 5 to 15 |
+| Damage taken | 1320 | 304 | 550 to 1540 |
+| Words memorized | 5 | 10 | 6 to 12 |
+| Damage dealt | 80% of boss health | 100% | 27 to 60% |
+| Healed back by hunger | **44%** (44 letters eaten) | 15% of damage dealt | 30 to 80% |
+| First cast | 7 s after the boss landed | 27 s | |
+
+- **The pipeline works end to end**: portal, entry pad, pop, memorize, cast, death,
+  re-entry and the report, with no fix needed after the build.
+- **A standing player on the real island dies about every 20 s**, which agrees with
+  the simulator's numbers for a player who does not dodge. The real bot never dodges,
+  so this fight says nothing yet about the simulator's 3 to 4% hit rate on a
+  strafing player. That is the next calibration run.
+- **Hunger healed 44% of the boss's health in one fight.** For a player who is
+  losing, the boss out-heals them: the bot dealt 80% and still ended with the boss at
+  64%.
+- The bot spelled real words through the real dictionary (JADED 21, DOCKER 19,
+  WHOSO 16, BRAVE 15, DESK 9) and cast Fireball, Inferno, Frost Nip and Mend.
+- One fight is one sample. Nothing here is a rate.
+
 ## Decisions for the user (open)
 
 1. **How should a young novice win?** The simulator's answer is spores that hurt the
@@ -303,7 +346,7 @@ every 3 s and walks at 9.
 | 3 | Baseline report | **done 2026-11-17**, § Tier 1 results |
 | 4 | Sweep the tuning fixes; model spore letters and the word ward | **done 2026-11-17** except fix 6 (premium reach, gate health, wildcard split), which is not swept |
 | 5 | Decisions for the user | **open**, § Decisions for the user |
-| 6 | Tier 2 bot and recorder; calibrate the simulator from 2 to 3 real fights | not started |
+| 6 | Tier 2 bot and recorder; calibrate the simulator from 2 to 3 real fights | **built and run once 2026-11-17**; dodging, cover and tow stealing not in the bot; calibration of the strafing hit rate still open |
 | 7 | Build the chosen fixes, re-measure in both tiers, then the human playtest | not started |
 
 ## How to run the simulator
@@ -329,20 +372,18 @@ keys are listed above `FightSim.run`.
 
 ## Pick up here
 
-Updated 2026-11-17 after stage 3.
+Updated 2026-11-17 after the first real bot fight. All code is committed.
 
 1. **The user answers § Decisions for the user.** Everything after depends on 1 and 3.
 2. **Next sweep in `FightSim`**: bring Average back to 150 to 220 s and Novice
    deaths under 2.5 with spores on (spore damage 2 to 3%, count 2 to 3, burst damage,
    the stop range); then fix 6 (`popReach` and `gateHealth` are tuning keys already;
    the wildcard split is not).
-3. **Tier 2.** A client bot under `src/client/Playtest/` gated by a workspace
-   attribute and `RunService:IsStudio()`, using the real `PlayerSession`,
-   `EconomyReport.memorize` and the `RequestCast` bindable; `BlockTapController` needs
-   a small `RequestPop` bindable so the bot pops through the production path. A server
-   recorder under `src/server/Playtest/` writes the same event kinds
-   `PlaytestMetrics` reads. First use: check the volley hit rate standing and
-   strafing at 60, 100 and 130 studs, whether a frozen boss attacks, and whether mana
-   and the buffer survive a death.
+3. **Tier 2 calibration.** Teach the bot to strafe on a windup (the persona's
+   `reactChance`) and run Strong once: the simulator says a strafing player is hit by
+   3 to 4% of shots, and no real fight has tested that. Also still unverified in a
+   real fight: whether a frozen boss attacks, and whether the buffer and mana survive
+   a death. A server signal for tow start / steal and for boss shots fired would fill
+   the two metrics the recorder cannot see.
 4. **Bands in code.** `PlaytestMetrics` reports numbers; the green / amber / red
    bands are applied by hand from the matrix. Encode them once they stop moving.

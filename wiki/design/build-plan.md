@@ -391,7 +391,7 @@ Added 2026-11-13 at the user's request. Full design, measured arena, layout tabl
 
 ## Phase 9 — AI playtest of the boss arena
 
-Plan, metric matrix, personas, results and stages: [[design/ai-playtest]]. Tier 1 (a fight simulator in `src/shared/Playtest/`, run from Edit mode) is built; Tier 2 (a real in-Studio bot and a server recorder) is not. Runs alongside Phase 8 stage 4, whose tuning it feeds.
+Plan, metric matrix, personas, results and stages: [[design/ai-playtest]]. Tier 1 (a fight simulator in `src/shared/Playtest/`, run from Edit mode) and Tier 2 (a real in-Studio bot and a server recorder) are both built; Tier 2 has run one fight. Runs alongside Phase 8 stage 4, whose tuning it feeds.
 
 ## Plan changelog
 
