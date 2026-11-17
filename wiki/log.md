@@ -2145,3 +2145,7 @@ Two builds from the user's decisions landed. The Brain now pulls the nearest let
 ## [2026-11-14] ingest | End of session: pick-up list rewritten
 
 [[design/boss-arena]] § Pick up here now reflects the day's work: two islands in the place file, the review copy as the candidate, and what is still unseen (a letter pull on a client, anything under real boss fire). No code changed.
+
+## [2026-11-17] ingest | Boss fight enabled on the review island
+
+`IslandReview` was made a scene slot running `PvEBoss`, with a small ready room and the orange lobby pad turned into a portal, so the user can fight the Brain there. A scripted run saw the entrance, six letter pulls, a tether on the client and a kill in the open at 76 studs. It also found the boss cannot path to the overlook, which sits beyond its attack range, so a player who stays there is never attacked. Recorded on [[design/boss-arena]] § Boss fight on the review copy. Place file only.

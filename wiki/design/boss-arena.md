@@ -557,6 +557,33 @@ exactly as it already waits for a character standing in the wall itself. `GateId
 the attribute word kits already use, so the cave plug's kit still re-rolls when the
 plug finally re-seals.
 
+## Boss fight on the review copy (2026-11-17)
+
+The user asked to playtest the review island with the boss. No code was needed: the
+island became a real arena in the place file.
+
+- `IslandReview` carries the `ArenaSlot` tag and `Mode = PvEBoss`, so it gets its own
+  session at boot. Its boss point was renamed `BossPoint_Island` to `BossPoint`, the
+  name `BossService` looks for.
+- `Workspace.Arena.IslandReviewReadyRoom` (360 studs east of the island centre): a
+  spawn pad tagged `FFASpawn`, an `ArenaEntryPad` to the overlook, and a
+  `LobbyReturnPad`. All `ArenaId = IslandReview`.
+- The orange lobby pad `TempReviewPad` is now a `ModePortal` with
+  `TargetArenaId = IslandReview`; `TempReviewArrival` was removed. The baseline island
+  is unchanged and still has no boss.
+
+First run, driven by the assistant with a scripted character: portal join moved the
+player into the session, the entry pad landed them on the overlook, the countdown ran
+and the boss dropped in 8.2 s later. In 45 s it put six letters in tow, and a tether
+beam was present on the client. A player standing in the open 76 studs out went from
+100 health to 0 in 14 s, and one rock cracked.
+
+**Found: the overlook is a permanent safe spot.** The boss never moved while the
+player stood there. `PathfindingService` returns `NoPath` from the boss to the
+overlook (a shelf 16 studs up with no ramp), and at 131 studs the player is beyond
+`attackRange`, so the boss stands in `Patrol` unable to walk or fire. A path to the
+open floor computes fine. Not fixed; a decision for the user.
+
 ## Pick up here (rewritten 2026-11-14 at the end of the session)
 
 All code is committed. Two islands sit in the place file: `IslandGreybox` (the
