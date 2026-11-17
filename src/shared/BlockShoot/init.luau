@@ -12,6 +12,7 @@
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local SporeConstants = require(ReplicatedStorage.Shared.BlockSpawner.SporeConstants)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 
 -- How far a tap can reach.
@@ -57,6 +58,14 @@ function BlockShoot.readBlock(block: Model): (string?, string?)
 	local letter = block:GetAttribute(LetterBlocks.LETTER_ATTRIBUTE)
 	local color = block:GetAttribute(LetterBlocks.COLOR_ATTRIBUTE)
 	return letter, color
+end
+
+-- Whether the block carries the spore mark. Read before the block is
+-- destroyed (a destroyed Model keeps its attributes, but a listener cannot
+-- be told which block it was) and passed on as a plain flag: what a spore
+-- does is not this module's business.
+function BlockShoot.isSpore(block: Model): boolean
+	return block:GetAttribute(SporeConstants.ATTRIBUTE) == true
 end
 
 return BlockShoot

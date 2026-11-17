@@ -65,6 +65,38 @@ local BossConstants = {
 	HUNGER_HEAL_VFX = "impact_heal",
 
 	-- ============================================================
+	-- Spore lob (Boss/Scripts/BossSpores; numbers live in BossConfig)
+	-- ============================================================
+	-- The attack name the boss's selection carries for a lob. It is not a
+	-- skill in BossTypeSpec.skills: a lob delivers blocks, not a SkillSpec.
+	-- The windup borrows the FireballVolley's telegraph and animation, so a
+	-- player cannot tell the two apart until the throw.
+	VOLLEY_ATTACK = "FireballVolley",
+	SPORE_LOB_ATTACK = "SporeLob",
+	-- Cause strings on the damage requests, for the Health log and kill feed.
+	SPORE_BURST_CAUSE = "SporeBurst",
+	SPORE_POP_CAUSE = "SporePop",
+	-- VfxConfig.EFFECTS ids played through VfxBroadcast. Reused stand-ins, not
+	-- final art: the throw (a sound-only launch cue at the boss), the landing
+	-- (a thud with dust at the spore) and the burst (the big fire eruption).
+	SPORE_LOB_VFX = "projectile_boss_fireball",
+	SPORE_LAND_VFX = "impact_wall",
+	SPORE_BURST_VFX = "impact_damage_t3",
+	-- The ring drawn on the ground where a spore will land (for the flight)
+	-- and where it burst (briefly): the burst radius, in this colour.
+	SPORE_RING_COLOR = Color3.fromRGB(255, 70, 20),
+	SPORE_BURST_RING_SEC = 0.4,
+	-- Finding the ground under a landing point: probe down from this far above
+	-- the target's root for this far. Without a hit (no floor, a test arena) the
+	-- ground is taken to be this far below the target's root, a character's
+	-- root-to-feet height.
+	SPORE_GROUND_PROBE_UP_STUDS = 20,
+	SPORE_GROUND_PROBE_DOWN_STUDS = 80,
+	SPORE_ROOT_TO_FEET_STUDS = 3,
+	-- The throw leaves the boss this far above its root.
+	SPORE_LOB_ORIGIN_HEIGHT_STUDS = 6,
+
+	-- ============================================================
 	-- Attacks
 	-- ============================================================
 	-- Height above the root part that an attack is delivered from, so

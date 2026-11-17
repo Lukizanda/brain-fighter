@@ -50,6 +50,10 @@
 -- outside every box, count and refill and removes itself after a lifetime;
 -- fossil letters are the user. See the section of that name below.
 --
+-- Spores: spawnSpore is a timed block marked as a spore (see SporeConstants);
+-- removeSpore / clearSpores take them away. Same standing as a fossil letter:
+-- no count, no refill, no tow. The boss decides everything a spore does.
+--
 -- Tows (Phase 8 stage 9): beginTow / advanceTow / cancelTow draw one ordinary
 -- block toward a point (the boss pulls a letter to itself). The pool is the
 -- one writer of the block's position meanwhile. See the section of that name.
@@ -79,6 +83,7 @@ local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
 local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 local LetterTables = require(script.LetterTables)
+local SporeConstants = require(script.SporeConstants)
 local TowConstants = require(script.TowConstants)
 local WordKits = require(script.WordKits)
 
@@ -422,6 +427,8 @@ export type BlockSpawner = typeof(setmetatable(
 		-- Timed blocks (fossils): stamped like pool blocks but in no box, so
 		-- in no count and never refilled. See spawnTimedBlock.
 		_timed: { [Model]: boolean },
+		-- The timed blocks that are spores (see spawnSpore); a subset of _timed.
+		_spores: { [Model]: boolean },
 		-- Pool blocks currently being pulled toward a point (see beginTow).
 		-- They stay in `_active` and in their box's count the whole time.
 		_towed: { [Model]: boolean },
@@ -483,6 +490,7 @@ function BlockSpawner.new(userOpts: Opts?): BlockSpawner
 		_quotaTotal = quotaTotal,
 		_kitTotal = kitTotal,
 		_timed = {},
+		_spores = {},
 		_towed = {},
 		_running = false,
 		_destroyed = false,
@@ -1010,6 +1018,73 @@ end
 function BlockSpawner.clearTimedBlocks(self: BlockSpawner): number
 	local snapshot = self:getTimedBlocks()
 	for _, block in ipairs(snapshot) do
+		block:Destroy()
+	end
+	return #snapshot
+end
+
+----------------------------------------------------------------------
+-- Spores (the boss's spore lob)
+----------------------------------------------------------------------
+-- A spore is a timed block that carries the spore mark and publishes when
+-- its fuse runs out (SporeConstants). It is an ordinary poppable letter of
+-- this arena: popping it goes through ConsumeBlock like any other. Being a
+-- timed block it is in no box, count, quota or refill, and beginTow never
+-- considers it. The pool knows nothing about what a spore does; the boss
+-- reads the fuse time, bursts it and removes it.
+
+-- Spawns a spore of `letter` / `color` at `position`. `fuseSec` is what the
+-- client counts down; the block itself only removes itself a grace period
+-- later, as a safety net. Returns nil on a destroyed pool.
+function BlockSpawner.spawnSpore(
+	self: BlockSpawner,
+	letter: string,
+	color: string,
+	position: Vector3,
+	fuseSec: number
+): Model?
+	local block = self:spawnTimedBlock(letter, color, CFrame.new(position), fuseSec + SporeConstants.REMOVAL_GRACE_SEC)
+	if block == nil then
+		return nil
+	end
+	-- Fuse time first: a client woken by the mark reads a time that is there.
+	block:SetAttribute(SporeConstants.EXPIRES_ATTRIBUTE, workspace:GetServerTimeNow() + fuseSec)
+	block:SetAttribute(SporeConstants.ATTRIBUTE, true)
+	self._spores[block] = true
+	block.Destroying:Connect(function()
+		self._spores[block] = nil
+	end)
+	return block
+end
+
+function BlockSpawner.getSpores(self: BlockSpawner): { Model }
+	local out: { Model } = {}
+	for block in self._spores do
+		table.insert(out, block)
+	end
+	return out
+end
+
+-- Removes one spore (it burst). False when `block` is not a live spore of
+-- this pool; nothing is destroyed then.
+function BlockSpawner.removeSpore(self: BlockSpawner, block: Model): boolean
+	if not self._spores[block] then
+		return false
+	end
+	self._spores[block] = nil
+	block:Destroy()
+	return true
+end
+
+-- Removes every live spore of this pool (the boss died, the round ended);
+-- returns how many.
+function BlockSpawner.clearSpores(self: BlockSpawner): number
+	local snapshot = self:getSpores()
+	for _, block in ipairs(snapshot) do
+		-- Forget it here, as removeSpore does: the removed signal that would
+		-- otherwise do it is deferred, so a caller asking straight away
+		-- would still be told the spore is live.
+		self._spores[block] = nil
 		block:Destroy()
 	end
 	return #snapshot

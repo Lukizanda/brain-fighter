@@ -16,6 +16,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local LetterTables = require(ReplicatedStorage.Shared.BlockSpawner.LetterTables)
 local BossTypes = require(ReplicatedStorage.Shared.Boss.BossTypes)
 
 type BossTypeSpec = BossTypes.BossTypeSpec
@@ -55,6 +56,26 @@ local bossTypes: { [string]: BossTypeSpec } = {
 		eatPullSpeed     = 12,
 		eatReach         = 8,
 		eatHealFraction  = 0.005,
+		-- Spore lob (wiki/design/ai-playtest.md, the spore decision): every
+		-- second attack that would have been a FireballVolley is instead a lob
+		-- of 3 letter blocks that land within 12 studs of the target 1.5 s
+		-- later. Each is a Common-table letter in red or blue that bursts 6 s
+		-- after landing for 15 damage to every player within 8 studs; popping
+		-- one is a normal pop and costs the boss 3% of its health. Numbers
+		-- from the fight simulator's sweep (FightSim tune.spore).
+		sporeEveryNthAttack    = 2,
+		sporeCount             = 3,
+		sporeLandRadius        = 12,
+		sporeFlightSec         = 1.5,
+		sporeFuseSec           = 6,
+		sporeBurstDamage       = 15,
+		sporeBurstRadius       = 8,
+		sporePopDamageFraction = 0.03,
+		-- Hover height over the ground (the simulator's SPORE_HEIGHT), so a
+		-- spore sits within a tap of a standing player.
+		sporeHoverHeight       = 4,
+		sporeLetterTable       = LetterTables.COMMON,
+		sporeColors            = { "red", "blue" },
 		skills = {
 			FireballVolley = {
 				name      = "FireballVolley",

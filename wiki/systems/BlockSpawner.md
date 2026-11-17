@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server-side letter-block populator — one instance per arena, maintaining that arena's target count of floating LetterBlocks with Scrabble-weighted letter distribution, configurable color weights, and a per-block respawn cooldown.
-updated: 2026-11-13
+updated: 2026-11-17
 ---
 
 # BlockSpawner
@@ -256,6 +256,23 @@ bosses: the target is just a point.
   so for a towed block it follows the published position instead of its spawn point.
 - `isTowed(block)` is false for a block that has left the world, even before its
   deferred `Destroying` handler clears the entry.
+
+## Spores (2026-11-17)
+
+A spore is a timed, marked, poppable block the boss asks for ([[systems/Boss]]
+§ Spore letters). It reuses the freed-fossil machinery: outside the density pool and
+every quota, never refilled, never towed.
+
+- `pool:spawnSpore(letter, color, position, fuseSec)` returns the block. It carries
+  the spore mark (read with `BlockShoot.isSpore(model)`) and a published expiry time
+  on `workspace:GetServerTimeNow()`'s clock for the client fuse.
+- `pool:removeSpore(block)`, `pool:clearSpores()` and `pool:getSpores()`. All three are
+  reached by the boss through `BlockPoolRegistry` (`spawnSpore`, `removeSpore`,
+  `clearSpores`), by arena id.
+- `clearSpores` forgets each spore before destroying it. The removed signal that would
+  otherwise do it is deferred, and the first test run caught a caller being told the
+  spores were still live (the same one-step lag `isTowed` had).
+- Constants: `shared/BlockSpawner/SporeConstants.luau`.
 
 ## Design decisions
 

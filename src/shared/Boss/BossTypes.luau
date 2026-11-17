@@ -20,6 +20,16 @@ export type PhaseSpec = {
 	availableAttacks: { string },
 }
 
+-- What BossStates needs of the boss's spore lob (implemented by BossSpores).
+export type SporeLobber = {
+	-- Call once for every attack that would have been a FireballVolley;
+	-- true when this one is a lob instead.
+	replacesVolley: (self: any) -> boolean,
+	-- Start a lob at `targetPosition`; `onLanded` runs when the spores land.
+	-- False (and `onLanded` never runs) when the lob could not start.
+	beginLob: (self: any, targetPosition: Vector3, onLanded: () -> ()) -> boolean,
+}
+
 export type BossTypeSpec = {
 	name: string,
 	maxHealth: number,
@@ -59,6 +69,31 @@ export type BossTypeSpec = {
 	eatPullSpeed: number?,
 	eatReach: number?,
 	eatHealFraction: number?,
+	-- Spore lob (the spore-letters mechanic, Boss/Scripts/BossSpores): every
+	-- `sporeEveryNthAttack`th attack that would have been a FireballVolley is a
+	-- lob instead. The boss throws `sporeCount` letter blocks that land within
+	-- `sporeLandRadius` studs (horizontal) of its target `sporeFlightSec`
+	-- seconds after the lob starts, hovering `sporeHoverHeight` studs over the
+	-- ground. Each is an ordinary letter (rolled from `sporeLetterTable`, in one
+	-- of `sporeColors`) that bursts `sporeFuseSec` after landing: it deals
+	-- `sporeBurstDamage` to every player of the arena within `sporeBurstRadius`
+	-- studs (horizontal) and is gone. Popping one is a normal pop, does not
+	-- burst it, and costs the boss `sporePopDamageFraction` of its maximum
+	-- health, credited to the popper.
+	-- A type that leaves out `sporeEveryNthAttack`, `sporeCount`,
+	-- `sporeLandRadius`, `sporeFlightSec`, `sporeFuseSec` or `sporeBurstRadius`,
+	-- or sets one to 0 or less, never lobs.
+	sporeEveryNthAttack: number?,
+	sporeCount: number?,
+	sporeLandRadius: number?,
+	sporeFlightSec: number?,
+	sporeFuseSec: number?,
+	sporeBurstDamage: number?,
+	sporeBurstRadius: number?,
+	sporePopDamageFraction: number?,
+	sporeHoverHeight: number?,
+	sporeLetterTable: string?,
+	sporeColors: { string }?,
 	skills: { [string]: SkillTypes.SkillSpec },
 	phases: { PhaseSpec },
 }
@@ -92,6 +127,11 @@ export type BossBlackboard = {
 	attackWindupStart: number?,
 	attackComplete: boolean,
 	cooldownStart: number,
+	-- The boss's spore lob, nil for a type without the spore config. The
+	-- attack states ask it whether this volley becomes a lob and hand it the
+	-- lob; it is a structural type so this shared file need not require the
+	-- server module (Boss/Scripts/BossSpores).
+	spores: SporeLobber?,
 }
 
 return nil

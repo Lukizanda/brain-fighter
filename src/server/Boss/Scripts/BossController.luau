@@ -12,6 +12,7 @@
 --   2. BossPhaseManager.update()     — check HP thresholds, fire callback
 --   3. StateMachine.tick(bb)         — advance AI state
 --   4. BossHunger.tick(dt)           — pull a nearby letter in and eat it, on a timer
+--   5. BossSpores.tick()             — land lobbed spores, burst the ones whose fuse ran out
 ----------------------------------------------------------------------
 
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
@@ -30,6 +31,7 @@ local StateMachine = require(ServerScriptService.Server.AI.Scripts.StateMachine)
 local BossStates      = require(script.Parent.BossStates)
 local BossPhaseManager = require(script.Parent.BossPhaseManager)
 local BossHunger       = require(script.Parent.BossHunger)
+local BossSpores       = require(script.Parent.BossSpores)
 
 type BB                   = BossTypes.BossBlackboard
 type BossTypeSpec         = BossTypes.BossTypeSpec
@@ -58,6 +60,7 @@ export type BossControllerInstance = {
 	_decision: StateMachineInstance,
 	_phaseManager: PhaseManagerInstance,
 	_hunger: BossHunger.BossHungerInstance?,
+	_spores: BossSpores.BossSporesInstance?,
 	_onPhaseChanged: ((number, any) -> ())?,
 	_alive: boolean,
 }
@@ -81,6 +84,10 @@ function BossController.new(
 		log:warn("Boss missing HumanoidRootPart:", boss.Name)
 		return nil
 	end
+
+	-- The spore lob, nil for a type that does not lob. Built first: the blackboard
+	-- hands it to the attack states.
+	local spores = BossSpores.new(boss, humanoid, hrp :: BasePart, typeSpec)
 
 	local bb: BB = {
 		-- ── NPCTypes.Blackboard fields ──────────────────────────
@@ -111,6 +118,7 @@ function BossController.new(
 		attackWindupStart    = nil,
 		attackComplete       = false,
 		cooldownStart        = 0,
+		spores               = spores :: any,
 	}
 
 	-- Load per-skill windup animations into bb.animations["windup_<skillName>"]
@@ -143,6 +151,7 @@ function BossController.new(
 		_decision       = decision,
 		_phaseManager   = phaseManager,
 		_hunger         = BossHunger.new(boss, humanoid, hrp :: BasePart, typeSpec),
+		_spores         = spores,
 		_onPhaseChanged = onPhaseChanged,
 		_alive          = true,
 	}, BossController)
@@ -215,6 +224,12 @@ function BossController:tick(dt: number)
 	if hunger then
 		hunger:tick(dt)
 	end
+
+	-- 5. Spores: a lob lands and a fuse runs out whatever the boss is doing.
+	local spores = self._spores
+	if spores then
+		spores:tick()
+	end
 end
 
 -- ---------------------------------------------------------------
@@ -228,6 +243,12 @@ function BossController:destroy()
 	local hunger = self._hunger
 	if hunger then
 		hunger:destroy()
+	end
+
+	-- So do the spores it lobbed, and a lob still in the air.
+	local spores = self._spores
+	if spores then
+		spores:destroy()
 	end
 
 	Perception.cleanup(asNPC(self._blackboard))

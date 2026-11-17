@@ -2173,3 +2173,7 @@ New `design/ai-playtest` (Phase 9): fun pillars, an 18-metric matrix and six bot
 ## [2026-11-17] ingest | Tuning fixes 1, 2 and 4 built; gate redesign proposed
 
 Decided by the user from the AI playtest and built: boss `attackRange` 150 with a new `stopRange` 70 (it now walks during Cooldown), spell damage 7 / 16 / 32% with a 1.5x Stasis amp and a 4 s boss freeze immunity, a 5-energy floor on a valid word's largest colour, `eatHealFraction` 0.005. `systems/Boss` (new § Range split), `design/gameplay-loop`, `systems/SpellRegistry`, `systems/EnergyEconomy` and `systems/Tests` (103 tests, 101/103 with the two known intermittents) updated. `design/ai-playtest` gains the designer's three gate options (key letters recommended, not decided) and a note that Edit mode's require cache hides config changes from the simulator until Studio restarts.
+
+## [2026-11-17] ingest | Spore letters built; gate rule decided
+
+`systems/Boss` gains § Spore letters and `systems/BlockSpawner` § Spores: every second volley is a lob of three letter blocks that burst after 6 s unless popped, and a pop does 3% to the boss. Six `spore_*` tests; the first run caught `clearSpores` leaving its bookkeeping to a deferred signal, fixed at the source, then 109/109. Not yet seen on a client. `design/ai-playtest` records the user's choice of key letters for opening gates (pop the three letters carved on a gate) and the next steps.

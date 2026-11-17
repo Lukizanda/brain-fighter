@@ -15,8 +15,9 @@
 -- It holds references and forwards questions; it owns no block state. The
 -- pool owns the blocks and decides what is eligible.
 --
--- Today's only asker is the boss's hunger (Boss/Scripts/BossHunger), through
--- the pool's tow API: begin a tow, advance it each tick, cancel it.
+-- Today's askers are the boss: its hunger (Boss/Scripts/BossHunger), through
+-- the pool's tow API (begin a tow, advance it each tick, cancel it), and its
+-- spore lob (Boss/Scripts/BossSpores): spawn a spore, remove it, clear them.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -76,6 +77,42 @@ function BlockPoolRegistry.cancelTow(arenaId: string, block: Model)
 	if pool ~= nil then
 		pool:cancelTow(block)
 	end
+end
+
+-- Spawns a spore (a timed, marked, poppable block; see BlockSpawner.spawnSpore)
+-- at `position` in `arenaId`'s pool, with a fuse of `fuseSec`. nil when the
+-- arena has no pool.
+function BlockPoolRegistry.spawnSpore(
+	arenaId: string,
+	letter: string,
+	color: string,
+	position: Vector3,
+	fuseSec: number
+): Model?
+	local pool = pools[arenaId]
+	if pool == nil then
+		return nil
+	end
+	return pool:spawnSpore(letter, color, position, fuseSec)
+end
+
+-- Removes one spore (it burst). False when the arena has no pool or the block
+-- is not one of its live spores.
+function BlockPoolRegistry.removeSpore(arenaId: string, block: Model): boolean
+	local pool = pools[arenaId]
+	if pool == nil then
+		return false
+	end
+	return pool:removeSpore(block)
+end
+
+-- Removes every live spore of `arenaId`; returns how many.
+function BlockPoolRegistry.clearSpores(arenaId: string): number
+	local pool = pools[arenaId]
+	if pool == nil then
+		return 0
+	end
+	return pool:clearSpores()
 end
 
 return BlockPoolRegistry

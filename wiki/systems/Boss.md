@@ -372,6 +372,53 @@ shelf the boss cannot path to, was never attacked.
 Verified by `boss_cooldown_closes_in` and the boss-immunity case in the Skills tests,
 in a 101/103 run. Not yet watched in a real fight.
 
+## Spore letters (2026-11-17)
+
+Decided from the automated playtest ([[design/ai-playtest]] § Decisions): the
+simulated novice could not win until popping a spore hurt the boss. It is the
+"minion destroyed by letter gathering".
+
+Every second attack that would have been a FireballVolley is a **spore lob**. The
+Brain throws three letter blocks that land within 12 studs of its target 1.5 s later.
+A spore is an ordinary letter block (Common table, red or blue) with a fuse: 6 s
+after landing it bursts for 15 damage to every player of the arena within 8 studs.
+**Popping it is a normal pop**: the letter goes to the popper's buffer, it does not
+burst, and the boss takes 3% of its maximum health, credited to the popper.
+
+| `BossConfig` value (Brain) | Value |
+|---|---|
+| `sporeEveryNthAttack` | 2 |
+| `sporeCount` | 3 |
+| `sporeLandRadius` / `sporeFlightSec` | 12 studs / 1.5 s |
+| `sporeFuseSec` | 6 |
+| `sporeBurstDamage` / `sporeBurstRadius` | 15 / 8 studs |
+| `sporePopDamageFraction` | 0.03 |
+| `sporeHoverHeight` | 4 studs |
+| `sporeLetterTable` / `sporeColors` | Common / red, blue |
+
+A type without the spore values never lobs (Wizard). Ground Slam selection is
+unchanged.
+
+- `Boss/Scripts/BossSpores.luau` is one object per boss, like `BossHunger`.
+  `BossStates` asks it `replacesVolley()` when the selection is a volley and hands it
+  the lob with `beginLob` when Attack starts; `BossController` ticks it so a spore
+  bursts whatever the boss is doing, and destroys it with the boss.
+- The block belongs to [[systems/BlockSpawner]] (§ Spores). The boss never touches it.
+- A pop reaches the boss as the existing `BlockConsumed` event with a new trailing
+  `wasSpore` argument, read off the block before it is destroyed. `BlockShootService`
+  does nothing else with it.
+- Burst and pop damage both go through `applyDamage.process`: the burst with no source
+  player, the pop with the popper as the source.
+- The player sees the throw, a ring at each landing spot, the landing and the burst
+  through `VfxBroadcast` (stand-in effect ids, `BossConstants.SPORE_*`), and a pulsing
+  fuse on the block drawn by `client/Vfx/SporeLetterVisuals` from the published expiry
+  time. No new art or audio.
+- Spores are never towed, never refill and are outside the density pool and every
+  quota. They go when the boss dies or the round ends.
+
+Verified 2026-11-17: six `spore_*` tests in a **109/109** full run. **Nobody has seen
+a lob on a client or in a real fight.**
+
 ## Future Work
 
 - **BossBrain visual iteration** — sphere + eyes is a first pass; the model lives in Studio (ServerStorage.AIWorldData.Rigs.BossBrain) and can be reshaped without any code changes.

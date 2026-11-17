@@ -27,6 +27,11 @@
 -- attackRange (no path required) and walks toward it until within stopRange
 -- (BossTypeSpec.stopRange, default attackRange). Patrol and Cooldown walk;
 -- AttackPrep and Attack stand still.
+--
+-- Spore lob: a type with the `spore*` config has every Nth would-be
+-- FireballVolley replaced by "SporeLob" in AttackPrep (BossSpores counts).
+-- It winds up as the volley, and Attack hands the throw to BossSpores and
+-- completes when the spores land.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
@@ -71,6 +76,16 @@ local S = BossStates.State
 -- these states, and it only ever ticks them with a BossBlackboard.
 local function bossOf(bb: Blackboard): BB
 	return (bb :: any) :: BB
+end
+
+-- The skill whose telegraph and animation an attack winds up with: the
+-- attack itself, or for a spore lob the FireballVolley it replaced (so the
+-- two look the same until the throw).
+local function windupSkillName(attack: string): string
+	if attack == BossConstants.SPORE_LOB_ATTACK then
+		return BossConstants.VOLLEY_ATTACK
+	end
+	return attack
 end
 
 
@@ -153,6 +168,11 @@ local AttackPrepState: StateDefinition = {
 		end
 		if #candidates > 0 then
 			bossbb.selectedAttack = candidates[math.random(1, #candidates)]
+			-- A volley that is due to be a spore lob is one (BossSpores counts them).
+			local spores = bossbb.spores
+			if bossbb.selectedAttack == BossConstants.VOLLEY_ATTACK and spores and spores:replacesVolley() then
+				bossbb.selectedAttack = BossConstants.SPORE_LOB_ATTACK
+			end
 		else
 			-- No eligible attack at this range — skip
 			bossbb.selectedAttack = nil
@@ -163,7 +183,9 @@ local AttackPrepState: StateDefinition = {
 		-- Broadcast telegraph VFX to all clients and play windup animation
 		local selectedAtk: string? = bossbb.selectedAttack
 		if selectedAtk then
-			local skill: SkillTypes.SkillSpec? = bossbb.bossTypeSpec.skills[selectedAtk]
+			-- A lob has no skill of its own: it winds up as the volley it replaced.
+			local windupName = windupSkillName(selectedAtk)
+			local skill: SkillTypes.SkillSpec? = bossbb.bossTypeSpec.skills[windupName]
 			if skill then
 				if skill.windupVfx then
 					-- The whole window the player has to react in, which for an
@@ -182,7 +204,7 @@ local AttackPrepState: StateDefinition = {
 					SkillVisuals.spawnTelegraph(skill.windupVfx, bossbb.npc, totalDuration, aoeRadius)
 				end
 
-				local track = bossbb.animations["windup_" .. selectedAtk]
+				local track = bossbb.animations["windup_" .. windupName]
 				if track then
 					local t = track :: any
 					t.Priority = Enum.AnimationPriority.Action
@@ -212,6 +234,26 @@ local AttackState: StateDefinition = {
 		local attack: string? = bossbb.selectedAttack
 		if not attack then
 			bossbb.attackComplete = true
+			return
+		end
+
+		-- A spore lob delivers blocks, not a skill: hand it to BossSpores and
+		-- finish when the spores land.
+		if attack == BossConstants.SPORE_LOB_ATTACK then
+			local windupTrack = bossbb.animations["windup_" .. windupSkillName(attack)]
+			if windupTrack then
+				local wt = windupTrack :: any
+				if wt.IsPlaying then wt:Stop(0.1) end
+			end
+			local spores = bossbb.spores
+			local target = bossbb.targetRootPart
+			local started = spores ~= nil and target ~= nil and target.Parent ~= nil
+				and spores:beginLob(target.Position, function()
+					bossbb.attackComplete = true
+				end)
+			if not started then
+				bossbb.attackComplete = true
+			end
 			return
 		end
 

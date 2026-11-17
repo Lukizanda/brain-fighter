@@ -41,7 +41,7 @@ local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 
 local log = Logger.new("BlockShootService")
 
--- Server-side domain signal: (player, letter, color, arenaId) for every
+-- Server-side domain signal: (player, letter, color, arenaId, wasSpore) for every
 -- consume the server accepted. Sibling Events folder, in the tree
 -- before this Script runs.
 local blockConsumedEvent = script.Parent.Events.BlockConsumed :: BindableEvent
@@ -169,6 +169,9 @@ consumeRemote.OnServerEvent:Connect(function(player: Player, block: any, request
 	-- thing that no longer exists arrives as nil on the receiving client.
 	local blockPos = model:GetPivot().Position
 	local blockLetter, blockColor = BlockShoot.readBlock(model)
+	-- The block's mark, carried on the event for whoever cares. This service
+	-- does nothing else with it: a spore pops like any other block.
+	local wasSpore = BlockShoot.isSpore(model)
 
 	model:Destroy()
 
@@ -186,7 +189,7 @@ consumeRemote.OnServerEvent:Connect(function(player: Player, block: any, request
 
 	-- Announced last, on the branch that succeeded, so a listener can
 	-- never hear about a pop the server refused (AnalyticsReporter).
-	blockConsumedEvent:Fire(player, blockLetter, blockColor, SessionRegistry.arenaIdFor(player))
+	blockConsumedEvent:Fire(player, blockLetter, blockColor, SessionRegistry.arenaIdFor(player), wasSpore)
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)
