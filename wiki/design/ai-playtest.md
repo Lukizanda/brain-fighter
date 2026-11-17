@@ -324,18 +324,17 @@ and the hit rate are missing from a real fight.
   WHOSO 16, BRAVE 15, DESK 9) and cast Fireball, Inferno, Frost Nip and Mend.
 - One fight is one sample. Nothing here is a rate.
 
-## Decisions for the user (open)
+## Decisions (user, 2026-11-17)
 
-1. **How should a young novice win?** The simulator's answer is spores that hurt the
-   boss when popped (3 a lob, 3% each): the only variant tried in which the Novice
-   wins. Alternatives: a longer round clock (60% at 600 s), a difficulty setting that
-   scales spell damage, or accepting that a 7-year-old wins in co-op and not solo.
-2. **Take fixes 1, 2 and 4?** They are config changes plus one new field
-   (`stopRange`) and a fire-without-a-path rule. The simulator supports all three.
-3. **Build spore letters and the word ward?** Both are modelled. Spores carry the
-   novice; the ward caps the burst. The ward is the less urgent of the two.
-4. **Gates and the cave never open in play.** Either the bots must learn to bait
-   (and a tutorial must teach it), or the gates need another way to open.
+| # | Question | Decision |
+|---|---|---|
+| 1 | Tuning fixes | **All three.** Fix 1 (stop range 70, attack range 150, fire with no path), fix 2 (Firebolt 7%, Fireball 16%, Inferno 32%, Stasis amp 1.5, 4 s freeze immunity), fix 4 (a valid word gives its majority colour at least 5 energy; `eatHealFraction` 0.005) |
+| 2 | How a young novice wins solo | **Spore letters that hurt the boss when popped.** Start at 3 a lob every second attack, 3% a pop, 15 burst damage in 8 studs after 6 s. Known side effect to tune: Average kills too fast (117 s) |
+| 3 | Word ward | **Build it.** Health stops at 50% until 4 orbiting letters are popped; then cooldown 3 s and walk speed 9 |
+| 4 | Gates and the cave never open | **Give gates another way to open.** Needs a design pass and the user's pick before any build |
+
+Build order: tuning fixes, then spores, then the ward (one after another: all three
+edit the Boss system). The gate redesign is a separate design pass.
 
 ## Stages
 
@@ -345,9 +344,9 @@ and the hit rate are missing from a real fight.
 | 2 | Tier 1 simulator: `SimLevel`, `FightSim`, `PlaytestPersonas`, `PlaytestMetrics`, `SimRunner` | **done 2026-11-17**; 100 fights per persona run in about 5 s |
 | 3 | Baseline report | **done 2026-11-17**, § Tier 1 results |
 | 4 | Sweep the tuning fixes; model spore letters and the word ward | **done 2026-11-17** except fix 6 (premium reach, gate health, wildcard split), which is not swept |
-| 5 | Decisions for the user | **open**, § Decisions for the user |
+| 5 | Decisions for the user | **decided 2026-11-17**, § Decisions |
 | 6 | Tier 2 bot and recorder; calibrate the simulator from 2 to 3 real fights | **built and run once 2026-11-17**; dodging, cover and tow stealing not in the bot; calibration of the strafing hit rate still open |
-| 7 | Build the chosen fixes, re-measure in both tiers, then the human playtest | not started |
+| 7 | Build the chosen fixes, re-measure in both tiers, then the human playtest | **in progress**: 7a tuning fixes, 7b spores, 7c ward, 7d gate redesign (design first) |
 
 ## How to run the simulator
 
@@ -374,7 +373,8 @@ keys are listed above `FightSim.run`.
 
 Updated 2026-11-17 after the first real bot fight. All code is committed.
 
-1. **The user answers § Decisions for the user.** Everything after depends on 1 and 3.
+1. **Build stage 7** in the order under § Decisions. After each: its suite, then one
+   bot fight. Check this page's stage table and `git log` for how far it got.
 2. **Next sweep in `FightSim`**: bring Average back to 150 to 220 s and Novice
    deaths under 2.5 with spores on (spore damage 2 to 3%, count 2 to 3, burst damage,
    the stop range); then fix 6 (`popReach` and `gateHealth` are tuning keys already;
