@@ -2161,3 +2161,7 @@ The items the 2026-11-14 reconcile left alone were checked and fixed. [[systems/
 ## [2026-11-17] ingest | AI playtest of the boss arena: plan, simulator, first results
 
 New `design/ai-playtest` (Phase 9): fun pillars, an 18-metric matrix and six bot personas from a designer pass, and a Monte-Carlo fight simulator under `src/shared/Playtest/` that reads the real config and casts real rays against the greybox from Edit mode. Baseline on `IslandReview` (100 fights per persona, simulated, not yet checked against a real fight): Novice wins 0%, Strong kills in 47 s with an 89% burst, the Turtle on the overlook is never fired at, no gate or cave opens. Fixes 1, 2 and 4 swept; they repair the strong speller and the safe spot and leave the novice at 0%. Four decisions recorded for the user. Index and build plan updated. Tier 2 (the real bot) is not built.
+
+## [2026-11-17] ingest | AI playtest: spore letters and the word ward modelled
+
+`design/ai-playtest` gains the mechanics sweep. Spores that only hand out letters leave the Novice at 0%; spores that do 3% to the boss when popped (3 a lob) give Novice 96% wins in 226 s, Strong 85 s and a 2.7 skill ratio, with Average now too fast at 117 s. The word ward is the only variant that brings the 5 s burst under 50%. Simulated only; the spore pop rates are the parent session's guess.

@@ -82,6 +82,15 @@ local MAX_GOAL_RADIUS = 135
 -- and how far behind its centre they stand.
 local COVER_SEARCH_RADIUS = 45
 local COVER_STANDOFF = 9
+-- Unbuilt mechanics (wiki/design/ai-playtest.md § Candidate fixes).
+-- A lobbed spore is in the air this long, and floats this high once down.
+local SPORE_FLIGHT_SEC = 1.5
+local SPORE_HEIGHT = 4
+-- Letters a player can carry outside a planned word (spores, ward
+-- letters) before the 12-slot buffer would be in the way.
+local MAX_HELD_LETTERS = 6
+-- Ward letters orbit at this height.
+local WARD_HEIGHT = 6
 -- Inside slam range the boss picks between its two attacks at random.
 local SLAM_PICK_CHANCE = 0.5
 -- A player who reacts to a windup keeps moving for the length of a volley.
@@ -217,7 +226,9 @@ end
 --   attackRange, stopRange, fireWithoutPath, volleyLead (0..1),
 --   dmgFrac = { Firebolt=, Fireball=, Inferno=, ["Frost Nip"]= },
 --   ampMult, freezeImmunitySec, minWordEnergy, eatHealFraction,
---   popReach = { [tableName] = studs }, gateHealth, timeLimit
+--   popReach = { [tableName] = studs }, gateHealth, timeLimit,
+--   spore = { everyNthAttack, count, landRadius, fuseSec, burstDmg, burstRadius, popDamage? },
+--   ward = { atHp, letters, orbitRadius, cooldown, walkSpeed }
 function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: number): Result
 	local tune = tuning or {}
 	local rng = Random.new(seed)
@@ -398,7 +409,13 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		ampMult = 1,
 		tow = nil,
 		nextEatAt = 0,
+		attacks = 0,
+		warded = false,
+		wardDone = false,
+		cooldown = phase.attackCooldown,
+		walkSpeed = phase.walkSpeed,
 	}
+	local held: { any } = {} -- letters the player carries outside a plan
 
 	local stats = { shots = 0, shotsHit = 0, shotsBlocked = 0, healed = 0, resealed = 0 }
 
@@ -437,8 +454,31 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 	end
 
 	local function hurtBoss(frac: number, spell: string, tier: number)
+		if b.warded then
+			emit("ward_absorb", { spell = spell })
+			return
+		end
 		local mult = if now < b.ampUntil then b.ampMult else 1
 		local dealt = math.min(b.hp, frac * mult)
+		local ward = tune.ward
+		if ward and not b.wardDone and b.hp - dealt <= ward.atHp then
+			-- The ward: health stops at the threshold and letters orbit the
+			-- boss until every one is popped.
+			dealt = math.max(0, b.hp - ward.atHp)
+			b.wardDone = true
+			b.warded = true
+			b.cooldown = ward.cooldown or b.cooldown
+			b.walkSpeed = ward.walkSpeed or b.walkSpeed
+			for i = 1, ward.letters do
+				local angle = i / ward.letters * math.pi * 2
+				local offset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * ward.orbitRadius
+				local zoneLike = { letterTable = LetterTables.COMMON, name = "Ward" }
+				local block = { letter = rollLetter(rng, LetterTables.COMMON), color = COLORS[rng:NextInteger(1, #COLORS)],
+					pos = b.pos + offset + Vector3.new(0, WARD_HEIGHT, 0), zone = zoneLike, alive = true, ward = true, fossil = true }
+				table.insert(blocks, block)
+			end
+			emit("ward_up", {})
+		end
 		b.hp -= dealt
 		emit("boss_damage", { amount = dealt, spell = spell, tier = tier, bossHp = b.hp })
 	end
@@ -457,7 +497,19 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				table.insert(out, block)
 			end
 		end
+		for _, block in held do
+			if block.alive then
+				table.insert(out, block)
+			end
+		end
 		return out
+	end
+
+	local function holdLetter(letter: string, color: string)
+		if #held >= MAX_HELD_LETTERS then
+			table.remove(held, 1)
+		end
+		table.insert(held, { letter = letter, color = color, alive = true, held = true, zone = { name = "Held" } })
 	end
 
 	-- Choose a word spellable from what is in sight and queue its letters.
@@ -612,7 +664,7 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		if not SpellRegistry.needsEnemyTarget(spec) then
 			return true
 		end
-		if not b.spawned or b.hp <= 0 then
+		if not b.spawned or b.hp <= 0 or b.warded then
 			return false
 		end
 		local from = p.pos + Vector3.new(0, ROOT_HEIGHT, 0)
@@ -819,6 +871,38 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 			return
 		end
 
+		-- Spores and ward letters are popped on sight, one tap each.
+		if now >= p.nextTapAt then
+			local eye = p.pos + Vector3.new(0, EYE_HEIGHT, 0)
+			for _, block in blocks do
+				if block.alive and (block.ward or (block.spore and block.willPop and now >= block.popAfter))
+					and (block.pos - eye).Magnitude <= BlockShoot.MAX_RAYCAST_DISTANCE and clearBetween(eye, block.pos) then
+					block.alive = false
+					holdLetter(block.letter, block.color)
+					p.nextTapAt = now + 1 / persona.tapsPerSec
+					emit("pop", { letter = block.letter, color = block.color, zone = if block.ward then "Ward" else "Spore", value = 0 })
+					-- Optional rule: a popped spore snaps back at the boss.
+					if block.spore and tune.spore.popDamage then
+						hurtBoss(tune.spore.popDamage, "Spore", 1)
+					end
+					break
+				end
+			end
+			if b.warded then
+				local left = false
+				for _, block in blocks do
+					if block.alive and block.ward then
+						left = true
+						break
+					end
+				end
+				if not left then
+					b.warded = false
+					emit("ward_down", {})
+				end
+			end
+		end
+
 		-- Steal a letter the boss is pulling in.
 		if b.tow and b.tow.alive and not b.tow.stealRolled then
 			b.tow.stealRolled = true
@@ -910,6 +994,12 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				startThinking(persona.typicalLen)
 				return
 			end
+			if block.held then
+				block.alive = false
+				table.remove(p.queue, 1)
+				table.insert(p.tiles, { letter = nextPick.letter, color = block.color })
+				return
+			end
 			if not clearBetween(eye, block.pos) then
 				return -- wait for a line of sight (the player is moving)
 			end
@@ -975,7 +1065,7 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		local walking = b.state == "Patrol" or (stopRange < attackRange and b.state == "Cooldown")
 		if walking and hasTarget and not frozen and d > stopRange and reachable() then
 			local delta = flat(p.pos) - flat(b.pos)
-			b.pos = ground(b.pos + delta.Unit * math.min(phase.walkSpeed * dt, d - stopRange))
+			b.pos = ground(b.pos + delta.Unit * math.min(b.walkSpeed * dt, d - stopRange))
 		end
 
 		local canAttack = hasTarget and d <= attackRange and (reachable() or tune.fireWithoutPath or d <= boss.attackRange)
@@ -985,6 +1075,10 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				b.state = "AttackPrep"
 				b.stateUntil = now + boss.attackWindupSec
 				b.attack = if d <= slam.maxSelectRange and rng:NextNumber() < SLAM_PICK_CHANCE then "GroundSlam" else "FireballVolley"
+				b.attacks += 1
+				if tune.spore and b.attack == "FireballVolley" and b.attacks % tune.spore.everyNthAttack == 0 then
+					b.attack = "SporeLob"
+				end
 				emit("boss_windup", { attack = b.attack, dist = d })
 				-- The telegraph: does the player start dodging?
 				if not p.coverWall and rng:NextNumber() < persona.reactChance then
@@ -997,6 +1091,8 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				b.state = "Attack"
 				if b.attack == "GroundSlam" then
 					b.stateUntil = now + slam.deliveryParams.windupSec
+				elseif b.attack == "SporeLob" then
+					b.stateUntil = now + SPORE_FLIGHT_SEC
 				else
 					local params = volley.deliveryParams
 					b.shots = {}
@@ -1025,8 +1121,24 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 						end
 					end
 				end
+				if b.attack == "SporeLob" then
+					local spore = tune.spore
+					local chance = math.max(persona.reactChance, persona.stealTow) / 2 + 0.5
+					for i = 1, spore.count do
+						local angle = rng:NextNumber(0, math.pi * 2)
+						local offset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * rng:NextNumber(0, spore.landRadius)
+						local zoneLike = { letterTable = LetterTables.COMMON, name = "Spore" }
+						table.insert(blocks, {
+							letter = rollLetter(rng, LetterTables.COMMON), color = if rng:NextNumber() < 0.5 then "red" else "blue",
+							pos = ground(p.pos + offset) + Vector3.new(0, SPORE_HEIGHT, 0), zone = zoneLike, alive = true,
+							spore = true, fossil = true, burstAt = now + spore.fuseSec,
+							willPop = rng:NextNumber() < chance, popAfter = now + persona.reactDelaySec + (i - 1) / persona.tapsPerSec,
+						})
+					end
+					emit("spore_lob", { count = spore.count })
+				end
 				b.state = "Cooldown"
-				b.stateUntil = now + phase.attackCooldown
+				b.stateUntil = now + b.cooldown
 			end
 		elseif b.state == "Cooldown" then
 			if now >= b.stateUntil then
@@ -1035,7 +1147,7 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		end
 
 		-- Hunger.
-		if boss.eatIntervalSec and not frozen then
+		if boss.eatIntervalSec and not frozen and not b.warded then
 			if b.tow then
 				local tow = b.tow
 				if not tow.alive then
@@ -1085,6 +1197,14 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		for _, block in blocks do
 			if block.alive and block.expiresAt and now >= block.expiresAt then
 				block.alive = false
+			end
+			if block.alive and block.spore and now >= block.burstAt then
+				block.alive = false
+				local hit = p.alive and hdist(block.pos, p.pos) <= tune.spore.burstRadius
+				emit("spore_burst", { hit = hit })
+				if hit then
+					hurtPlayer(tune.spore.burstDmg, "Spore")
+				end
 			end
 		end
 		for _, w in walls do

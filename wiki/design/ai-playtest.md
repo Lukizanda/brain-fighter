@@ -236,6 +236,39 @@ the economy alone does not get there. Even if the designer's guess at a young
 child's speed is wrong by half, it still wins one fight in ten. This is a design
 decision, not a number: see § Decisions for the user.
 
+### The new mechanics, modelled (100 fights per persona, on top of fixes 1 + 2 + 4)
+
+Spores: every second attack is a lob of letter blocks that land within 12 studs of
+the player and burst after 6 s for 15 damage in 8 studs unless popped. A popped
+spore's letter is kept for a later word. Ward: at 50% the boss's health stops and 4
+letters orbit it; nothing hurts it until they are popped; afterwards it attacks
+every 3 s and walks at 9.
+
+| Variant | Novice win / TTK / deaths | Average win / TTK / deaths | Strong TTK / burst | Novice ÷ Strong TTK |
+|---|---|---|---|---|
+| Fixes 1 + 2 + 4 only | 0% / never / 4.4 | 87% / 214 s / 3.1 | 108 s / 50% | none |
+| + 2 spores (letters only) | 0% / never / 4.0 | 89% / 207 s / 1.7 | 115 s / 50% | none |
+| + word ward | 0% / never / 4.4 | 78% / 218 s / 3.5 | 158 s / 48% | none |
+| + 2 spores, **each pop does 3% to the boss** | 21% / 271 s / 3.9 | 100% / 132 s / 1.1 | 88 s / 53% | 3.1 |
+| + 3 spores at 3% | **96% / 226 s / 3.8** | 100% / 117 s / 1.0 | 85 s / 54% | **2.7** |
+| + 3 spores at 4%, word floor 8 | 100% / 171 s / 2.7 | 100% / 97 s / 0.8 | 68 s / 54% | 2.5 |
+| + 3 spores at 4%, floor 8, and the ward | 100% / 173 s / 2.8 | 100% / 101 s / 0.9 | 89 s / **36%** | 1.9 |
+
+- **Spores that only hand out letters do nothing for the Novice.** Its limit is the
+  time it takes to find a word, not the supply of letters. They do cut Average's
+  deaths from 3.1 to 1.7, because a lob replaces a volley.
+- **Spores that hurt the boss when popped are what let a novice win.** The parent
+  session added this rule (`popDamage`) after the letters-only version failed; it is
+  the user's "minions destroyed by letter gathering" taken literally. At 3 spores and
+  3% a pop, Novice wins 96% in 226 s (band 220 to 290), Strong takes 85 s (band 80 to
+  130) and the ratio between them is 2.7 (band 2.0 to 3.0).
+- **That setting makes Average too fast** (117 s against 150 to 220) and Novice still
+  dies 3.8 times (band 1 to 2.5). Both are for the next sweep.
+- **The ward is the only thing that brings the burst under 50%** (36%), and it puts
+  the midpoint of the fight at 0.56.
+- The share of spores each persona pops (65% Novice, 80% Average, 95% Strong) is the
+  parent session's guess, not the designer's. The result leans on it.
+
 ### What the simulator leaves out
 
 - Agents walk straight lines; the boss has no pathfinding and never gets stuck.
@@ -250,14 +283,14 @@ decision, not a number: see § Decisions for the user.
 
 ## Decisions for the user (open)
 
-1. **How should a young novice win?** Options: (a) spore letters, which hand weak
-   players letters and a reason to keep popping; (b) a longer round clock; (c) a
-   difficulty setting that scales spell damage; (d) accept that a 7-year-old wins in
-   co-op and not solo. The designer recommends (a).
+1. **How should a young novice win?** The simulator's answer is spores that hurt the
+   boss when popped (3 a lob, 3% each): the only variant tried in which the Novice
+   wins. Alternatives: a longer round clock (60% at 600 s), a difficulty setting that
+   scales spell damage, or accepting that a 7-year-old wins in co-op and not solo.
 2. **Take fixes 1, 2 and 4?** They are config changes plus one new field
    (`stopRange`) and a fire-without-a-path rule. The simulator supports all three.
-3. **Build spore letters and the word ward?** Both should be modelled in the
-   simulator first (stage 4).
+3. **Build spore letters and the word ward?** Both are modelled. Spores carry the
+   novice; the ward caps the burst. The ward is the less urgent of the two.
 4. **Gates and the cave never open in play.** Either the bots must learn to bait
    (and a tutorial must teach it), or the gates need another way to open.
 
@@ -268,7 +301,7 @@ decision, not a number: see § Decisions for the user.
 | 1 | Designer pass: pillars, metrics, personas, predictions, fixes | **done 2026-11-17** |
 | 2 | Tier 1 simulator: `SimLevel`, `FightSim`, `PlaytestPersonas`, `PlaytestMetrics`, `SimRunner` | **done 2026-11-17**; 100 fights per persona run in about 5 s |
 | 3 | Baseline report | **done 2026-11-17**, § Tier 1 results |
-| 4 | Sweep the tuning fixes; model spore letters and the word ward | fixes 1, 2, 4 and a volley lead swept; **fix 6, spores and the ward not yet modelled** |
+| 4 | Sweep the tuning fixes; model spore letters and the word ward | **done 2026-11-17** except fix 6 (premium reach, gate health, wildcard split), which is not swept |
 | 5 | Decisions for the user | **open**, § Decisions for the user |
 | 6 | Tier 2 bot and recorder; calibrate the simulator from 2 to 3 real fights | not started |
 | 7 | Build the chosen fixes, re-measure in both tiers, then the human playtest | not started |
@@ -299,9 +332,10 @@ keys are listed above `FightSim.run`.
 Updated 2026-11-17 after stage 3.
 
 1. **The user answers § Decisions for the user.** Everything after depends on 1 and 3.
-2. **Model the remaining fixes in `FightSim`**: fix 6 (reach by letter table is
-   already a tuning key, `popReach`; gate health is `gateHealth`; the wildcard split
-   is not), spore letters, the word ward. Re-run the sweep.
+2. **Next sweep in `FightSim`**: bring Average back to 150 to 220 s and Novice
+   deaths under 2.5 with spores on (spore damage 2 to 3%, count 2 to 3, burst damage,
+   the stop range); then fix 6 (`popReach` and `gateHealth` are tuning keys already;
+   the wildcard split is not).
 3. **Tier 2.** A client bot under `src/client/Playtest/` gated by a workspace
    attribute and `RunService:IsStudio()`, using the real `PlayerSession`,
    `EconomyReport.memorize` and the `RequestCast` bindable; `BlockTapController` needs
