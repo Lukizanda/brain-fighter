@@ -1,5 +1,7 @@
 # TPS Shooter Template
 
+> **Historical (checked 2026-11-17).** This describes the third-person shooter template Brain Fighter started from. Most of it has since been removed from this repo: the camera, locomotion and weapon stacks, the firearm server, `LocomotionAnimations` and the `/setup-project` command no longer exist. Core, Health and the architecture rules still apply. For what the game is today, start at [wiki/index.md](wiki/index.md).
+
 A Roblox third-person shooter template with camera, locomotion, weapon, and health systems.
 
 ## Starting a new project

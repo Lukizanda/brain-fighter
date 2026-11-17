@@ -2,7 +2,7 @@
 type: system
 description: Tutorial system — teaches the core Brain Fighter loop (pop blocks → buffer word → memorize → cast spell) through guided in-world steps
 status: planning
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 # Tutorial System
@@ -22,6 +22,8 @@ Guide a first-time player through the full Brain Fighter loop without UI overloa
 > directly — so the tutorial now opens on the thing the player actually does.
 > One fewer step before the first bit of feedback, which is the right direction
 > for a first-play sequence anyway. See [[design/tap-to-pop]].
+
+> **Persistence superseded 2026-11-04.** Everything below that stores the "seen it" flag in a raw DataStore (`BrainFighterTutorial`, `readTutorialFlag`, the DataStore rows in the tables and checklists) predates the decision in [[design/build-plan]] § Current focus: the flag lives in a minimal ProfileStore-backed `PlayerData` module pulled forward from Phase 5.5. The step machine and overlay design still stand; the storage sections need rewriting in the tutorial's design pass, and nothing here is built yet.
 
 ## Architecture Overview
 

@@ -1,25 +1,25 @@
 ---
 type: design
-description: Canonical core loop — aim, shoot letter blocks, spell words in a 12-slot buffer, cast color-typed spells that drain per-color energy reservoirs to defeat the level monster
-updated: 2026-11-14
+description: Canonical core loop — tap letter blocks, spell words in a 12-slot buffer, cast color-typed spells that drain per-color energy reservoirs to defeat the level monster
+updated: 2026-11-17
 ---
 
 # Gameplay Loop
 
 ## Elevator pitch
 
-Brain Fighter is a third-person shooter where combat *is* spelling. The player is a wizard whose spells are loaded by shooting floating letter blocks scattered around the level; shot letters land in a small word buffer, the player drags them into a real word, and pressing Cast spends per-color energy to fire a spell at the level's monster. Block color decides which spell type charges — red feeds damage, green feeds healing/walls, blue feeds utility — so what you *can* cast is shaped by what's currently flying around the arena. The TPS-template foundation (aiming, hit detection, movement) is in service of a literacy mechanic: precision aim and vocabulary are the same skill.
+Brain Fighter is a third-person shooter where combat *is* spelling. The player is a wizard whose spells are loaded by popping floating letter blocks scattered around the level (tapped directly since Phase 5.7, see [[design/tap-to-pop]]; originally shot with a staff); popped letters land in a small word buffer, the player drags them into a real word, and pressing Cast spends per-color energy to fire a spell at the level's monster. Block color decides which spell type charges — red feeds damage, green feeds healing/walls, blue feeds utility — so what you *can* cast is shaped by what's currently flying around the arena. The TPS-template foundation (aiming, hit detection, movement) is in service of a literacy mechanic: precision aim and vocabulary are the same skill.
 
 ## Core loop
 
 The full cycle, as drawn in [`./gameplay-loop.excalidraw`](./gameplay-loop.excalidraw):
 
-1. **Aim** — player tracks a floating letter block with the TPS reticle.
-2. **Shoot** — a successful hit despawns the block; the spawner queues a replacement.
-3. **Buffer** — the shot letter appends to the 12-slot word buffer. Each tile remembers the **color** of the block it came from.
+1. **Aim** — player points at a floating letter block; a hover outline shows whether a tap will land. (There is no reticle or weapon since Phase 5.7, [[design/tap-to-pop]].)
+2. **Pop** — a click or tap on a block in reach despawns it; the spawner queues a replacement.
+3. **Buffer** — the popped letter appends to the 12-slot word buffer. Each tile remembers the **color** of the block it came from.
 4. **Arrange** — player drags buffer tiles into the order they want and double-clicks/taps to destroy unwanted letters. The buffer is the only place words are constructed.
 5. **Memorize** — the explicit commit button (icon-only, e.g. ✨) validates the buffered word against the dictionary. **Valid** → the word's energy transmutes into the matching per-color reservoirs and the buffer clears. **Invalid** → the button shakes, the buffer flashes red, and the buffer is **cleared anyway** — the letters are consumed, so a bad commit costs the collected tiles and the player must re-collect. *No spell fires from this action* — committing and casting are now separate. (Revised from an earlier "preserve on invalid" rule; see Memorize section below.)
-6. **Energy** — on a valid Memorize, `word_energy = Σ letter_values × length_multiplier`. Mixed-color words are allowed; energy is **split value-weighted by tile color** — each tile contributes its own `letter_value × length_multiplier` to *its* color's reservoir. Sum across colors equals whole-word energy. All blocks are colored. Energy persists across words, so the player can Memorize multiple words to stockpile before casting.
+6. **Energy** — on a valid Memorize, `word_energy = Σ letter_values × length_multiplier`. Mixed-color words are allowed; energy is **split value-weighted by tile color** — each tile contributes its own `letter_value × length_multiplier` to *its* color's reservoir. Sum across colors equals whole-word energy. Every block is red, green or blue except the gold ★ wildcard, whose value is spread across all three reservoirs ([[systems/Wildcard]]). Energy persists across words, so the player can Memorize multiple words to stockpile before casting.
 7. **Cast** — the player spends energy by **pressing and holding** a color reservoir. The charge starts at T1 (so a quick tap is a Firebolt) and climbs through the tiers that colour can afford — Firebolt T1·5 at 0 s, Fireball T2·10 at 1 s, Inferno T3·20 at 3 s — stopping dead at the affordability ceiling. Release over the panel fires the tier you reached; release outside cancels. Casting drains *exactly the tier cost*, not the whole bar, and **nothing is drained until release**, so a cancelled hold costs nothing. See [[systems/ChargeCast]].
 8. **Spell** — the spell config's `targetingMode` decides what happens next: `auto` fires at the monster (or self, for buffs); `placement` hands the player an aimed reticle for the spell's footprint.
 9. **Effect** — the spell resolves against the monster (damage, debuff) or the player (heal, shield) or the world (wall, AOE).
@@ -205,7 +205,7 @@ All major design decisions are now resolved (see the resolved-decisions sections
 
 - **Energy curve.** `Σ letter_values × length_multiplier` produces (CAT, FIRE, FLAME, LIGHTNING, EARTHQUAKES) → (5, 7, 15, 42, 81). Are short words rewarding enough to not feel wasteful? Are long words rewarding enough to justify the build-up time? Does `CHARACTERIZE`=84 trivialize a boss in one cast, or is that the desired payoff moment?
 - **Spell tier thresholds (5 / 10 / 20).** Is T1 reachable within ~10 sec of combat starting? Does T3 feel earned rather than constantly out of reach? If players are firing T1 spam exclusively, T1's cost may be too low (or its payoff too high).
-- **Spawn density (~24 blocks, ~8 per color).** Is the player ever starved for >5 sec between word attempts (too few)? Does the arena read as "block soup" (too many)? Tune via the `BLOCKS_PER_100_SQ_STUDS` constant.
+- **Spawn density (~24 blocks, ~8 per color).** Is the player ever starved for >5 sec between word attempts (too few)? Does the arena read as "block soup" (too many)? Tune via `GameConfig.BLOCK_SPAWN_DENSITY`.
 - **Color weighting.** Default 33/33/33. Per-level designers may want to lean specific colors scarce for encounter shape; the first signal will come when monster designs are concrete.
 - **Mind Full pacing.** With a 12-slot buffer, how often does the player actually hit the cap? If it's a rare emergency, the cap is well-placed; if "destroy a letter to keep shooting" becomes a constant mode, the cap is too low or the Memorize gesture isn't being used enough.
 - **Spawner reroll trigger.** How often do players manually reroll vs how often does the spawner's soft heuristic save them automatically? Heavy manual rerolls might mean the heuristic is too loose.

@@ -1,7 +1,7 @@
 ---
 type: system
-description: One-way teleporter from an arena's ready room onto its island (Phase 8 stage 5, 2026-11-13). A player of the pad's arena who touches a part tagged ArenaEntryPad is moved onto a random ArenaArrivalPoint of the same ArenaId. Nothing leads back; dying respawns the player in the ready room. Server-owned, cues through VfxBroadcast. 5 tests; the physical Touched signal and the client cues are not yet verified, and no pad exists in the place yet.
-updated: 2026-11-14
+description: One-way teleporter from an arena's ready room onto its island (Phase 8 stage 5, 2026-11-13). A player of the pad's arena who touches a part tagged ArenaEntryPad is moved onto a random ArenaArrivalPoint of the same ArenaId. Nothing leads back; dying respawns the player in the ready room. Server-owned, cues through VfxBroadcast. 5 tests; the physical touch was verified with a walking character, and the review island has a pad and arrival point; the shipped Default arena has none until the swap.
+updated: 2026-11-17
 ---
 
 # ArenaEntry
@@ -10,8 +10,7 @@ The way into the boss arena once the bridge is removed. Decided in
 [[design/boss-arena]] § Entry: players teleport in and cannot walk back to the ready
 room, so the only ways off the island are dying or quitting.
 
-No pad or arrival point exists in the place yet. Placing them, removing the bridge and
-moving the `LobbyReturnPad` into the ready room are Phase 8 stage 3.
+The shipped `Default` arena has no pad or arrival point yet. The place holds them on the staged islands (counted 2026-11-17): a pad and an arrival point under `ArenaId = IslandReview`, an arrival point under `IslandStaging`, and the temporary lobby pair in `TEMP_IslandWalkthrough`. Giving the shipped arena its pad, removing the bridge and moving the `LobbyReturnPad` into the ready room are part of the swap in [[design/boss-arena]] § Pick up here.
 
 ## Files
 

@@ -1,7 +1,7 @@
 ---
 type: system
 description: Walls the boss destroys (Phase 8 stage 1, 2026-11-13). A BasePart tagged BreakableWall has health; boss fireballs that stop on it and Ground Slams that reach it wear it through intact / cracked / critical / broken. The server owns health and collision and publishes WallHealth / WallState; the client owns the look. RegenSec walls re-seal, the rest stay broken until the arena's next round. Fed by two new SkillDelivery Bindables, WorldImpact and AoeImpact. Suite 7/7; real boss fire against a wall is not yet verified.
-updated: 2026-11-13
+updated: 2026-11-17
 ---
 
 # BreakableWalls
@@ -10,7 +10,7 @@ Cover and gates in the boss arena that the boss's own attacks destroy. Built for
 [[design/boss-arena]], which holds the layout and the reason: hiding behind cover spends
 the cover, and reward areas are opened by baiting the boss into hitting their wall.
 
-No wall exists in the place yet. The greybox is Phase 8 stage 3.
+The shipped `Default` arena has no wall. The place holds 50, all on the two staged islands (25 each under `ArenaId = IslandStaging` and `IslandReview`, counted 2026-11-17); they reach the shipped arena with the swap in [[design/boss-arena]] § Pick up here.
 
 ## Files
 
