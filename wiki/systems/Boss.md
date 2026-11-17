@@ -1,7 +1,7 @@
 ---
 type: system
 description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. One boss cycle per arena session, started on RoundStarted and stopped on RoundEnded; HUD remotes, perception and skill targets are all scoped to the BossPoint's arena (Phase 6 stage 3 + refactor chunk 9).
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 # Boss
@@ -131,7 +131,7 @@ Part projectiles in spread. Each is `CanCollide = false` with a `LinearVelocity`
 
 ### GroundSlam (`delivery = "aoe"`)
 
-0.8 s windup delay, then AOE within `radius=22` studs. The skill has `minRange = 18`, and `AttackPrep` only offers it when the target is at or inside 18 studs (`dist <= minRange`), so at longer range the boss picks FireballVolley. Spawns a flat Cylinder shockwave visual (Neon yellow, Debris 0.5 s). All humanoids in radius take damage and receive a knockup. `attackComplete` set via `ctx.onComplete` after total cycle. Brain's tuning: `onImpact = [{kind="damage", amount=25}, {kind="knockup", force=60}]` — multi-effect composition. `deliveryParams.cosmeticEffectId = "aoe_boss_groundslam"` (added 2026-08-04) gives the shockwave a sound stub (reuses `SFX.impactHeavy` pitched down) — was previously silent.
+0.8 s windup delay, then AOE within `radius=22` studs. The skill has `maxSelectRange = 18` (named `minRange` until 2026-11-17, although it was always an upper bound), and `AttackPrep` only offers it when the target is at or inside 18 studs (`dist <= maxSelectRange`), so at longer range the boss picks FireballVolley. Spawns a flat Cylinder shockwave visual (Neon yellow, Debris 0.5 s). All humanoids in radius take damage and receive a knockup. `attackComplete` set via `ctx.onComplete` after total cycle. Brain's tuning: `onImpact = [{kind="damage", amount=25}, {kind="knockup", force=60}]` — multi-effect composition. `deliveryParams.cosmeticEffectId = "aoe_boss_groundslam"` (added 2026-08-04) gives the shockwave a sound stub (reuses `SFX.impactHeavy` pitched down) — was previously silent.
 
 ## Client HUD
 

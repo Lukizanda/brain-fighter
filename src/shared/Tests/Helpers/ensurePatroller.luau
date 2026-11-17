@@ -111,7 +111,7 @@ function Helpers.ensure(player: Player?): Fixture?
 
 	npc.Parent = Workspace
 
-	local controller = NPCController.new(npc, Patroller, nil)
+	local controller = NPCController.new(npc, Patroller)
 	if not controller then
 		npc:Destroy()
 		return nil

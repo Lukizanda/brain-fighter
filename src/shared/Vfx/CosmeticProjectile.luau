@@ -273,9 +273,10 @@ local function buildBody(projectile: Part, params: LaunchParams)
 		trail.Parent    = projectile
 	end
 
-	-- PERF.allowLights is dropped by WorldVfxController when the frame budget
-	-- slips. A light attached to every shot in flight would be the heaviest
-	-- thing left standing if it ignored that switch.
+	-- PERF.allowLights is a static config switch; nothing lowers it at runtime
+	-- today (the frame-budget throttle that would is not built). A light
+	-- attached to every shot in flight would be the heaviest thing left
+	-- standing if it ignored that switch.
 	if body.light and VfxConfig.PERF.allowLights then
 		local light = Instance.new("PointLight")
 		light.Name       = "ProjectileLight"

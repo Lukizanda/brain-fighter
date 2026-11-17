@@ -87,7 +87,6 @@ function BossController.new(
 		npc                  = boss,
 		humanoid             = humanoid,
 		humanoidRootPart     = hrp :: BasePart,
-		weapon               = nil,
 		nearestPlayer        = nil,
 		distanceToNearest    = math.huge,
 		canSeeTarget         = false,

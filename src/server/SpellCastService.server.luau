@@ -31,9 +31,12 @@
 --
 -- That check is a lower bound on a cheat, not a mirror of the client's
 -- reservoir — energy still lives in client/PlayerSession, and the full
--- server-side economy remains the real fix. It also ships DARK: while
--- EconomyConstants.ENFORCE is false the verdict is logged and nothing
--- is refused. See wiki/systems/SpellCastService.md § Validated memorize.
+-- server-side economy remains the real fix. The check is ENFORCED
+-- (EconomyConstants.ENFORCE = true): an unaffordable cast is logged and
+-- refused before it is debited or applied. Setting ENFORCE to false is
+-- the shadow mode — the verdict is still logged ("would reject") but
+-- nothing is refused and the cast proceeds and is debited as usual.
+-- See wiki/systems/SpellCastService.md § Validated memorize.
 --
 -- Every rejection drops the request and logs; nothing throws, so one
 -- malformed payload can never take the handler down for other players.
@@ -79,9 +82,9 @@ local function reject(player: Player, reason: string)
 	end
 end
 
--- Affordability failures log even while shadow mode refuses nothing:
--- these lines are the entire product of running the mode dark, and one
--- nobody reads is the same as not having shipped it.
+-- Affordability failures log in both modes. Under ENFORCE (the shipped
+-- setting) the line records a refused cast; in shadow mode it is the
+-- only product of the check, since nothing is refused there.
 local function noteUnaffordable(player: Player, reason: string)
 	local key = string.format("%d:afford:%s", player.UserId, reason)
 	if not rejectionLogBudget:consume(key) then

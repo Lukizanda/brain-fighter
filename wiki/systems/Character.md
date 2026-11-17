@@ -1,7 +1,7 @@
 ---
 type: system
 description: Per-character systems (mostly REMOVED 2026-06-22, commit 6610291) — CameraController + LocomotionController deleted; only DashController + CharacterSystemsLoader (CoreGui config) survive. Retained as historical record of the TPS stack.
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 # Character System
@@ -12,7 +12,7 @@ Locomotion, camera, and weapon-pose are intentionally separated but coordinated 
 
 ## TPS character stack is gated off by default
 
-> **Historical (checked 2026-11-14).** `GameConfig.TPS_CHARACTER_ENABLED`, `CameraManager`, `LocomotionManager` and `LocomotionController` no longer exist in `src/`; `CharacterSystemsLoader` only applies the `GameConfig.SHOW_*` CoreGui toggles. `src/shared/LocomotionAnimations/` holds only a `Backward.meta.json` stub. The rest of this section and the Files / Body lock / Render priorities / Movement states sections below describe the deleted stack.
+> **Historical (checked 2026-11-14).** `GameConfig.TPS_CHARACTER_ENABLED`, `CameraManager`, `LocomotionManager` and `LocomotionController` no longer exist in `src/`; `CharacterSystemsLoader` only applies the `GameConfig.SHOW_*` CoreGui toggles. `src/shared/LocomotionAnimations/` holds only its `init.meta.json`; the lone `Backward.meta.json` stub, which created nothing, was deleted 2026-11-17. The place file still carries one hand-made `Backward` Animation in that folder (`rbxassetid://122355628887557`) that no code reads; the folder's `init.meta.json` is what keeps Rojo from removing it. The rest of this section and the Files / Body lock / Render priorities / Movement states sections below describe the deleted stack.
 
 Brain Fighter uses default Roblox third-person camera + `Humanoid.AutoRotate = true` character (platformer-style). The inherited TPS template's body-lock + Motor6D upper-body tracking + weapon-aim camera modes are gated behind `GameConfig.TPS_CHARACTER_ENABLED` (default `false`).
 

@@ -297,9 +297,9 @@ function InfernoVfx.start(humanoid: Humanoid)
 	entry.highlight = highlight
 	table.insert(entry.tweens, pulse(highlight, "FillTransparency", HIGHLIGHT_FILL_MIN, HIGHLIGHT_PULSE_SEC))
 
-	-- Honours the same PERF switch as spawnEffect's burst light: on a
-	-- machine already dropping frames, a three-second dynamic light on a
-	-- moving rig is exactly the cost worth shedding first.
+	-- Honours the same static PERF.allowLights switch as spawnEffect's burst
+	-- light. Nothing lowers it at runtime today, but a three-second dynamic
+	-- light on a moving rig is exactly the cost worth shedding first.
 	if VfxConfig.PERF.allowLights then
 		local hrp = (character :: Model):FindFirstChild("HumanoidRootPart")
 		if hrp and hrp:IsA("BasePart") then

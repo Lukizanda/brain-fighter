@@ -171,9 +171,10 @@ local function spawnEffect(effectSpec: VfxConfig.EffectSpec, anchorPart: BasePar
 	-- Light, like sound, is outside the emitters guard — an effect is
 	-- allowed to be a flash with no particles.
 	--
-	-- `PERF.allowLights` is the honoured switch: WorldVfxController drops it
-	-- when the frame budget slips, and a burst that ignored it would be the
-	-- one thing still adding dynamic lights on a machine already struggling.
+	-- `PERF.allowLights` is a static config switch that every light honours.
+	-- Nothing lowers it at runtime today (the frame-budget throttle that would
+	-- is not built), but a burst that ignored it would defeat the switch the
+	-- moment someone turns it off or that throttle lands.
 	local reduced = isReducedVfx()
 	if effectSpec.light and VfxConfig.PERF.allowLights and not reduced then
 		spawnLight(effectSpec.light, anchorPart)

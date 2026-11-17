@@ -1,7 +1,7 @@
 ---
 type: system
 description: Weapon system (REMOVED 2026-06-22, commit 6610291; last Luau removed 2026-09-14, refactor chunk 11) — firearm/melee TPS stack deleted. No code remains under src/shared/Weapon; the folder survives only as a Studio-side container for Objects (LaserBeam, impact parts) and ViewModels. Retained as historical record.
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 # Weapon System
@@ -14,7 +14,7 @@ updated: 2026-11-14
 >
 > **`src/shared/Weapon/` now holds no Luau at all** — just `init.meta.json` and `Objects/init.meta.json`, both `ignoreUnknownInstances` Folders. They exist to keep Rojo from deleting the one Studio-side branch that is still live: `Objects`, holding `LaserBeam` (cloned by `laserBeamEffect`) plus `CharacterImpact` and `EnvironmentImpact`.
 >
-> `Shared.Weapon.ViewModels` (`AutoBlaster`, `Blaster`) also survives in the `.rbxl` on the same `ignoreUnknownInstances`, but **nothing references it** — `grep ViewModels src/` is empty. It is first-person rig content from the deleted TPS stack, kept alive by accident rather than by need. Chunk 11 left it alone: it is Studio content, not disk content, so removing it is an `.rbxl` edit nobody asked for. Delete it whenever someone is next saving the place for another reason. Note `Shared.Weapon.Templates` does **not** exist — `NPCService.equipWeapon` still indexes it, which is a latent error for any archetype that sets `weaponTemplateName` (all ship with `nil`).
+> `Shared.Weapon.ViewModels` (`AutoBlaster`, `Blaster`) also survives in the `.rbxl` on the same `ignoreUnknownInstances`, but **nothing references it** — `grep ViewModels src/` is empty. It is first-person rig content from the deleted TPS stack, kept alive by accident rather than by need. Chunk 11 left it alone: it is Studio content, not disk content, so removing it is an `.rbxl` edit nobody asked for. Delete it whenever someone is next saving the place for another reason. `Shared.Weapon.Templates` does **not** exist. `NPCService.equipWeapon`, which indexed it, was removed on 2026-11-17 together with `weaponTemplateName` and the blackboard's `weapon` field; NPCs fire from eye level, as they already did with no weapon equipped.
 
 Weapons are Tools. Each Tool template has a per-weapon controller LocalScript that drives a generic state machine. Hit detection and damage application are split between client and server with different authority models per weapon type.
 

@@ -23,7 +23,6 @@ export type Blackboard = {
 	npc: Model,
 	humanoid: Humanoid,
 	humanoidRootPart: BasePart,
-	weapon: Tool?, -- equipped weapon Tool, if any (for visual muzzle position)
 
 	-- Perception output (written by Perception layer)
 	nearestPlayer: Player?,
@@ -90,7 +89,6 @@ export type Archetype = {
 	templateName: string, -- key into ServerStorage.AIWorldData.Rigs
 	walkSpeed: number,
 	initialState: string,
-	weaponTemplateName: string?, -- key into ReplicatedStorage.Shared.Weapon.Templates
 	animations: AnimationSet?, -- rbxassetid:// strings for walk/idle/shoot
 	states: { [string]: StateDefinition },
 	transitions: { [string]: { TransitionRule } }, -- keyed by state name

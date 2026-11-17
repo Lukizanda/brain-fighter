@@ -884,8 +884,8 @@ VfxConfig.EFFECTS = {
 			},
 		},
 		-- Same flash as the eruption, dimmer and shorter. Honours
-		-- PERF.allowLights inside spawnEffect, so it sheds first on a
-		-- machine already dropping frames.
+		-- PERF.allowLights inside spawnEffect, so it goes first when that
+		-- switch is turned off (nothing does so at runtime yet).
 		light            = { color = VfxConfig.FIRE.light, brightness = 5.0, durationSec = 0.32 },
 		-- Deliberately still the T1 hit sound pitched down, not T3's
 		-- `impactHeavy`. The visual language is shared; the *weight* is not

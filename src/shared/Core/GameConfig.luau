@@ -29,9 +29,12 @@ local GameConfig = {
 	----------------------------------------------------------------------
 	-- Block Spawner
 	----------------------------------------------------------------------
-	-- Blocks per 1000 cubic studs of spawn volume. All BlockSpawnVolume
-	-- parts are summed; total count = density × total_volume / 1000.
-	-- Default 2 ≈ 26 blocks in the 40×8×40 reference arena.
+	-- Blocks per 1000 cubic studs of spawn volume. Each arena's pool sums the
+	-- volumes of its BlockSpawnVolume parts (skipping any with a BlockQuota,
+	-- which hold their own fixed count) and targets
+	-- max(1, round(density × volume / 1000)) blocks.
+	-- At 0.1 the shipped arena's eight volumes (397,600 cubic studs in total)
+	-- give round(39.76) = 40 blocks; the 40×8×40 fallback box (12,800) gives 1.
 	----------------------------------------------------------------------
 	BLOCK_SPAWN_DENSITY = 0.1,
 	BLOCK_SCALE = 1.5,                -- uniform scale multiplier on the 4×4×4 template (e.g. 0.5 = 2 studs, 2 = 8 studs)

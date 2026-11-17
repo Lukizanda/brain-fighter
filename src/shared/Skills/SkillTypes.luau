@@ -70,7 +70,7 @@ export type SkillSpec = {
 	delivery: DeliveryKind,
 	deliveryParams: { [string]: any },  -- handler-specific params
 	onImpact: { EffectSpec },           -- effects applied on landing
-	minRange: number?,                  -- if set, skill is only selected when distanceToNearest <= minRange
+	maxSelectRange: number?,            -- offered only while the nearest target is at or inside this many studs; nil = offered at any distance
 	windupVfx: string?,                 -- telegraph shown during AttackPrep: "aoe_indicator" | "charge_glow"
 	windupAnimId: string?,              -- animation asset ID played on the boss during AttackPrep
 }

@@ -53,7 +53,7 @@ local stateBuilders: { [string]: { build: () -> (any, any), cleanup: ((Blackboar
 -- ============================================================
 -- Construction
 -- ============================================================
-function NPCController.new(npc: Model, archetype: Archetype, weapon: Tool?): NPCControllerInstance?
+function NPCController.new(npc: Model, archetype: Archetype): NPCControllerInstance?
 	local humanoid = npc:FindFirstChildOfClass("Humanoid")
 	local hrp = npc:FindFirstChild("HumanoidRootPart")
 
@@ -78,7 +78,6 @@ function NPCController.new(npc: Model, archetype: Archetype, weapon: Tool?): NPC
 		npc = npc,
 		humanoid = humanoid,
 		humanoidRootPart = hrp :: BasePart,
-		weapon = weapon,
 		nearestPlayer = nil,
 		distanceToNearest = math.huge,
 		canSeeTarget = false,

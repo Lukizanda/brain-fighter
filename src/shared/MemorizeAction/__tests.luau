@@ -51,7 +51,7 @@ function M.run()
 		r:destroy()
 	end
 
-	-- 2. Invalid word "XYZ" fizzles with reason="invalid"; buffer is preserved.
+	-- 2. Invalid word "XYZ" fizzles with reason="invalid"; buffer is cleared (letters consumed).
 	do
 		local b = WordBuffer.new()
 		local r = EnergyReservoirs.new()

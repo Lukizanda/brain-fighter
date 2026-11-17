@@ -1,7 +1,7 @@
 ---
 type: system
 description: Unified data + dispatch pipeline shared by player spells and boss attacks. SkillSpec (data) + SkillEffects (effects) + SkillDelivery (deliveries), with caller-resolved origin so any caster (player, boss, future NPC) plugs in the same way.
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 # Skill Pipeline
@@ -78,7 +78,7 @@ graph LR
         SD["delivery:<br/>'instant' | 'projectile'<br/>| 'aoe' | 'world_spawn'"]
         SDP["deliveryParams:<br/>count, speed, radius, ..."]
         SOI["onImpact: { EffectSpec }"]
-        SVF["minRange?"]
+        SVF["maxSelectRange?"]
         SSF["windupVfx? / windupAnimId?"]
     end
 

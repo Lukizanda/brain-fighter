@@ -15,13 +15,8 @@ local Patroller = {
 	walkSpeed = NPCConstants.DEFAULT_WALK_SPEED,
 	initialState = NPCConstants.State.Patrol,
 
-	-- Weapon template (optional) — cloned from ReplicatedStorage.Shared.Weapon.Templates
-	-- and welded to the NPC's right hand on spawn for visual display only.
-	-- NPC damage comes from NPCConstants.COMBAT_*, not the weapon's attributes.
-	weaponTemplateName = nil :: string?,
-
 	-- Animation asset IDs (rbxassetid:// strings). nil = skip that animation.
-	-- Default R15 walk/idle + Rifle shoot animation from the weapon template.
+	-- Default R15 walk/idle + Rifle aim + shoot animations.
 	animations = {
 		walk = "rbxassetid://507777826", -- R15 Walk
 		idle = "rbxassetid://507766666", -- R15 Idle 1

@@ -133,14 +133,15 @@ local AttackPrepState: StateDefinition = {
 		bossbb.attackComplete    = false
 
 		-- Pick a random attack from the current phase's available set,
-		-- excluding any skill whose minRange exceeds the current distance.
+		-- excluding any skill whose maxSelectRange is less than the current
+		-- distance to the nearest target (nil maxSelectRange = any distance).
 		local phaseSpec = bossbb.currentPhaseSpec
 		local dist = bb.distanceToNearest
 		local candidates: { string } = {}
 		if phaseSpec then
 			for _, attackName in phaseSpec.availableAttacks do
 				local skill: SkillTypes.SkillSpec? = bossbb.bossTypeSpec.skills[attackName]
-				if skill and (not skill.minRange or dist <= skill.minRange) then
+				if skill and (not skill.maxSelectRange or dist <= skill.maxSelectRange) then
 					table.insert(candidates, attackName)
 				end
 			end

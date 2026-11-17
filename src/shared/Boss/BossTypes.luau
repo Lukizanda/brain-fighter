@@ -63,7 +63,6 @@ export type BossBlackboard = {
 	npc: Model,
 	humanoid: Humanoid,
 	humanoidRootPart: BasePart,
-	weapon: Tool?,
 	nearestPlayer: Player?,
 	distanceToNearest: number,
 	canSeeTarget: boolean,

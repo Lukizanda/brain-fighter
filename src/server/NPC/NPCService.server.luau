@@ -94,63 +94,6 @@ local function getTemplate(templateName: string): Model?
 	return template
 end
 
--- Equip a weapon visually on the NPC's right hand. Uses Humanoid:EquipTool()
--- so Roblox handles the RightGrip weld correctly. Strips scripts from the
--- cloned tool since NPC shooting is driven by NPC code, not the weapon's
--- client/server scripts.
-local function equipWeapon(npc: Model, weaponTemplateName: string?): Tool?
-	if not weaponTemplateName then
-		return nil
-	end
-
-	local templates = ReplicatedStorage.Shared.Weapon.Templates
-	local template = templates:FindFirstChild(weaponTemplateName)
-	if not template or not template:IsA("Tool") then
-		log:warn("Weapon template not found:", weaponTemplateName)
-		return nil
-	end
-
-	local humanoid = npc:FindFirstChildOfClass("Humanoid")
-	if not humanoid then
-		log:warn("NPC has no Humanoid:", npc.Name)
-		return nil
-	end
-
-	local weapon = template:Clone() :: Tool
-	local handle = weapon:FindFirstChild("Handle")
-	if not handle or not handle:IsA("BasePart") then
-		log:warn("Weapon template has no Handle:", weaponTemplateName)
-		weapon:Destroy()
-		return nil
-	end
-
-	-- Strip scripts from the cloned tool — the NPC shoots via NPC logic,
-	-- not the weapon's own Scripts folder (which targets players).
-	local weaponScripts = weapon:FindFirstChild("Scripts")
-	if weaponScripts then
-		weaponScripts:Destroy()
-	end
-	for _, child in weapon:GetChildren() do
-		if child:IsA("LocalScript") or child:IsA("Script") then
-			child:Destroy()
-		end
-	end
-
-	-- Ensure handle is ready to be equipped
-	handle.Anchored = false
-	handle.CanCollide = false
-	handle.Massless = true
-
-	-- Humanoid:EquipTool handles the RightGrip weld using Tool.Grip automatically.
-	-- Tool must first be parented to a place the humanoid can reach.
-	weapon.Parent = npc
-	humanoid:EquipTool(weapon)
-
-	log:info(string.format("Equipped %s on %s", weapon.Name, npc.Name))
-
-	return weapon
-end
-
 -- The arena a spawn marker belongs to. Mirrors `Arena.idOf` over the
 -- snapshot's attribute table, since the marker Part itself is destroyed
 -- after WorldDataManager snapshots it.
@@ -202,11 +145,8 @@ local function spawnNPCAtPosition(
 
 	npc.Parent = Workspace
 
-	-- Equip visual weapon (if specified by archetype)
-	local weapon = equipWeapon(npc, archetype.weaponTemplateName)
-
 	-- Create the controller for this NPC
-	local controller = NPCController.new(npc, archetype, weapon)
+	local controller = NPCController.new(npc, archetype)
 	if controller then
 		table.insert(set.controllers, controller)
 	else

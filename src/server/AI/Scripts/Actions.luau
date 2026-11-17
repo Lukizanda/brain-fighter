@@ -471,21 +471,8 @@ local function getHitZone(instance: Instance): string
 	return DamageTypes.HitZone.Limb
 end
 
--- Find a MuzzleAttachment on the weapon for visual shot origin.
--- Falls back to the weapon's Handle or the NPC HRP eye-level.
+-- Visual shot origin: the NPC's eye level (NPCs carry no weapon model).
 local function getShotOrigin(bb: Blackboard): Vector3
-	local weapon = bb.weapon
-	if weapon and weapon.Parent then
-		local muzzle = weapon:FindFirstChild("MuzzleAttachment", true)
-		if muzzle and muzzle:IsA("Attachment") then
-			return muzzle.WorldPosition
-		end
-		local handle = weapon:FindFirstChild("Handle")
-		if handle and handle:IsA("BasePart") then
-			return handle.Position
-		end
-	end
-	-- Fallback: NPC eye level
 	return bb.humanoidRootPart.Position + Vector3.new(0, NPCConstants.EYE_HEIGHT, 0)
 end
 
@@ -525,7 +512,7 @@ function Actions.Shoot(bb: Blackboard): ActionResult
 	local direction = (targetPos - aimOrigin).Unit
 	direction = applySpread(direction, NPCConstants.COMBAT_SPREAD_DEGREES)
 
-	-- Visual beam uses the weapon muzzle (or fallback) for a nicer look
+	-- Visual beam starts at the NPC's eye level
 	local visualOrigin = getShotOrigin(bb)
 
 	local rayVec = direction * NPCConstants.COMBAT_RANGE
@@ -540,7 +527,7 @@ function Actions.Shoot(bb: Blackboard): ActionResult
 		beamEnd = aimOrigin + rayVec
 	end
 
-	-- Draw the laser beam from the weapon muzzle to the hit/end point.
+	-- Draw the laser beam from the shot origin to the hit/end point.
 	-- The server has no screen: drawing it here would parent a Part nobody
 	-- asked any client to render. VfxBroadcast hands the two positions to
 	-- every client and WorldVfxController draws the tracer on each one.
@@ -564,7 +551,6 @@ function Actions.Shoot(bb: Blackboard): ActionResult
 		baseDamage = NPCConstants.COMBAT_DAMAGE,
 		damageType = DamageTypes.DamageType.Bullet,
 		hitZone = getHitZone(hitInstance),
-		sourceWeapon = bb.weapon,
 		cause = npcCause(bb),
 		timestamp = now,
 	})
