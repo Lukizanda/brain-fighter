@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 # Build Plan
@@ -24,6 +24,7 @@ The plan is a living doc — update it as systems land or discover new dependenc
 
 1. **Re-baseline.** Run all 8 suites after the six-week pause, and do the open client checks: the stage 6 two-client duel ([[design/lobby]]), the chunk 9 two-arena check, the charge-tier hold check Q4(a), and the nameplate check. *Suites done 2026-11-04: `RunTests=all` passed 43/43 with a clean boot, after the Studio MCP reconnected. The only new console noise was `ContentId rbxassetid://203785492 … Asset type does not match` ×3 on the client. That id is not in `src/` or the Edit DataModel, so something creates it at runtime. Not yet traced. The client checks are still open.*
 1a. **Boss arena layout (Phase 8), before the publish.** Added 2026-11-13: the user chose to land the new arena ahead of the unlisted publish, so the friends playtest sees it. All code stages (1, 2, 5–9) are in as of 2026-11-13; what remains is the user's walk-through, the swap and the tuning playtest (stages 3–4). See [[design/boss-arena]] § Pick up here.
+1b. **AI playtest of the boss arena (Phase 9), before a human playtest.** Added 2026-11-17 at the user's request: bots and a fight simulator score the arena against a fun-metric matrix, so the human playtest starts from a polished level. The simulator and its first results are in; four design decisions are with the user. See [[design/ai-playtest]] § Pick up here.
 2. **Unlisted publish, early.** This is the only way to check analytics delivery to the dashboard. It also gives the friends playtest a build, and that playtest feeds the tuning pass.
 3. **Tutorial (5.3), on a minimal `PlayerData`.** The user chose to pull the ProfileStore-backed `PlayerData` module forward from 5.5, with a schema holding only the tutorial-seen flag. 5.5 then extends that module instead of starting from nothing. The tutorial needs a design pass first: [[systems/Tutorial]] still assumes a raw DataStore flag.
 4. **Audio (5.2): decision deferred.** The stand-in SFX stay for the unlisted friends test. Buying a pack versus using free sources is decided before the public listing, because the milestone requires no placeholder audio.
@@ -388,7 +389,13 @@ Added 2026-11-13 at the user's request. Full design, measured arena, layout tabl
 
 **Sequenced before the unlisted publish** (user, 2026-11-13); see § Current focus step 1a. "Quit" from the arena is the `LobbyReturnPad` in the ready room, not an in-fight button.
 
+## Phase 9 — AI playtest of the boss arena
+
+Plan, metric matrix, personas, results and stages: [[design/ai-playtest]]. Tier 1 (a fight simulator in `src/shared/Playtest/`, run from Edit mode) is built; Tier 2 (a real in-Studio bot and a server recorder) is not. Runs alongside Phase 8 stage 4, whose tuning it feeds.
+
 ## Plan changelog
+
+- **2026-11-17**: **Phase 9 added** — an automated playtest of the boss arena ([[design/ai-playtest]]). The user asked for an AI-driven playtest with metrics that stand for fun before any human playtest, and is open to new boss moves, phases and minions destroyed by letter gathering. A designer pass fixed six pillars, eighteen metrics and six personas; the simulator's first run found the novice cannot win, the strong speller wins in under 50 s, and the overlook is a complete safe spot. No tuning has been changed.
 
 - **2026-11-13**: **Phase 8 stages 8 and 9 added** — fossil letters and the hungry brain, picked by the user from a mechanics ideation session ([[design/boss-arena]] § Mechanics ideation). They run one after the other behind stage 7, because all three edit `BlockSpawner`. The toppling spire and the riddle stone went to [[ideas]].
 - **2026-11-13**: **Phase 8 added** — boss arena layout ([[design/boss-arena]]). User decisions: value rings + cover + jackpot ledges; keep the 200-stud reach and rely on line of sight; boss attacks that miss destroy walls, including walls hiding reward areas; most walls are gone for the round and some regenerate; Ground Slam cracks cover in its radius. Stages 1 and 2 are parallel code builds against a contract fixed on the design page; the greybox is done with the user.
