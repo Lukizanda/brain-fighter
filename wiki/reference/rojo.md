@@ -1,7 +1,7 @@
 ---
 type: reference
 description: Rojo 7.7 as tested here — .model.json creates instances, .meta.json only modifies, and a lone .meta.json silently creates nothing
-updated: 2026-10-15
+updated: 2026-11-18
 ---
 
 # Rojo
@@ -38,6 +38,10 @@ The rules agents must follow are in `CLAUDE.md` § Rojo JSON hard rules and [`do
 **How to check.** Rojo's `/api/read` tree (`curl localhost:34872/api/rojo` to find the session) shows what Rojo really creates. If it shows a folder as empty, the instances in it aren't versioned, whatever Studio shows.
 
 **`init.model.json` inside a folder** creates a child named `init`; it doesn't set the folder's class. Use `init.meta.json` with `className`.
+
+## Console noise from the Rojo plugin
+
+`ContentId: rbxassetid://203785492 failed due to: Asset type does not match requested type` appears once each time a DataModel starts (opening the place, and again for the server and the client of a playtest). It comes from the Rojo Studio plugin, not from the game. Asset 203785492 is the plugin's notification sound ("Pop Close Sound", an Audio asset; `Sounds.Notification` in the plugin's `Assets.lua`), and the plugin's `preloadAssets.lua` passes every asset URL as a bare string to `ContentProvider:PreloadAsync`, which requests it as an image. Traced 2026-11-18 from the Studio log (the request asks for a texture format) and the Rojo v7.7.0 source. It is harmless and cannot be fixed from this repo; it will not occur for players.
 
 ## See also
 

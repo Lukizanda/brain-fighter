@@ -2177,3 +2177,7 @@ Decided by the user from the AI playtest and built: boss `attackRange` 150 with 
 ## [2026-11-17] ingest | Spore letters built; gate rule decided
 
 `systems/Boss` gains § Spore letters and `systems/BlockSpawner` § Spores: every second volley is a lob of three letter blocks that burst after 6 s unless popped, and a pop does 3% to the boss. Six `spore_*` tests; the first run caught `clearSpores` leaving its bookkeeping to a deferred signal, fixed at the source, then 109/109. Not yet seen on a client. `design/ai-playtest` records the user's choice of key letters for opening gates (pop the three letters carved on a gate) and the next steps.
+
+## [2026-11-18] ingest | Asset-type warning traced to the Rojo plugin
+
+The `rbxassetid://203785492 … Asset type does not match requested type` warning, open since the 2026-11-04 re-baseline, is the Rojo Studio plugin preloading its own notification sound as an image. Nothing in `src/` or the place references the id. Recorded on [[reference/rojo]]; the note in [[design/build-plan]] § Current focus is closed. No code changed.
