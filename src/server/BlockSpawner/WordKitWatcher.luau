@@ -22,12 +22,18 @@
 --   also trips the gate path; both rolls land within a frame, the second
 --   replaces the first, and the player sees one fresh kit.)
 --
+--   Key kits, the other way round. A kit volume with `KitOpensGate` holds a
+--   gate's key letters; when its last letter is popped the pool says so
+--   (onGateKitEmptied) and this passes it to the walls as their `OpenGate`
+--   event, with the pool's arena and the kit's `KitGate`. The walls decide
+--   what that does (BreakableWallService).
+--
 -- Matching is per arena: a wall's arena (Arena.idOf, so no ArenaId means
 -- Default) selects the pool, so two arenas can reuse a GateId without
 -- re-rolling each other's kits.
 --
 -- It reads only the published `WallState` and the `GateId` attribute; it
--- writes nothing on a wall.
+-- writes nothing on a wall (opening one is a request, fired as an event).
 --
 -- Lifecycle follows the project idiom: `disable()` is a reversible pause
 -- (connections dropped; `start()` picks up again), `destroy()` is the
@@ -55,6 +61,7 @@ local STATE_BROKEN = BreakableWallConstants.State.Broken
 local STATE_INTACT = BreakableWallConstants.State.Intact
 
 local roundStartedEvent = ServerScriptService.Server.GameMode.Events.RoundStarted :: BindableEvent
+local openGateEvent = ServerScriptService.Server.Arena.Events.OpenGate :: BindableEvent
 
 type Pools = { [string]: BlockSpawner.BlockSpawner }
 
@@ -75,6 +82,8 @@ export type WordKitWatcher = typeof(setmetatable(
 		_pools: Pools,
 		_watches: { [Instance]: WallWatch },
 		_connections: { RBXScriptConnection },
+		-- Stops for the pools' key-kit listeners.
+		_poolStops: { () -> () },
 		_running: boolean,
 		_destroyed: boolean,
 	},
@@ -86,6 +95,7 @@ function WordKitWatcher.new(pools: Pools): WordKitWatcher
 		_pools = pools,
 		_watches = {},
 		_connections = {},
+		_poolStops = {},
 		_running = false,
 		_destroyed = false,
 	}, WordKitWatcher)
@@ -174,6 +184,15 @@ function WordKitWatcher.start(self: WordKitWatcher)
 	for _, instance in ipairs(CollectionService:GetTagged(BreakableWallConstants.TAG)) do
 		self:_watchWall(instance)
 	end
+	-- Key kits: the pools that exist now. (Unlike the wall paths, a pool added
+	-- to the table later is not picked up; the service builds every pool
+	-- before it starts the watcher.)
+	for arenaId, pool in self._pools do
+		table.insert(self._poolStops, pool:onGateKitEmptied(function(gate: string)
+			log:info(string.format("[%s] key letters of gate '%s' popped — asking the walls to open it", arenaId, gate))
+			openGateEvent:Fire(arenaId, gate)
+		end))
+	end
 	log:info(string.format("watching %d wall(s) and round starts", self:wallCount()))
 end
 
@@ -195,6 +214,10 @@ function WordKitWatcher.disable(self: WordKitWatcher)
 		connection:Disconnect()
 	end
 	table.clear(self._connections)
+	for _, stop in ipairs(self._poolStops) do
+		stop()
+	end
+	table.clear(self._poolStops)
 	for _, watch in self._watches do
 		watch.connection:Disconnect()
 	end

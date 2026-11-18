@@ -72,6 +72,9 @@ export type Level = {
 	arrival: Vector3,
 	zones: { Zone },
 	walls: { Wall },
+	-- Key letters as built in the level: the key kit volumes (KitOpensGate),
+	-- by the gate they open. FightSim hangs its own keys from these numbers.
+	keyKits: { [string]: { count: number, popReach: number? } },
 	lint: { string },
 }
 
@@ -112,8 +115,18 @@ function SimLevel.fromWorkspace(arenaId: string): Level
 
 	local zones: { Zone } = {}
 	local lint: { string } = {}
+	local keyKits: { [string]: { count: number, popReach: number? } } = {}
 	for _, inst in CollectionService:GetTagged(TAG_ZONE) do
-		if inst:IsA("BasePart") and inArena(inst, arenaId) then
+		if inst:IsA("BasePart") and inArena(inst, arenaId) and inst:GetAttribute("KitOpensGate") == true then
+			-- A gate's key letters, not a letter zone: FightSim models them.
+			local gate = inst:GetAttribute("KitGate")
+			if type(gate) == "string" and gate ~= "" then
+				keyKits[gate] = {
+					count = (inst:GetAttribute("WordKit") :: number?) or 0,
+					popReach = inst:GetAttribute("PopReach") :: number?,
+				}
+			end
+		elseif inst:IsA("BasePart") and inArena(inst, arenaId) then
 			local kit = inst:GetAttribute("WordKit") :: number?
 			local tableName = (inst:GetAttribute("LetterTable") :: string?) or LetterTables.DEFAULT
 			local quota = (inst:GetAttribute("BlockQuota") :: number?) or 0
@@ -187,6 +200,7 @@ function SimLevel.fromWorkspace(arenaId: string): Level
 		arrival = arrival,
 		zones = zones,
 		walls = walls,
+		keyKits = keyKits,
 		lint = lint,
 	}
 end

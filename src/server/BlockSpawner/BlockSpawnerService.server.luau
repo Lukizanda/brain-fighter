@@ -28,6 +28,10 @@
 -- Word kits (Phase 8 stage 7) add two more:
 --   WordKit (number)  the volume holds one shuffled word of this length,
 --                     laid out along the part's local X axis
+--   KitOpensGate (boolean)  a key kit: a 3- or 4-letter key word; popping
+--                     all of it opens the walls named by KitGate
+--   PopReach (number) the volume's blocks can only be popped from within
+--                     this many studs
 --   KitGate (string)  re-roll the kit when a BreakableWall whose GateId is
 --                     this string re-seals
 -- WordKitWatcher (a sibling module) is what notices re-seals and new rounds
@@ -100,6 +104,8 @@ local function collectVolumesByArena(): ArenaBoxes
 					quota = readAttribute(part, BlockSpawner.BLOCK_QUOTA_ATTRIBUTE, "number"),
 					wordKit = readAttribute(part, BlockSpawner.WORD_KIT_ATTRIBUTE, "number"),
 					kitGate = readAttribute(part, BlockSpawner.KIT_GATE_ATTRIBUTE, "string"),
+					kitOpensGate = readAttribute(part, BlockSpawner.KIT_OPENS_GATE_ATTRIBUTE, "boolean"),
+					popReach = readAttribute(part, BlockSpawner.POP_REACH_ATTRIBUTE, "number"),
 					-- A kit is laid out along the part's own X axis, the one
 					-- case where rotation counts; ordinary boxes stay the
 					-- axis-aligned min/max above.

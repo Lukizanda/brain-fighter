@@ -12,6 +12,7 @@
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local KeyConstants = require(ReplicatedStorage.Shared.BlockSpawner.KeyConstants)
 local SporeConstants = require(ReplicatedStorage.Shared.BlockSpawner.SporeConstants)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 
@@ -66,6 +67,28 @@ end
 -- does is not this module's business.
 function BlockShoot.isSpore(block: Model): boolean
 	return block:GetAttribute(SporeConstants.ATTRIBUTE) == true
+end
+
+-- The block's own, shorter tap reach in studs (key letters), or nil for a
+-- block that can be popped from as far as any other. Measured from the
+-- character's root to the block, not along the camera ray: "walk up to it"
+-- has to mean the same whatever the zoom.
+function BlockShoot.reachOf(block: Model): number?
+	local reach = block:GetAttribute(KeyConstants.POP_REACH_ATTRIBUTE)
+	if type(reach) == "number" and reach > 0 then
+		return reach
+	end
+	return nil
+end
+
+-- Is `from` (a character's root position) close enough to pop `block`, as
+-- far as the block's own reach goes? True for a block without one.
+function BlockShoot.withinOwnReach(block: Model, from: Vector3, toleranceStuds: number?): boolean
+	local reach = BlockShoot.reachOf(block)
+	if reach == nil then
+		return true
+	end
+	return (block:GetPivot().Position - from).Magnitude <= reach + (toleranceStuds or 0)
 end
 
 return BlockShoot

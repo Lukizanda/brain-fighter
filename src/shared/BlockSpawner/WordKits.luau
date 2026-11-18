@@ -46,6 +46,25 @@ SUMMER SYMBOL TICKET TROPHY TURKEY WAFFLE WINDOW WIZARD YELLOW ZIPPER
 ]],
 }
 
+-- Key words (wiki/design/ai-playtest.md § Gate redesign): the short words
+-- hung in front of a gate as its key letters. Popping all of one opens the
+-- gate, and the popper keeps the letters, so the word is a small reward for
+-- walking up, not the prize behind the gate: every key word is worth between
+-- 8 and 14 energy (a first-tier cast and most of a second), which the
+-- `keykit_words_valid` suite asserts. Same rules as the kit lists otherwise:
+-- common words a school-age player knows, in the Dictionary, no palindromes.
+local KEY_WORDS_BY_LENGTH_SOURCE: { [number]: string } = {
+	[3] = [[
+FOX JAM KEY BOX ZIP WAX JOY WEB HUB HOP HUM HAM MOW PAW COW FLY FRY SHY WHY
+YAM YAK KID SKY BOY BUY HAY WAY JAR JET JOB JOG JUG JAW MIX SIX FIX ZOO
+]],
+	[4] = [[
+FROG HAWK MOTH WOLF CHEF FISH BAKE DUCK YARD PLUM COMB WAVE HIVE KIWI PUFF
+WHIP CHIP CHOP SHIP SHOP FLAG GIFT BIKE CAKE PARK FORK MILK BOOK COOK KITE
+KING WISH FARM HOME CAMP WAVY PONY BABY CUBE MASK DESK HELP PLAY
+]],
+}
+
 -- A reshuffle that happens to read as the word (or its mirror image, which a
 -- player standing on the other side of the row sees) is thrown away and
 -- redone, up to this many times. A word has at least 20 distinct orderings,
@@ -64,7 +83,58 @@ for length, source in WORDS_BY_LENGTH_SOURCE do
 end
 table.sort(lengths)
 
+local keyWordsByLength: { [number]: { string } } = {}
+local keyLengths: { number } = {}
+for length, source in KEY_WORDS_BY_LENGTH_SOURCE do
+	local words: { string } = {}
+	for word in string.gmatch(source, "%S+") do
+		table.insert(words, word)
+	end
+	keyWordsByLength[length] = words
+	table.insert(keyLengths, length)
+end
+table.sort(keyLengths)
+
 local WordKits = {}
+
+-- The word lengths a key kit can be, ascending.
+function WordKits.keyLengths(): { number }
+	return table.clone(keyLengths)
+end
+
+function WordKits.isSupportedKeyLength(length: number): boolean
+	return keyWordsByLength[length] ~= nil
+end
+
+-- The supported key length closest to `length` (the lower one on a tie).
+function WordKits.nearestKeyLength(length: number): number
+	local best = keyLengths[1]
+	for _, candidate in ipairs(keyLengths) do
+		if math.abs(candidate - length) < math.abs(best - length) then
+			best = candidate
+		end
+	end
+	return best
+end
+
+-- The key words of one length, uppercase, or an empty list. A copy.
+function WordKits.keyWords(length: number): { string }
+	local words = keyWordsByLength[length]
+	if words == nil then
+		return {}
+	end
+	return table.clone(words)
+end
+
+-- A random key word of `length`, avoiding `avoid` when there is another.
+function WordKits.pickKey(length: number, avoid: string?): string
+	local words = keyWordsByLength[length] or keyWordsByLength[WordKits.nearestKeyLength(length)]
+	local choice = words[math.random(1, #words)]
+	while avoid ~= nil and choice == avoid and #words > 1 do
+		choice = words[math.random(1, #words)]
+	end
+	return choice
+end
 
 -- The word lengths a kit can be, ascending.
 function WordKits.lengths(): { number }

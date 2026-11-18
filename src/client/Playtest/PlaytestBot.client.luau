@@ -196,6 +196,10 @@ local function run(persona: PlaytestPersonas.Persona, myRun: number)
 		if delta.Magnitude > BlockShoot.MAX_RAYCAST_DISTANCE then
 			return false
 		end
+		-- Key letters: a shorter reach of their own, from the root.
+		if not BlockShoot.withinOwnReach(block, eye - Vector3.new(0, C.EYE_HEIGHT, 0)) then
+			return false
+		end
 		local hit = workspace:Raycast(eye, delta, params)
 		return hit == nil or hit.Instance:IsDescendantOf(block)
 	end

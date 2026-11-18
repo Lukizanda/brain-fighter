@@ -274,6 +274,44 @@ every quota, never refilled, never towed.
   spores were still live (the same one-step lag `isTowed` had).
 - Constants: `shared/BlockSpawner/SporeConstants.luau`.
 
+## Key kits and pop reach (2026-11-18)
+
+A gate's key letters ([[design/ai-playtest]] § Gate redesign; [[systems/BreakableWalls]]
+§ Key letters) are a word kit hung in front of the gate, with two new volume attributes:
+
+| Attribute | On | Meaning |
+|---|---|---|
+| `KitOpensGate` | a `WordKit` volume that also has `KitGate` | boolean. The kit holds a **key word** and popping its last letter opens the walls named by `KitGate` |
+| `PopReach` | any spawn volume | number. The volume's blocks can only be popped from within this many studs of the character's root |
+
+- **Key words are their own lists** (`WordKits.keyWords`, lengths 3 and 4, 37 and 43
+  words), worth 8 to 14 energy: a small reward for walking up, not the prize behind
+  the gate. `WordKit` on a key volume is read against these lengths (5 becomes 4, with a
+  warning). `keykit_words_valid` asserts the band.
+- A key kit behaves as a gated kit otherwise: shuffled, one colour, not refilled letter
+  by letter, re-rolled whole when its gate re-seals and on a round start.
+- **The pool only announces.** When the last letter of a key kit is popped it calls the
+  listeners of `pool:onGateKitEmptied(fn)` with the gate id. A kit cleared for a re-roll
+  is not a pop and announces nothing. `WordKitWatcher` listens on every pool that exists
+  when it starts and fires the walls' `OpenGate(arenaId, gateId)` event; the pool knows
+  nothing about walls.
+- `KitOpensGate` without both `WordKit` and `KitGate` warns and is ignored.
+- `PopReach` is stamped on each block as `Block.PopReach` (`shared/BlockSpawner/KeyConstants`).
+  [[systems/BlockShoot]] reads it for the tap and the server's range check, and
+  `client/Vfx/KeyLetterVisuals` draws a gold outline on such blocks, with a brighter fill
+  once the local player is inside the reach (greybox; the "carved on the gate" tell
+  from the design is not built).
+
+On `IslandReview` (place file, 2026-11-18): `Key_Stones`, `Key_Overhang`, `Key_Spit`
+(3 letters, 20 x 4 x 12, a zig-zag row 11 studs in front of the gate) and `Key_CaveRidge`
+(4 letters, 21 long), all `PopReach` 40. The ledge zones were grown upward to hold
+**4 wildcards a ledge**: `Zone_Overhang` 14 x 14 x 16 (quota 4), `Zone_Spit` 16 x 14 x 12
+(quota 4), `Zone_Stone_3` 12 x 14 x 14 (quota 3, with `Zone_Stone_2`'s 1). The staging
+island has none of this. **The place has to be saved to keep it.**
+
+Tests: `keykit_words_valid`, `keykit_pool_announces` (Phase3), `keygate_opens_and_reseals`
+(Arena), `keyreach_range_check` (Hardening).
+
 ## Ward letters (2026-11-18)
 
 A ward letter is a marked, poppable block with no lifetime that the boss asks for and

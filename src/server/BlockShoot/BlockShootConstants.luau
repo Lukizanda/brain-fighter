@@ -36,6 +36,11 @@ local CAMERA_ZOOM_ALLOWANCE_STUDS = 100
 BlockShootConstants.MAX_CONSUME_DISTANCE_STUDS =
 	BlockShoot.MAX_RAYCAST_DISTANCE + CAMERA_ZOOM_ALLOWANCE_STUDS
 
+-- A block with a reach of its own (key letters, BlockShoot.reachOf) is
+-- refused beyond that reach plus this: the client measured from where the
+-- character was a moment ago.
+BlockShootConstants.OWN_REACH_TOLERANCE_STUDS = 6
+
 -- Sustained ceiling is exactly the client's tap cooldown, so a player
 -- popping as fast as the input allows is never throttled. The burst
 -- allowance absorbs network jitter bunching consecutive pops into one

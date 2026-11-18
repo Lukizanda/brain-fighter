@@ -18,6 +18,7 @@ local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
+local BlockShoot = require(ReplicatedStorage.Shared.BlockShoot)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 local BlockShootConstants = require(script.Parent.BlockShootConstants)
 
@@ -76,6 +77,13 @@ function BlockShootValidation.checkRange(character: Model?, block: Model): (bool
 			"out of range (%.0f > %d studs)",
 			distance,
 			BlockShootConstants.MAX_CONSUME_DISTANCE_STUDS
+		)
+	end
+
+	-- Key letters carry a shorter reach of their own.
+	if not BlockShoot.withinOwnReach(block, origin, BlockShootConstants.OWN_REACH_TOLERANCE_STUDS) then
+		return false, string.format(
+			"out of the block's own reach (%.0f > %d studs)", distance, BlockShoot.reachOf(block) :: number
 		)
 	end
 

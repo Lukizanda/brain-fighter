@@ -1,7 +1,7 @@
 ---
 type: system
 description: Shared helpers and server handler for block consumption. Client input is BlockTapController (Phase 5.7 — click/tap a block directly). Server-trust validation added in 5.4 and unchanged by the input migration.
-updated: 2026-11-14
+updated: 2026-11-18
 ---
 
 # BlockShoot
@@ -202,6 +202,16 @@ Reach is tuned in exactly one place; the server bound and the Hardening suite's 
 The rate limit is a token bucket, not a flat interval: network jitter routinely bunches two legitimately-spaced taps into one frame, so a flat interval rejects real play. Sustained rate is exactly `1 / BlockTapConfig.COOLDOWN`, with a 3-tap burst allowance for the jitter. Verified both ways — see [[systems/Tests]] § Hardening.
 
 `BlockTapConfig.COOLDOWN` has three consumers, which is why it is one constant and not three: this rate limiter, the Hardening suite, and `SpellCastConstants.CAST_REFILL_PER_SEC` — the spell-cast flood guard is derived from the block cooldown because energy only enters a reservoir via popped blocks.
+
+### A block's own reach (2026-11-18)
+
+A block may carry a shorter reach of its own (`Block.PopReach`, stamped by the pool;
+key letters, 40 studs). `BlockShoot.reachOf(block)` and `withinOwnReach(block, from)`
+measure it from the **character's root**, not along the camera ray, so "walk up to it"
+means the same at any zoom. The client refuses the tap first (`sendPop`, with the
+fizzle sound) and greys the hover; the server's `checkRange` refuses beyond the reach
+plus `OWN_REACH_TOLERANCE_STUDS` (6). Test: `keyreach_range_check`. No real client has
+tapped a key letter yet.
 
 ### What this does not cover
 

@@ -456,6 +456,35 @@ game as built (tuning fixes, spores, ward, phase 2):
   are right; the split by spell is not to be trusted yet.
 - One fight is one sample.
 
+### Key letters, built (7d)
+
+Built the same day to decision 6: [[systems/BlockSpawner]] § Key kits and pop reach,
+[[systems/BreakableWalls]] § Key letters, [[systems/BlockShoot]] § A block's own reach.
+A gate's keys are a word kit hung 11 studs in front of it (3 letters, 4 at the cave
+plug) with a 40-stud reach; popping the last one opens the gate, and the gate hangs a
+fresh word when it re-seals. Each ledge now holds 4 wildcards. Four tests, **116/116**,
+and on the review island three keys popped server-side broke `Gate_Stones`, which
+re-sealed 25 s later with new keys.
+
+Differences from the model: the cave's keys are not forced to the cave word's colour;
+keys stay hanging if the boss breaks the gate first; the tell is a gold outline on
+the key letters, not a carving on the gate.
+
+The simulator now reads the key volumes and the bigger ledges from the level. As
+built (spores, ward, keys, ledges):
+
+| Persona | Win, time to kill | Opens a gate | Trips | Payoff | Dies on a trip |
+|---|---|---|---|---|---|
+| Novice | 92%, 216 s | 51% | 1.0 | 4.3x | 31% |
+| Average | 100%, 129 s | 72% | 1.3 | 1.7x | 5% |
+| Strong | 99%, 135 s | 100% | 2.7 | 0.7x | 1% |
+
+Strong's 135 s is the model's doing: its persona notices 90% of gates and always
+goes, 2.7 trips a fight, at a loss each time. A real strong player would stop going.
+The Stones ledge counts for less than the others in the model (it visits one of the
+two stones). **Not yet done: a real client tapping a key letter, and a bot that walks
+to a gate.**
+
 ## Decisions (user, 2026-11-17)
 
 | # | Question | Decision |
@@ -512,7 +541,7 @@ tuning keys only: `ward = { atHp, letters, orbitRadius, cooldown, walkSpeed }` a
 | 4 | Sweep the tuning fixes; model spore letters and the word ward | **done 2026-11-17** except fix 6 (premium reach, gate health, wildcard split), which is not swept |
 | 5 | Decisions for the user | **decided 2026-11-17**, § Decisions |
 | 6 | Tier 2 bot and recorder; calibrate the simulator from 2 to 3 real fights | **built and run once 2026-11-17**; dodging, cover and tow stealing not in the bot; calibration of the strafing hit rate still open |
-| 7 | Build the chosen fixes, re-measure in both tiers, then the human playtest | **in progress**: 7a tuning fixes **built 2026-11-17** (suites 101/103, the two known intermittents); 7b spores **built 2026-11-17** (109/109, not yet seen in a fight); 7c ward **built 2026-11-18** (112/112, seen in one real fight); 7d key letters **modelled 2026-11-18**, build decided, not built |
+| 7 | Build the chosen fixes, re-measure in both tiers, then the human playtest | **in progress**: 7a tuning fixes **built 2026-11-17** (suites 101/103, the two known intermittents); 7b spores **built 2026-11-17** (109/109, not yet seen in a fight); 7c ward **built 2026-11-18** (112/112, seen in one real fight); 7d key letters **built 2026-11-18** with 4-wildcard ledges (116/116; the gate seen opening on the review island, no client tap yet) |
 
 ## How to run the simulator
 
@@ -541,12 +570,11 @@ Updated 2026-11-18. See § Second pass for what the numbers below rest on.
 
 1. **Done 2026-11-18**: suites 112/112 and one real fight (§ Third and fourth runs).
 2. **Done 2026-11-18**: the user's two choices are decisions 5 and 6.
-3. **Build key letters (7d)**, with 4 wildcards on each ledge (decision 6; the ledge
-   volumes are too small for 4 at the pool's 10.4-stud spacing, so they must grow in
-   the greybox): keys on a gate through
-   `BlockSpawner` and `BreakableWalls`, a 40-stud reach on those blocks, and curated
-   3- and 4-letter lists in `WordKits`. The carving must read as a tell: nobody finds
-   it by accident.
+3. **Done 2026-11-18**: key letters and 4-wildcard ledges built (§ Key letters, built).
+   **Save the place**: the key volumes and the bigger ledge zones live in the place
+   file. Left to do: tap a key letter on a real client (reach, the gold outline, the
+   fizzle when too far); teach the bot to walk to a gate; the carving on the gate; and
+   decide whether a strong speller should be paid more behind a gate (0.7x now).
 4. **Novice deaths** (about 4 a fight, band 1 to 2.5) come from the volley and no
    spore setting moves them. Not yet looked at.
 5. **Tier 2 calibration.** Teach the bot to strafe on a windup (the persona's

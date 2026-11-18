@@ -1,7 +1,7 @@
 ---
 type: system
 description: Walls the boss destroys (Phase 8 stage 1, 2026-11-13). A BasePart tagged BreakableWall has health; boss fireballs that stop on it and Ground Slams that reach it wear it through intact / cracked / critical / broken. The server owns health and collision and publishes WallHealth / WallState; the client owns the look. RegenSec walls re-seal, the rest stay broken until the arena's next round. Fed by two new SkillDelivery Bindables, WorldImpact and AoeImpact. Suite 7/7; real boss fire against a wall is not yet verified.
-updated: 2026-11-17
+updated: 2026-11-18
 ---
 
 # BreakableWalls
@@ -70,6 +70,21 @@ cover, so the default is a volley and a half: it survives a full volley even if 
 shot lands, and the second volley finishes it. `VOLLEY_SHOTS` mirrors
 `BossConfig`'s `FireballVolley.count`, and the suite asserts they match, so retuning
 the volley fails a test instead of quietly thinning every wall.
+
+## Key letters: the `OpenGate` event (2026-11-18)
+
+The one way a wall breaks other than boss fire. `Server.Arena.Events.OpenGate`
+(a BindableEvent beside the service) takes `(arenaId, gateId)`: every wall of that
+arena with that `GateId` that is not already broken loses all its health at once,
+through the same path as damage, so it publishes `WallState`, re-seals after `RegenSec`
+and is held by a `GateHoldZone` like any broken gate. A wall with another `GateId`, or
+the same one in another arena, is untouched; a request for an open gate does nothing.
+
+Who fires it is not the walls' business. Today it is `WordKitWatcher`, when the last
+letter of a gate's key kit is popped ([[systems/BlockSpawner]] § Key kits and pop
+reach). Baiting the boss into a gate still works. Test: `keygate_opens_and_reseals`;
+seen on the review island the same day (three keys popped server-side, `Gate_Stones`
+broke, re-sealed 25 s later with fresh keys).
 
 ## Regeneration and reset
 

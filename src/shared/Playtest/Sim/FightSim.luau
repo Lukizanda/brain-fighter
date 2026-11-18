@@ -249,7 +249,8 @@ end
 --     pass `spore = false` for a fight without them),
 --   ward = { atHp, letters, orbitRadius, cooldown, walkSpeed },
 --   keys = { gateCount, caveCount, popReach, noticeChance?, noticeRange? }
---     (key letters: noticeChance overrides every persona's own
+--     (key letters; defaults to the level's key kit volumes now that they
+--     are built, `keys = false` for a fight without them: noticeChance overrides every persona's own
 --     `noticeGate`; noticeRange defaults to the tap reach, on the view
 --     that a letter can be read from as far as it can be tapped)
 function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: number): Result
@@ -266,7 +267,36 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 	local timeLimit: number = tune.timeLimit or GameModeConstants.PVE_ROUND_TIME_LIMIT_SEC
 	local eatHeal: number = tune.eatHealFraction or boss.eatHealFraction
 	local manaCap = EnergyReservoirs.CAP_PER_COLOR
+	-- Key letters: as the level has them (key kit volumes), unless `tuning`
+	-- says otherwise (`keys = false` for a fight without them).
 	local keys = tune.keys
+	if keys == nil and next(level.keyKits) ~= nil then
+		local derived: any = { gateCount = 0, caveCount = 0 }
+		for gateId, kit in level.keyKits do
+			local isCave = false
+			for _, zone in level.zones do
+				if zone.gateId == gateId and zone.kitLength then
+					isCave = true
+				end
+			end
+			if isCave then
+				derived.caveCount = kit.count
+			else
+				derived.gateCount = kit.count
+			end
+			derived.popReach = kit.popReach or derived.popReach
+		end
+		derived.popReach = derived.popReach or BlockShoot.MAX_RAYCAST_DISTANCE
+		if derived.caveCount == 0 then
+			derived.caveCount = derived.gateCount
+		end
+		if derived.gateCount == 0 then
+			derived.gateCount = derived.caveCount
+		end
+		keys = derived
+	elseif keys == false then
+		keys = nil
+	end
 	local spore = tune.spore
 	if spore == nil and boss.sporeEveryNthAttack then
 		spore = {

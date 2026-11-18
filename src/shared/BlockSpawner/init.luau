@@ -54,6 +54,12 @@
 -- removeSpore / clearSpores take them away. Same standing as a fossil letter:
 -- no count, no refill, no tow. The boss decides everything a spore does.
 --
+-- Key kits (key letters): a kit volume with `kitOpensGate` holds a short key
+-- word; when its last letter is popped the pool tells whoever asked through
+-- onGateKitEmptied, naming the kit's gate. `popReach` on any box stamps a
+-- shorter tap reach on its blocks (KeyConstants). The pool knows nothing
+-- about walls: WordKitWatcher carries the news to them.
+--
 -- Ward letters: spawnWardLetter is a marked block with no lifetime that the
 -- boss's word ward moves round itself (moveWardLetter); clearWardLetters
 -- takes them away. Same standing as a spore: no count, no refill, no tow.
@@ -88,6 +94,7 @@ local Wildcard = require(ReplicatedStorage.Shared.Wildcard)
 local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 local LetterTables = require(script.LetterTables)
 local SporeConstants = require(script.SporeConstants)
+local KeyConstants = require(script.KeyConstants)
 local TowConstants = require(script.TowConstants)
 local WardConstants = require(script.WardConstants)
 local WordKits = require(script.WordKits)
@@ -134,6 +141,8 @@ local COLOR_ONLY_ATTRIBUTE = "ColorOnly"
 local BLOCK_QUOTA_ATTRIBUTE = "BlockQuota"
 local WORD_KIT_ATTRIBUTE = "WordKit"
 local KIT_GATE_ATTRIBUTE = "KitGate"
+local KIT_OPENS_GATE_ATTRIBUTE = "KitOpensGate"
+local POP_REACH_ATTRIBUTE = "PopReach"
 
 local UNNAMED_BOX_LABEL = "(unnamed box)"
 
@@ -163,6 +172,12 @@ export type BoxDef = {
 	-- Word kit fields (Phase 8 stage 7); absent means an ordinary box.
 	wordKit: number?,  -- word length: the box holds one shuffled word of this length
 	kitGate: string?,  -- re-rolled by rerollKitsForGate(kitGate)
+	-- Key kit: the kit holds a key word (WordKits key lists, lengths 3 and 4)
+	-- and emptying it is announced through onGateKitEmptied(kitGate). Needs
+	-- wordKit and kitGate.
+	kitOpensGate: boolean?,
+	-- Blocks of this box can only be popped from within this many studs.
+	popReach: number?,
 	cframe: CFrame?,  -- the part's CFrame; a kit lays out along its local X axis
 	size: Vector3?,  -- the part's Size; Size.X is the kit's row length
 	-- With neither cframe nor size a kit uses the box centre and the
@@ -208,6 +223,8 @@ type BoxState = {
 	-- quota box.
 	kitLength: number?,
 	kitGate: string?,
+	opensGate: boolean,  -- a key kit: see BoxDef.kitOpensGate
+	popReach: number?,
 	kitWord: string?,  -- the word currently laid out
 	kitColor: string?,  -- the colour it was rolled in
 	-- Bumped by every roll and every scheduled roll, so a timer that was
@@ -245,8 +262,40 @@ local function makeBoxState(def: BoxDef, arenaId: string): BoxState
 
 	-- A kit's word length. WordKit implies the block count and the letters,
 	-- so BlockQuota and LetterTable are ignored on a kit volume (below).
+	local opensGate = def.kitOpensGate == true
+	if opensGate and (def.wordKit == nil or def.kitGate == nil or def.kitGate == "") then
+		log:warn(string.format(
+			"[%s] %s: %s needs both %s and %s — ignoring it",
+			arenaId, label, KIT_OPENS_GATE_ATTRIBUTE, WORD_KIT_ATTRIBUTE, KIT_GATE_ATTRIBUTE
+		))
+		opensGate = false
+	end
+
+	local popReach: number? = nil
+	if def.popReach ~= nil then
+		if def.popReach > 0 then
+			popReach = def.popReach
+		else
+			log:warn(string.format(
+				"[%s] %s: %s must be above 0, got %s — ignoring it",
+				arenaId, label, POP_REACH_ATTRIBUTE, tostring(def.popReach)
+			))
+		end
+	end
+
 	local kitLength: number? = nil
-	if def.wordKit ~= nil then
+	if def.wordKit ~= nil and opensGate then
+		if WordKits.isSupportedKeyLength(def.wordKit) then
+			kitLength = def.wordKit
+		else
+			kitLength = WordKits.nearestKeyLength(def.wordKit)
+			log:warn(string.format(
+				"[%s] %s: %s %s is not a supported key word length (supported: %s) — using %d",
+				arenaId, label, WORD_KIT_ATTRIBUTE, tostring(def.wordKit),
+				table.concat(WordKits.keyLengths(), ", "), kitLength
+			))
+		end
+	elseif def.wordKit ~= nil then
 		if WordKits.isSupportedLength(def.wordKit) then
 			kitLength = def.wordKit
 		else
@@ -334,6 +383,8 @@ local function makeBoxState(def: BoxDef, arenaId: string): BoxState
 		spacingWarned = false,
 		kitLength = kitLength,
 		kitGate = kitGate,
+		opensGate = opensGate,
+		popReach = popReach,
 		kitWord = nil,
 		kitColor = nil,
 		kitToken = 0,
@@ -406,6 +457,8 @@ BlockSpawner.COLOR_ONLY_ATTRIBUTE = COLOR_ONLY_ATTRIBUTE
 BlockSpawner.BLOCK_QUOTA_ATTRIBUTE = BLOCK_QUOTA_ATTRIBUTE
 BlockSpawner.WORD_KIT_ATTRIBUTE = WORD_KIT_ATTRIBUTE
 BlockSpawner.KIT_GATE_ATTRIBUTE = KIT_GATE_ATTRIBUTE
+BlockSpawner.KIT_OPENS_GATE_ATTRIBUTE = KIT_OPENS_GATE_ATTRIBUTE
+BlockSpawner.POP_REACH_ATTRIBUTE = POP_REACH_ATTRIBUTE
 
 export type BlockSpawner = typeof(setmetatable(
 	{} :: {
@@ -436,6 +489,9 @@ export type BlockSpawner = typeof(setmetatable(
 		_spores: { [Model]: boolean },
 		-- The blocks that are ward letters (see spawnWardLetter); also in _timed.
 		_wards: { [Model]: boolean },
+		-- Who to tell when a key kit is emptied (see onGateKitEmptied).
+		_gateKitListeners: { [number]: (gate: string) -> () },
+		_gateKitListenerId: number,
 		-- Pool blocks currently being pulled toward a point (see beginTow).
 		-- They stay in `_active` and in their box's count the whole time.
 		_towed: { [Model]: boolean },
@@ -499,6 +555,8 @@ function BlockSpawner.new(userOpts: Opts?): BlockSpawner
 		_timed = {},
 		_spores = {},
 		_wards = {},
+		_gateKitListeners = {},
+		_gateKitListenerId = 0,
 		_towed = {},
 		_running = false,
 		_destroyed = false,
@@ -688,6 +746,9 @@ function BlockSpawner._spawnTracked(self: BlockSpawner, letter: string, color: s
 	-- session is in a different arena — the range check alone would let a
 	-- hub player at the boundary pop arena blocks (chunk 9).
 	block:SetAttribute(Arena.ID_ATTRIBUTE, self.arenaId)
+	if box.popReach ~= nil then
+		block:SetAttribute(KeyConstants.POP_REACH_ATTRIBUTE, box.popReach)
+	end
 	self._active[block] = box
 	self._activeCount += 1
 	box.count += 1
@@ -764,7 +825,7 @@ function BlockSpawner._rollKit(self: BlockSpawner, box: BoxState)
 	box.kitToken += 1
 	self:_clearBox(box)
 
-	local word = WordKits.pick(length, box.kitWord)
+	local word = if box.opensGate then WordKits.pickKey(length, box.kitWord) else WordKits.pick(length, box.kitWord)
 	local color = box.colorOnly or self:_pickColor(box.kitColor)
 	local letters = WordKits.shuffledLetters(word)
 	box.kitWord = word
@@ -819,9 +880,33 @@ end
 -- A kit letter was consumed. The kit does not refill letter by letter: an
 -- emptied kit with no gate is replaced whole after the respawn delay; an
 -- emptied kit with a gate waits for rerollKitsForGate (or a new round).
+--
+-- An emptied KEY kit is also announced: its last letter was popped, which is
+-- what opens its gate. Only a pop gets here; a kit cleared for a re-roll has
+-- its bookkeeping removed first and is not seen as consumed.
 function BlockSpawner._onKitLetterConsumed(self: BlockSpawner, box: BoxState)
-	if box.count == 0 and box.kitGate == nil then
+	if box.count ~= 0 then
+		return
+	end
+	local gate = box.kitGate
+	if gate == nil then
 		self:_scheduleKitRoll(box)
+	elseif box.opensGate then
+		log:info(string.format("[%s] %s: key word %s popped — gate '%s'", self.arenaId, box.label, tostring(box.kitWord), gate))
+		for _, listener in self._gateKitListeners do
+			task.spawn(listener, gate)
+		end
+	end
+end
+
+-- Calls `listener(gateId)` each time the last letter of a key kit (a kit with
+-- `kitOpensGate`) is popped. Returns a function that stops it.
+function BlockSpawner.onGateKitEmptied(self: BlockSpawner, listener: (gate: string) -> ()): () -> ()
+	self._gateKitListenerId += 1
+	local id = self._gateKitListenerId
+	self._gateKitListeners[id] = listener
+	return function()
+		self._gateKitListeners[id] = nil
 	end
 end
 

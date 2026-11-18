@@ -134,6 +134,16 @@ local function sendPop(block: Model): boolean
 		return false
 	end
 
+	-- Key letters have a reach of their own, measured from the character:
+	-- the server would refuse the pop, so refuse it here first.
+	local character = Players.LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") and not BlockShoot.withinOwnReach(block, root.Position) then
+		fizzleSound:Play()
+		log:info(string.format("'%s' is a key letter and too far to pop - walk closer", letter))
+		return false
+	end
+
 	-- Read before firing: the server destroys the block, and the burst
 	-- needs to start from where it stood, not from a Model mid-teardown.
 	local blockPos = block:GetPivot().Position
@@ -325,6 +335,11 @@ local function updateHover()
 	-- precisely the blocks a click would fail to reach, not approximately
 	-- those.
 	local inRange = result.Distance <= BlockShoot.MAX_RAYCAST_DISTANCE
+	local hoverCharacter = Players.LocalPlayer.Character
+	local hoverRoot = hoverCharacter and hoverCharacter:FindFirstChild("HumanoidRootPart")
+	if inRange and hoverRoot and hoverRoot:IsA("BasePart") then
+		inRange = BlockShoot.withinOwnReach(block, hoverRoot.Position)
+	end
 	local _, color = BlockShoot.readBlock(block)
 	showHover(block, inRange and not session.mindFullManager:isMindFull(), color)
 end

@@ -25,6 +25,17 @@
 -- because opening a vault with your own Fireball would remove the baiting
 -- the layout is built around.
 --
+-- The one other way a wall breaks is its key letters (wiki/design/
+-- ai-playtest.md § Gate redesign): the sibling event
+--
+--   OpenGate(arenaId, gateId)
+--       every intact wall of that arena with that GateId breaks at once,
+--       exactly as if its last point of health had been shot away (so it
+--       re-seals and holds like any broken gate)
+--
+-- Who may fire it is the firer's business; today that is WordKitWatcher,
+-- when the last letter of a gate's key kit is popped.
+--
 -- A broken wall stays in the DataModel, non-colliding and non-queryable,
 -- so it can re-seal and so taps and fireballs pass through it.
 --   RegenSec > 0 : re-seals that many seconds after breaking, but not
@@ -53,6 +64,7 @@ local State = C.State
 local worldImpactEvent = ReplicatedStorage.Shared.Skills.SkillEvents.WorldImpact :: BindableEvent
 local aoeImpactEvent = ReplicatedStorage.Shared.Skills.SkillEvents.AoeImpact :: BindableEvent
 local roundStartedEvent = ServerScriptService.Server.GameMode.Events.RoundStarted :: BindableEvent
+local openGateEvent = script.Parent.Events.OpenGate :: BindableEvent
 
 type Wall = {
 	part: BasePart,
@@ -305,6 +317,20 @@ local function onAoeImpact(center: any, radius: any, _skillName: any, source: an
 	end
 end
 
+local function onOpenGate(arenaId: any, gateId: any)
+	if type(arenaId) ~= "string" or type(gateId) ~= "string" or gateId == "" then
+		return
+	end
+	local opened = 0
+	for part, wall in walls do
+		if wall.state ~= State.Broken and Arena.idOf(part) == arenaId and part:GetAttribute(C.Authored.GateId) == gateId then
+			applyDamage(wall, wall.health)
+			opened += 1
+		end
+	end
+	log:info(string.format("[%s] gate '%s' opened by its key letters - %d wall(s)", arenaId, gateId, opened))
+end
+
 local function onRoundStarted(_roster: any, arenaId: any)
 	if type(arenaId) ~= "string" then
 		return
@@ -377,6 +403,7 @@ function BreakableWallService.enable()
 	table.insert(eventConns, worldImpactEvent.Event:Connect(onWorldImpact))
 	table.insert(eventConns, aoeImpactEvent.Event:Connect(onAoeImpact))
 	table.insert(eventConns, roundStartedEvent.Event:Connect(onRoundStarted))
+	table.insert(eventConns, openGateEvent.Event:Connect(onOpenGate))
 	-- A wall that broke before a pause still owes its re-seal.
 	for _, wall in walls do
 		if wall.state == State.Broken then
