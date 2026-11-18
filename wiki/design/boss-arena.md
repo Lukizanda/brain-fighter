@@ -675,8 +675,7 @@ Steps 2 and 3 were done on 2026-11-18: see § The island dressed.
 2. ~~`BreakableWallVisuals` learns the `Deco_` / `Seam_` children.~~ Done.
 3. ~~A swap script maps each greybox part to an asset and pivots a clone onto it.~~
    Done as four dress passes.
-4. Lighting was not touched. The place's haze and flat ambient do the art no favours;
-   a lighting pass is its own decision.
+4. ~~Lighting was not touched.~~ Done 2026-11-18: see § Lighting.
 
 ## The island dressed (2026-11-18)
 
@@ -762,9 +761,10 @@ player can step onto.
 
 Left open by the review:
 
-- Ring-out edges (the Spit, the Overhang slab) fade into the pale horizon, and the
+- ~~Ring-out edges (the Spit, the Overhang slab) fade into the pale horizon, and the
   lobby and the baseline island show over the low rim: for the lighting pass and the
-  swap.
+  swap.~~ The Spit now reads against the dusk haze and the other islands are faint
+  shapes (§ Lighting); the Overhang slab is unchecked, and the swap removes the rest.
 - The ready room's entry ring is orange neon, a hue reserved for the boss: for the
   ready room's real dressing.
 - The Stones marker reaches about 1.4 studs into a corner of the Stones key-letter
@@ -774,6 +774,67 @@ Left open by the review:
   against the floor and the blue-grey ridge; fireballs and the spore ring against the
   floor and dais; whether new players read the cave as an exit; edges and fossil glyphs
   at distance; frame rate with about 1,800 more parts.
+
+## Lighting (2026-11-18)
+
+Phase 8 stage 10d. The user asked for a lighting pass on the boss island, as a senior
+lighting artist, with a senior designer to consult. Decided by the user: **the arena
+gets its own preset** (the lobby keeps the place's look), the mood is **high-altitude
+dusk**, and a designer reviews it before the user does.
+
+**Why a client controller.** The Lighting service is one per place, so the hub, the
+duel pads and both islands share it. `client/Arena/ArenaLighting` records the place's
+own Lighting at start as the hub look and cross-fades (2 s) to a preset while the local
+Player's `PlayerState` is `InArena` in an arena that asks for one, and back when they
+leave. Which arena asks: `ARENA_PRESET[arenaId]` (the code-made Default arena), else the
+`Mode` on the arena's `ArenaSlot` part through `MODE_PRESET` (`PvEBoss` → `BossDusk`).
+It is the only writer of the Lighting properties a preset names, of those properties on
+the place's Atmosphere and Bloom, and of its own `ArenaGrade` ColorCorrectionEffect;
+`ScreenImpact`'s effects are untouched. Presets live in
+`Shared/Arena/ArenaLightingConstants`. The place file's Lighting is unchanged, so the
+lobby looks as before and editing it in Studio needs no code change.
+
+**`BossDusk`.** Sun at about 14 degrees, toward -X and 24 degrees toward -Z: from the
+arrival overlook the player looks into the sunset past the dais. Warm key
+(`ColorShift_Top` 255,196,148), near-neutral shadow fill (`OutdoorAmbient` 126,120,132),
+dark cool `Ambient` so the cave stays a dark mouth, peach-to-violet haze (density
+0.45), bloom from threshold 1.2 so Neon seams, runes and the Brain's core glow and stone
+does not, a grade of contrast 0.12 at saturation 0. The skybox stays the place's
+daytime blue overhead (it is the hub's too), so the look is late afternoon with a sunset
+horizon rather than a full dusk sky.
+
+**Local lights.** A dress pass, `dress/lighting.luau` (`Dress_Lighting`, audit
+`problems: 0`), adds six PointLights, shadows off, coloured from palette roles: the
+dais (Rune, range 20, reaches the dais top at radius 19.8, inside Ground Slam's 22),
+the back of the cave chamber (GateSeam, range 14) and one per rim crystal cluster
+(Crystal, range 12). **No light on a breakable** (walls, gates, the plug, the Overhang
+slab): it would outlive its wall. Their Neon seams carry the "light in the joints" tell
+through the bloom. The lights are in the place file, which needs saving.
+
+**Designer's review.** The same read-only role as before, in its own playtest. Verdict:
+**agree with conditions**, no blockers. Passed by measurement: the dais light inside
+radius 22 and 25 degrees of hue from the boss violet; spore-ring and fireball probes
+readable on sunlit floor, shadowed floor and the dais; nothing in a letter band or lane;
+letters against the sun still legible; the Spit's edge reads against the haze. Its
+two conditions, both fixed and re-shot in a second playtest:
+
+| Condition | Fix |
+|---|---|
+| The other islands still showed: `IslandGreybox`'s letters readable from the Spit, `LevelArtShowcase` on the horizon past the Stones like a grey city | Haze density 0.38 → 0.45: the showcase is gone into haze and the baseline island is a faint shape with no readable letters |
+| High-contrast blue letters lost against the west ridge, whose inner face (backlit by the low sun) was navy | `OutdoorAmbient` from blue 110,116,148 to near-neutral; the ridge face is blue-grey and the blue blocks separate |
+
+Also changed from its notes: the sun 2 degrees higher (its raycasts put 56% of the floor
+in shadow at 12 degrees, hiding nothing but striping the dais), and bloom threshold 1.4
+→ 1.2 so the backlit Spit gate's and the plug's seams still glow. Not re-measured after
+these: the shadow share and the seams.
+
+**For the swap.** Delete or move `Workspace.LevelArtShowcase` too: the haze thins it but
+a player who looks for it will find it. `IslandGreybox` goes with the swap already.
+
+**Not checked:** a real fight (the boss's own colours, real fireballs and spore ring
+under this light), frame rate, the Overhang slab from outside the ring, the cave with
+its plug broken, the ready room (it shares the island's `ArenaId`, so it gets the
+preset too).
 
 ## Pick up here (rewritten 2026-11-14 at the end of the session)
 

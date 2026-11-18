@@ -22,6 +22,7 @@ Nothing here is game code and nothing in the game requires it.
 | `vignette.luau` | A slice of the island assembled from the kits |
 | `dress/rocks.luau`, `dress/terrain.luau`, `dress/setpieces.luau` | The dress passes: each puts one kit on the real island |
 | `dress/lead.luau` | The lead's pass: hides the greybox's working volumes. Run it last |
+| `dress/lighting.luau` | Local lights on the island (dais, cave, rim crystals). Run after `dress/setpieces.luau`. The sky, sun and haze are game code, not here: `client/Arena/ArenaLighting` |
 
 ## Running a file
 
@@ -72,7 +73,7 @@ The `:Clone()` is required: Edit mode caches `require` results across calls
 - **Deterministic.** Use `Random.new(<fixed seed>)`, never `math.random`, so a re-run
   gives the same rock.
 - **Stay in your strip.** `ART.ROWS[<row>]` gives each kit its Z line and X range.
-- **Leave the rest of the place alone.** No changes to Lighting, Terrain,
+- **Leave the rest of the place alone.** No changes to the Lighting service (the arena's look is `ArenaLightingConstants`; local lights go in `dress/lighting.luau`), Terrain,
   `Workspace.Arena`, the lobby or any script.
 
 ## Dressing the island
