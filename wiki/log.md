@@ -2213,3 +2213,7 @@ The user asked for a boss whose movement telegraphs attacks and shows vulnerabil
 ## [2026-11-18] ingest | Boss movement foundation for stages 11b-11d
 
 Before splitting 11b/11c/11d across parallel sessions: `BossStates` publishes `PendingAttack` and `WindupEndsAt`, reads per-attack prep lengths (`attackPrepSec`: Volley 0.8, SporeLob 0.9, GroundSlam 1.0) and honours a `stunnedUntil` hold and an `onAttackFinished` hook; `BossWard` publishes `WardUp` / `WardLettersLeft`; the puppet applies three pose layers (`client/Vfx/BossPoses/`, stubs). Compile-checked in Studio; not playtested (the session's two playtests were spent on 11a). `design/boss-movement` § Foundation.
+
+## [2026-11-18] ingest | Level art: the user accepts the designer's rulings and picks IslandReview
+
+`design/boss-arena` § Level art: the user accepted the senior designer's rulings and named `IslandReview` as the island to art, closing pick-up item 1. The four rulings the designer amended after the dress pass are read as covered by the same acceptance, and the page says so. The user also asked for a session to make `BreakableWallVisuals` follow `Deco_` / `Seam_` children; that had already shipped in `69af2ef` the same day, so no session was started. No code changed.

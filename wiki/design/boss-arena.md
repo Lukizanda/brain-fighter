@@ -613,11 +613,12 @@ stone with cool light in the joints; a plum rune circle under the boss.
 
 A designer session (Opus, read-only) answered ten questions before the artists were
 briefed. **[W]** is a decision already in this wiki or the code. **[J]** is the
-designer's own judgment: **the user has not confirmed any [J] ruling.**
+designer's own judgment. **The user accepted the designer's rulings on 2026-11-18**
+("accept the designer rulings"), so the [J] rows below now stand as decisions.
 
 | Topic | Ruling |
 |---|---|
-| Island | Build for `IslandReview`. The user's pick between the two islands is still open [W], but every boss fight and the AI playtest run on it |
+| Island | Build for `IslandReview`. **Decided by the user 2026-11-18: `IslandReview` is the island to art.** Before that the pick was open [W], but every boss fight and the AI playtest run on it |
 | Stable | Floor top and outline, the ridge collider ring, the three exits, the cave chamber (32 x 28 x 14), dais radius 22 (it follows Ground Slam), cover heights by role [W] |
 | Provisional | Gates and the cave plug (key letters decided 2026-11-17, not built; health may drop to 12); the return stairs (likely to go); the overlook (safe-spot fix not yet seen in a fight); cover counts and positions, spire health, letter heights (stage 4) |
 | Collision [J] | The greybox boxes stay the collision **and query** truth. Art is non-colliding with `CanQuery` off: `BlockTapController` raycasts without `RespectCanCollide`, so a queryable banner would block taps |
@@ -670,7 +671,7 @@ Known weak points, for the review:
 
 Steps 2 and 3 were done on 2026-11-18: see § The island dressed.
 
-1. The user reviews the dressed island and the [J] rulings above.
+1. The user reviews the dressed island. (The rulings were accepted 2026-11-18.)
 2. ~~`BreakableWallVisuals` learns the `Deco_` / `Seam_` children.~~ Done.
 3. ~~A swap script maps each greybox part to an asset and pivots a clone onto it.~~
    Done as four dress passes.
@@ -737,8 +738,9 @@ The designer measured and passed: lanes from the boss point to the three gates a
 cave plug clear from +3 to +12, no art in any letter zone, dais radius 22 and the only
 plum, cover decoration within 1 stud, breakable body colour and gate seams as ruled.
 
-Rulings the designer changed after seeing them built (its own judgment, **not confirmed
-by the user**):
+Rulings the designer changed after seeing them built. The user's acceptance of
+2026-11-18 was given as "accept the designer rulings" without naming these four, and is
+read here as covering them; say so if not:
 
 - **Spires and tall cover:** the 1-stud envelope stands up to +12. Above +12 decoration
   may reach 3 studs outside the box, with a top of +3. Up to 12 `Deco_` / `Seam_`
@@ -780,7 +782,8 @@ baseline) and `IslandReview` (the senior review's copy, plus the wider cave plug
 the gate hold zones). Each has a pad in the lobby. **The place file had unsaved changes
 when the session ended**; check both models still exist before assuming they do.
 
-1. **The user walks both islands and picks one.** The review copy is the candidate.
+1. ~~The user walks both islands and picks one.~~ **Picked 2026-11-18: `IslandReview`.**
+   `IslandGreybox` is now only the baseline for comparison. The review copy was the candidate.
    Nobody but the review session has looked at it. Decide then whether the stairs back
    in stay now that gates hold open.
 2. **Watch a letter being pulled, on a client.** Built and tested server-side only:
