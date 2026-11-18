@@ -27,6 +27,8 @@ local NPCTypes   = require(ReplicatedStorage.Shared.NPC.NPCTypes)
 local Logger     = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillTypes = require(ReplicatedStorage.Shared.Skills.SkillTypes)
 local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
+local BossConstants = require(ReplicatedStorage.Shared.Boss.BossConstants)
+local BrainBody = require(ReplicatedStorage.Shared.Boss.BrainBody)
 
 local Actions      = require(ServerScriptService.Server.AI.Scripts.Actions)
 local Perception   = require(ServerScriptService.Server.AI.Scripts.Perception)
@@ -215,6 +217,13 @@ function BossController:tick(dt: number)
 			if not character:GetAttribute(SkillConstants.FROZEN_ATTRIBUTE) then
 				bb.humanoid.WalkSpeed = newSpec.walkSpeed
 			end
+		end
+
+		-- The phase's colour and number, for every client: the body wears
+		-- the colour, the puppet reads the number (wiki/design/boss-movement.md).
+		bb.npc:SetAttribute(BossConstants.PHASE_ATTRIBUTE, newIndex)
+		if bb.npc:GetAttribute(BrainBody.BODY_ATTRIBUTE) == BrainBody.BODY_NAME then
+			BrainBody.recolor(bb.npc, newSpec.bodyColor.Color)
 		end
 
 		if self._onPhaseChanged then

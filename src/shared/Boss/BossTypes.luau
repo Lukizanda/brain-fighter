@@ -36,6 +36,10 @@ export type BossTypeSpec = {
 	bodyScale: number,
 	rigName: string?,
 	hipHeight: number?,
+	-- The animated body built on the rig at spawn (BrainBody.BODY_NAME), in
+	-- place of the template's welded parts. Absent = the template as it is.
+	-- See wiki/design/boss-movement.md.
+	body: string?,
 	respawnDelaySec: number,
 	-- Seconds between the first player arriving on an arena's island and
 	-- the boss appearing, in an arena whose players enter through an

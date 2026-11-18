@@ -123,6 +123,13 @@ local BossConstants = {
 	-- carries no attackCooldown of its own. Every shipped phase does, so
 	-- this is the "a new phase forgot one" guard rather than a tuning dial.
 	DEFAULT_ATTACK_COOLDOWN_SEC = 4,
+
+	-- ============================================================
+	-- Published intent (read by the client puppet, wiki/design/boss-movement.md)
+	-- ============================================================
+	-- The boss Model's current phase index, set at spawn and on every
+	-- phase change.
+	PHASE_ATTRIBUTE = "Phase",
 }
 
 return BossConstants

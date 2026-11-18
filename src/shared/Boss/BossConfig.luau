@@ -31,6 +31,9 @@ local bossTypes: { [string]: BossTypeSpec } = {
 		maxHealth        = 1500,
 		bodyScale        = 1,
 		rigName          = "BossBrain",
+		-- Lobes over a neon core on Motor6Ds, animated by each client
+		-- (wiki/design/boss-movement.md).
+		body             = "Brain",
 		hipHeight        = 6,
 		respawnDelaySec  = 5,
 		-- Time for arriving players to read the island and reach cover before

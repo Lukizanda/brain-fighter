@@ -59,6 +59,11 @@ Model "Boss"  [tag: "Boss"]
 └── BillboardGui (on HRP, StudsOffset 0,9,0 — "BOSS" label)
 ```
 
+**The animated body (2026-11-18, [[design/boss-movement]] stage 11a).** The tree above is the Studio template. A type with `body = "Brain"` (the Brain has it) has those four welded parts replaced at spawn by `Shared/Boss/BrainBody.build`, on disk: an invisible `BrainRoot` on a Motor6D from the root part, and on Motor6Ds from it two ellipsoid lobes (a `Sphere` SpecialMesh, hinged at the bottom of the fissure so they can swing open, three darker ridges welded to each), a neon `Core` with a `PointLight` that the closed lobes hide but for a glowing seam, a cerebellum, a stem hinged at its top, two neon eyes with welded pupils and four `Neuron` balls tied to the core by `Beam`s. Every part is massless, non-colliding and non-queryable, so the Humanoid physics and every hit check are unchanged. The Model carries `BossBody = "Brain"` and `Phase`.
+
+- **Who writes what.** The server builds the body and owns its colours: `BossController` sets `Phase` and calls `BrainBody.recolor` on each phase change, so phase 2's Crimson now shows. `client/Vfx/BossPuppet` owns every body joint's `Transform` and the lobes' mesh `Scale`, neither of which replicates: hover bob, breathing, a lean into its travel (pitch and roll from the replicated root velocity), a trailing stem, eyes turned to the nearest player (clamped to 40°), orbiting neurons, a pulsing core light, and on each health drop a spring wobble (squash, tilt, lobes flinching open) with a white `Highlight` flash. While `_frozen` is set every joint holds its pose. Tuning: `Shared/Boss/BossPuppetConstants`.
+- Verified 2026-11-18 in a playtest with a boss spawned by `BossSpawner` and moved by hand (no AI): leaning 9.6° at walk speed 6, a 60-damage hit flashed, squashed and flinched, a freeze held the pose and let go; screenshots front and side. Arena suite 48/48 after the spawner change. **Not seen in a real fight**, and no attack tells yet (stage 11b).
+
 **KeepColor attribute**: parts with `KeepColor=true` are skipped by BossSpawner's coloring loop and keep their template color. Used for the eyes.
 
 **Custom rigs**: `BossSpawner` skips the ShieldPart/LeftArmCore welded accessories when `typeSpec.rigName` is set — custom rigs define their own visual parts in the template. The BossBrain model lives in `ServerStorage.AIWorldData.Rigs` (Studio-only, not on disk).
@@ -91,7 +96,7 @@ type PhaseSpec = {
 | 1 | 1.0 (spawn) | FireballVolley, GroundSlam | 4 s | 6 |
 | 2 | 0.5 (the word ward's line) | FireballVolley, GroundSlam | 3 s | 9 |
 
-`bodyColor` is only read at spawn (`BossSpawner`), so phase 2's Crimson is not shown yet.
+`bodyColor` is read at spawn (`BossSpawner`) and, for a boss with an animated body, on every phase change (`BrainBody.recolor`, 2026-11-18), so phase 2's Crimson shows on the Brain.
 
 ## State Machine
 
@@ -477,7 +482,7 @@ runs): health stopped at 750 of 1500, four letters popped, floor cleared, walk s
 
 ## Future Work
 
-- **BossBrain visual iteration** — sphere + eyes is a first pass; the model lives in Studio (ServerStorage.AIWorldData.Rigs.BossBrain) and can be reshaped without any code changes.
+- **BossBrain visual iteration** — the body is now built from disk (`BrainBody`) and animated by the client; attack tells, vulnerability windows and the death sequence are stages 11b–11d of [[design/boss-movement]].
 - **hipHeight hover** — `hipHeight=6` in BossConfig is the intent but Roblox's Humanoid continuously recalculates HipHeight from R15 leg geometry (settles at ~2). To achieve a higher hover: resize the hidden Patroller legs in the BossBrain template, or replace the skeleton with a minimal custom joint structure.
 - **Destructible parts** — `destroyedParts` blackboard field is the scaffold; no health pools yet.
 - **Multi-phase behavior** — add entries to `BossConfig.BOSS_TYPES[<name>].phases`; BossPhaseManager and BossController handle the rest without code changes.

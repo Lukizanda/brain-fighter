@@ -22,6 +22,7 @@ local BossTypes = require(ReplicatedStorage.Shared.Boss.BossTypes)
 local Logger    = require(ReplicatedStorage.Shared.Core.Logger)
 local BossConstants = require(ReplicatedStorage.Shared.Boss.BossConstants)
 local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
+local BrainBody = require(ReplicatedStorage.Shared.Boss.BrainBody)
 
 type BossTypeSpec = BossTypes.BossTypeSpec
 
@@ -213,6 +214,15 @@ function BossSpawner.spawn(bossPoint: BasePart, typeSpec: BossTypeSpec): Model?
 			partName     = "LeftArm",
 		})
 	end
+
+	-- ── Animated body (built after the colouring loop, which it must not
+	-- reach: the body colours its own parts) ─────────────────────────
+	if hrp and hrp:IsA("BasePart") and typeSpec.body == BrainBody.BODY_NAME then
+		BrainBody.build(boss, hrp :: BasePart, phase1.bodyColor.Color)
+	elseif typeSpec.body then
+		log:warn("Unknown boss body '" .. typeSpec.body .. "'; keeping the template's parts")
+	end
+	boss:SetAttribute(BossConstants.PHASE_ATTRIBUTE, phase1.index)
 
 	-- ── Billboard ───────────────────────────────────────────────
 	addBillboard(boss)
