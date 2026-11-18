@@ -386,6 +386,7 @@ Added 2026-11-13 at the user's request. Full design, measured arena, layout tabl
 | 9 | Hungry brain: the boss eats the nearest letter on a timer and heals a little (added 2026-11-13 from the mechanics ideation) | no, after 8 | **built 2026-11-13**, 9 tests — [[systems/Boss]] § Hunger |
 | 6 | Arrival beat: timed boss entrance from the first arrival, brief arrival protection (added 2026-11-13 after the user's first walk-through) | no | **built 2026-11-13**, 6 tests — [[systems/Boss]] § Entrance, [[systems/Health]] § Protection |
 | 5 | Arena entry teleporter (one-way pad from the ready room to the island; the bridge is removed, so leaving means dying or quitting) | with 1 | **built 2026-11-13**, 3 tests — [[systems/ArenaEntry]] |
+| 10 | Level art: replace the greybox look with art from native Roblox primitives (added 2026-11-18). 10a a reviewed asset kit in a showcase; 10b `BreakableWallVisuals` follows `Deco_` / `Seam_` children; 10c the swap onto the chosen island; 10d lighting | 10a with three artist agents | **10a built 2026-11-18**: 36 assets and a vignette in `Workspace.LevelArtShowcase`, waiting on the user's review — [[design/boss-arena]] § Level art. 10b to 10d not started |
 
 **Sequenced before the unlisted publish** (user, 2026-11-13); see § Current focus step 1a. "Quit" from the arena is the `LobbyReturnPad` in the ready room, not an in-fight button.
 
@@ -395,6 +396,7 @@ Plan, metric matrix, personas, results and stages: [[design/ai-playtest]]. Tier 
 
 ## Plan changelog
 
+- **2026-11-18**: **Phase 8 stage 10 added** — level art for the boss island, at the user's request: native Roblox shapes and built-in materials, built by a team of artist agents in a showcase beside the level, greybox not replaced. A senior-designer session ruled on collision, breakables, colour and air space first ([[design/boss-arena]] § Level art); its own-judgment rulings are not yet confirmed by the user.
 - **2026-11-17**: **Phase 9 added** — an automated playtest of the boss arena ([[design/ai-playtest]]). The user asked for an AI-driven playtest with metrics that stand for fun before any human playtest, and is open to new boss moves, phases and minions destroyed by letter gathering. A designer pass fixed six pillars, eighteen metrics and six personas; the simulator's first run found the novice cannot win, the strong speller wins in under 50 s, and the overlook is a complete safe spot. No tuning has been changed.
 
 - **2026-11-13**: **Phase 8 stages 8 and 9 added** — fossil letters and the hungry brain, picked by the user from a mechanics ideation session ([[design/boss-arena]] § Mechanics ideation). They run one after the other behind stage 7, because all three edit `BlockSpawner`. The toppling spire and the riddle stone went to [[ideas]].
