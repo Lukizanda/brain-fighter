@@ -469,9 +469,11 @@ A type without `wardAtHpFraction` has no ward (Wizard).
   `Block.Ward` mark for a client that wants to draw them differently).
 
 Verified 2026-11-18: `ward_holds_then_breaks`, `ward_ends_with_boss` and
-`phase_only_goes_forward`, in a full run of **111/112**. The failure was
-`ward_holds_then_breaks` reading the pool in the frame of a pop; fixed in the pool
-and **not run again**. **Nobody has seen a ward on a client or in a real fight.**
+`phase_only_goes_forward`, in a full run of **112/112** (the first run was 111/112:
+`ward_holds_then_breaks` read the pool in the frame of a pop; fixed in the pool).
+Seen in one real bot fight the same day ([[design/ai-playtest]] § Third and fourth
+runs): health stopped at 750 of 1500, four letters popped, floor cleared, walk speed
+6 to 9. **No person has watched one on a client**, so the cues are unjudged.
 
 ## Future Work
 

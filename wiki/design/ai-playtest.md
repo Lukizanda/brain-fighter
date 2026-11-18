@@ -421,8 +421,40 @@ believing it was on the island.** With streaming on, the entry pad had not reach
 the client when the bot arrived, and the bot read "no pad" as "no ready room"; the
 teleport into the ready room could also be read as the pad's teleport. Both paths
 are fixed (wait 10 s for a pad; count a jump only from beside the pad). **Not
-re-run**: the session had used its two playtests. Nothing built on 2026-11-17 or
-2026-11-18 has yet been seen in a real fight.
+re-run** in that sitting: the session had used its two playtests.
+
+### Third and fourth runs, with the user's go-ahead (2026-11-18)
+
+`RunTests = "all"`: **112/112**. Then one real fight, Average on `IslandReview`, the
+game as built (tuning fixes, spores, ward, phase 2):
+
+| | Real bot | Simulator, Average, as built with the ward |
+|---|---|---|
+| Outcome | **won in 143 s** | wins 100%, 120 s |
+| Deaths | 4 | 1.1 |
+| Damage taken | 505 (475 volley, 30 spore bursts) | about 170 |
+| Words memorized | 5 (FAB, MASHING, WONKY, AWARE, HYENA) | 5.5 |
+| Energy a minute | 39 | 41 |
+| Spores | 10 lobs, 24 popped, 6 burst | |
+| Share of boss damage from spore pops | **67%** | about 70% (as T1) |
+| Hunger heal ÷ damage dealt | 8% (17 letters eaten) | 5% |
+| Pacing (time to half ÷ time to kill) | 0.48 | 0.56 |
+| First cast | 44 s | 29 s |
+
+- **Everything built since 2026-11-17 was seen working in a real fight**: the boss
+  walked in to 70 studs and held there, lobbed spores on alternate volleys, stopped at
+  exactly 750 of 1500 health with the floor set, the bot popped the four ward letters
+  in under 10 s, the floor cleared, and the boss's walk speed went from 6 to 9. A
+  letter eaten after the ward took the boss back over half and it stayed in phase 2.
+- **The simulator's economy matches** (energy a minute, words, spore share). Its
+  deaths do not: the real bot still never dodges, so 4 deaths against 1.1 says
+  nothing new about the strafing hit rate.
+- **The loss of 2026-11-17 has become a win**: the same non-dodging bot lost on the
+  clock with 12 deaths before the fixes. Hunger heal fell from 44% to 8%.
+- The recorder credits some boss damage to the wrong spell (0.06 to Mend, a heal):
+  a health drop is tagged with the last cast when no cause arrives with it. Totals
+  are right; the split by spell is not to be trusted yet.
+- One fight is one sample.
 
 ## Decisions (user, 2026-11-17)
 
@@ -432,6 +464,8 @@ re-run**: the session had used its two playtests. Nothing built on 2026-11-17 or
 | 2 | How a young novice wins solo | **Spore letters that hurt the boss when popped.** Start at 3 a lob every second attack, 3% a pop, 15 burst damage in 8 studs after 6 s. Known side effect to tune: Average kills too fast (117 s) |
 | 3 | Word ward | **Build it.** Health stops at 50% until 4 orbiting letters are popped; then cooldown 3 s and walk speed 9 |
 | 4 | Gates and the cave never open | **Key letters** (chosen 2026-11-17 from three options, § Gate redesign): pop the three letters carved on a gate, from within 40 studs, and it breaks; the cave plug takes four. Boss baiting stays as a second way in. To be modelled in the simulator before it is built |
+| 5 | Spore tuning after the sweep (asked 2026-11-18) | **Keep 3 spores at 3% a pop.** Average killing in about 120 s (143 s in the one real fight) is accepted for now; retune after more real fights |
+| 6 | Key letters after the model (asked 2026-11-18) | **Build as modelled, and raise each ledge to 4 wildcards** so a trip pays (2.2x for Average, 1.1x for Strong in the simulator) |
 
 Build order: tuning fixes, then spores, then the ward (one after another: all three
 edit the Boss system). The gate redesign is a separate design pass.
@@ -478,7 +512,7 @@ tuning keys only: `ward = { atHp, letters, orbitRadius, cooldown, walkSpeed }` a
 | 4 | Sweep the tuning fixes; model spore letters and the word ward | **done 2026-11-17** except fix 6 (premium reach, gate health, wildcard split), which is not swept |
 | 5 | Decisions for the user | **decided 2026-11-17**, § Decisions |
 | 6 | Tier 2 bot and recorder; calibrate the simulator from 2 to 3 real fights | **built and run once 2026-11-17**; dodging, cover and tow stealing not in the bot; calibration of the strafing hit rate still open |
-| 7 | Build the chosen fixes, re-measure in both tiers, then the human playtest | **in progress**: 7a tuning fixes **built 2026-11-17** (suites 101/103, the two known intermittents); 7b spores **built 2026-11-17** (109/109, not yet seen in a fight); 7c ward **built 2026-11-18** (111/112, the one failure fixed and not re-run); 7d key letters **modelled 2026-11-18**, not built |
+| 7 | Build the chosen fixes, re-measure in both tiers, then the human playtest | **in progress**: 7a tuning fixes **built 2026-11-17** (suites 101/103, the two known intermittents); 7b spores **built 2026-11-17** (109/109, not yet seen in a fight); 7c ward **built 2026-11-18** (112/112, seen in one real fight); 7d key letters **modelled 2026-11-18**, build decided, not built |
 
 ## How to run the simulator
 
@@ -505,19 +539,11 @@ keys are listed above `FightSim.run`.
 
 Updated 2026-11-18. See § Second pass for what the numbers below rest on.
 
-1. **Run the suites, then one bot fight.** `RunTests = "all"` should give 112/112
-   (the ward test's fix has not been run). Then Average on `IslandReview`: the bot
-   should leave the ready room, pop spores, and at half health pop the four ward
-   letters. Check in that fight: the Turtle's overlook is fired at, the boss closes
-   to 70 studs, every second volley is a lob, the ward holds and breaks, phase 2 is
-   faster. The recorder has no `ward_up` / `ward_down` event yet.
-2. **Two choices for the user** (asked 2026-11-18; record the answers in
-   § Decisions):
-   - Spores: keep 3 at 3% (Average kills in about 120 s, under its band), or move to
-     3 at 2% with a word floor of 8 (Average 142 s, Novice win rate about 62%).
-   - Key letters: build as modelled, and whether to raise the ledge reward (4
-     wildcards) in the same pass, since a trip does not pay a strong speller.
-3. **Build key letters (7d)** once 2 is answered: keys on a gate through
+1. **Done 2026-11-18**: suites 112/112 and one real fight (§ Third and fourth runs).
+2. **Done 2026-11-18**: the user's two choices are decisions 5 and 6.
+3. **Build key letters (7d)**, with 4 wildcards on each ledge (decision 6; the ledge
+   volumes are too small for 4 at the pool's 10.4-stud spacing, so they must grow in
+   the greybox): keys on a gate through
    `BlockSpawner` and `BreakableWalls`, a 40-stud reach on those blocks, and curated
    3- and 4-letter lists in `WordKits`. The carving must read as a tell: nobody finds
    it by accident.
