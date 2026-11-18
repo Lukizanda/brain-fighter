@@ -46,6 +46,14 @@ local bossTypes: { [string]: BossTypeSpec } = {
 		attackRange      = 150,
 		stopRange        = 70,
 		attackWindupSec  = 0.5,
+		-- Per-attack prep, long enough for the body's tell to read
+		-- (wiki/design/boss-movement.md, stage 11b). The slam's total warning
+		-- is this plus its delivery windupSec (0.8), so 1.8 s.
+		attackPrepSec    = {
+			FireballVolley = 0.8,
+			SporeLob       = 0.9,
+			GroundSlam     = 1.0,
+		},
 		continuousFacing = true,
 		-- Hungry brain: every eatIntervalSec the boss pulls the nearest
 		-- letter within eatRadius studs (horizontal; height ignored) toward

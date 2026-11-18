@@ -130,6 +130,23 @@ local BossConstants = {
 	-- The boss Model's current phase index, set at spawn and on every
 	-- phase change.
 	PHASE_ATTRIBUTE = "Phase",
+	-- The attack being prepared (FireballVolley / GroundSlam / SporeLob),
+	-- set on entering AttackPrep and cleared on entering Cooldown.
+	PENDING_ATTACK_ATTRIBUTE = "PendingAttack",
+	-- When that attack lands, in workspace:GetServerTimeNow() time. For an
+	-- aoe this includes the delivery's own windup, so it is the moment the
+	-- circle fires.
+	WINDUP_ENDS_AT_ATTRIBUTE = "WindupEndsAt",
+	-- Until when the boss is exposed (core open, extra damage), in
+	-- GetServerTimeNow() time. Written by stage 11c.
+	EXPOSED_UNTIL_ATTRIBUTE = "ExposedUntil",
+	-- Until when the boss is stunned and still, in GetServerTimeNow() time.
+	STUNNED_UNTIL_ATTRIBUTE = "StunnedUntil",
+	-- The word ward is holding, and how many of its letters are left.
+	WARD_UP_ATTRIBUTE = "WardUp",
+	WARD_LETTERS_LEFT_ATTRIBUTE = "WardLettersLeft",
+	-- Where the letter the boss is eating is (Vector3), while it pulls one.
+	EATING_AT_ATTRIBUTE = "EatingAt",
 }
 
 return BossConstants

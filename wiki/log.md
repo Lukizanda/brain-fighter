@@ -2209,3 +2209,7 @@ The user asked for a boss whose movement telegraphs attacks and shows vulnerabil
 ## [2026-11-18] ingest | Boss body and client puppet (stage 11a)
 
 `Shared/Boss/BrainBody` replaces the template's welded sphere at spawn with lobes, a core, eyes, a stem and neurons on Motor6Ds (`body = "Brain"` on the type spec); `client/Vfx/BossPuppet` writes their `Transform` (hover, breath, lean, eyes, neurons, hit wobble and flash, freeze hold) from `BossPuppetConstants`. `BossController` publishes `Phase` and recolours the body, so phase 2's Crimson shows. Seen in a playtest with a hand-moved boss (lean 9.6° at speed 6, hit flash and squash, freeze hold, screenshots); Arena suite 48/48. Not seen in a real fight. `systems/Boss` § Boss Model and § Phase System, `design/boss-movement`, the build plan and the index updated.
+
+## [2026-11-18] ingest | Boss movement foundation for stages 11b-11d
+
+Before splitting 11b/11c/11d across parallel sessions: `BossStates` publishes `PendingAttack` and `WindupEndsAt`, reads per-attack prep lengths (`attackPrepSec`: Volley 0.8, SporeLob 0.9, GroundSlam 1.0) and honours a `stunnedUntil` hold and an `onAttackFinished` hook; `BossWard` publishes `WardUp` / `WardLettersLeft`; the puppet applies three pose layers (`client/Vfx/BossPoses/`, stubs). Compile-checked in Studio; not playtested (the session's two playtests were spent on 11a). `design/boss-movement` § Foundation.

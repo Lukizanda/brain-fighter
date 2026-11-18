@@ -207,6 +207,8 @@ function BossWard._raise(self: BossWardInstance)
 		return
 	end
 	self._state = STATE_UP
+	self._boss:SetAttribute(BossConstants.WARD_UP_ATTRIBUTE, true)
+	self._boss:SetAttribute(BossConstants.WARD_LETTERS_LEFT_ATTRIBUTE, #self._letters)
 	self._pulseInSec = BossConstants.WARD_PULSE_EVERY_SEC
 	VfxBroadcast.playAt(BossConstants.WARD_UP_VFX, self._root.Position)
 	self:_pulse()
@@ -218,6 +220,8 @@ end
 function BossWard._drop(self: BossWardInstance, broken: boolean)
 	self._state = STATE_DOWN
 	table.clear(self._letters)
+	self._boss:SetAttribute(BossConstants.WARD_UP_ATTRIBUTE, nil)
+	self._boss:SetAttribute(BossConstants.WARD_LETTERS_LEFT_ATTRIBUTE, nil)
 	HealthFloor.clear(self._boss)
 	if broken then
 		VfxBroadcast.playAt(BossConstants.WARD_DOWN_VFX, self._root.Position)
@@ -255,6 +259,7 @@ function BossWard.tick(self: BossWardInstance, dt: number)
 		self:_drop(true)
 		return
 	end
+	self._boss:SetAttribute(BossConstants.WARD_LETTERS_LEFT_ATTRIBUTE, #self._letters)
 	self._pulseInSec -= dt
 	if self._pulseInSec <= 0 then
 		self._pulseInSec = BossConstants.WARD_PULSE_EVERY_SEC

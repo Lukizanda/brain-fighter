@@ -48,6 +48,14 @@ local BossPuppetConstants = {
 	NEURON_BOB_HZ = 0.35,
 	NEURON_HEIGHT = 1.5,         -- studs above the core
 
+	-- Synapse beams: transparency at rest (BrainBody's value), and how much
+	-- wider they get at full glow (1 = double).
+	SYNAPSE_REST_TRANSPARENCY = 0.6,
+	SYNAPSE_GLOW_WIDTH = 1.5,
+
+	-- A pose layer that throws is logged at most this often (seconds).
+	LAYER_ERROR_LOG_SEC = 5,
+
 	-- ── Hit reaction ───────────────────────────────────────────
 	-- A damped spring kicked by each hit; the kick grows with the damage
 	-- up to WOBBLE_FULL_DAMAGE.

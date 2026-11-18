@@ -98,6 +98,21 @@ end
 -- NPCConstants.FACE_TURN_RATE_DEGREES — the same authored half-circle per
 -- second the hand-rolled lerp was aiming for. Any state that stops facing
 -- calls `Actions.ReleaseFacing` so the Humanoid steers the walk again.
+-- How long AttackPrep holds before `attack` fires.
+local function prepSecFor(bossbb: BB, attack: string?): number
+	local spec = bossbb.bossTypeSpec
+	local byAttack = spec.attackPrepSec
+	if attack and byAttack and byAttack[attack] then
+		return byAttack[attack]
+	end
+	return spec.attackWindupSec
+end
+
+local function isStunned(bossbb: BB): boolean
+	local untilAt = bossbb.stunnedUntil
+	return untilAt ~= nil and os.clock() < untilAt
+end
+
 local function faceTarget(bb: Blackboard)
 	local targetRootPart = bb.targetRootPart
 	if not targetRootPart or not targetRootPart.Parent then return end
@@ -191,7 +206,7 @@ local AttackPrepState: StateDefinition = {
 					-- The whole window the player has to react in, which for an
 					-- aoe is this boss's windup plus the delivery's own: the
 					-- disc has to still be pulsing when the circle fires.
-					local totalDuration: number = bossbb.bossTypeSpec.attackWindupSec
+					local totalDuration: number = prepSecFor(bossbb, selectedAtk)
 					local aoeRadius: number? = nil
 					if skill.delivery == "aoe" then
 						totalDuration = totalDuration + ((skill.deliveryParams.windupSec or 0) :: number)
@@ -213,6 +228,17 @@ local AttackPrepState: StateDefinition = {
 				end
 			end
 		end
+
+		-- Intent for every client's puppet (wiki/design/boss-movement.md):
+		-- what is coming and when it lands.
+		local landsIn = prepSecFor(bossbb, selectedAtk)
+		local landingSkill = if selectedAtk then bossbb.bossTypeSpec.skills[selectedAtk] else nil
+		if landingSkill and landingSkill.delivery == "aoe" then
+			landsIn += (landingSkill.deliveryParams.windupSec or 0) :: number
+		end
+		bb.npc:SetAttribute(BossConstants.PENDING_ATTACK_ATTRIBUTE, selectedAtk)
+		bb.npc:SetAttribute(BossConstants.WINDUP_ENDS_AT_ATTRIBUTE,
+			if selectedAtk then workspace:GetServerTimeNow() + landsIn else nil)
 
 		log:info(string.format("%s: AttackPrep → will use '%s'",
 			bb.npc.Name, tostring(bossbb.selectedAttack)))
@@ -315,11 +341,28 @@ local CooldownState: StateDefinition = {
 	name = S.Cooldown,
 
 	onEnter = function(bb)
-		bossOf(bb).cooldownStart = os.clock()
+		local bossbb = bossOf(bb)
+		bossbb.cooldownStart = os.clock()
 		Actions.StopMoving(bb)
+		bb.npc:SetAttribute(BossConstants.PENDING_ATTACK_ATTRIBUTE, nil)
+		bb.npc:SetAttribute(BossConstants.WINDUP_ENDS_AT_ATTRIBUTE, nil)
+		local attack = bossbb.selectedAttack
+		local onFinished = bossbb.onAttackFinished
+		if attack and onFinished then
+			onFinished(attack)
+		end
 	end,
 
 	update = function(bb)
+		-- Stunned: stand still, face nothing, wait it out.
+		if isStunned(bossOf(bb)) then
+			if closingInCooldown[bb] then
+				closingInCooldown[bb] = nil
+			end
+			Actions.StopMoving(bb)
+			return
+		end
+
 		-- A type with a stopRange keeps closing on its target between
 		-- attacks until it is within that range, so it can fire from afar
 		-- without standing off at attackRange. Walking hands facing back to
@@ -359,6 +402,9 @@ local CooldownState: StateDefinition = {
 
 local function cooldownElapsed(bb: Blackboard): boolean
 	local bossbb  = bossOf(bb)
+	if isStunned(bossbb) then
+		return false
+	end
 	local elapsed = os.clock() - bossbb.cooldownStart
 	local spec    = bossbb.currentPhaseSpec
 	local cooldown = if spec then spec.attackCooldown else BossConstants.DEFAULT_ATTACK_COOLDOWN_SEC
@@ -378,7 +424,7 @@ end
 local function windupElapsed(bb: Blackboard): boolean
 	local bossbb = bossOf(bb)
 	local start = bossbb.attackWindupStart
-	return start ~= nil and (os.clock() - start) >= bossbb.bossTypeSpec.attackWindupSec
+	return start ~= nil and (os.clock() - start) >= prepSecFor(bossbb, bossbb.selectedAttack)
 end
 
 -- ---------------------------------------------------------------

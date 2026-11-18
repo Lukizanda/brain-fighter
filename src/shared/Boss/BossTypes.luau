@@ -54,6 +54,10 @@ export type BossTypeSpec = {
 	-- to let the boss fire from afar while still closing in.
 	stopRange: number?,
 	attackWindupSec: number,
+	-- Per-attack prep (AttackPrep) length, keyed by attack name including
+	-- "SporeLob"; an attack not listed uses attackWindupSec. Long enough for
+	-- the body's tell to read (wiki/design/boss-movement.md, stage 11b).
+	attackPrepSec: { [string]: number }?,
 	-- When true the boss smoothly rotates toward its target in all non-moving states.
 	-- When false (default) facing only happens during AttackPrep (windup telegraph).
 	continuousFacing: boolean?,
@@ -154,6 +158,12 @@ export type BossBlackboard = {
 	-- lob; it is a structural type so this shared file need not require the
 	-- server module (Boss/Scripts/BossSpores).
 	spores: SporeLobber?,
+	-- Until this os.clock() time the boss is stunned: it stands still and
+	-- does not leave Cooldown (wiki/design/boss-movement.md, stage 11c).
+	stunnedUntil: number?,
+	-- Called with the attack's name when an attack finishes (Attack →
+	-- Cooldown). Set by BossController.
+	onAttackFinished: ((attack: string) -> ())?,
 }
 
 return nil

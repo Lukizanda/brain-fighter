@@ -39,13 +39,36 @@ about to do, and when to punish it.
 
 | Attribute | Written by | Meaning |
 |---|---|---|
-| `CurrentState` | `BossController` (exists) | Idle / Patrol / AttackPrep / Attack / Cooldown |
-| `PendingAttack` | `BossStates` AttackPrep | FireballVolley / GroundSlam / SporeLob, cleared after the attack |
-| `WindupEndsAt` | `BossStates` AttackPrep | When the hit lands, so every pose peaks with it |
-| `ExposedUntil` | `BossStates` / `BossWard` | End of a vulnerable window (stage 3) |
-| `Phase` | `BossController` | Current phase index |
-| `WardUp` | `BossWard` | The ward is holding |
-| `EatingAt` | `BossHunger` | Position of the letter being eaten, while it pulls |
+| `CurrentState` | `StateMachine` (exists) | Idle / Patrol / AttackPrep / Attack / Cooldown |
+| `PendingAttack` | `BossStates` AttackPrep (**built**) | FireballVolley / GroundSlam / SporeLob, cleared on entering Cooldown |
+| `WindupEndsAt` | `BossStates` AttackPrep (**built**) | When the hit lands (prep + an aoe's own windup), so every pose peaks with it |
+| `ExposedUntil` | stage 11c | End of a vulnerable window |
+| `StunnedUntil` | stage 11c | End of a stun (the boss stands still) |
+| `Phase` | `BossSpawner` / `BossController` (**built**) | Current phase index |
+| `WardUp`, `WardLettersLeft` | `BossWard` (**built**) | The ward is holding; letters still orbiting |
+| `EatingAt` | `BossHunger` (stage 11b) | Position of the letter being eaten, while it pulls |
+
+All names are `BossConstants.*_ATTRIBUTE`.
+
+### Foundation for 11b–11d (built 2026-11-18)
+
+Laid down before the three stages were split across parallel sessions, so each owns
+its own files:
+
+- **Per-attack prep.** `BossTypeSpec.attackPrepSec` (by attack name, `SporeLob`
+  included) replaces the single `attackWindupSec` where listed. The Brain: Volley 0.8 s,
+  SporeLob 0.9 s, GroundSlam 1.0 s (+0.8 s delivery windup = 1.8 s of warning). The
+  ground telegraph runs for the same window.
+- **Stun hold.** `BossBlackboard.stunnedUntil` (server `os.clock()`): while it is in the
+  future the boss stands still in Cooldown and cannot leave it. Nothing sets it yet.
+- **Attack-finished hook.** `BossBlackboard.onAttackFinished(attack)` is called on
+  entering Cooldown. Nothing sets it yet.
+- **Pose layers.** `client/Vfx/BossPoses/`: `PoseTypes` (the `Pose` a layer writes:
+  root offset, lobe opening and scale, stem, eye target/offset, core light, neuron
+  orbit, synapse glow, body tint, a motion scale) and three layers applied in order,
+  `Telegraph` (11b), `Exposed` (11c), `Ceremony` (11d), stubs until built. The puppet
+  stays the one writer of joints, scales, lights, beams and the flash; a dead boss's
+  idle motion stops but the layers still run (for the death sequence).
 
 The collision body stays the invisible skeleton, so a float or a lean is purely visual.
 

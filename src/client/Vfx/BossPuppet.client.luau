@@ -3,25 +3,27 @@
 ----------------------------------------------------------------------
 -- BossPuppet
 ----------------------------------------------------------------------
--- Animates a boss's body on this client (wiki/design/boss-movement.md,
--- stage 11a). The server owns where the boss is and which way it faces;
--- this script only writes the body's Motor6D.Transform values and the
--- lobes' mesh Scale, neither of which replicates, so the motion costs
--- nothing on the network and cannot fight the server.
+-- Animates a boss's body on this client (wiki/design/boss-movement.md).
+-- The server owns where the boss is and which way it faces; this script
+-- only writes the body's Motor6D.Transform values, the lobes' mesh Scale,
+-- the core light and synapse beams, and its own hit-flash Highlight. None
+-- of that replicates, so the motion costs nothing on the network and
+-- cannot fight the server.
 --
 -- Single ownership (wiki/concepts/SingleOwnership.md): nothing else writes
--- a BrainBody joint's Transform or a lobe mesh's Scale, or the hit-flash
--- Highlight this script creates.
+-- any of those.
 --
--- What it reads: the "Boss" tag, the body attribute BrainBody publishes,
--- the replicated root velocity, Humanoid health, and the freeze flag.
---
+-- Base motion (stage 11a):
 --   idle    hover bob, breathing lobes, pulsing core, orbiting neurons,
 --           eyes on the nearest player
 --   moving  leans into its travel, bobs faster, the stem trails behind
 --   hit     a wobble that grows with the damage, a white flash, the lobes
 --           flinch open
 --   frozen  every joint holds its pose
+--
+-- Pose layers (BossPoses/): Telegraph (11b), Exposed (11c), Ceremony (11d)
+-- each add to a neutral Pose every frame (see BossPoses/PoseTypes); the
+-- puppet draws the base motion plus that Pose.
 ----------------------------------------------------------------------
 
 local CollectionService = game:GetService("CollectionService")
@@ -33,6 +35,14 @@ local BrainBody = require(ReplicatedStorage.Shared.Boss.BrainBody)
 local C = require(ReplicatedStorage.Shared.Boss.BossPuppetConstants)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
+local PoseTypes = require(script.Parent.BossPoses.PoseTypes)
+
+-- Applied in this order; a later layer may override an earlier one.
+local LAYERS: { PoseTypes.Layer } = {
+	require(script.Parent.BossPoses.Telegraph) :: PoseTypes.Layer,
+	require(script.Parent.BossPoses.Exposed) :: PoseTypes.Layer,
+	require(script.Parent.BossPoses.Ceremony) :: PoseTypes.Layer,
+}
 
 local log = Logger.new("BossPuppet")
 
@@ -47,10 +57,15 @@ type Puppet = {
 	neurons: { Motor6D },
 	lobeMeshes: { { mesh: SpecialMesh, base: Vector3 } },
 	coreLight: PointLight?,
+	coreLightColor: Color3,
+	synapses: { { beam: Beam, width: number } },
+	layerStates: { any },
+	pose: PoseTypes.Pose,
 	flash: Highlight?,
 	flashUntil: number,
 	seed: number,
 	bobPhase: number,
+	neuronPhase: number,
 	pitch: number,
 	roll: number,
 	wobble: number,
@@ -119,6 +134,12 @@ local function untrack(model: Model)
 	if puppet.flash then
 		puppet.flash:Destroy()
 	end
+	for i, layer in LAYERS do
+		local ok, err = pcall(layer.detach, puppet.layerStates[i])
+		if not ok then
+			log:warn("Pose layer " .. layer.name .. " failed to detach: " .. tostring(err))
+		end
+	end
 end
 
 local function track(model: Model)
@@ -147,7 +168,16 @@ local function track(model: Model)
 		end
 	end
 	local core = model:FindFirstChild("Core")
-	local coreLight = core and core:FindFirstChild(BrainBody.CORE_LIGHT_NAME)
+	local found = core and core:FindFirstChild(BrainBody.CORE_LIGHT_NAME)
+	local coreLight: PointLight? = if found and found:IsA("PointLight") then found else nil
+	local synapses = {}
+	for _, motor in neurons do
+		local neuron = motor.Part1
+		local beam = neuron and neuron:FindFirstChildOfClass("Beam")
+		if beam then
+			table.insert(synapses, { beam = beam, width = beam.Width0 })
+		end
+	end
 
 	local flash = Instance.new("Highlight")
 	flash.Name = "BossHitFlash"
@@ -165,11 +195,16 @@ local function track(model: Model)
 		joints = joints,
 		neurons = neurons,
 		lobeMeshes = lobeMeshes,
-		coreLight = if coreLight and coreLight:IsA("PointLight") then coreLight else nil,
+		coreLight = coreLight,
+		coreLightColor = if coreLight then coreLight.Color else Color3.new(1, 1, 1),
+		synapses = synapses,
+		layerStates = {},
+		pose = PoseTypes.neutral(),
 		flash = flash,
 		flashUntil = 0,
 		seed = math.random() * TAU,
 		bobPhase = 0,
+		neuronPhase = 0,
 		pitch = 0,
 		roll = 0,
 		wobble = 0,
@@ -186,6 +221,13 @@ local function track(model: Model)
 			untrack(model)
 		end
 	end))
+	for i, layer in LAYERS do
+		local ok, result = pcall(layer.attach, model)
+		puppet.layerStates[i] = if ok then result else {}
+		if not ok then
+			log:warn("Pose layer " .. layer.name .. " failed to attach: " .. tostring(result))
+		end
+	end
 	puppets[model] = puppet
 	log:info("Animating boss body on " .. model:GetFullName())
 end
@@ -209,9 +251,9 @@ local function nearestCharacter(from: Vector3): Vector3?
 	return best
 end
 
--- Turns an eye toward `target` (world space), no further than the
--- clamp, smoothed.
-local function aimEye(puppet: Puppet, jointName: string, target: Vector3?, dt: number)
+-- Turns an eye toward `target` (world space), clamped unless told not to,
+-- smoothed, then turned by `offset`.
+local function aimEye(puppet: Puppet, jointName: string, target: Vector3?, unclamped: boolean, offset: CFrame, dt: number)
 	local motor = puppet.joints[jointName]
 	local goal = CFrame.identity
 	local eye = motor.Part1
@@ -221,7 +263,7 @@ local function aimEye(puppet: Puppet, jointName: string, target: Vector3?, dt: n
 		if direction.Magnitude > 0 then
 			local look = CFrame.lookAt(Vector3.zero, direction.Unit)
 			local angle = math.acos(math.clamp(-direction.Unit.Z, -1, 1))
-			local fraction = if angle > C.EYE_MAX_RADIANS then C.EYE_MAX_RADIANS / angle else 1
+			local fraction = if not unclamped and angle > C.EYE_MAX_RADIANS then C.EYE_MAX_RADIANS / angle else 1
 			goal = CFrame.identity:Lerp(look, fraction)
 		end
 	end
@@ -229,14 +271,22 @@ local function aimEye(puppet: Puppet, jointName: string, target: Vector3?, dt: n
 	local alpha = 1 - math.exp(-C.SMOOTHING_RATE * dt)
 	local nextLook = current:Lerp(goal, alpha)
 	puppet.eyeLook[jointName] = nextLook
-	motor.Transform = nextLook
+	motor.Transform = nextLook * offset
 end
 
-local function step(puppet: Puppet, dt: number, now: number, camera: Camera?)
-	local model = puppet.model
-	if puppet.humanoid.Health <= 0 then
-		return
+local function resetPose(pose: PoseTypes.Pose)
+	local neutral = PoseTypes.neutral() :: any
+	local target = pose :: any
+	for key in target do
+		target[key] = nil
 	end
+	for key, value in neutral do
+		target[key] = value
+	end
+end
+
+local function step(puppet: Puppet, dt: number, now: number, serverNow: number, camera: Camera?)
+	local model = puppet.model
 	if model:GetAttribute(SkillConstants.FROZEN_ATTRIBUTE) then
 		return -- every joint holds its pose
 	end
@@ -244,6 +294,7 @@ local function step(puppet: Puppet, dt: number, now: number, camera: Camera?)
 	if camera and (camera.CFrame.Position - root.Position).Magnitude > C.MAX_ANIMATE_DISTANCE then
 		return
 	end
+	local alive = puppet.humanoid.Health > 0
 
 	-- Travel, in the boss's own frame (-Z is forward).
 	local velocity = root.AssemblyLinearVelocity
@@ -251,10 +302,34 @@ local function step(puppet: Puppet, dt: number, now: number, camera: Camera?)
 	local localVelocity = root.CFrame:VectorToObjectSpace(flat)
 	local speed = flat.Magnitude
 
+	-- Let the layers pose the body for this frame.
+	local pose = puppet.pose
+	resetPose(pose)
+	local state = model:GetAttribute("CurrentState")
+	local ctx: PoseTypes.Context = {
+		model = model,
+		root = root,
+		humanoid = puppet.humanoid,
+		dt = dt,
+		clock = now,
+		serverNow = serverNow,
+		speed = speed,
+		state = if typeof(state) == "string" then state else nil,
+		alive = alive,
+	}
+	for i, layer in LAYERS do
+		local ok, err = pcall(layer.apply, puppet.layerStates[i], ctx, pose)
+		if not ok then
+			log:warnThrottled("layer:" .. layer.name, C.LAYER_ERROR_LOG_SEC, "Pose layer " .. layer.name .. " failed: " .. tostring(err))
+		end
+	end
+	-- A dead boss does no idle motion; only the layers move it.
+	local motion = if alive then pose.motionScale else 0
+
 	local pitchGoal = math.clamp(localVelocity.Z * C.LEAN_RADIANS_PER_SPEED, -C.LEAN_MAX_RADIANS, C.LEAN_MAX_RADIANS)
 	local rollGoal = math.clamp(-localVelocity.X * C.LEAN_RADIANS_PER_SPEED, -C.LEAN_MAX_RADIANS, C.LEAN_MAX_RADIANS)
-	puppet.pitch = approach(puppet.pitch, pitchGoal, dt)
-	puppet.roll = approach(puppet.roll, rollGoal, dt)
+	puppet.pitch = approach(puppet.pitch, pitchGoal * motion, dt)
+	puppet.roll = approach(puppet.roll, rollGoal * motion, dt)
 
 	-- Hit spring: x'' = -k x - c x'.
 	local accel = -C.WOBBLE_STIFFNESS * puppet.wobble - C.WOBBLE_DAMPING * puppet.wobbleVelocity
@@ -263,44 +338,55 @@ local function step(puppet: Puppet, dt: number, now: number, camera: Camera?)
 	local w = puppet.wobble
 
 	puppet.bobPhase += (C.HOVER_BOB_HZ + speed * C.HOVER_BOB_HZ_PER_SPEED) * TAU * dt
-	local hover = C.HOVER_LIFT + math.sin(puppet.bobPhase) * C.HOVER_BOB_AMPLITUDE
+	local hover = C.HOVER_LIFT + math.sin(puppet.bobPhase) * C.HOVER_BOB_AMPLITUDE * motion
 	local t = now + puppet.seed
 
 	local j = puppet.joints
 	j[J.Root].Transform = CFrame.new(0, hover, 0)
 		* CFrame.Angles(puppet.pitch + w * C.WOBBLE_TILT_RADIANS, 0, puppet.roll)
+		* pose.rootOffset
 
-	-- Lobes flinch open on a hit (only the outward half of the swing).
-	local flinch = math.max(w, 0) * C.WOBBLE_LOBE_FLINCH_RADIANS
-	j[J.LeftLobe].Transform = CFrame.Angles(0, 0, flinch)
-	j[J.RightLobe].Transform = CFrame.Angles(0, 0, -flinch)
+	-- Lobes: the layers' opening plus a flinch on a hit (outward half only).
+	local open = pose.lobeOpen + math.max(w, 0) * C.WOBBLE_LOBE_FLINCH_RADIANS
+	j[J.LeftLobe].Transform = CFrame.Angles(0, 0, open)
+	j[J.RightLobe].Transform = CFrame.Angles(0, 0, -open)
 
-	-- Breathing plus the squash of a hit.
-	local breath = 1 + math.sin(t * C.BREATH_HZ * TAU) * C.BREATH_SCALE
+	-- Breathing plus the squash of a hit, times the layers' scale.
+	local breath = 1 + math.sin(t * C.BREATH_HZ * TAU) * C.BREATH_SCALE * motion
 	local squash = w * C.WOBBLE_SQUASH
-	local scale = Vector3.new(breath * (1 + squash / 2), breath * (1 - squash), breath * (1 + squash / 2))
+	local scale = Vector3.new(breath * (1 + squash / 2), breath * (1 - squash), breath * (1 + squash / 2)) * pose.lobeScale
 	for _, entry in puppet.lobeMeshes do
 		entry.mesh.Scale = entry.base * scale
 	end
 
 	-- The stem trails the lean and sways.
-	local sway = math.sin(t * C.STEM_SWAY_HZ * TAU) * C.STEM_SWAY_RADIANS
-	j[J.Stem].Transform = CFrame.Angles(-puppet.pitch * C.STEM_TRAIL, 0, -puppet.roll * C.STEM_TRAIL + sway)
+	local sway = math.sin(t * C.STEM_SWAY_HZ * TAU) * C.STEM_SWAY_RADIANS * motion
+	j[J.Stem].Transform = CFrame.Angles(-puppet.pitch * C.STEM_TRAIL, 0, -puppet.roll * C.STEM_TRAIL + sway) * pose.stemOffset
 
-	local target = nearestCharacter(root.Position)
-	aimEye(puppet, J.LeftEye, target, dt)
-	aimEye(puppet, J.RightEye, target, dt)
+	local target = pose.eyeTarget or nearestCharacter(root.Position)
+	aimEye(puppet, J.LeftEye, target, pose.eyeUnclamped, pose.eyeOffset, dt)
+	aimEye(puppet, J.RightEye, target, pose.eyeUnclamped, pose.eyeOffset, dt)
 
+	puppet.neuronPhase += C.NEURON_ORBIT_HZ * TAU * pose.neuronSpeedScale * dt
+	local radius = C.NEURON_ORBIT_RADIUS * pose.neuronRadiusScale
 	for i, motor in puppet.neurons do
-		local angle = t * C.NEURON_ORBIT_HZ * TAU + (i - 1) * TAU / #puppet.neurons
-		local y = C.NEURON_HEIGHT + math.sin(t * C.NEURON_BOB_HZ * TAU + i) * C.NEURON_BOB_STUDS
-		motor.Transform = CFrame.new(math.cos(angle) * C.NEURON_ORBIT_RADIUS, y, math.sin(angle) * C.NEURON_ORBIT_RADIUS)
+		local angle = puppet.neuronPhase + (i - 1) * TAU / #puppet.neurons
+		local y = C.NEURON_HEIGHT + pose.neuronHeightOffset + math.sin(t * C.NEURON_BOB_HZ * TAU + i) * C.NEURON_BOB_STUDS
+		motor.Transform = CFrame.new(math.cos(angle) * radius, y, math.sin(angle) * radius)
+	end
+	local glow = math.clamp(pose.synapseGlow, 0, 1)
+	for _, synapse in puppet.synapses do
+		local width = synapse.width * (1 + glow * C.SYNAPSE_GLOW_WIDTH)
+		synapse.beam.Width0 = width
+		synapse.beam.Width1 = width
+		synapse.beam.Transparency = NumberSequence.new(C.SYNAPSE_REST_TRANSPARENCY * (1 - glow))
 	end
 
 	local light = puppet.coreLight
 	if light then
 		local pulse = (math.sin(t * C.CORE_PULSE_HZ * TAU) + 1) / 2
-		light.Brightness = C.CORE_LIGHT_MIN + (C.CORE_LIGHT_MAX - C.CORE_LIGHT_MIN) * pulse
+		light.Brightness = (C.CORE_LIGHT_MIN + (C.CORE_LIGHT_MAX - C.CORE_LIGHT_MIN) * pulse) * pose.coreLightScale
+		light.Color = pose.coreLightColor or puppet.coreLightColor
 	end
 
 	local flash = puppet.flash
@@ -308,7 +394,11 @@ local function step(puppet: Puppet, dt: number, now: number, camera: Camera?)
 		local left = puppet.flashUntil - os.clock()
 		if left > 0 then
 			local fade = 1 - left / C.HIT_FLASH_SEC
+			flash.FillColor = C.HIT_FLASH_COLOR
 			flash.FillTransparency = C.HIT_FLASH_TRANSPARENCY + (1 - C.HIT_FLASH_TRANSPARENCY) * fade
+		elseif pose.tint and pose.tintAlpha > 0 then
+			flash.FillColor = pose.tint
+			flash.FillTransparency = 1 - math.clamp(pose.tintAlpha, 0, 1)
 		else
 			flash.FillTransparency = 1
 		end
@@ -346,8 +436,9 @@ RunService.PreSimulation:Connect(function(dt: number)
 		end
 	end
 	local now = os.clock()
+	local serverNow = workspace:GetServerTimeNow()
 	local camera = workspace.CurrentCamera
 	for _, puppet in puppets do
-		step(puppet, dt, now, camera)
+		step(puppet, dt, now, serverNow, camera)
 	end
 end)
