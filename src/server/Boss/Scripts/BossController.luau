@@ -13,6 +13,10 @@
 --   3. StateMachine.tick(bb)         — advance AI state
 --   4. BossHunger.tick(dt)           — pull a nearby letter in and eat it, on a timer
 --   5. BossSpores.tick()             — land lobbed spores, burst the ones whose fuse ran out
+--   6. BossWard.tick(dt)             — raise the word ward at its line, carry its letters round
+--
+-- The ward runs before hunger in the tick so the boss does not eat on the
+-- frame its ward goes up; it is listed last because it was added last.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
@@ -32,6 +36,7 @@ local BossStates      = require(script.Parent.BossStates)
 local BossPhaseManager = require(script.Parent.BossPhaseManager)
 local BossHunger       = require(script.Parent.BossHunger)
 local BossSpores       = require(script.Parent.BossSpores)
+local BossWard         = require(script.Parent.BossWard)
 
 type BB                   = BossTypes.BossBlackboard
 type BossTypeSpec         = BossTypes.BossTypeSpec
@@ -61,6 +66,7 @@ export type BossControllerInstance = {
 	_phaseManager: PhaseManagerInstance,
 	_hunger: BossHunger.BossHungerInstance?,
 	_spores: BossSpores.BossSporesInstance?,
+	_ward: BossWard.BossWardInstance?,
 	_onPhaseChanged: ((number, any) -> ())?,
 	_alive: boolean,
 }
@@ -152,6 +158,7 @@ function BossController.new(
 		_phaseManager   = phaseManager,
 		_hunger         = BossHunger.new(boss, humanoid, hrp :: BasePart, typeSpec),
 		_spores         = spores,
+		_ward           = BossWard.new(boss, humanoid, hrp :: BasePart, typeSpec),
 		_onPhaseChanged = onPhaseChanged,
 		_alive          = true,
 	}, BossController)
@@ -218,10 +225,17 @@ function BossController:tick(dt: number)
 	-- 3. Decision: advance state machine
 	self._decision:tick(asNPC(bb))
 
+	-- 6. The word ward: up when the boss reaches its line, down when popped away.
+	local ward = self._ward
+	if ward then
+		ward:tick(dt)
+	end
+
 	-- 4. Hunger: a timer beside the state machine, not a state in it (the
 	-- boss eats whatever it is doing). Nil for a type that does not eat.
+	-- A warded boss does not eat: a fight cannot be stalled into a heal.
 	local hunger = self._hunger
-	if hunger then
+	if hunger and not (ward and ward:isUp()) then
 		hunger:tick(dt)
 	end
 
@@ -243,6 +257,12 @@ function BossController:destroy()
 	local hunger = self._hunger
 	if hunger then
 		hunger:destroy()
+	end
+
+	-- And its ward: the letters, and the floor under its health.
+	local ward = self._ward
+	if ward then
+		ward:destroy()
 	end
 
 	-- So do the spores it lobbed, and a lob still in the air.

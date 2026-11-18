@@ -1,7 +1,7 @@
 ---
 type: design
-description: Phase 9 plan (2026-11-17) for an automated, bot-driven playtest of the boss arena, so the level is polished before a human plays it. Six fun pillars, an 18-metric matrix with green/amber/red bands, six bot personas, and two sources scored by one metrics module - a Monte-Carlo fight simulator that casts real rays against the greybox, and a real in-Studio bot with a server recorder. Holds the designer's predicted problems and candidate fixes (range split, damage curve, spore letters, word ward) and the pick-up list.
-updated: 2026-11-17
+description: Phase 9 plan (2026-11-17) for an automated, bot-driven playtest of the boss arena, so the level is polished before a human plays it. Six fun pillars, an 18-metric matrix with green/amber/red bands, six bot personas, and two sources scored by one metrics module - a Monte-Carlo fight simulator that casts real rays against the greybox, and a real in-Studio bot with a server recorder. Holds the designer's predicted problems and candidate fixes (range split, damage curve, spore letters, word ward) and the pick-up list. Second pass 2026-11-18: key letters modelled (gates open in most fights, the reward is the weak part), a spore sweep that cannot fit Average and Novice at once, the word ward built.
+updated: 2026-11-18
 ---
 
 # AI Playtest (boss arena)
@@ -134,6 +134,7 @@ boss HP actually lost. Bands are for the Average persona unless one is named.
 | Heals | Mend at ≤40 | Mend ≤40, Sanctuary ≤25 | Shield first, Sanctuary ≤30 | never | never | never |
 | Telegraph reaction | 30% / 1.2 s | 60% / 0.7 s | 90% / 0.4 s | n/a | 10% / 0.8 s | 90% / 0.4 s |
 | Pops letters in tow | 10% | 40% | 80% | 60% | 20% | 80% |
+| Notices a gate's key letters (added 2026-11-18) | 30% | 60% | 90% | never | 60% | 90% |
 
 The novice numbers are the designer's least certain input. A child who spells twice
 as fast moves several predictions from red to amber.
@@ -295,7 +296,8 @@ recorder writes `workspace.PlaytestReport.Fight_<n>` (a `StringValue` holding JS
 persona, metrics, events) and sets `PlaytestFightsDone`. Read it from the Server
 DataModel, stop Play, and **clear both attributes**: they persist in the place file.
 
-This version does not use cover, react to windups, steal tows or keep wildcards, and
+This version (as run on 2026-11-17; spores and ward letters were added on 2026-11-18,
+§ Second pass) does not use cover, react to windups, steal tows or keep wildcards, and
 the recorder has no signal for tow starts or for boss shots fired, so the steal rate
 and the hit rate are missing from a real fight.
 
@@ -323,6 +325,104 @@ and the hit rate are missing from a real fight.
 - The bot spelled real words through the real dictionary (JADED 21, DOCKER 19,
   WHOSO 16, BRAVE 15, DESK 9) and cast Fireball, Inferno, Frost Nip and Mend.
 - One fight is one sample. Nothing here is a rate.
+
+## Second pass (2026-11-18)
+
+Simulated numbers are 100 fights per persona on `IslandReview`, as before. "As built"
+now means fixes 1, 2 and 4 and the spores; Studio was restarted, so the simulator
+reads the built config.
+
+### Key letters, modelled (decision 4)
+
+Three keys hang 6 studs in front of each gate (four at the cave plug, in the kit's
+colour), poppable from 40 studs. Popping the last one breaks the gate. A player who
+popped them on purpose memorizes the ready-made word and walks through. At each pause
+between words a persona may notice the nearest gate it can see (Novice 30%, Average
+60%, Strong 90%; the designer's numbers), once each time a gate's keys are hung.
+
+| Persona | Opens a gate | Reaches a ledge / the cave | Trips a fight | Payoff (energy a second on a trip ÷ off it) | Dies on a trip | Time to kill, no keys → keys |
+|---|---|---|---|---|---|---|
+| Novice | 44% | 28% / 18% | 0.8 | 3.6x | 35% | 226 → 229 s |
+| Average | 60% | 39% / 38% | 1.1 | 1.6x | 8% | 117 → 124 s |
+| Strong | 94% | 92% / 27% | 2.3 | 0.6x | 1% | 85 → 110 s |
+
+Against M14 (bands are for Average): uptake is green for gates (60%) and just under
+it for the cave (38%); payoff is green (1.6x, band 1.5 to 3); deaths on a trip are
+under the band (8%, band 10 to 30%).
+
+- **Key letters do what they were chosen for.** Gates and the cave went from never
+  opening to opening in most fights.
+- **Nobody opens a gate by accident.** With noticing switched off and a reach of 40,
+  a gate opened in 0 to 3% of fights (the designer's bar was 20%). At a reach of 200
+  it is 13 to 28%, and the Turtle opens gates from the overlook. So the carving on
+  the gate has to be a clear tell; the 40-stud reach stays.
+- **Reach hardly changes uptake** once a player has noticed (40, 70 and 200 give the
+  same numbers within noise). It only changes accidents.
+- **A trip costs a strong speller more than it pays** (0.6x; its kill is 25 s
+  slower). A ledge holds 1 or 2 wildcards and a strong speller earns that much
+  standing still. With 4 wildcards on a ledge the payoff is 2.2x for Average and
+  1.1x for Strong. The reward, not the door, is now the weak part. A wildcard is
+  counted as 3 energy, which is a guess.
+- **The built version needs 3- and 4-letter word lists.** `WordKits` has only 5 and 6;
+  the model takes any dictionary word of the length.
+- The model's players stand on the arrival side and do not roam, so the gates on
+  the far side (the Spit, the cave) are noticed less than a real player would.
+
+Modelling this found a simulator fault: a player sent into the cave stood on its
+roof and waited for ever for a line of sight. Fixed (`floorBelow`). The baseline was
+not affected, because no gate opened in it.
+
+### Spore tuning sweep (pick-up 1c)
+
+With the ward modelled, since it is now built. N, A and S are Novice, Average and
+Strong; the target bands are Novice win 60% or more in 220 to 290 s, Average 150 to
+220 s, Strong 80 to 130 s.
+
+| Spores a lob / damage a pop / word floor | Novice win, time | Average time | Strong time, burst |
+|---|---|---|---|
+| 3 / 3% / 5 (**as built**, with the ward) | 99%, 223 s | 120 s | 96 s, 39% |
+| 3 / 2.5% / 5 | 75%, 249 s | 133 s | 96 s, 40% |
+| 3 / 2.5% / 8 | 89%, 238 s | 127 s | 94 s, 40% |
+| 3 / 2% / 8 | 62%, 257 s | 142 s | 94 s, 42% |
+| 3 / 2% / 5 | 32%, 262 s | 146 s | 99 s, 42% |
+| 2 / 2% / 10 | 12%, 264 s | 154 s | 93 s, 45% |
+| 3 / 2% / 8, a lob every third attack | 2%, 276 s | 164 s | 94 s, 46% |
+
+- **No spore setting puts Average in its band while the Novice still wins.** A pop
+  does the same damage whoever pops it, so slowing Average slows the Novice, whose
+  kill already sits against the 300 s clock: its win rate falls off a cliff there
+  (and moves by about 10 points between runs of 100).
+- Spore pops are most of the damage for the weaker personas: all of the Novice's,
+  about 70% of Average's (M12 amber).
+- The closest setting is **3 spores, 2% a pop, word floor 8**: Novice 62%, Average
+  142 s. It trades 37 points of Novice win rate for 22 s on Average.
+- Novice deaths stay near 4 a fight (band 1 to 2.5) under every spore setting; they
+  come from the volley, not the spores.
+- **Not changed in the game.** 3 spores at 3% is the user's decision; see § Pick up
+  here for the choice.
+
+### The word ward, built (7c)
+
+Built 2026-11-18 to decision 3: [[systems/Boss]] § Word ward. The boss's health
+stops at half, 4 letters circle it, and nothing hurts it until all 4 are popped;
+from the same point phase 2 gives it a 3 s cooldown and a walk speed of 9. Three
+new tests; the full run was **111/112**, the failure being one of the new tests,
+which read the pool in the same frame as a pop. That was traced to a deferred
+signal and fixed in the pool, and **the suite has not been run again since**. In the
+simulator the ward takes Strong's 5 s burst from 54% to 39% and its kill from 85 to
+96 s, and barely moves the other two.
+
+### Second bot run (pick-up 1b): no fight
+
+The bot now pops spores and ward letters on sight (the simulator's rule and
+chances) and the recorder writes spore pops, spore damage to the boss, lobs and
+bursts. The run itself produced no fight: **the bot stood in the ready room
+believing it was on the island.** With streaming on, the entry pad had not reached
+the client when the bot arrived, and the bot read "no pad" as "no ready room"; the
+teleport into the ready room could also be read as the pad's teleport. Both paths
+are fixed (wait 10 s for a pad; count a jump only from beside the pad). **Not
+re-run**: the session had used its two playtests. Nothing built on 2026-11-17 or
+2026-11-18 has yet been seen in a real fight.
 
 ## Decisions (user, 2026-11-17)
 
@@ -358,7 +458,15 @@ after `BossConfig`, `SpellRegistry` or `EnergyEconomy` change on disk the simula
 keeps the old numbers until Studio restarts (seen 2026-11-17: the synced source had
 `stopRange = 70`, the cached module still said `attackRange = 100`). Until a restart,
 pass the new values as `tuning`. The "Fixes 1 + 2 + 4" rows above are the prediction
-for the game as now built.
+for the game as built on 2026-11-17 before the spores.
+
+Since 2026-11-18 the simulator takes the spore numbers from `BossConfig` (pass
+`spore = false` for a fight without them). The ward and key letters are still
+tuning keys only: `ward = { atHp, letters, orbitRadius, cooldown, walkSpeed }` and
+`keys = { gateCount, caveCount, popReach, noticeChance?, noticeRange? }`.
+`zoneQuota = { Wildcard = 4 }` sets the starting letters of every zone of a table.
+`PlaytestMetrics` gained the trip metrics (`m14_keyed`, `m14_keyedAccident`,
+`m14_trips`, `m14_tripPayoff`, `m14_tripDeaths`).
 
 ## Stages
 
@@ -370,7 +478,7 @@ for the game as now built.
 | 4 | Sweep the tuning fixes; model spore letters and the word ward | **done 2026-11-17** except fix 6 (premium reach, gate health, wildcard split), which is not swept |
 | 5 | Decisions for the user | **decided 2026-11-17**, § Decisions |
 | 6 | Tier 2 bot and recorder; calibrate the simulator from 2 to 3 real fights | **built and run once 2026-11-17**; dodging, cover and tow stealing not in the bot; calibration of the strafing hit rate still open |
-| 7 | Build the chosen fixes, re-measure in both tiers, then the human playtest | **in progress**: 7a tuning fixes **built 2026-11-17** (suites 101/103, the two known intermittents); 7b spores **built 2026-11-17** (109/109, not yet seen in a fight); 7c ward not started; 7d gate redesign decided (key letters), not yet modelled or built |
+| 7 | Build the chosen fixes, re-measure in both tiers, then the human playtest | **in progress**: 7a tuning fixes **built 2026-11-17** (suites 101/103, the two known intermittents); 7b spores **built 2026-11-17** (109/109, not yet seen in a fight); 7c ward **built 2026-11-18** (111/112, the one failure fixed and not re-run); 7d key letters **modelled 2026-11-18**, not built |
 
 ## How to run the simulator
 
@@ -395,27 +503,32 @@ keys are listed above `FightSim.run`.
 
 ## Pick up here
 
-Updated 2026-11-17 after the first real bot fight. All code is committed.
+Updated 2026-11-18. See § Second pass for what the numbers below rest on.
 
-1. **Key letters (7d)**: model it in `FightSim` with the keys listed under § Gate
-   redesign, check uptake and payoff against M14, then build it.
-1a. **Build 7c (the word ward).** Spec: § Decisions and the `tune.ward` code in
-   `FightSim`.
-1b. **One bot fight on the tuning fixes and spores** (not yet run): Turtle on the
-   overlook should now be fired at, the boss should close to 70 studs, and every
-   second volley should be a lob. The bot does not pop spores yet: teach it to (the
-   simulator pops them on sight) and add spore events to the recorder.
-1c. **Tune spores**: the simulator has Average killing in about 117 s with spores on,
-   under its 150 to 220 s band.
-2. **Next sweep in `FightSim`**: bring Average back to 150 to 220 s and Novice
-   deaths under 2.5 with spores on (spore damage 2 to 3%, count 2 to 3, burst damage,
-   the stop range); then fix 6 (`popReach` and `gateHealth` are tuning keys already;
-   the wildcard split is not).
-3. **Tier 2 calibration.** Teach the bot to strafe on a windup (the persona's
+1. **Run the suites, then one bot fight.** `RunTests = "all"` should give 112/112
+   (the ward test's fix has not been run). Then Average on `IslandReview`: the bot
+   should leave the ready room, pop spores, and at half health pop the four ward
+   letters. Check in that fight: the Turtle's overlook is fired at, the boss closes
+   to 70 studs, every second volley is a lob, the ward holds and breaks, phase 2 is
+   faster. The recorder has no `ward_up` / `ward_down` event yet.
+2. **Two choices for the user** (asked 2026-11-18; record the answers in
+   § Decisions):
+   - Spores: keep 3 at 3% (Average kills in about 120 s, under its band), or move to
+     3 at 2% with a word floor of 8 (Average 142 s, Novice win rate about 62%).
+   - Key letters: build as modelled, and whether to raise the ledge reward (4
+     wildcards) in the same pass, since a trip does not pay a strong speller.
+3. **Build key letters (7d)** once 2 is answered: keys on a gate through
+   `BlockSpawner` and `BreakableWalls`, a 40-stud reach on those blocks, and curated
+   3- and 4-letter lists in `WordKits`. The carving must read as a tell: nobody finds
+   it by accident.
+4. **Novice deaths** (about 4 a fight, band 1 to 2.5) come from the volley and no
+   spore setting moves them. Not yet looked at.
+5. **Tier 2 calibration.** Teach the bot to strafe on a windup (the persona's
    `reactChance`) and run Strong once: the simulator says a strafing player is hit by
    3 to 4% of shots, and no real fight has tested that. Also still unverified in a
    real fight: whether a frozen boss attacks, and whether the buffer and mana survive
    a death. A server signal for tow start / steal and for boss shots fired would fill
    the two metrics the recorder cannot see.
-4. **Bands in code.** `PlaytestMetrics` reports numbers; the green / amber / red
+6. **Fix 6** (premium reach, gate health, wildcard split) is still not swept.
+7. **Bands in code.** `PlaytestMetrics` reports numbers; the green / amber / red
    bands are applied by hand from the matrix. Encode them once they stop moving.

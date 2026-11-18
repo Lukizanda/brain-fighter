@@ -19,6 +19,9 @@ local HealthConstants = {
 
 	ARMOR_ATTRIBUTE = "_armor",
 	SHIELD_ATTRIBUTE = "_shield",
+	-- Hit points a character cannot be damaged below while set, owned by
+	-- Health (`shared/Health/HealthFloor`). The boss's word ward sets it.
+	HEALTH_FLOOR_ATTRIBUTE = "_healthFloor",
 
 	-- Time-boxed invulnerability, owned by Health (`shared/Health/Protection`).
 	-- The attribute holds the `workspace:GetServerTimeNow()` instant the

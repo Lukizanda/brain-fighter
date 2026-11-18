@@ -94,6 +94,24 @@ export type BossTypeSpec = {
 	sporeHoverHeight: number?,
 	sporeLetterTable: string?,
 	sporeColors: { string }?,
+	-- Word ward (Boss/Scripts/BossWard): the boss's health cannot be taken
+	-- below `wardAtHpFraction` of its maximum until the ward is broken. The
+	-- hit that would cross the line lands on it, `wardLetterCount` letter
+	-- blocks (rolled from `wardLetterTable`, each in one of `wardColors`)
+	-- appear and circle the boss `wardOrbitRadius` studs out and
+	-- `wardOrbitHeight` studs above its root, once round every
+	-- `wardOrbitPeriodSec` seconds, and nothing hurts the boss until every one
+	-- has been popped. A boss has one ward. What changes afterwards (a faster
+	-- boss) is an ordinary entry in `phases` at the same fraction.
+	-- A type that leaves out `wardAtHpFraction`, or sets it to 0 or less,
+	-- has no ward.
+	wardAtHpFraction: number?,
+	wardLetterCount: number?,
+	wardOrbitRadius: number?,
+	wardOrbitHeight: number?,
+	wardOrbitPeriodSec: number?,
+	wardLetterTable: string?,
+	wardColors: { string }?,
 	skills: { [string]: SkillTypes.SkillSpec },
 	phases: { PhaseSpec },
 }

@@ -12,7 +12,8 @@
 -- Event kinds read here: boss_spawn, pop, memorize, fizzle, cast,
 -- boss_damage, player_damage, player_heal, player_shield, death,
 -- reenter, tow_start, tow_eaten, tow_stolen, kit_taken, excursion_end,
--- sample, fight_end. Every event carries `t` (seconds) and `kind`.
+-- gate_keyed, trip_end, sample, fight_end. Every event carries `t`
+-- (seconds) and `kind`.
 --
 -- Dev tooling: no game system requires this module.
 ----------------------------------------------------------------------
@@ -76,6 +77,9 @@ function PlaytestMetrics.compute(events: { [number]: { [string]: any } }): Metri
 	local healed, healedWhileDead = 0, 0
 	local words, fizzles, pops = 0, 0, 0
 	local premiumPops, fossilPops, kits, ledgeTrips = 0, 0, 0, 0
+	-- M14 for gates: gates opened by key letters, and trips beyond a gate.
+	local keyedOnPurpose, keyedByAccident = 0, 0
+	local trips, tripDeaths, tripSec, tripEnergy, tripMemorized = 0, 0, 0, 0, 0
 
 	-- M10 bookkeeping: the longest quiet stretch while in the arena.
 	local lastActivity: number? = nil
@@ -162,6 +166,20 @@ function PlaytestMetrics.compute(events: { [number]: { [string]: any } }): Metri
 			kits += 1
 		elseif kind == "excursion_end" then
 			ledgeTrips += 1
+		elseif kind == "gate_keyed" then
+			if e.deliberate then
+				keyedOnPurpose += 1
+			else
+				keyedByAccident += 1
+			end
+		elseif kind == "trip_end" then
+			trips += 1
+			tripSec += e.sec
+			tripEnergy += e.energy
+			tripMemorized += e.memorized
+			if e.died then
+				tripDeaths += 1
+			end
 		elseif kind == "sample" then
 			if e.alive then
 				aliveSamples += 1
@@ -250,6 +268,18 @@ function PlaytestMetrics.compute(events: { [number]: { [string]: any } }): Metri
 	m.m14_fossil = if fossilPops > 0 then 1 else 0
 	m.m14_cave = if kits > 0 then 1 else 0
 	m.m14_ledge = if ledgeTrips > 0 then 1 else 0
+	m.m14_keyed = if keyedOnPurpose + keyedByAccident > 0 then 1 else 0
+	m.m14_keyedAccident = if keyedByAccident > 0 then 1 else 0
+	m.m14_trips = trips
+	if trips > 0 then
+		m.m14_tripDeaths = tripDeaths / trips
+		-- Payoff: energy a second on trips against energy a second off them.
+		local offSec = aliveSamples - tripSec
+		local offEnergy = energy - tripMemorized
+		if tripSec > 0 and offSec > 0 and offEnergy > 0 then
+			m.m14_tripPayoff = (tripEnergy / tripSec) / (offEnergy / offSec)
+		end
+	end
 	if towsStarted > 0 then
 		m.m15_stealRate = towsStolen / towsStarted
 	end

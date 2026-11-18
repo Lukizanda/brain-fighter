@@ -17,7 +17,9 @@
 --
 -- Today's askers are the boss: its hunger (Boss/Scripts/BossHunger), through
 -- the pool's tow API (begin a tow, advance it each tick, cancel it), and its
--- spore lob (Boss/Scripts/BossSpores): spawn a spore, remove it, clear them.
+-- spore lob (Boss/Scripts/BossSpores): spawn a spore, remove it, clear them,
+-- and its word ward (Boss/Scripts/BossWard): spawn a ward letter, move it,
+-- clear them.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -113,6 +115,36 @@ function BlockPoolRegistry.clearSpores(arenaId: string): number
 		return 0
 	end
 	return pool:clearSpores()
+end
+
+-- Spawns a ward letter (a marked, poppable block with no lifetime; see
+-- BlockSpawner.spawnWardLetter) at `position` in `arenaId`'s pool. nil when
+-- the arena has no pool.
+function BlockPoolRegistry.spawnWardLetter(arenaId: string, letter: string, color: string, position: Vector3): Model?
+	local pool = pools[arenaId]
+	if pool == nil then
+		return nil
+	end
+	return pool:spawnWardLetter(letter, color, position)
+end
+
+-- Moves one ward letter. False when the arena has no pool or the block is
+-- not one of its live ward letters.
+function BlockPoolRegistry.moveWardLetter(arenaId: string, block: Model, position: Vector3): boolean
+	local pool = pools[arenaId]
+	if pool == nil then
+		return false
+	end
+	return pool:moveWardLetter(block, position)
+end
+
+-- Removes every live ward letter of `arenaId`; returns how many.
+function BlockPoolRegistry.clearWardLetters(arenaId: string): number
+	local pool = pools[arenaId]
+	if pool == nil then
+		return 0
+	end
+	return pool:clearWardLetters()
 end
 
 return BlockPoolRegistry

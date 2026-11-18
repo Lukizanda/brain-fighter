@@ -8,6 +8,8 @@
 --   - Phase 1 (hpFraction=1.0) is always the starting phase.
 --   - Phase N (hpFraction=X) activates when current HP/MaxHP <= X.
 --   - The highest-index eligible phase wins.
+--   - Phases only go forward: a boss that heals back over a threshold (the
+--     Brain eats letters) stays in the phase it reached.
 --
 -- With a single entry in phases the manager never transitions — the
 -- scaffolding is in place for multi-phase without changing any code.
@@ -61,9 +63,9 @@ function BossPhaseManager:update(): boolean
 
 	-- Scan phases from index 2 upward; highest eligible index wins.
 	-- Phase 1 is always active so we start targetIndex at 1.
-	local targetIndex = 1
+	local targetIndex = self._currentIndex
 	for i = 2, #phases do
-		if fraction <= phases[i].hpFraction then
+		if fraction <= phases[i].hpFraction and i > targetIndex then
 			targetIndex = i
 		end
 	end

@@ -97,6 +97,22 @@ local BossConstants = {
 	SPORE_LOB_ORIGIN_HEIGHT_STUDS = 6,
 
 	-- ============================================================
+	-- Word ward (Boss/Scripts/BossWard; numbers live in BossConfig)
+	-- ============================================================
+	-- VfxConfig.EFFECTS ids played at the boss through VfxBroadcast as the
+	-- ward goes up and as it breaks. Reused stand-ins, not final art.
+	WARD_UP_VFX = "wall_rise_rumble",
+	WARD_DOWN_VFX = "impact_wall",
+	-- While the ward holds, a ring at the orbit radius pulses round the boss
+	-- this often, each lasting this long, in this colour.
+	WARD_PULSE_EVERY_SEC = 1.5,
+	WARD_RING_SEC = 0.6,
+	WARD_RING_COLOR = Color3.fromRGB(120, 200, 255),
+	-- The ward goes up when the boss's health is within this of the line
+	-- (Humanoid.Health is a 32-bit float, so "exactly on it" is not safe).
+	WARD_HEALTH_TOLERANCE = 0.01,
+
+	-- ============================================================
 	-- Attacks
 	-- ============================================================
 	-- Height above the root part that an attack is delivered from, so

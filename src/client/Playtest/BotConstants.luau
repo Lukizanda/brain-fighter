@@ -57,6 +57,12 @@ BotConstants.JOIN_RETRY_SEC = 2
 -- A jump in position this big in one tick is a teleport: the entry pad
 -- put the character on the island.
 BotConstants.TELEPORT_JUMP_STUDS = 40
+-- That jump only counts when it starts this close to the pad: the teleport
+-- from the lobby into the ready room is a jump too, and is not an arrival.
+BotConstants.PAD_NEAR_STUDS = 20
+-- The pad may not have streamed in when the bot reaches the ready room. Only
+-- after this long without one is the arena taken to have no ready room.
+BotConstants.PAD_WAIT_SEC = 10
 
 -- Word play (FightSim).
 BotConstants.PLAN_LENGTH_TRIES = 3
@@ -66,5 +72,13 @@ BotConstants.MAX_POP_FAILS = 20
 -- A refused cast waits this long before the persona is asked again.
 BotConstants.CAST_RETRY_SEC = 1
 BotConstants.COLORS = { "red", "green", "blue" }
+
+-- Spores (FightSim "Spores and ward letters are popped on sight"). Each
+-- spore is popped with chance max(reactChance, stealTow) / SPORE_CHANCE_DIVISOR
+-- + SPORE_CHANCE_BASE, rolled once, and not before the persona's
+-- reactDelaySec after it was first seen (later spores of one lob a tap
+-- apart).
+BotConstants.SPORE_CHANCE_DIVISOR = 2
+BotConstants.SPORE_CHANCE_BASE = 0.5
 
 return BotConstants

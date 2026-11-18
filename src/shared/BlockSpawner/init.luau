@@ -54,6 +54,10 @@
 -- removeSpore / clearSpores take them away. Same standing as a fossil letter:
 -- no count, no refill, no tow. The boss decides everything a spore does.
 --
+-- Ward letters: spawnWardLetter is a marked block with no lifetime that the
+-- boss's word ward moves round itself (moveWardLetter); clearWardLetters
+-- takes them away. Same standing as a spore: no count, no refill, no tow.
+--
 -- Tows (Phase 8 stage 9): beginTow / advanceTow / cancelTow draw one ordinary
 -- block toward a point (the boss pulls a letter to itself). The pool is the
 -- one writer of the block's position meanwhile. See the section of that name.
@@ -85,6 +89,7 @@ local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 local LetterTables = require(script.LetterTables)
 local SporeConstants = require(script.SporeConstants)
 local TowConstants = require(script.TowConstants)
+local WardConstants = require(script.WardConstants)
 local WordKits = require(script.WordKits)
 
 local log = Logger.new("BlockSpawner")
@@ -429,6 +434,8 @@ export type BlockSpawner = typeof(setmetatable(
 		_timed: { [Model]: boolean },
 		-- The timed blocks that are spores (see spawnSpore); a subset of _timed.
 		_spores: { [Model]: boolean },
+		-- The blocks that are ward letters (see spawnWardLetter); also in _timed.
+		_wards: { [Model]: boolean },
 		-- Pool blocks currently being pulled toward a point (see beginTow).
 		-- They stay in `_active` and in their box's count the whole time.
 		_towed: { [Model]: boolean },
@@ -491,6 +498,7 @@ function BlockSpawner.new(userOpts: Opts?): BlockSpawner
 		_kitTotal = kitTotal,
 		_timed = {},
 		_spores = {},
+		_wards = {},
 		_towed = {},
 		_running = false,
 		_destroyed = false,
@@ -1085,6 +1093,72 @@ function BlockSpawner.clearSpores(self: BlockSpawner): number
 		-- otherwise do it is deferred, so a caller asking straight away
 		-- would still be told the spore is live.
 		self._spores[block] = nil
+		block:Destroy()
+	end
+	return #snapshot
+end
+
+----------------------------------------------------------------------
+-- Ward letters (the boss's word ward)
+----------------------------------------------------------------------
+-- A ward letter is an ordinary poppable letter of this arena that carries
+-- the ward mark (WardConstants) and has no lifetime: it stays until it is
+-- popped or cleared. Like a timed block it is in no box, count, quota or
+-- refill, and beginTow never considers it (it is kept in `_timed` for that
+-- reason, so the round-start clear takes it too). The pool is the one writer
+-- of its position, through moveWardLetter; the boss says where. The pool
+-- knows nothing about what a ward does.
+
+-- Spawns a ward letter of `letter` / `color` at `position`. Returns nil on a
+-- destroyed pool.
+function BlockSpawner.spawnWardLetter(self: BlockSpawner, letter: string, color: string, position: Vector3): Model?
+	if self._destroyed then
+		return nil
+	end
+	local block = LetterBlocks.spawn(letter, color, CFrame.new(position), self._opts.parent)
+	block:SetAttribute(Arena.ID_ATTRIBUTE, self.arenaId)
+	block:SetAttribute(WardConstants.ATTRIBUTE, true)
+	self._timed[block] = true
+	self._wards[block] = true
+	block.Destroying:Connect(function()
+		self._timed[block] = nil
+		self._wards[block] = nil
+	end)
+	return block
+end
+
+-- Moves a ward letter to `position`, keeping its rotation. False when
+-- `block` is not a live ward letter of this pool; nothing moves then.
+function BlockSpawner.moveWardLetter(self: BlockSpawner, block: Model, position: Vector3): boolean
+	if not self._wards[block] or block.Parent == nil then
+		return false
+	end
+	block:PivotTo(CFrame.new(position) * block:GetPivot().Rotation)
+	return true
+end
+
+-- The ward letters still in the world. A popped one is left out at once: the
+-- signal that forgets it is deferred, so for the rest of that frame it is
+-- still in `_wards` with no parent.
+function BlockSpawner.getWardLetters(self: BlockSpawner): { Model }
+	local out: { Model } = {}
+	for block in self._wards do
+		if block.Parent ~= nil then
+			table.insert(out, block)
+		end
+	end
+	return out
+end
+
+-- Removes every live ward letter of this pool (the boss died, the round
+-- ended); returns how many.
+function BlockSpawner.clearWardLetters(self: BlockSpawner): number
+	local snapshot = self:getWardLetters()
+	for _, block in ipairs(snapshot) do
+		-- Forgotten here for the reason clearSpores gives: the removed signal
+		-- is deferred.
+		self._wards[block] = nil
+		self._timed[block] = nil
 		block:Destroy()
 	end
 	return #snapshot

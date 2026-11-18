@@ -14,6 +14,7 @@
 -- names a persona (PlaytestPersonas). `PlaytestArena` names the arena.
 -- The server half is src/server/Playtest/PlaytestRecorder.
 --
+-- Spores and ward letters are popped on sight (popSpore).
 -- Not played yet: cover, reacting to the boss's telegraph, stealing tows.
 ----------------------------------------------------------------------
 
@@ -30,6 +31,7 @@ local Shared = ReplicatedStorage.Shared
 local Arena = require(Shared.GameMode.Arena)
 local ArenaEntryConstants = require(Shared.Arena.ArenaEntryConstants)
 local BlockShoot = require(Shared.BlockShoot)
+local WardConstants = require(Shared.BlockSpawner.WardConstants)
 local Dictionary = require(Shared.Dictionary)
 local LetterBlocks = require(Shared.LetterBlocks)
 local Lobby = require(Shared.Lobby)
@@ -50,6 +52,7 @@ local portalRequest = Shared.Lobby.Remotes.PortalRequest :: RemoteEvent
 
 type Phase = "lobby" | "ready" | "island"
 type Mode = "idle" | "think" | "pop" | "charge"
+type SporeState = { willPop: boolean, popAfter: number, fails: number }
 
 local runId = 0
 
@@ -129,6 +132,10 @@ local function run(persona: PlaytestPersonas.Persona, myRun: number)
 	-- What the bot was doing when a cast hold began, to go back to after.
 	local resumeMode: Mode = "idle"
 	local resumeUntil = 0
+	-- Per spore seen: whether to pop it, from when, and refused taps so far.
+	local sporeStates: { [Model]: SporeState } = {}
+	-- When the bot got into the ready room (see PAD_WAIT_SEC).
+	local readySince = 0
 
 	local function setPhase(to: Phase)
 		if to ~= phase then
@@ -177,27 +184,111 @@ local function run(persona: PlaytestPersonas.Persona, myRun: number)
 		return nil
 	end
 
-	-- Blocks of this arena the character can see from head height.
-	local function visibleBlocks(char: Model, root: BasePart, arenaId: string): { BotVocabulary.Visible }
-		local eye = root.Position + Vector3.new(0, C.EYE_HEIGHT, 0)
+	-- A ward letter (the boss's word ward): popped on sight like a spore, and
+	-- always, since the boss cannot be hurt while one is left.
+	local function isWardLetter(block: Model): boolean
+		return block:GetAttribute(WardConstants.ATTRIBUTE) == true
+	end
+
+	-- Whether `block` is within tap reach of `eye` with a clear line to it.
+	local function canTap(eye: Vector3, params: RaycastParams, block: Model): boolean
+		local delta = block:GetPivot().Position - eye
+		if delta.Magnitude > BlockShoot.MAX_RAYCAST_DISTANCE then
+			return false
+		end
+		local hit = workspace:Raycast(eye, delta, params)
+		return hit == nil or hit.Instance:IsDescendantOf(block)
+	end
+
+	local function sightParams(char: Model): RaycastParams
 		local params = RaycastParams.new()
 		params.FilterType = Enum.RaycastFilterType.Exclude
 		params.FilterDescendantsInstances = { char }
+		return params
+	end
+
+	-- Blocks of this arena the character can see from head height. Spores are
+	-- left out: they are popped on sight (popSpore), never spelled with.
+	local function visibleBlocks(char: Model, root: BasePart, arenaId: string): { BotVocabulary.Visible }
+		local eye = root.Position + Vector3.new(0, C.EYE_HEIGHT, 0)
+		local params = sightParams(char)
 		local out: { BotVocabulary.Visible } = {}
 		for _, instance in CollectionService:GetTagged(LetterBlocks.TAG) do
-			if instance:IsA("Model") and instance:IsDescendantOf(workspace) and Arena.idOf(instance) == arenaId then
-				local target = instance:GetPivot().Position
-				local delta = target - eye
-				if delta.Magnitude <= BlockShoot.MAX_RAYCAST_DISTANCE then
-					local hit = workspace:Raycast(eye, delta, params)
-					local letter, color = BlockShoot.readBlock(instance)
-					if letter and color and (hit == nil or hit.Instance:IsDescendantOf(instance)) then
-						table.insert(out, { model = instance, letter = letter:upper(), color = color })
-					end
+			if instance:IsA("Model") and instance:IsDescendantOf(workspace) and Arena.idOf(instance) == arenaId
+				and not BlockShoot.isSpore(instance) and not isWardLetter(instance) and canTap(eye, params, instance) then
+				local letter, color = BlockShoot.readBlock(instance)
+				if letter and color then
+					table.insert(out, { model = instance, letter = letter:upper(), color = color })
 				end
 			end
 		end
 		return out
+	end
+
+	-- Pop a spore or a ward letter on sight, ahead of whatever the bot was
+	-- going for (a ward letter always; the rest of this is about spores). Each spore
+	-- is rolled once for whether this persona bothers (FightSim's chance) and
+	-- waits the persona's reaction delay from when it was first seen. The
+	-- tap shares nextTapAt with word popping, so the two never tap together.
+	-- The popped letter lands in the real word buffer like any pop; it is
+	-- taken straight back out, as a player discarding a tile (FightSim keeps
+	-- such letters outside the plan), so the planned word is not disturbed.
+	-- True if a tap was spent.
+	local function popSpore(char: Model, root: BasePart, arenaId: string, now: number): boolean
+		local eye = root.Position + Vector3.new(0, C.EYE_HEIGHT, 0)
+		local params = sightParams(char)
+		local chance = math.max(persona.reactChance, persona.stealTow) / C.SPORE_CHANCE_DIVISOR + C.SPORE_CHANCE_BASE
+		for model in sporeStates do
+			if not model:IsDescendantOf(workspace) then
+				sporeStates[model] = nil
+			end
+		end
+		local fresh = 0
+		local target: Model? = nil
+		for _, instance in CollectionService:GetTagged(LetterBlocks.TAG) do
+			if not instance:IsA("Model") or not instance:IsDescendantOf(workspace) or Arena.idOf(instance) ~= arenaId
+				or not (BlockShoot.isSpore(instance) or isWardLetter(instance)) then
+				continue
+			end
+			local ward = isWardLetter(instance)
+			local state = sporeStates[instance]
+			if not state then
+				state = {
+					willPop = ward or rng:NextNumber() < chance,
+					popAfter = now + persona.reactDelaySec + fresh / persona.tapsPerSec,
+					fails = 0,
+				}
+				sporeStates[instance] = state
+				fresh += 1
+			end
+			if target == nil and state.willPop and now >= state.popAfter and (ward or state.fails < C.MAX_POP_FAILS)
+				and canTap(eye, params, instance) then
+				target = instance
+			end
+		end
+		if not target then
+			return false
+		end
+		local spore: Model = target
+		local letter, color = BlockShoot.readBlock(spore)
+		local ok, popped = pcall(function(): any
+			return (requestPop :: BindableFunction):Invoke(spore)
+		end)
+		if ok and popped == true then
+			nextTapAt = now + 1 / persona.tapsPerSec
+			sporeStates[spore] = nil
+			if letter and color then
+				session.wordBuffer:removeLastMatching(letter, color)
+			end
+			log:info(string.format("popped a %s (%s)", if isWardLetter(spore) then "ward letter" else "spore", tostring(letter)))
+		else
+			local state = sporeStates[spore]
+			if state then
+				state.fails += 1
+			end
+			nextTapAt = now + C.TICK_SEC
+		end
+		return true
 	end
 
 	-- Whether a spell can land now: affordable and, for an attack, a boss in
@@ -388,6 +479,7 @@ local function run(persona: PlaytestPersonas.Persona, myRun: number)
 		setMode("idle", now)
 		local here = player:GetAttribute(Arena.ID_ATTRIBUTE)
 		setPhase(if here == currentArena() then "ready" else "lobby")
+		readySince = now
 	end
 
 	local function step()
@@ -412,6 +504,7 @@ local function run(persona: PlaytestPersonas.Persona, myRun: number)
 		elseif phase == "lobby" then
 			setPhase("ready")
 			lastPos = nil
+			readySince = now
 		end
 
 		if phase == "lobby" then
@@ -428,9 +521,15 @@ local function run(persona: PlaytestPersonas.Persona, myRun: number)
 		elseif phase == "ready" then
 			local pad = findPad(arenaId, position)
 			if not pad then
-				setPhase("island")
-				startThinking(now)
-			elseif lastPos and (position - lastPos).Magnitude > C.TELEPORT_JUMP_STUDS then
+				-- Not streamed in yet, or an arena with no ready room.
+				if now - readySince >= C.PAD_WAIT_SEC then
+					log:info("no entry pad found - taking this arena to have no ready room")
+					setPhase("island")
+					startThinking(now)
+				end
+			elseif lastPos and (position - lastPos).Magnitude > C.TELEPORT_JUMP_STUDS
+				and hdist(pad.Position, lastPos) <= C.PAD_NEAR_STUDS then
+				log:info("the entry pad moved the character onto the island")
 				setPhase("island")
 				startThinking(now)
 				goal, movedTo = nil, nil
@@ -446,6 +545,11 @@ local function run(persona: PlaytestPersonas.Persona, myRun: number)
 			else
 				local startedCast = bossModel() ~= nil and now >= nextCastAt and tryStartCast(char, root, humanoid, now)
 				if startedCast then
+					return
+				end
+				-- Spores first; a tap spent on one holds the word popping
+				-- back through nextTapAt.
+				if now >= nextTapAt and popSpore(char, root, arenaId, now) then
 					return
 				end
 				if mode == "think" then

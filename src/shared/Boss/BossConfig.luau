@@ -76,6 +76,19 @@ local bossTypes: { [string]: BossTypeSpec } = {
 		sporeHoverHeight       = 4,
 		sporeLetterTable       = LetterTables.COMMON,
 		sporeColors            = { "red", "blue" },
+		-- Word ward (wiki/design/ai-playtest.md, the ward decision): the
+		-- boss's health stops at half and 4 Common-table letters circle it,
+		-- 10 studs out and 6 up, once round every 8 s; nothing hurts it until
+		-- all 4 are popped. Phase 2 below starts at the same half. The radius
+		-- and height keep the letters inside the Premium zone's footprint, so
+		-- they are tapped from wherever the premium letters are.
+		wardAtHpFraction       = 0.5,
+		wardLetterCount        = 4,
+		wardOrbitRadius        = 10,
+		wardOrbitHeight        = 6,
+		wardOrbitPeriodSec     = 8,
+		wardLetterTable        = LetterTables.COMMON,
+		wardColors             = { "red", "green", "blue" },
 		skills = {
 			FireballVolley = {
 				name      = "FireballVolley",
@@ -131,6 +144,16 @@ local bossTypes: { [string]: BossTypeSpec } = {
 				attackCooldown   = 4.0,
 				walkSpeed        = 6,
 				bodyColor        = BrickColor.new("Bright red"),
+				availableAttacks = { "FireballVolley", "GroundSlam" },
+			},
+			-- The second half, from the word ward on: the same attacks,
+			-- sooner and from a boss that closes faster.
+			{
+				index            = 2,
+				hpFraction       = 0.5,
+				attackCooldown   = 3.0,
+				walkSpeed        = 9,
+				bodyColor        = BrickColor.new("Crimson"),
 				availableAttacks = { "FireballVolley", "GroundSlam" },
 			},
 		},

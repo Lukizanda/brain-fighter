@@ -13,6 +13,9 @@
 -- is set; `PlaytestArena` names the arena (default IslandReview). It only
 -- listens: no gameplay system knows it exists.
 --
+-- Spores: pops carry zone "Spore", their boss damage is spell "Spore" tier 1,
+-- and spore_lob / spore_burst are observed off the blocks (see the end).
+--
 -- Not recorded: tow_start and tow_stolen (no server signal), boss
 -- projectile counts (shots, shotsHit).
 ----------------------------------------------------------------------
@@ -30,10 +33,13 @@ end
 local Shared = ReplicatedStorage.Shared
 local Arena = require(Shared.GameMode.Arena)
 local BossConfig = require(Shared.Boss.BossConfig)
+local BossConstants = require(Shared.Boss.BossConstants)
 local BreakableWallConstants = require(Shared.Arena.BreakableWallConstants)
+local LetterBlocks = require(Shared.LetterBlocks)
 local Logger = require(Shared.Core.Logger)
 local PlaytestMetrics = require(Shared.Playtest.PlaytestMetrics)
 local SpellRegistry = require(Shared.SpellRegistry)
+local SporeConstants = require(Shared.BlockSpawner.SporeConstants)
 
 local C = require(script.Parent.RecorderConstants)
 local log = Logger.new("PlaytestRecorder")
@@ -51,6 +57,8 @@ local bossDefeatedEvent = Shared.Boss.BossEvents.BossDefeated :: BindableEvent
 local playerEnteredEvent = Shared.Arena.ArenaEvents.PlayerEntered :: BindableEvent
 
 type Event = { [string]: any }
+type Drop = { event: Event, amount: number, lethal: boolean, at: number }
+type Burst = { event: Event, at: number }
 type Fight = {
 	arena: string,
 	persona: string,
@@ -65,6 +73,16 @@ type Fight = {
 	lastSpell: string,
 	lastTier: number,
 	wallsBroken: number,
+	-- Spore bookkeeping. The last boss health drop and a spore-pop damage not
+	-- yet seen as a drop, so either arrival order pairs them up.
+	lastDrop: Drop?,
+	sporeOwed: number,
+	sporeOwedAt: number,
+	-- Spores landed and not yet written out as one `spore_lob`.
+	lobPending: number,
+	lobScheduled: boolean,
+	-- `spore_burst` events still waiting to learn whether they hurt anyone.
+	bursts: { Burst },
 	conns: { RBXScriptConnection },
 }
 
@@ -114,6 +132,38 @@ end
 -- Boss and walls
 ----------------------------------------------------------------------
 
+-- Spore pop damage. The boss's HealthChanged and the Health system's
+-- PlayerDamaged (which carries the cause) can arrive in either order, so
+-- each side checks for the other: whichever comes second pairs them. A drop
+-- of the right size that arrived first is relabelled; damage that arrived
+-- first is held (`sporeOwed`) for the drop. A lethal drop may be smaller
+-- than the damage (health stops at 0).
+local function sameDamage(drop: number, damage: number, lethal: boolean): boolean
+	return math.abs(drop - damage) <= C.DAMAGE_MATCH_TOLERANCE or (lethal and drop <= damage + C.DAMAGE_MATCH_TOLERANCE)
+end
+
+-- HealthChanged side: is this drop the spore pop already announced?
+local function sporePopOwes(f: Fight, drop: number, lethal: boolean): boolean
+	if f.sporeOwed > 0 and os.clock() - f.sporeOwedAt <= C.ATTRIBUTION_WINDOW_SEC and sameDamage(drop, f.sporeOwed, lethal) then
+		f.sporeOwed = 0
+		return true
+	end
+	return false
+end
+
+-- PlayerDamaged side: the boss took `damage` from a spore pop.
+local function notePopDamage(f: Fight, damage: number)
+	local last = f.lastDrop
+	if last and os.clock() - last.at <= C.ATTRIBUTION_WINDOW_SEC and sameDamage(last.amount, damage, last.lethal) then
+		last.event.tier = C.SPORE_DAMAGE_TIER
+		last.event.spell = C.SPORE_SPELL
+		f.lastDrop = nil
+	else
+		f.sporeOwed = damage
+		f.sporeOwedAt = os.clock()
+	end
+end
+
 local function attachBoss(f: Fight, model: Model)
 	if f.boss == model or Arena.idOf(model) ~= f.arena then
 		return
@@ -134,12 +184,21 @@ local function attachBoss(f: Fight, model: Model)
 	table.insert(f.conns, humanoid.HealthChanged:Connect(function(hp: number)
 		local fraction = (f.bossLastHp - hp) / math.max(f.bossMax, 1)
 		if hp < f.bossLastHp then
-			emit(f, "boss_damage", {
+			local drop = f.bossLastHp - hp
+			local fields: Event = {
 				amount = fraction,
 				tier = math.clamp(f.lastTier, 1, C.MAX_DAMAGE_TIER),
 				spell = f.lastSpell,
 				bossHp = hp / math.max(f.bossMax, 1),
-			})
+			}
+			if sporePopOwes(f, drop, hp <= 0) then
+				fields.tier = C.SPORE_DAMAGE_TIER
+				fields.spell = C.SPORE_SPELL
+				f.lastDrop = nil
+			else
+				f.lastDrop = { event = fields, amount = drop, lethal = hp <= 0, at = os.clock() }
+			end
+			emit(f, "boss_damage", fields)
 		elseif hp > f.bossLastHp then
 			local subject = subjectOf(f)
 			local character = subject and subject.Character
@@ -268,6 +327,12 @@ local function startFight(arenaId: string)
 		lastSpell = "?",
 		lastTier = 1,
 		wallsBroken = 0,
+		lastDrop = nil,
+		sporeOwed = 0,
+		sporeOwedAt = 0,
+		lobPending = 0,
+		lobScheduled = false,
+		bursts = {},
 		conns = {},
 	}
 	fight = f
@@ -324,9 +389,9 @@ CollectionService:GetInstanceAddedSignal(C.BOSS_TAG):Connect(function(instance: 
 	instance:GetAttributeChangedSignal(Arena.ID_ATTRIBUTE):Connect(attach)
 end)
 
-blockConsumedEvent.Event:Connect(function(_player: Player, letter: string, color: string, arenaId: string)
+blockConsumedEvent.Event:Connect(function(_player: Player, letter: string, color: string, arenaId: string, wasSpore: boolean?)
 	if fight and fight.arena == arenaId then
-		emit(fight, "pop", { letter = letter, color = color, zone = "?" })
+		emit(fight, "pop", { letter = letter, color = color, zone = if wasSpore == true then C.SPORE_ZONE else "?" })
 	end
 end)
 
@@ -367,9 +432,21 @@ end)
 
 playerDamagedEvent.Event:Connect(function(_source: Player?, targetHumanoid: Instance?, result: any)
 	local f = fight
+	if f and targetHumanoid and targetHumanoid == f.bossHumanoid and result.cause == BossConstants.SPORE_POP_CAUSE then
+		notePopDamage(f, result.finalDamage)
+		return
+	end
 	local victim = playerOfHumanoid(targetHumanoid)
 	if not f or not victim or not inArena(f, victim) or not targetHumanoid then
 		return
+	end
+	if result.cause == BossConstants.SPORE_BURST_CAUSE then
+		for _, burst in f.bursts do
+			if os.clock() - burst.at <= C.ATTRIBUTION_WINDOW_SEC and not burst.event.hit then
+				burst.event.hit = true
+				break
+			end
+		end
 	end
 	emit(f, "player_damage", {
 		amount = result.finalDamage,
@@ -390,6 +467,63 @@ playerEnteredEvent.Event:Connect(function(player: Player, arenaId: string)
 	if fight and fight.arena == arenaId then
 		emit(fight, "reenter", { player = player.Name })
 	end
+end)
+
+-- Spore lobs and bursts have no signal of their own (the Boss system fires
+-- none), so they are read off the blocks: a letter block gaining the spore
+-- mark has landed, and a marked block destroyed at its fuse time has burst
+-- (earlier it was popped or cleared). The times are landing and burst times,
+-- not the throw. Which burst hurt anyone comes from the SporeBurst damage.
+local watchedSpores: { [Instance]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+
+local function sporeLanded(f: Fight)
+	f.lobPending += 1
+	if f.lobScheduled then
+		return
+	end
+	f.lobScheduled = true
+	task.delay(C.LOB_BATCH_SEC, function()
+		f.lobScheduled = false
+		local count = f.lobPending
+		f.lobPending = 0
+		if fight == f and count > 0 then
+			emit(f, "spore_lob", { count = count })
+		end
+	end)
+end
+
+local function sporeGone(f: Fight, block: Instance)
+	local expires = block:GetAttribute(SporeConstants.EXPIRES_ATTRIBUTE)
+	if type(expires) ~= "number" or workspace:GetServerTimeNow() < expires - C.BURST_SLACK_SEC then
+		return
+	end
+	local fields: Event = { hit = false }
+	emit(f, "spore_burst", fields)
+	table.insert(f.bursts, { event = fields, at = os.clock() })
+end
+
+CollectionService:GetInstanceAddedSignal(LetterBlocks.TAG):Connect(function(instance: Instance)
+	if not instance:IsA("Model") then
+		return
+	end
+	local function check()
+		if watchedSpores[instance] or instance:GetAttribute(SporeConstants.ATTRIBUTE) ~= true then
+			return
+		end
+		watchedSpores[instance] = true
+		local f = fight
+		if f and Arena.idOf(instance) == f.arena then
+			sporeLanded(f)
+		end
+		instance.Destroying:Connect(function()
+			local g = fight
+			if g and Arena.idOf(instance) == g.arena then
+				sporeGone(g, instance)
+			end
+		end)
+	end
+	check()
+	instance:GetAttributeChangedSignal(SporeConstants.ATTRIBUTE):Connect(check)
 end)
 
 log:info("ready - waiting for a PlaytestBot attribute and a round start")

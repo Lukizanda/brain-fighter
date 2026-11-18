@@ -67,6 +67,9 @@ local SIGHT_TOLERANCE = 3
 local NO_PATH_HEIGHT = 8
 -- How far outside its zone's gate a player counts as "beyond the gate".
 local EXCURSION_ARRIVE_RADIUS = 14
+-- A player headed for a spot under a roof (the cave) is kept on the floor
+-- at that spot's level: the floor is looked for this far below eye height.
+local UNDER_ROOF_PROBE = 40
 -- How long a strafe keeps one direction before turning round.
 local STRAFE_FLIP_SEC = 1.5
 -- A stuck planner waits this long before looking again.
@@ -91,6 +94,19 @@ local SPORE_HEIGHT = 4
 local MAX_HELD_LETTERS = 6
 -- Ward letters orbit at this height.
 local WARD_HEIGHT = 6
+-- Key letters (unbuilt; wiki/design/ai-playtest.md § Gate redesign). The
+-- keys float this far in front of their gate, toward the island's centre,
+-- this far apart and this high; a player who sets out to pop them walks to
+-- a spot this far further in.
+local KEY_STANDOFF = 6
+local KEY_SPACING = 4
+local KEY_HEIGHT = 5
+local KEY_STAND_BACK = 10
+-- A player starts tapping keys at this share of their reach, still walking in.
+local KEY_TAP_REACH_SHARE = 0.9
+-- What one carried wildcard is counted as when a trip's payoff is added
+-- up: about one mid-value letter in a medium word. An estimate.
+local WILD_WORTH_ENERGY = 3
 -- Inside slam range the boss picks between its two attacks at random.
 local SLAM_PICK_CHANCE = 0.5
 -- A player who reacts to a windup keeps moving for the length of a volley.
@@ -227,8 +243,15 @@ end
 --   dmgFrac = { Firebolt=, Fireball=, Inferno=, ["Frost Nip"]= },
 --   ampMult, freezeImmunitySec, minWordEnergy, eatHealFraction,
 --   popReach = { [tableName] = studs }, gateHealth, timeLimit,
---   spore = { everyNthAttack, count, landRadius, fuseSec, burstDmg, burstRadius, popDamage? },
---   ward = { atHp, letters, orbitRadius, cooldown, walkSpeed }
+--   zoneQuota = { [tableName] = blocks } (starting letters per zone of that table),
+--   spore = { everyNthAttack, count, landRadius, fuseSec, burstDmg, burstRadius, popDamage? }
+--     (defaults to BossConfig's spore numbers now that spores are built;
+--     pass `spore = false` for a fight without them),
+--   ward = { atHp, letters, orbitRadius, cooldown, walkSpeed },
+--   keys = { gateCount, caveCount, popReach, noticeChance?, noticeRange? }
+--     (key letters: noticeChance overrides every persona's own
+--     `noticeGate`; noticeRange defaults to the tap reach, on the view
+--     that a letter can be read from as far as it can be tapped)
 function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: number): Result
 	local tune = tuning or {}
 	local rng = Random.new(seed)
@@ -243,6 +266,19 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 	local timeLimit: number = tune.timeLimit or GameModeConstants.PVE_ROUND_TIME_LIMIT_SEC
 	local eatHeal: number = tune.eatHealFraction or boss.eatHealFraction
 	local manaCap = EnergyReservoirs.CAP_PER_COLOR
+	local keys = tune.keys
+	local spore = tune.spore
+	if spore == nil and boss.sporeEveryNthAttack then
+		spore = {
+			everyNthAttack = boss.sporeEveryNthAttack, count = boss.sporeCount, landRadius = boss.sporeLandRadius,
+			fuseSec = boss.sporeFuseSec, burstDmg = boss.sporeBurstDamage, burstRadius = boss.sporeBurstRadius,
+			popDamage = boss.sporePopDamageFraction,
+		}
+	elseif spore == false then
+		spore = nil
+	end
+	local sporeFlightSec: number = boss.sporeFlightSec or SPORE_FLIGHT_SEC
+	local sporeHeight: number = boss.sporeHoverHeight or SPORE_HEIGHT
 	local center = flat(level.bossPoint)
 
 	local events: { Event } = {}
@@ -266,6 +302,16 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 	local function ground(p: Vector3): Vector3
 		local y = SimLevel.floorAt(level, p.X, p.Z, rayParams) or level.floorY
 		return Vector3.new(p.X, y, p.Z)
+	end
+
+	-- The floor straight below `from`, for places with a roof over them,
+	-- where the top-down probe of `ground` would land on the roof.
+	local function floorBelow(from: Vector3): Vector3
+		local hit = workspace:Raycast(from, Vector3.new(0, -UNDER_ROOF_PROBE, 0), rayParams)
+		if hit then
+			return Vector3.new(from.X, hit.Position.Y, from.Z)
+		end
+		return ground(from)
 	end
 
 	local function clearBetween(a: Vector3, b: Vector3): boolean
@@ -292,6 +338,11 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 	local blocks: { any } = {}
 	local respawns: { any } = {}
 	local kitWords: { [any]: string } = {}
+	local kitColors: { [any]: string } = {}
+	-- Key letters: one entry per regenerating gate that has a GateId.
+	local gates: { [string]: any } = {}
+	local gateList: { any } = {}
+	local onKeyPopped: (block: any) -> ()
 
 	local function spawnBlock(zone: any, letter: string?, color: string?, pos: Vector3?, extra: any?)
 		local l = letter or rollLetter(rng, zone.letterTable)
@@ -321,6 +372,7 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		local word = WordKits.pick(WordKits.nearestLength(zone.kitLength))
 		kitWords[zone] = word
 		local color = zone.colorOnly or COLORS[rng:NextInteger(1, #COLORS)]
+		kitColors[zone] = color
 		for i = 1, #word do
 			spawnBlock(zone, word:sub(i, i), color, nil, { kit = true })
 		end
@@ -330,15 +382,70 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		if zone.kitLength then
 			rollKit(zone)
 		else
-			for _ = 1, zone.quota do
+			local quota = (tune.zoneQuota and tune.zoneQuota[zone.letterTable]) or zone.quota
+			for _ = 1, quota do
 				spawnBlock(zone)
+			end
+		end
+	end
+
+	-- Hang a fresh ready-made word in front of a gate, replacing what is left
+	-- of the last one.
+	local function rollKeys(g: any)
+		for _, block in g.blocks do
+			block.alive = false
+		end
+		-- WordKits has no 3- or 4-letter list yet, so the model takes any
+		-- dictionary word of the length; the built version needs curated ones.
+		local words = loadAllWords()[if g.caveZone then keys.caveCount else keys.gateCount]
+		local word = words[rng:NextInteger(1, #words)]
+		local color = (g.caveZone and kitColors[g.caveZone]) or COLORS[rng:NextInteger(1, #COLORS)]
+		g.blocks = {}
+		g.word = word
+		g.left = #word
+		g.whole = true
+		g.noticeRolled = false
+		for i = 1, #word do
+			local block = {
+				letter = word:sub(i, i), color = color, alive = true, key = g, reach = keys.popReach,
+				pos = g.center + g.side * ((i - (#word + 1) / 2) * KEY_SPACING),
+				zone = { name = "Key" },
+			}
+			table.insert(blocks, block)
+			table.insert(g.blocks, block)
+		end
+	end
+
+	if keys then
+		for _, w in walls do
+			local id = w.def.gateId
+			if id and w.def.regenSec > 0 and not gates[id] then
+				local inward = center - flat(w.def.position)
+				inward = if inward.Magnitude > 1 then inward.Unit else Vector3.new(1, 0, 0)
+				local caveZone: any = nil
+				for _, zone in level.zones do
+					if zone.gateId == id and zone.kitLength then
+						caveZone = zone
+					end
+				end
+				local g = {
+					id = id, wall = w, caveZone = caveZone, blocks = {},
+					center = ground(flat(w.def.position) + inward * KEY_STANDOFF) + Vector3.new(0, KEY_HEIGHT, 0),
+					side = Vector3.new(-inward.Z, 0, inward.X),
+					stand = ground(flat(w.def.position) + inward * (KEY_STANDOFF + KEY_STAND_BACK)),
+				}
+				gates[id] = g
+				table.insert(gateList, g)
+				rollKeys(g)
 			end
 		end
 	end
 
 	local function removeBlock(block: any)
 		block.alive = false
-		if not block.kit and not block.fossil then
+		if block.key then
+			onKeyPopped(block)
+		elseif not block.kit and not block.fossil then
 			table.insert(respawns, { at = now + GameConfig.BLOCK_RESPAWN_DELAY, zone = block.zone })
 		end
 	end
@@ -352,6 +459,14 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 			w.resealAt = now + w.def.regenSec
 			if w.def.gateId then
 				gateOpen[w.def.gateId] = true
+				-- An open gate has no use for its keys.
+				local g = gates[w.def.gateId]
+				if g then
+					for _, block in g.blocks do
+						block.alive = false
+					end
+					g.left = 0
+				end
 			end
 		elseif w.def.fossilTable then
 			local zoneLike = { letterTable = w.def.fossilTable, name = "Fossil" }
@@ -392,6 +507,11 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		strafeSign = 1,
 		excursion = nil,
 		gateRolled = {},
+		-- Key letters: gates this player opened on purpose (so walks
+		-- through), and the trip being timed for M14.
+		gateForced = {},
+		trip = nil,
+		keyWord = false,
 	}
 
 	local b: any = {
@@ -423,6 +543,30 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		return (flat(p.pos) - flat(b.pos)).Magnitude
 	end
 
+	-- Close the books on a trip beyond a gate. `from` is where the player
+	-- turns back; the walk home to the gate is part of the trip's cost.
+	local function endTrip(died: boolean, from: Vector3?)
+		local trip = p.trip
+		if not trip then
+			return
+		end
+		p.trip = nil
+		local sec = now - trip.startedAt
+		if from then
+			sec += hdist(from, trip.gatePos) / PLAYER_WALK_SPEED
+		end
+		emit("trip_end", {
+			gate = trip.gate, sec = sec, memorized = trip.energy, wilds = trip.wilds,
+			energy = trip.energy + trip.wilds * WILD_WORTH_ENERGY, died = died, deliberate = trip.deliberate,
+		})
+	end
+
+	local function startTrip(gateId: string, gatePos: Vector3, deliberate: boolean)
+		if not p.trip then
+			p.trip = { gate = gateId, gatePos = gatePos, startedAt = now, deliberate = deliberate, energy = 0, wilds = 0 }
+		end
+	end
+
 	local function hurtPlayer(amount: number, source: string)
 		if not p.alive or now < p.protectedUntil then
 			return
@@ -448,6 +592,8 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				p.tiles = {}
 				p.mode = "think"
 			end
+			p.keyWord = false
+			endTrip(true, nil)
 			p.vel = Vector3.zero
 			emit("death", { source = source, bossHp = b.hp })
 		end
@@ -483,8 +629,30 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		emit("boss_damage", { amount = dealt, spell = spell, tier = tier, bossHp = b.hp })
 	end
 
+	-- The last key of a gate breaks it. A key popped as part of an ordinary
+	-- word counts too, which is how a gate opens by accident.
+	onKeyPopped = function(block: any)
+		local g = block.key
+		local onPurpose = p.keyWord and p.excursion ~= nil and p.excursion.keyGate == g
+		if not onPurpose then
+			g.whole = false
+		end
+		g.left -= 1
+		emit("key_pop", { gate = g.id, deliberate = onPurpose })
+		if g.left <= 0 and not g.wall.broken then
+			if onPurpose then
+				p.gateForced[g.id] = true
+			end
+			emit("gate_keyed", { gate = g.id, deliberate = onPurpose })
+			breakWall(g.wall)
+		end
+	end
+
 	-- Player: planning --------------------------------------------------
 	local function reachFor(block: any): number
+		if block.reach then
+			return block.reach
+		end
 		local override = tune.popReach and tune.popReach[block.zone.letterTable or ""]
 		return override or BlockShoot.MAX_RAYCAST_DISTANCE
 	end
@@ -624,6 +792,18 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 	end
 
 	local function memorize()
+		if p.keyWord and not p.kitWord then
+			-- Keys left over after some went into other words: loose letters.
+			for _, tile in p.tiles do
+				holdLetter(tile.letter, tile.color)
+			end
+			p.tiles = {}
+			p.queue = {}
+			p.excursion = nil
+			p.keyWord = false
+			startThinking(persona.typicalLen)
+			return
+		end
 		local fizzled = (not p.kitWord) and rng:NextNumber() < persona.invalidRate
 		if fizzled then
 			emit("fizzle", { letters = #p.tiles })
@@ -647,15 +827,20 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 			end
 			emit("memorize", {
 				word = p.word, red = energy.red or 0, green = energy.green or 0, blue = energy.blue or 0,
-				wasted = wasted, kit = p.kitWord, zone = p.wordZone,
+				wasted = wasted, kit = p.kitWord, key = p.keyWord, zone = p.wordZone,
 			})
-			if p.kitWord then
+			if p.trip then
+				p.trip.energy += (energy.red or 0) + (energy.green or 0) + (energy.blue or 0)
+			end
+			if p.kitWord and not p.keyWord then
 				emit("kit_taken", { word = p.word })
+				endTrip(false, p.pos)
 			end
 		end
 		p.tiles = {}
 		p.queue = {}
 		p.excursion = nil
+		p.keyWord = false
 		startThinking(persona.typicalLen)
 	end
 
@@ -806,7 +991,14 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 			local delta = flat(goal) - flat(p.pos)
 			if delta.Magnitude > 1 then
 				local step = delta.Unit * math.min(delta.Magnitude, PLAYER_WALK_SPEED * dt)
-				p.pos = ground(p.pos + step)
+				local nextPos = p.pos + step
+				if p.excursion and p.excursion.zone then
+					-- Stay at the level of the place being walked to, so a
+					-- cave is entered and not walked over.
+					p.pos = floorBelow(Vector3.new(nextPos.X, goal.Y + EYE_HEIGHT, nextPos.Z))
+				else
+					p.pos = ground(nextPos)
+				end
 			end
 		end
 		p.vel = flat(p.pos - before) / dt
@@ -821,9 +1013,17 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 			local gate = zone.gateId
 			if gate and gateOpen[gate] and not p.gateRolled[gate] then
 				p.gateRolled[gate] = true
-				local chance = if zone.kitLength then persona.goCave else persona.goGates
+				local chance = if p.gateForced[gate] then 1 elseif zone.kitLength then persona.goCave else persona.goGates
+				p.gateForced[gate] = nil
 				if rng:NextNumber() < chance then
-					p.excursion = { zone = zone, spot = ground(zone.center), startedAt = now }
+					p.excursion = { zone = zone, spot = floorBelow(zone.center), startedAt = now }
+					local gatePos = zone.center
+					for _, w in walls do
+						if w.def.gateId == gate then
+							gatePos = w.def.position
+						end
+					end
+					startTrip(gate, gatePos, false)
 					p.queue = {}
 					p.tiles = {}
 					p.mode = "travel"
@@ -832,6 +1032,38 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				end
 			end
 		end
+	end
+
+	-- Key letters: at a pause between words, does the player see a gate's
+	-- carved letters and decide to go and pop them? Rolled once per gate
+	-- each time its keys are hung.
+	local function noticeGate(): boolean
+		if not keys or p.excursion or persona.station == "overlook" then
+			return false
+		end
+		local eye = p.pos + Vector3.new(0, EYE_HEIGHT, 0)
+		local chance: number = keys.noticeChance or persona.noticeGate
+		local range: number = keys.noticeRange or BlockShoot.MAX_RAYCAST_DISTANCE
+		-- Nearest gate first: nobody crosses the island past a nearer one.
+		table.sort(gateList, function(x: any, y: any): boolean
+			return hdist(x.center, p.pos) < hdist(y.center, p.pos)
+		end)
+		for _, g in gateList do
+			if not g.noticeRolled and not g.wall.broken and g.left > 0
+				and hdist(g.center, p.pos) <= range and clearBetween(eye, g.center) then
+				g.noticeRolled = true
+				if rng:NextNumber() < chance then
+					p.excursion = { keyGate = g, spot = g.stand, startedAt = now }
+					startTrip(g.id, g.wall.def.position, true)
+					p.queue = {}
+					p.tiles = {}
+					p.mode = "travel"
+					emit("key_trip_start", { gate = g.id })
+					return true
+				end
+			end
+		end
+		return false
 	end
 
 	local function stepPlayer(dt: number)
@@ -882,8 +1114,8 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 					p.nextTapAt = now + 1 / persona.tapsPerSec
 					emit("pop", { letter = block.letter, color = block.color, zone = if block.ward then "Ward" else "Spore", value = 0 })
 					-- Optional rule: a popped spore snaps back at the boss.
-					if block.spore and tune.spore.popDamage then
-						hurtBoss(tune.spore.popDamage, "Spore", 1)
+					if block.spore and spore and spore.popDamage then
+						hurtBoss(spore.popDamage, "Spore", 1)
 					end
 					break
 				end
@@ -920,6 +1152,29 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 			local ex = p.excursion
 			if not ex then
 				startThinking(persona.typicalLen)
+			elseif ex.keyGate then
+				local g = ex.keyGate
+				if g.wall.broken or g.left <= 0 then
+					-- Opened before the player got there (the boss, or their
+					-- own earlier pops): walk through all the same.
+					p.gateForced[g.id] = true
+					p.gateRolled[g.id] = nil
+					p.excursion = nil
+					startThinking(persona.typicalLen)
+				elseif hdist(p.pos, g.center) <= math.max(EXCURSION_ARRIVE_RADIUS, keys.popReach * KEY_TAP_REACH_SHARE) then
+					p.queue = {}
+					p.tiles = {}
+					for _, block in g.blocks do
+						if block.alive then
+							table.insert(p.queue, { block = block, letter = block.letter })
+						end
+					end
+					p.word = g.word
+					p.kitWord = g.whole
+					p.keyWord = true
+					p.wordZone = "Key"
+					p.mode = "pop"
+				end
 			elseif hdist(p.pos, ex.spot) <= EXCURSION_ARRIVE_RADIUS then
 				p.queue = {}
 				p.tiles = {}
@@ -944,6 +1199,10 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 					end
 					p.wilds += taken
 					emit("excursion_end", { zone = ex.zone.name, wilds = taken, sec = now - ex.startedAt })
+					if p.trip then
+						p.trip.wilds += taken
+					end
+					endTrip(false, p.pos)
 					p.excursion = nil
 					startThinking(persona.typicalLen)
 				end
@@ -953,6 +1212,9 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 
 		if p.mode == "think" then
 			if now >= p.until_ then
+				if noticeGate() then
+					return
+				end
 				if planWord() then
 					p.mode = "pop"
 					p.wordZone = nil
@@ -989,6 +1251,13 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				p.tiles = {}
 				p.queue = {}
 				if p.excursion then
+					local g = p.excursion.keyGate
+					if g then
+						-- The gate opened under the player's hands.
+						p.gateForced[g.id] = true
+						p.gateRolled[g.id] = nil
+						p.keyWord = false
+					end
 					p.excursion = nil
 				end
 				startThinking(persona.typicalLen)
@@ -998,6 +1267,17 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				block.alive = false
 				table.remove(p.queue, 1)
 				table.insert(p.tiles, { letter = nextPick.letter, color = block.color })
+				return
+			end
+			if block.reach and (block.pos - eye).Magnitude > block.reach then
+				if p.excursion then
+					return -- still walking up to the gate
+				end
+				-- Walked out of reach of a key since planning: the word is off.
+				emit("plan_lost", { letters = #p.tiles })
+				p.tiles = {}
+				p.queue = {}
+				startThinking(persona.typicalLen)
 				return
 			end
 			if not clearBetween(eye, block.pos) then
@@ -1076,7 +1356,7 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				b.stateUntil = now + boss.attackWindupSec
 				b.attack = if d <= slam.maxSelectRange and rng:NextNumber() < SLAM_PICK_CHANCE then "GroundSlam" else "FireballVolley"
 				b.attacks += 1
-				if tune.spore and b.attack == "FireballVolley" and b.attacks % tune.spore.everyNthAttack == 0 then
+				if spore and b.attack == "FireballVolley" and b.attacks % spore.everyNthAttack == 0 then
 					b.attack = "SporeLob"
 				end
 				emit("boss_windup", { attack = b.attack, dist = d })
@@ -1092,7 +1372,7 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				if b.attack == "GroundSlam" then
 					b.stateUntil = now + slam.deliveryParams.windupSec
 				elseif b.attack == "SporeLob" then
-					b.stateUntil = now + SPORE_FLIGHT_SEC
+					b.stateUntil = now + sporeFlightSec
 				else
 					local params = volley.deliveryParams
 					b.shots = {}
@@ -1122,7 +1402,6 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 					end
 				end
 				if b.attack == "SporeLob" then
-					local spore = tune.spore
 					local chance = math.max(persona.reactChance, persona.stealTow) / 2 + 0.5
 					for i = 1, spore.count do
 						local angle = rng:NextNumber(0, math.pi * 2)
@@ -1130,7 +1409,7 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 						local zoneLike = { letterTable = LetterTables.COMMON, name = "Spore" }
 						table.insert(blocks, {
 							letter = rollLetter(rng, LetterTables.COMMON), color = if rng:NextNumber() < 0.5 then "red" else "blue",
-							pos = ground(p.pos + offset) + Vector3.new(0, SPORE_HEIGHT, 0), zone = zoneLike, alive = true,
+							pos = ground(p.pos + offset) + Vector3.new(0, sporeHeight, 0), zone = zoneLike, alive = true,
 							spore = true, fossil = true, burstAt = now + spore.fuseSec,
 							willPop = rng:NextNumber() < chance, popAfter = now + persona.reactDelaySec + (i - 1) / persona.tapsPerSec,
 						})
@@ -1171,7 +1450,7 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 			elseif now >= b.nextEatAt then
 				local nearest: any, nearestDist = nil, boss.eatRadius
 				for _, block in blocks do
-					if block.alive and not block.kit and not block.fossil then
+					if block.alive and not block.kit and not block.fossil and not block.key then
 						local bd = hdist(block.pos, b.pos)
 						if bd <= nearestDist then
 							nearest, nearestDist = block, bd
@@ -1200,17 +1479,19 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 			end
 			if block.alive and block.spore and now >= block.burstAt then
 				block.alive = false
-				local hit = p.alive and hdist(block.pos, p.pos) <= tune.spore.burstRadius
+				local hit = p.alive and hdist(block.pos, p.pos) <= spore.burstRadius
 				emit("spore_burst", { hit = hit })
 				if hit then
-					hurtPlayer(tune.spore.burstDmg, "Spore")
+					hurtPlayer(spore.burstDmg, "Spore")
 				end
 			end
 		end
 		for _, w in walls do
 			if w.broken and w.def.regenSec > 0 and now >= w.resealAt then
 				local gate = w.def.gateId
-				local held = p.excursion ~= nil and gate ~= nil and p.excursion.zone.gateId == gate
+				local ex = p.excursion
+				local held = ex ~= nil and gate ~= nil
+					and ((ex.zone and ex.zone.gateId == gate) or (ex.keyGate and ex.keyGate.id == gate))
 				if not held then
 					w.broken = false
 					w.hp = w.maxHp
@@ -1228,6 +1509,9 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 							if zone.gateId == gate and zone.kitLength then
 								rollKit(zone)
 							end
+						end
+						if gates[gate] then
+							rollKeys(gates[gate])
 						end
 					end
 				end

@@ -1,7 +1,7 @@
 ---
 type: system
 description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. One boss cycle per arena session, started on RoundStarted and stopped on RoundEnded; HUD remotes, perception and skill targets are all scoped to the BossPoint's arena (Phase 6 stage 3 + refactor chunk 9).
-updated: 2026-11-17
+updated: 2026-11-18
 ---
 
 # Boss
@@ -82,11 +82,16 @@ type PhaseSpec = {
 
 `BossPhaseManager` scans `PHASES[2..N]` each tick and transitions the moment `currentFraction <= PHASES[i].hpFraction`. With one entry, the loop never executes — always phase 1. Add more entries to the `phases` array in `BossConfig.BOSS_TYPES[type]` to activate multi-phase behavior without changing any other file.
 
-**Current config (single phase):**
+**Phases only go forward (2026-11-18).** A boss that heals back over a threshold stays in the phase it reached; the Brain eats letters, and would otherwise drop back to phase 1 half a percent after its ward broke. Test: `phase_only_goes_forward`.
+
+**Current config (the Brain, two phases since 2026-11-18):**
 
 | Index | hpFraction | Attacks | Cooldown | WalkSpeed |
 |---|---|---|---|---|
 | 1 | 1.0 (spawn) | FireballVolley, GroundSlam | 4 s | 6 |
+| 2 | 0.5 (the word ward's line) | FireballVolley, GroundSlam | 3 s | 9 |
+
+`bodyColor` is only read at spawn (`BossSpawner`), so phase 2's Crimson is not shown yet.
 
 ## State Machine
 
@@ -418,6 +423,55 @@ unchanged.
 
 Verified 2026-11-17: six `spore_*` tests in a **109/109** full run. **Nobody has seen
 a lob on a client or in a real fight.**
+
+## Word ward (2026-11-18)
+
+Decided by the user on 2026-11-17 from the AI playtest ([[design/ai-playtest]]
+§ Decisions): it is the one mechanic that brought a strong speller's 5-second burst
+under half the boss's health.
+
+The Brain's health cannot be taken below half until its ward is broken. The hit that
+would cross the line lands on it, four letter blocks appear and circle the boss, and
+nothing hurts the boss until all four have been popped. A pop is an ordinary pop: the
+letter goes to the popper's buffer. A boss has one ward. From the same line, phase 2
+makes the boss faster (§ Phase System).
+
+| Field (`BossConfig.BOSS_TYPES.Brain`) | Value |
+|---|---|
+| `wardAtHpFraction` | 0.5 |
+| `wardLetterCount` | 4 |
+| `wardOrbitRadius` / `wardOrbitHeight` | 10 studs out / 6 studs above the root |
+| `wardOrbitPeriodSec` | 8 |
+| `wardLetterTable` / `wardColors` | Common / red, green, blue |
+
+A type without `wardAtHpFraction` has no ward (Wizard).
+
+- `Boss/Scripts/BossWard.luau` is one object per boss, like `BossHunger` and
+  `BossSpores`, ticked by `BossController`. It decides when the ward goes up, where
+  the letters are and when it is broken.
+- **Whether a hit lands is Health's rule.** The ward sets and clears a health floor
+  on the boss ([[systems/Health]] § Health floor) and never writes `Humanoid.Health`.
+  The floor is set from the moment the boss spawns, which is what makes the crossing
+  hit stop on the line.
+- **The blocks belong to [[systems/BlockSpawner]]** (§ Ward letters). The ward asks
+  the pool to spawn, move and clear them. It needs no pop signal: a ward letter
+  leaves the world only by being popped or cleared, so a letter whose block is gone
+  was popped.
+- A warded boss does not eat: `BossController` skips the hunger tick while the ward
+  is up, so a fight cannot be stalled into a heal. Spores still fly, and their pop
+  damage is held by the floor like any other.
+- If the arena has no block pool the ward cannot hang letters and is dropped at once
+  with a warning, so the boss is never left unkillable.
+- Cues go through `VfxBroadcast` with stand-ins (`BossConstants.WARD_*`): a rumble as
+  it goes up, a ring at the orbit radius every 1.5 s while it holds, a thud as it
+  breaks. A hit that is held back still shows the attacker a damage number of 0. No
+  new art or audio, and ward letters look like any other letter (they carry the
+  `Block.Ward` mark for a client that wants to draw them differently).
+
+Verified 2026-11-18: `ward_holds_then_breaks`, `ward_ends_with_boss` and
+`phase_only_goes_forward`, in a full run of **111/112**. The failure was
+`ward_holds_then_breaks` reading the pool in the frame of a pop; fixed in the pool
+and **not run again**. **Nobody has seen a ward on a client or in a real fight.**
 
 ## Future Work
 

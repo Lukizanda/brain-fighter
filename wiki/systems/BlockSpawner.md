@@ -1,7 +1,7 @@
 ---
 type: system
 description: Server-side letter-block populator — one instance per arena, maintaining that arena's target count of floating LetterBlocks with Scrabble-weighted letter distribution, configurable color weights, and a per-block respawn cooldown.
-updated: 2026-11-17
+updated: 2026-11-18
 ---
 
 # BlockSpawner
@@ -273,6 +273,22 @@ every quota, never refilled, never towed.
   otherwise do it is deferred, and the first test run caught a caller being told the
   spores were still live (the same one-step lag `isTowed` had).
 - Constants: `shared/BlockSpawner/SporeConstants.luau`.
+
+## Ward letters (2026-11-18)
+
+A ward letter is a marked, poppable block with no lifetime that the boss asks for and
+moves ([[systems/Boss]] § Word ward). Same standing as a spore: outside the density
+pool and every quota, never refilled, never towed, and taken by the round-start clear.
+
+- `pool:spawnWardLetter(letter, color, position)` returns the block, carrying the
+  `Block.Ward` mark (`shared/BlockSpawner/WardConstants.luau`).
+- `pool:moveWardLetter(block, position)`: the pool stays the one writer of a block's
+  position; the boss only says where.
+- `pool:getWardLetters()` and `pool:clearWardLetters()`. The boss reaches all of them
+  through `BlockPoolRegistry`, by arena id.
+- `getWardLetters` leaves out a block that has left the world. The signal that
+  forgets a popped letter is deferred, and the first test run caught the list still
+  holding one in the frame of its pop (the lag `isTowed` and `clearSpores` had).
 
 ## Design decisions
 

@@ -1,7 +1,7 @@
 ---
 type: system
 description: Damage pipeline — one path. applyDamage.process / applyDamage.heal are the only Humanoid.Health writers; spells reach them through the DamageSink HealthService injects into SkillEffects; every request carries a cause id the kill feed credits; PvP is allowsPvP on the victim's mode, resolved through their session.
-updated: 2026-11-13
+updated: 2026-11-18
 ---
 
 # Health System
@@ -220,6 +220,19 @@ Consequences worth knowing:
 
 - Damage callers → see § Callers above; the spell side is [[systems/SkillPipeline]] § Damage paths. (The former firearm/TeamService friendly-fire path was deleted with the TPS stack in commit `6610291`.)
 - Kill feed rendering → `KillFeedGui` prints `[<cause>]` between killer and victim; env kills (no `sourcePlayer`) print the cause alone.
+
+## Health floor (2026-11-18)
+
+A health value a character cannot be damaged below while it is set, owned by Health.
+`shared/Health/HealthFloor.luau` keeps one character attribute, `_healthFloor`, in hit
+points; `set` and `clear` are its only writers. The rule is the last modifier in
+`DamageModifierRegistry`: a hit that would cross the floor is cut to land on it
+(label `Floor(-n)`), and a hit on a character already there resolves to 0. Unlike
+Protection the hit is not dropped, so the damage event still fires and the attacker
+sees a 0. The floor does not heal, and heals are not affected.
+
+First user: the boss's word ward ([[systems/Boss]] § Word ward). Tests:
+`ward_holds_then_breaks`, `ward_ends_with_boss`.
 
 ## Protection (Phase 8 stage 6, 2026-11-13)
 

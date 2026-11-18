@@ -1,5 +1,6 @@
 local HealthConstants = require(script.Parent.HealthConstants)
 local DamageTypes = require(script.Parent.DamageTypes)
+local HealthFloor = require(script.Parent.HealthFloor)
 
 type DamageRequest = DamageTypes.DamageRequest
 
@@ -55,10 +56,31 @@ local function shieldModifier(request: DamageRequest): (DamageRequest, string?)
 	return request, string.format("Shield(-%d)", absorbed)
 end
 
+-- A character with a health floor (HealthFloor) cannot be taken below it:
+-- the hit is cut to land on the floor, and does nothing once there. Last in
+-- the chain, so it cuts what would actually have landed.
+local function floorModifier(request: DamageRequest): (DamageRequest, string?)
+	local humanoid = request.targetHumanoid
+	local character = humanoid:FindFirstAncestorOfClass("Model")
+	local floor = character and HealthFloor.get(character)
+	if not floor then
+		return request, nil
+	end
+
+	local room = math.max(0, humanoid.Health - floor)
+	if request.baseDamage <= room then
+		return request, nil
+	end
+	local held = request.baseDamage - room
+	request.baseDamage = room
+	return request, string.format("Floor(-%d)", held)
+end
+
 DamageModifierRegistry.modifiers = {
 	headshotModifier,
 	armorModifier,
 	shieldModifier,
+	floorModifier,
 }
 
 function DamageModifierRegistry.resolve(request: DamageRequest): (number, number, { string })

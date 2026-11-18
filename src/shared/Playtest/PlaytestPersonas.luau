@@ -44,6 +44,9 @@ export type Persona = {
 	usesWild: boolean,
 	goGates: number,
 	goCave: number,
+	-- Key letters (unbuilt): chance of noticing a gate's carved letters and
+	-- going to pop them. A gate opened that way is always walked through.
+	noticeGate: number,
 	station: "roam" | "overlook",
 	distMin: number,
 	distMax: number,
@@ -177,6 +180,7 @@ local novice: Persona = {
 	usesWild = false,
 	goGates = 0,
 	goCave = 0,
+	noticeGate = 0.3,
 	station = "roam",
 	distMin = 40,
 	distMax = 90,
@@ -204,6 +208,7 @@ local average: Persona = {
 	usesWild = true,
 	goGates = 0,
 	goCave = 0.3,
+	noticeGate = 0.6,
 	station = "roam",
 	distMin = 60,
 	distMax = 100,
@@ -231,6 +236,7 @@ local strong: Persona = {
 	usesWild = true,
 	goGates = 0.5,
 	goCave = 0.8,
+	noticeGate = 0.9,
 	station = "roam",
 	distMin = 70,
 	distMax = 110,
@@ -245,6 +251,7 @@ local turtle: Persona = table.clone(average)
 turtle.name = "Turtle"
 turtle.station = "overlook"
 turtle.goCave = 0
+turtle.noticeGate = 0
 turtle.stealTow = 0.6
 turtle.reactChance = 0
 turtle.coverUse = 0
