@@ -668,14 +668,110 @@ Known weak points, for the review:
 
 ### Before the swap
 
-1. The user reviews the showcase and the [J] rulings above.
-2. `BreakableWallVisuals` learns the `Deco_` / `Seam_` children (tint and fade with the
-   body). Until then decorated breakables would keep their decoration when broken.
-3. A swap script maps each greybox part to an asset by size class and pivots a clone
-   onto it. The greybox part stays as collision, invisible except for breakables,
-   whose greybox part becomes the asset's `Body`.
+Steps 2 and 3 were done on 2026-11-18: see § The island dressed.
+
+1. The user reviews the dressed island and the [J] rulings above.
+2. ~~`BreakableWallVisuals` learns the `Deco_` / `Seam_` children.~~ Done.
+3. ~~A swap script maps each greybox part to an asset and pivots a clone onto it.~~
+   Done as four dress passes.
 4. Lighting was not touched. The place's haze and flat ambient do the art no favours;
    a lighting pass is its own decision.
+
+## The island dressed (2026-11-18)
+
+The user asked for the art to go onto the review island in place of the greybox look,
+with the senior designer's agreement before their own review. Done the same day on
+`Workspace.Arena.IslandReview` and its ready room. `IslandGreybox`, the baseline, is
+untouched. **The user has not reviewed it yet, and the place has to be saved to keep
+it.**
+
+**How.** Four dress passes under `src/server/Dev/LevelArt/dress/` (rocks, terrain, set
+pieces, and the lead's), run like the kits. No greybox part was moved, resized, renamed,
+re-tagged or deleted: all 268 are still the collision, raycast and gameplay truth.
+
+- Non-breakable greybox parts are hidden (transparency 1) under non-colliding art in
+  `Workspace.IslandReviewArt`, outside `Workspace.Arena` so no arena scan walks it.
+- The 25 breakable walls stay visible as the art's body: re-skinned, with `Deco_` /
+  `Seam_` children parented under them.
+- The 96 floor wedges are re-skinned and stay visible as the walkable surface.
+- Zone, key and boss-point volumes are invisible.
+- Every change is recorded on the part (`ArtPass`, `ArtOrig*`), so undressing the four
+  passes puts the greybox look back exactly, and re-running a pass rebuilds it. The
+  [README](../../src/server/Dev/LevelArt/README.md) § Dressing the island has the
+  helpers.
+
+**Code.** `BreakableWallVisuals` now draws a wall's `Deco_` children (damage tint and
+every fade) and `Seam_` children (fades only) with the wall, including children that
+stream in after it: [[systems/BreakableWalls]] § Client look. That was step 2 of
+§ Before the swap.
+
+**What is on the island.** About 1,620 art parts.
+
+| Pass | Covers |
+|---|---|
+| `Dress_Rocks` | 20 breakable covers across 11 assets (six low, two tall, three spires), 8 cores across three, the three ridge gates (one asset) and the cave plug |
+| `Dress_Terrain` | Floor (the `Soil` role with a few dark paving patches), 34 ridge parts across 16 lip and mass assets, three exit markers, the Stones, the Spit as three pieces, the six return blocks, the Overhang slab, a rim strip and the underside |
+| `Dress_SetPieces` | Dais, overlook with an arrival plinth, the cave (shell plus its ten cladding rocks one by one), ready-room pads, floor scatter, four floating rocks, four crystal clusters |
+| `Dress_Lead` | Hides the working volumes |
+
+**Checked.** By script after a clean re-run of all four: every audit reports no
+problems; no art part collides, answers queries, touches, or carries a tag or an
+`ArenaId`. In one playtest, on one cover and one gate with `WallState` set from the
+server: tint at cracked and critical, everything hidden at broken, seams keeping their
+colour, all restored at intact; the console showed nothing new. **Not checked:** real
+boss fire on dressed walls, a spire, the Overhang slab or the cave plug changing state,
+fight VFX against the art, a real player camera, frame rate.
+
+### Designer's review of the dressed island
+
+The same designer session reviewed it read-only in Studio, measuring for itself.
+First verdict: agree with conditions. Two blockers, both fixed and re-measured by the
+designer; final verdict: **agree**.
+
+| Blocker | Fix |
+|---|---|
+| The Spit's drawn floor was 2 to 3 studs off the real floor on the ramp and tip (one asset placed by its middle box, with the ends carried along) | Ramp, mid and tip are three assets, each on its own part; the designer sampled 25 points a segment and found no floor drawn past an edge |
+| The arrival mark was cyan neon, 12 degrees from the high-contrast letter green | Pale metal inlay, no neon |
+
+The designer measured and passed: lanes from the boss point to the three gates and the
+cave plug clear from +3 to +12, no art in any letter zone, dais radius 22 and the only
+plum, cover decoration within 1 stud, breakable body colour and gate seams as ruled.
+
+Rulings the designer changed after seeing them built (its own judgment, **not confirmed
+by the user**):
+
+- **Spires and tall cover:** the 1-stud envelope stands up to +12. Above +12 decoration
+  may reach 3 studs outside the box, with a top of +3. Up to 12 `Deco_` / `Seam_`
+  children. The five tall pieces were rebuilt to this.
+- **Exit markers:** up to +11 over the mass top; no part more than 3 studs in front of
+  the gate's boss-facing face, none in the gate's central 14 studs.
+- **Ridge mass tops:** +-3 instead of +-2.
+- **Arrival mark:** "subtle" means no neon and no reserved hue.
+
+Departures the designer accepted: the `Soil` floor in place of turf (the Grass material
+renders mint green beside letter green; moss and soil patches were dropped), one asset
+for all three ridge gates, the dressed lintel rock over the cave mouth, gate keystones
+1.9 above the gate top.
+
+Also done from its non-blocking list: the ridge builders reworked so the rim reads less
+like masonry, a paving ring 6 studs outside the dais removed (it blurred Ground Slam's
+edge), the Stones' tops off grass, and full decks on the ridge lips, six of which a
+player can step onto.
+
+Left open by the review:
+
+- Ring-out edges (the Spit, the Overhang slab) fade into the pale horizon, and the
+  lobby and the baseline island show over the low rim: for the lighting pass and the
+  swap.
+- The ready room's entry ring is orange neon, a hue reserved for the boss: for the
+  ready room's real dressing.
+- The Stones marker reaches about 1.4 studs into a corner of the Stones key-letter
+  volume.
+- From the boss's spot the ridge still reads a little stacked.
+- To check in a fight: letter colours (blue and the high-contrast green and blue most)
+  against the floor and the blue-grey ridge; fireballs and the spore ring against the
+  floor and dais; whether new players read the cave as an exit; edges and fossil glyphs
+  at distance; frame rate with about 1,800 more parts.
 
 ## Pick up here (rewritten 2026-11-14 at the end of the session)
 

@@ -10,6 +10,13 @@
 -- player sees and hears of it and is the only writer of the part's
 -- Color and Transparency on this client. Server code never sets either.
 --
+-- Level art: a wall may carry art as BaseParts parented directly under it,
+-- named `Deco_<n>` (takes the damage tint and every fade with the wall) or
+-- `Seam_<n>` (a glow strip: fades with the wall, never tinted). They are
+-- pieces of the wall's look, so this controller is the only writer of their
+-- Color and Transparency too. With streaming a child can arrive after its
+-- wall; it is drawn in the wall's current state when it does.
+--
 -- Greybox quality on purpose: a tint toward a dark stone colour per stage,
 -- a little transparency at the critical stage, the break as a burst plus
 -- hide, and the regen as a faint pulsing ghost before the wall re-seals.
@@ -48,17 +55,29 @@ local State = C.State
 local Fossil = FossilConstants
 local Glyph = FossilConstants.Glyph
 
-type Watched = {
+-- One visible piece of a wall: the tagged part itself, or an art child.
+type Piece = {
 	part: BasePart,
 	baseColor: Color3,
 	baseTransparency: number,
+	tinted: boolean, -- false for seams: they keep their colour
+	tween: Tween?,
+}
+
+type Watched = {
+	part: BasePart,
+	-- pieces[1] is the tagged part; the rest are its art children.
+	pieces: { Piece },
+	-- What the wall currently shows, kept so a late art child can match it.
+	tintFraction: number,
+	transparency: number,
 	lastState: string,
 	stateConn: RBXScriptConnection,
+	childConns: { RBXScriptConnection },
 	-- Fossil letter changes (a new round re-rolls it) redraw a showing glyph.
 	fossilConns: { RBXScriptConnection },
 	-- One SurfaceGui per broad face while the glyph shows.
 	glyphGuis: { SurfaceGui },
-	tween: Tween?,
 	telegraphThread: thread?,
 }
 
@@ -74,11 +93,40 @@ local function stateOf(part: BasePart): string
 	return if type(value) == "string" then value else State.Intact
 end
 
-local function stopMotion(w: Watched)
-	if w.tween then
-		w.tween:Cancel()
-		w.tween = nil
+-- A piece never shows more solid than it was authored: a half-clear seam
+-- stays half-clear on an intact wall and goes with the wall when it fades.
+local function pieceTransparency(piece: Piece, wallTransparency: number): number
+	return math.max(piece.baseTransparency, wallTransparency)
+end
+
+local function cancelTweens(w: Watched)
+	for _, piece in w.pieces do
+		if piece.tween then
+			piece.tween:Cancel()
+			piece.tween = nil
+		end
 	end
+end
+
+-- Push every tinted piece `fraction` of the way to the damage colour.
+local function setTint(w: Watched, fraction: number)
+	w.tintFraction = fraction
+	for _, piece in w.pieces do
+		if piece.tinted then
+			piece.part.Color = piece.baseColor:Lerp(C.DAMAGE_TINT_COLOR, fraction)
+		end
+	end
+end
+
+local function setTransparency(w: Watched, transparency: number)
+	w.transparency = transparency
+	for _, piece in w.pieces do
+		piece.part.Transparency = pieceTransparency(piece, transparency)
+	end
+end
+
+local function stopMotion(w: Watched)
+	cancelTweens(w)
 	if w.telegraphThread then
 		pcall(task.cancel, w.telegraphThread)
 		w.telegraphThread = nil
@@ -86,21 +134,22 @@ local function stopMotion(w: Watched)
 end
 
 local function fadeTo(w: Watched, transparency: number, seconds: number, info: TweenInfo?)
-	if w.tween then
-		w.tween:Cancel()
-		w.tween = nil
-	end
+	cancelTweens(w)
 	if seconds <= 0 and not info then
-		w.part.Transparency = transparency
+		setTransparency(w, transparency)
 		return
 	end
-	local tween = TweenService:Create(
-		w.part,
-		info or TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Transparency = transparency }
-	)
-	w.tween = tween
-	tween:Play()
+	w.transparency = transparency
+	local tweenInfo = info or TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	for _, piece in w.pieces do
+		local tween = TweenService:Create(
+			piece.part,
+			tweenInfo,
+			{ Transparency = pieceTransparency(piece, transparency) }
+		)
+		piece.tween = tween
+		tween:Play()
+	end
 end
 
 -- The ghost of a wall that is about to re-seal. A pulse unless the viewer
@@ -114,7 +163,7 @@ local function showGhost(w: Watched)
 		fadeTo(w, C.GHOST_TRANSPARENCY, 0)
 		return
 	end
-	w.part.Transparency = C.GHOST_TRANSPARENCY + C.GHOST_PULSE_DEPTH
+	setTransparency(w, C.GHOST_TRANSPARENCY + C.GHOST_PULSE_DEPTH)
 	fadeTo(w, C.GHOST_TRANSPARENCY - C.GHOST_PULSE_DEPTH, 0, TweenInfo.new(
 		C.GHOST_PULSE_SEC,
 		Enum.EasingStyle.Sine,
@@ -222,8 +271,8 @@ local function draw(w: Watched, state: string, live: boolean)
 	local part = w.part
 
 	if state == State.Broken then
-		part.Transparency = 1
-		part.Color = w.baseColor
+		setTransparency(w, C.BROKEN_TRANSPARENCY)
+		setTint(w, 0)
 		if live then
 			SkillVisuals.spawnEffectAtPoint(part.Position, C.Vfx.Break)
 		end
@@ -233,14 +282,14 @@ local function draw(w: Watched, state: string, live: boolean)
 
 	-- Every non-broken stage is the authored look pushed toward the damage tint.
 	local tint = 0
-	local transparency = w.baseTransparency
+	local transparency = 0
 	if state == State.Cracked then
 		tint = C.CRACKED_TINT_FRACTION
 	elseif state == State.Critical then
 		tint = C.CRITICAL_TINT_FRACTION
-		transparency = math.max(transparency, C.CRITICAL_TRANSPARENCY)
+		transparency = C.CRITICAL_TRANSPARENCY
 	end
-	part.Color = w.baseColor:Lerp(C.DAMAGE_TINT_COLOR, tint)
+	setTint(w, tint)
 
 	if previous == State.Broken then
 		-- Re-sealed. Dust where it closes, and a fade-in from the ghost
@@ -251,14 +300,69 @@ local function draw(w: Watched, state: string, live: boolean)
 		if live and not isReduced() then
 			fadeTo(w, transparency, C.RESEAL_FADE_SEC)
 		else
-			part.Transparency = transparency
+			setTransparency(w, transparency)
 		end
 		return
 	end
 
-	part.Transparency = transparency
+	setTransparency(w, transparency)
 	if live and tint > 0 then
 		SkillVisuals.spawnEffectAtPoint(part.Position, C.Vfx.Crack)
+	end
+end
+
+----------------------------------------------------------------------
+-- Art children
+----------------------------------------------------------------------
+
+local function isDeco(child: Instance): boolean
+	return string.find(child.Name, C.Art.DECO_PATTERN) ~= nil
+end
+
+local function isArtChild(child: Instance): boolean
+	return child:IsA("BasePart") and (isDeco(child) or string.find(child.Name, C.Art.SEAM_PATTERN) ~= nil)
+end
+
+local function newPiece(part: BasePart, tinted: boolean): Piece
+	return {
+		part = part,
+		baseColor = part.Color,
+		baseTransparency = part.Transparency,
+		tinted = tinted,
+	}
+end
+
+-- An art child seen for the first time takes the wall's current look at
+-- once. If the wall is mid-fade or pulsing, the child joins the motion at
+-- the next state change: a streamed-in rock does not start a tween of its own.
+local function addArtChild(w: Watched, child: Instance)
+	if not isArtChild(child) then
+		return
+	end
+	local part = child :: BasePart
+	for _, piece in w.pieces do
+		if piece.part == part then
+			return
+		end
+	end
+	local piece = newPiece(part, isDeco(part))
+	table.insert(w.pieces, piece)
+	if piece.tinted then
+		part.Color = piece.baseColor:Lerp(C.DAMAGE_TINT_COLOR, w.tintFraction)
+	end
+	part.Transparency = pieceTransparency(piece, w.transparency)
+end
+
+-- pieces[1] is the wall itself and is never dropped here.
+local function removeArtChild(w: Watched, child: Instance)
+	for index = #w.pieces, 2, -1 do
+		local piece = w.pieces[index]
+		if piece.part == child then
+			if piece.tween then
+				piece.tween:Cancel()
+			end
+			table.remove(w.pieces, index)
+		end
 	end
 end
 
@@ -269,8 +373,9 @@ local function watch(instance: Instance)
 	local part: BasePart = instance
 	local w: Watched = {
 		part = part,
-		baseColor = part.Color,
-		baseTransparency = part.Transparency,
+		pieces = { newPiece(part, true) },
+		tintFraction = 0,
+		transparency = 0,
 		lastState = State.Intact,
 		stateConn = part:GetAttributeChangedSignal(C.Published.State):Connect(function()
 			local current = watched[part]
@@ -282,9 +387,25 @@ local function watch(instance: Instance)
 				draw(current, state, true)
 			end
 		end),
+		childConns = {},
 		fossilConns = {},
 		glyphGuis = {},
 	}
+	for _, child in part:GetChildren() do
+		addArtChild(w, child)
+	end
+	table.insert(w.childConns, part.ChildAdded:Connect(function(child: Instance)
+		local current = watched[part]
+		if current then
+			addArtChild(current, child)
+		end
+	end))
+	table.insert(w.childConns, part.ChildRemoved:Connect(function(child: Instance)
+		local current = watched[part]
+		if current then
+			removeArtChild(current, child)
+		end
+	end))
 	-- A re-rolled (or late-replicated) letter redraws the glyph if the wall
 	-- is in a state that shows it.
 	for _, attribute in { Fossil.LETTER_ATTRIBUTE, Fossil.COLOR_ATTRIBUTE } do
@@ -310,15 +431,20 @@ local function unwatch(instance: Instance)
 	end
 	watched[instance :: BasePart] = nil
 	w.stateConn:Disconnect()
+	for _, connection in w.childConns do
+		connection:Disconnect()
+	end
 	for _, connection in w.fossilConns do
 		connection:Disconnect()
 	end
 	clearGlyph(w)
 	stopMotion(w)
 	-- Put the authored look back: the part may be re-tagged or re-streamed.
-	if w.part.Parent then
-		w.part.Color = w.baseColor
-		w.part.Transparency = w.baseTransparency
+	for _, piece in w.pieces do
+		if piece.part.Parent then
+			piece.part.Color = piece.baseColor
+			piece.part.Transparency = piece.baseTransparency
+		end
 	end
 end
 

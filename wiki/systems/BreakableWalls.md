@@ -116,6 +116,15 @@ before the re-seal and a short fade back. Effects are `VfxConfig.EFFECTS` entrie
 art pass is a config change. A wall first seen in a damaged state is drawn silently.
 Reduced effects drops the ghost pulse and the fade.
 
+**Art children (2026-11-18).** A wall may carry level art as BaseParts parented
+directly under it: `Deco_<n>` takes the damage tint and every fade with the wall,
+`Seam_<n>` (a glow strip) fades but keeps its colour. The patterns are
+`BreakableWallConstants.Art`. The controller is the only writer of those children's
+Color and Transparency as well. A child never shows more solid than it was authored,
+and one that streams in after its wall takes the wall's current look at once. Seen in a
+playtest on one cover and one gate of the dressed island with `WallState` set from the
+server; not yet under real boss fire.
+
 The regen ghost is a client estimate: the server publishes no timestamp, so the client
 counts `RegenSec` minus 2 s from when it saw the break. A late joiner sees no ghost,
 and a wall held open by an overlapping character keeps its ghost until the server

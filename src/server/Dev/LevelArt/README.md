@@ -1,9 +1,12 @@
 # Level art kit (boss island)
 
 Builders for the boss island's level art. The art is made of native Roblox
-primitives and built-in materials only, and lives in the place file under
-`Workspace.LevelArtShowcase`. These files are the source: re-running a kit rebuilds
-its assets in place, so review feedback is a file edit, not hand work in Studio.
+primitives and built-in materials only, and lives in the place file: the kit on a
+showcase under `Workspace.LevelArtShowcase`, and the dressed level under
+`Workspace.IslandReviewArt` plus the changes the dress passes make to the greybox
+parts of `Workspace.Arena.IslandReview`. These files are the source: re-running a
+file rebuilds what it made, so review feedback is a file edit, not hand work in
+Studio.
 
 Nothing here is game code and nothing in the game requires it.
 
@@ -17,6 +20,8 @@ Nothing here is game code and nothing in the game requires it.
 | `kits/terrain.luau` | Floor, ridge, ledges, island underside |
 | `kits/setpieces.luau` | Dais, overlook, pads, ready room, dressing |
 | `vignette.luau` | A slice of the island assembled from the kits |
+| `dress/rocks.luau`, `dress/terrain.luau`, `dress/setpieces.luau` | The dress passes: each puts one kit on the real island |
+| `dress/lead.luau` | The lead's pass: hides the greybox's working volumes. Run it last |
 
 ## Running a file
 
@@ -70,6 +75,44 @@ The `:Clone()` is required: Edit mode caches `require` results across calls
 - **Leave the rest of the place alone.** No changes to Lighting, Terrain,
   `Workspace.Arena`, the lobby or any script.
 
+## Dressing the island
+
+The kits make assets on the showcase; the dress passes put them on
+`Workspace.Arena.IslandReview` and its ready room. Run a pass like any other file:
+`return require(game.ServerStorage.LevelArtRun:Clone())("dress/rocks.luau")`. It
+returns its audit. Run the kit a pass draws from first: a pass clones what is on the
+showcase.
+
+A pass never moves, resizes, renames, re-tags or deletes a greybox part. Through the
+prelude it may do four things, each recorded on the part so the pass can be undone:
+
+| Helper | What it does |
+|---|---|
+| `ART.place(pass, kit, asset, part, opts)` | Clones a showcase asset, stretches its `GreyboxRef` to the part's box and lays it over the part. The part is hidden and stays the collision. `opts.turn` (0 / 90 / 180 / 270) faces the asset; `opts.at` / `opts.size` give the box when it is not the part's own (a Cylinder on its side) |
+| `ART.adopt(pass, kit, asset, wall, flip)` | For a `BreakableWall`: the greybox part takes the asset Body's material and colour and gets clones of its `Deco_` / `Seam_` children. The game client tints and fades those with the wall |
+| `ART.skin(pass, part, role)` | Gives a greybox part a palette role and leaves it visible |
+| `ART.hide(pass, part)` | Makes a greybox part invisible; it still collides and answers raycasts |
+
+Bespoke art is built with `ART.prim` into `ART.dressFolder(pass)`, which is
+`Workspace.IslandReviewArt.<pass>`: outside `Workspace.Arena`, so no arena scan walks
+it.
+
+- **Re-running a pass is safe.** `ART.dress(pass, fn)` undoes the pass first, runs it
+  in one undo waypoint and returns `ART.audit(pass)`.
+- **`ART.undress(pass)` puts the greybox back**: the pass's folder and the wall
+  children it added go, and every part it claimed gets its original colour, material
+  and transparency from the `ArtOrig*` attributes. Undress all four passes and the
+  island is the greybox again.
+- **One owner per part.** A part claimed by one pass (`ArtPass`) cannot be touched by
+  another; the helper errors.
+- **`problems: 0` in the audit is the done condition.** It checks that art is anchored,
+  does not collide, answer queries or touch, carries no tag and no `ArenaId`, that wall
+  children are named `Deco_<n>` / `Seam_<n>` and number at most 12, and that no fitted
+  clone is stretched outside 0.6 to 1.6 on an axis.
+- **`ART.undressed()`** lists the greybox parts that are still visible and unclaimed.
+- Greybox names repeat (three `Cover_10`), so a pass works from `ART.greybox(prefix)`
+  and part sizes, never from a name.
+
 ## Designer rulings (digest)
 
 From the senior designer consultation of 2026-11-18. The full record, including which
@@ -90,9 +133,17 @@ that faces the playfield, and must not leave a collision face uncovered by more 
 masses.
 
 **Breakables** use `ART.breakable`: a visible `Body` at the exact greybox size with up
-to 8 direct children named `Deco_<n>` (tinted and faded with the body) or `Seam_<n>`
+to 12 direct children named `Deco_<n>` (tinted and faded with the body) or `Seam_<n>`
 (glow, faded only). Children reach at most 1 stud outside the box and never cover the
 glyph square: centred on the two broad faces, side 0.7 x min(face width, face height).
+
+**Revised after the dressed island (2026-11-18).** Tall cover and spires: the 1-stud
+envelope stands up to +12; above +12 decoration may reach 3 studs outside the box and
+the top +3. Exit markers: up to +11 over the mass top, no part more than 3 studs in
+front of the gate's boss-facing face or inside its central 14 studs. Ridge mass tops:
++-3. The arrival mark carries no neon and no reserved hue. The Grass material renders
+mint green beside letter green: the floor is the `Soil` role, and `Turf` is not used on
+anything a letter is read against.
 
 **Colour.** Large surfaces S <= 25%, anything in the playfield S <= 35%, floor value
 30-45%. Reserved, and absent from the palette: letter red, green, blue and wildcard

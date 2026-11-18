@@ -78,6 +78,14 @@ end
 ----------------------------------------------------------------------
 local function buildDais(model: Model, o: CFrame)
 	-- Layers, each at its own height (<= 0.2), larger-dark under smaller-light.
+	-- The greybox dais stands 1 stud proud of the floor: a skirt (radius 22) closes its side.
+	ART.prim(model, {
+		role = "Plum",
+		name = "Skirt",
+		shape = "Cylinder",
+		size = Vector3.new(1, 44, 44),
+		cf = o * CFrame.new(0, -0.5, 0) * CFrame.Angles(0, 0, math.pi / 2),
+	})
 	disc(model, o, "PlumLight", 44, 0.04, "Rim") -- the radius-22 edge: light line against dark floor
 	disc(model, o, "Plum", 42.4, 0.06, "Field")
 	disc(model, o, "Rune", 41.6, 0.08, "RuneRing") -- neon ring r 20.5..20.8, 0.3 wide
@@ -125,58 +133,94 @@ local function wedge(model: Instance, o: CFrame, role: string, w, h, run, at: Ve
 	})
 end
 
-local function buildOverlook(model: Model, o: CFrame)
-	-- Four strata, each a pair of long slabs yawed against each other and shifted in/out.
-	local strata = {
-		{ "CliffDark", -0.5, 4.6 },
-		{ "Cliff", 4.2, 8.8 },
-		{ "Cliff", 8.4, 12.6 },
-		{ "CliffLight", 12.2, 15.7 },
-	}
-	for i, s in strata do
-		for side = -1, 1, 2 do
-			local shiftZ = rng:NextNumber(-0.5, 0.5)
-			local shiftX = rng:NextNumber(-0.4, 0.4)
+-- Cladding on one face: courses of broken slabs, each course cut into segments of
+-- different width, so no joint lines up with the one below. The face is a greybox
+-- face at (cx, cz) in asset space; `yawDeg` turns local +Z to point outward
+-- (0 = +Z, 180 = -Z, 90 = +X, -90 = -X). `courses` entries are
+-- { role, y0, y1, outerLo, outerHi }: the outer surface sits that far outside the
+-- greybox face (negative = inset); every value stays within 1 stud of it.
+local function cladFace(model: Instance, o: CFrame, cx: number, cz: number, yawDeg: number, length: number, courses, thk: number, segMin: number, segMax: number, name: string)
+	local face = o * CFrame.new(cx, 0, cz) * CFrame.Angles(0, rad(yawDeg), 0)
+	for _, c in courses do
+		local cursor = -length / 2
+		while cursor < length / 2 - 0.3 do
+			local remaining = length / 2 - cursor
+			local w = math.min(rng:NextNumber(segMin, segMax), remaining)
+			if remaining - w < segMin * 0.6 then
+				w = remaining
+			end
+			local y0 = c[2] + rng:NextNumber(-0.25, 0.25)
+			local y1 = c[3] + rng:NextNumber(-0.25, 0.25)
+			local outer = rng:NextNumber(c[4], c[5])
 			ART.prim(model, {
-				role = s[1],
-				name = "Stratum" .. i,
-				size = Vector3.new(15.2, s[3] - s[2], 21),
-				cf = o * CFrame.new(side * 7.3 + shiftX * 0.5, (s[2] + s[3]) / 2, shiftZ)
-					* CFrame.Angles(0, rad(side * rng:NextNumber(0.8, 1.2)), 0),
-				color = ART.shade(s[1], rng:NextNumber(-0.02, 0.02)),
+				role = c[1],
+				name = name,
+				size = Vector3.new(w + 0.1, y1 - y0, thk),
+				cf = face * CFrame.new(cursor + w / 2, (y0 + y1) / 2, outer - thk / 2) * CFrame.Angles(0, rad(rng:NextNumber(-1.5, 1.5)), 0),
+				color = ART.shade(c[1], rng:NextNumber(-0.03, 0.03)),
 			})
+			cursor += w
 		end
 	end
-	-- Steep buttress wedges: front (x2) and the +X side, each over 9 high, run 1.6.
+end
+
+-- Where the real ArrivalPoint pad sits on the real shelf, in the shelf's own space
+-- (measured on the island: 2.0 studs toward +Z of the shelf's centre).
+local PAD_X, PAD_Z = 0, 2
+
+local function buildOverlook(model: Model, o: CFrame)
+	-- Hidden core so no gap shows between slabs.
+	box(model, o, "Cliff", -14.2, 14.2, -0.3, 15.6, -10.2, 10.2, nil, "Core")
+	-- Four strata. The top one overhangs (+0.4..+0.8) and the one under it is cut back
+	-- (-0.9..-0.4), so a shadow line runs under the lip.
+	local courses = {
+		{ "CliffDark", -0.5, 4.6, -0.3, 0.6 },
+		{ "Cliff", 4.3, 8.9, -0.6, 0.5 },
+		{ "Cliff", 8.6, 12.7, -0.9, -0.4 },
+		{ "CliffLight", 12.4, 15.8, 0.4, 0.8 },
+	}
+	cladFace(model, o, 0, -11, 180, 30, courses, 2.4, 5.5, 10, "Slab")
+	cladFace(model, o, 0, 11, 0, 30, courses, 2.4, 5.5, 10, "Slab")
+	cladFace(model, o, -15, 0, -90, 22, courses, 2.4, 5, 9, "Slab")
+	cladFace(model, o, 15, 0, 90, 22, courses, 2.4, 5, 9, "Slab")
+	-- Steep ribs on the front and the +X side, each over 9 high; run under 1.6 so a rib
+	-- is a lean, not a step.
 	wedge(model, o, "Cliff", 5, 12, 1.6, Vector3.new(-8, 5.7, -11.2), Vector3.new(0, 0, 1), false, 2, "Buttress")
-	wedge(model, o, "CliffLight", 4, 10.5, 1.6, Vector3.new(4, 4.95, -11.2), Vector3.new(0, 0, 1), false, -2, "Buttress")
-	wedge(model, o, "Cliff", 7, 13, 1.6, Vector3.new(15.4, 6.2, 3), Vector3.new(-1, 0, 0), false, 1, "Buttress")
-	-- Irregular paved lip: broken curb blocks at the edge, then paving at +16.
+	wedge(model, o, "CliffDark", 4, 10.5, 1.6, Vector3.new(4, 4.95, -11.2), Vector3.new(0, 0, 1), false, -2, "Buttress")
+	wedge(model, o, "Cliff", 7, 13, 1.6, Vector3.new(15.2, 6.2, 3), Vector3.new(-1, 0, 0), false, 1, "Buttress")
+	-- Two crags break the top outline (tilted blocks 1.3 over the paving, at the corners).
+	ART.prim(model, { role = "CliffLight", name = "Crag", size = Vector3.new(3.4, 1.8, 2.6),
+		cf = o * CFrame.new(-12.6, 16.5, -8.6) * CFrame.Angles(rad(4), rad(18), rad(-7)) })
+	ART.prim(model, { role = "Cliff", name = "Crag", size = Vector3.new(2.6, 1.5, 3.2),
+		cf = o * CFrame.new(12.8, 16.4, 7.4) * CFrame.Angles(rad(-5), rad(-22), rad(6)) })
+	-- Paving and a broken lip along the top edge.
+	box(model, o, "Flagstone", -14.2, 0.4, 15.5, 16, -10.2, 10.2, nil, "PavingL")
+	box(model, o, "Flagstone", -0.2, 14.2, 15.5, 16, -10.2, 10.2, ART.shade("Flagstone", 0.03), "PavingR")
+	box(model, o, "FlagstoneDark", -9, -4, 15.5, 15.95, -6, -3, nil, "PavingPatch")
 	local lip = {
-		{ -9, -9.9, 7, 1.6 }, { 4, -10.1, 9, 1.4 }, { 12, -9.2, 5, 2 },
-		{ -13.7, 2, 2.2, 10 }, { 13.9, -1, 1.8, 9 }, { -4, 10, 11, 1.6 },
+		{ -9, -10.6, 7, 1.4 }, { 4, -10.7, 9, 1.3 }, { 12, -10.3, 5, 1.6 },
+		{ -14.6, 2, 1.6, 10 }, { 14.7, -1, 1.5, 9 }, { -4, 10.7, 11, 1.4 },
 	}
 	for _, l in lip do
 		ART.prim(model, {
 			role = "CliffLight",
 			name = "Lip",
 			size = Vector3.new(l[3], 0.9, l[4]),
-			cf = o * CFrame.new(l[1], 15.45, l[2]) * CFrame.Angles(0, rad(rng:NextNumber(-4, 4)), 0),
+			cf = o * CFrame.new(l[1], 15.9, l[2]) * CFrame.Angles(0, rad(rng:NextNumber(-3, 3)), 0),
 		})
 	end
-	box(model, o, "Flagstone", -13, 0.4, 15.5, 16, -9.4, 9.4, nil, "PavingL")
-	box(model, o, "Flagstone", -0.2, 13, 15.5, 16, -9.4, 9.4, ART.shade("Flagstone", 0.03), "PavingR")
-	box(model, o, "FlagstoneDark", 7, 12.6, 15.5, 15.95, 3, 7, nil, "PavingPatch")
-	-- Pad_Arrival: 8 x 8 mark. Trim frame, thin PadArrive strips.
-	local px, pz = 0, -1
-	box(model, o, "Trim", px - 4, px + 4, 16, 16.15, pz - 4, pz - 3.3, nil, "FrameS")
-	box(model, o, "Trim", px - 4, px + 4, 16, 16.15, pz + 3.3, pz + 4, nil, "FrameN")
-	box(model, o, "Trim", px - 4, px - 3.3, 16, 16.15, pz - 3.3, pz + 3.3, nil, "FrameW")
-	box(model, o, "Trim", px + 3.3, px + 4, 16, 16.15, pz - 3.3, pz + 3.3, nil, "FrameE")
-	box(model, o, "PadArrive", px - 3, px + 3, 16.02, 16.1, pz - 3, pz - 2.7, nil, "StripS")
-	box(model, o, "PadArrive", px - 3, px + 3, 16.02, 16.1, pz + 2.7, pz + 3, nil, "StripN")
-	box(model, o, "PadArrive", px - 3, px - 2.7, 16.02, 16.1, pz - 2.7, pz + 2.7, nil, "StripW")
-	box(model, o, "PadArrive", px + 2.7, px + 3, 16.02, 16.1, pz - 2.7, pz + 2.7, nil, "StripE")
+	-- The arrival pad is a 1-high plinth (the greybox ArrivalPoint): stone with a thin mark.
+	local px, pz = PAD_X, PAD_Z
+	box(model, o, "FlagstoneDark", px - 4, px + 4, 16, 17, pz - 4, pz + 4, nil, "Plinth")
+	box(model, o, "Trim", px - 4, px + 4, 17, 17.15, pz - 4, pz - 3.3, nil, "FrameS")
+	box(model, o, "Trim", px - 4, px + 4, 17, 17.15, pz + 3.3, pz + 4, nil, "FrameN")
+	box(model, o, "Trim", px - 4, px - 3.3, 17, 17.15, pz - 3.3, pz + 3.3, nil, "FrameW")
+	box(model, o, "Trim", px + 3.3, px + 4, 17, 17.15, pz - 3.3, pz + 3.3, nil, "FrameE")
+	-- Inlay of pale metal (saturation 12%): no neon, no reserved hue (designer ruling 2026-11-18).
+	box(model, o, "TrimLight", px - 3, px + 3, 17.02, 17.1, pz - 3, pz - 2.7, nil, "StripS")
+	box(model, o, "TrimLight", px - 3, px + 3, 17.02, 17.1, pz + 2.7, pz + 3, nil, "StripN")
+	box(model, o, "TrimLight", px - 3, px - 2.7, 17.02, 17.1, pz - 2.7, pz + 2.7, nil, "StripW")
+	box(model, o, "TrimLight", px + 2.7, px + 3, 17.02, 17.1, pz - 2.7, pz + 2.7, nil, "StripE")
 end
 
 local function buildCave(model: Model, o: CFrame)
@@ -229,6 +273,72 @@ local function buildCave(model: Model, o: CFrame)
 	wedge(model, o, "CliffLight", 11, 7, 8, Vector3.new(6, 21.3, 6), Vector3.new(1, 0, 0), false, 0, "RoofWedge")
 	mass(model, o, "CliffLight", 14.5, 6, 8.5, 11, 17.5, 30, -2, 8, 4, true)
 	mass(model, o, "Cliff", -12, 11, 5, 5, 17.5, 22, 0, 15, -4, true)
+end
+
+-- The cave as it really stands: only the sealed shell (the real walls, jambs and roof).
+-- The ten real rocks around it are dressed one by one in dress/setpieces.luau.
+-- Air space: nothing here may stand in the lane (x within LANE_HALF of the axis, in
+-- front of z = -18) above +14. The jambs lean in, but their inner top edge stays
+-- outside x = LANE_HALF; the lintel is flush with the front plane, not past it.
+local LANE_HALF, MOUTH_HALF = 10.5, 8.5
+local function buildCaveShell(model: Model, o: CFrame)
+	local inside = ART.shade("CliffDark", -0.06)
+	local courses = {
+		{ "CliffDark", -0.5, 4.8, 0.05, 0.7 },
+		{ "Cliff", 4.5, 9.5, 0.05, 0.8 },
+		{ "Cliff", 9.2, 14.6, 0.05, 0.7 },
+	}
+	-- Real shell: sides x +-18 (z +-14), back z 16, front corners x 8.5..20 at z -16 (4 thick).
+	cladFace(model, o, -20, 0, -90, 36, courses, 2.6, 5, 9, "WallL")
+	cladFace(model, o, 20, 0, 90, 36, courses, 2.6, 5, 9, "WallR")
+	cladFace(model, o, 0, 18, 0, 40, courses, 2.6, 5, 9, "WallBack")
+	-- Front corners stop at 13.7 (+0.25 jitter = 13.95): nothing in front of z -18 above +14.
+	local frontCourses = {
+		{ "CliffDark", -0.5, 4.8, 0.05, 0.7 },
+		{ "Cliff", 4.5, 9.3, 0.05, 0.8 },
+		{ "Cliff", 9.0, 13.7, 0.05, 0.7 },
+	}
+	cladFace(model, o, -14.25, -18, 180, 11.5, frontCourses, 2.6, 4, 7, "FrontL")
+	cladFace(model, o, 14.25, -18, 180, 11.5, frontCourses, 2.6, 4, 7, "FrontR")
+	-- Lining, seen only once the plug is gone.
+	box(model, o, "CliffDark", -17.6, -16, 0, 14.2, -16, 16.2, inside, "LiningL")
+	box(model, o, "CliffDark", 16, 17.6, 0, 14.2, -16, 16.2, inside, "LiningR")
+	box(model, o, "CliffDark", -17.6, 17.6, 0, 14.2, 14, 16.2, inside, "LiningBack")
+	box(model, o, "CliffDark", -17.6, -8.6, 0, 14.2, -16, -14, inside, "LiningFrontL")
+	box(model, o, "CliffDark", 8.6, 17.6, 0, 14.2, -16, -14, inside, "LiningFrontR")
+	-- Reveals: dark rock between the plug and the jambs, so the mouth is a dark opening.
+	for _, s in { -1, 1 } do
+		local x0, x1 = s * MOUTH_HALF, s * (LANE_HALF + 0.1)
+		box(model, o, "CliffDark", math.min(x0, x1), math.max(x0, x1), 0, 14.1, -18, -14.4, ART.shade("CliffDark", -0.04), "Reveal")
+		-- Leaning jamb: tips 7 degrees in; centre set so the inner top edge is at |x| >= 10.6.
+		ART.prim(model, {
+			role = "Cliff",
+			name = "Jamb",
+			size = Vector3.new(3.6, 15.2, 3.4),
+			cf = o * CFrame.new(s * 13.4, 7.5, -17.2) * CFrame.Angles(0, 0, rad(s * 7)),
+			color = ART.shade("Cliff", 0.03),
+		})
+		ART.prim(model, {
+			role = "CliffLight",
+			name = "JambFoot",
+			size = Vector3.new(4.8, 2.6, 3.8),
+			cf = o * CFrame.new(s * 13.6, 1.1, -17.1) * CFrame.Angles(0, rad(s * 3), 0),
+		})
+	end
+	-- Heavy lintel: flush with the front plane (z -18), under a roof set back.
+	box(model, o, "CliffDark", -12.8, 12.8, 14, 17.5, -18, -14.4, ART.shade("CliffDark", -0.02), "Lintel")
+	-- Roof: a dark lower slab (the ceiling) and a lighter upper slab, set back from the front.
+	box(model, o, "CliffDark", -20.4, 20.4, 14, 16.4, -17.3, 18.4, nil, "RoofLower")
+	ART.prim(model, {
+		role = "Cliff",
+		name = "RoofUpper",
+		size = Vector3.new(39.4, 2.2, 34.4),
+		cf = o * CFrame.new(0, 16.9, 0.6) * CFrame.Angles(rad(0.6), rad(1.2), 0),
+	})
+	-- Boulders on the roof, at the back: at most 3 above the roof top.
+	mass(model, o, "CliffLight", -9, 7, 9, 9, 17.5, 20.6, 0, 8, 2, true)
+	mass(model, o, "Cliff", 6, 10, 10, 8, 17.5, 21, 0, -10, -3, true)
+	mass(model, o, "CliffDark", 15, 0, 6, 7, 17.5, 20, 0, 14, 4, false)
 end
 
 local function padFrame(model: Instance, o: CFrame, size: number, bodyTop: number, frameRole: string)
@@ -449,7 +559,7 @@ end
 -- Layout
 ----------------------------------------------------------------------
 ART.run("LevelArt: set pieces kit", function()
-	local GAP = 24
+	local GAP = 18
 	local cursor = row.xMin + 6
 	local function place(name, w, greybox, refOffset, class, note, build)
 		local x = cursor + w / 2
@@ -469,6 +579,7 @@ ART.run("LevelArt: set pieces kit", function()
 	place("Dais_Boss", 44, Vector3.new(44, 1, 44), Vector3.new(0, -0.5, 0), "Dais", "flush plum rune disc, radius 22", buildDais)
 	place("Overlook_Shelf", 30, Vector3.new(30, 16, 22), nil, "Overlook", "rock shelf, paved top, arrival mark", buildOverlook)
 	place("Cave_Outcrop", 40, Vector3.new(40, 18, 36), nil, "Cave", "chamber and mouth left empty", buildCave)
+	place("Cave_Shell", 40, Vector3.new(40, 18, 36), nil, "Cave", "real shell only; rocks are dressed apart", buildCaveShell)
 	place("Pad_Entry", 12, Vector3.new(12, 1, 12), nil, "Pad", "go: ring and chevrons", buildPadEntry)
 	place("Pad_Return", 14, Vector3.new(14, 1, 14), nil, "Pad", "leave: doorway and arrow out", buildPadReturn)
 	place("Pad_Spawn", 8, Vector3.new(8, 1, 8), nil, "Pad", "neutral", buildPadSpawn)

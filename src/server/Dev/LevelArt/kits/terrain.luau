@@ -8,6 +8,7 @@ local FLOOR_Y = ART.FLOOR_Y
 local GAP = 12 -- air between assets
 local FRONT_Z = row.z - 10 -- floor, ledges, markers
 local BACK_Z = row.z + 40 -- ridge lips and masses
+local BACK2_Z = row.z + 22 -- second back row for the dress variants
 local UNDERSIDE_Z = row.z + 45 -- local +10 is the strip's +Z edge (z = 1305)
 local RAISE_STONES = 20 -- mounts: ledge tops sit below the stage floor, so lift them
 local RAISE_SLAB = 10
@@ -139,44 +140,76 @@ end
 ----------------------------------------------------------------------
 -- 2. Ridge lips (local +X = playfield face, local Z = length; build with yaw = 90)
 ----------------------------------------------------------------------
+-- p = { T, H, L, seed, scree, segs, chips }. H is the greybox top. A lip can be reached from
+-- the floor (the invisible collider wall stands along its middle, so the inward strip is
+-- walkable), so a continuous Deck covers the whole collision top within 0.45 of H. Lumps of
+-- rock sit on the outer half of the deck and never rise more than 0.3 over H.
+local LIP_DECK_THICK = 1.4
+local LIP_DECK_OVERHANG = 0.15 -- the deck's inward edge sits this far past the greybox face (turned pieces still cover it)
+local LIP_LUMP_TOP = { -0.6, 0.3 } -- lump top relative to H
+local LIP_LUMP_FLOOR = 0.9 -- lumps start this far under H, inside the deck
+local LIP_INWARD_CLEAR = 0.4 -- share of the thickness kept free of lumps on the inward side
+
 local function buildLip(model: Model, origin: CFrame, p)
 	local rng = Random.new(p.seed)
-	local T = p.T
-	put(model, origin, "CliffDark", V3(T + 0.6, 1.6, p.L - 1), V3(0, 0.7, 0), V3(0, rng:NextNumber(-1.5, 1.5), 0), { name = "Base" })
+	local T, H, L = p.T, p.H, p.L
+	put(model, origin, "CliffDark", V3(T + 0.6, 1.6, L - 1), V3(0, 0.7, 0), V3(0, rng:NextNumber(-1.5, 1.5), 0), { name = "Base" })
 	local face = T / 2 - 0.2
+	-- deck: overlapping pieces of uneven length, each a little tilted
+	local nDeck = math.max(2, math.floor(L / 14))
+	local pieceLen = L / nDeck
+	for i = 1, nDeck do
+		local zc = -L / 2 + pieceLen * (i - 0.5) + rng:NextNumber(-1, 1)
+		local len = pieceLen + 1.2 + rng:NextNumber(0, 1.5)
+		local top = H - rng:NextNumber(0.05, 0.35)
+		local w = T - 0.1 + rng:NextNumber(0, 0.3) -- reaches the outward edge too: no sample of the collision top is bare
+		local role = if i % 2 == 0 then "Cliff" else "CliffLight"
+		put(model, origin, role, V3(w, LIP_DECK_THICK, len), V3(T / 2 + LIP_DECK_OVERHANG - w / 2 + rng:NextNumber(-0.1, 0.1), top - LIP_DECK_THICK / 2, zc), V3(rng:NextNumber(-1.5, 1.5), rng:NextNumber(-3, 3), rng:NextNumber(-2, 2)), {
+			name = "Deck_" .. i,
+			color = tone(rng, role, 0.04),
+		})
+	end
+	-- lumps: broken rock on the outer part of the deck, different in size, height and turn
 	for i, s in p.segs do
-		local w = T - 1.2 + rng:NextNumber(0, 0.8)
-		local h = s.top - 1.0
-		put(model, origin, "Cliff", V3(w, h, s.len), V3(face - w / 2, 1.0 + h / 2, s.zc), V3(rng:NextNumber(-2, 2), rng:NextNumber(-4, 4), rng:NextNumber(1, 3)), {
-			name = "Body_" .. i,
-			color = tone(rng, "Cliff", 0.03),
+		local len = s.len * rng:NextNumber(0.65, 1.1)
+		local zc = s.zc + rng:NextNumber(-1.8, 1.8)
+		local w = T * rng:NextNumber(0.35, 0.6)
+		local x = face - T * LIP_INWARD_CLEAR - w / 2 - rng:NextNumber(0, T * 0.15)
+		local top = H + rng:NextNumber(LIP_LUMP_TOP[1], LIP_LUMP_TOP[2])
+		local bottom = H - LIP_LUMP_FLOOR
+		put(model, origin, if rng:NextNumber() < 0.5 then "Cliff" else "CliffLight", V3(w, top - bottom, len), V3(x, (top + bottom) / 2, zc), V3(rng:NextNumber(-4, 4), rng:NextNumber(-10, 10), rng:NextNumber(-3, 4)), {
+			name = "Lump_" .. i,
+			color = tone(rng, "Cliff", 0.05),
 		})
-		put(model, origin, "CliffLight", V3(w * 0.85, 0.9, s.len - 1.4), V3(face - w * 0.5, s.top - 0.2, s.zc), V3(0, rng:NextNumber(-6, 6), rng:NextNumber(-4, 4)), {
-			name = "Cap_" .. i,
-		})
-		put(model, origin, "Turf", V3(w * 0.5, 0.2, s.len * 0.55), V3(face - w * 0.5 - 0.3, s.top + 0.35, s.zc + rng:NextNumber(-1, 1)), V3(0, rng:NextNumber(-8, 8), 0), {
-			name = "Moss_" .. i,
-		})
-		-- outward side rolls off: tall face against the body, slope falling away to -X
-		local run = 3.2 + rng:NextNumber(0, 1.6)
-		wedge(model, origin, "Cliff", s.len * rng:NextNumber(0.7, 0.9), s.top * 0.85, run, V3(face - w - run / 2 + 0.4, s.top * 0.425 + 0.3, s.zc), V3(1, 0, 0), {
+		-- outward side rolls off: tall face against the lump, slope falling away to -X
+		local run = 3.2 + rng:NextNumber(0, 1.8)
+		wedge(model, origin, "Cliff", len * rng:NextNumber(0.6, 0.95), (H - 0.3) * rng:NextNumber(0.7, 0.95), run, V3(face - T - run / 2 + 0.4, (H - 0.3) * 0.4 + 0.3, zc), V3(1, 0, 0), {
 			name = "Roll_" .. i,
-			roll = rng:NextNumber(-4, 4),
+			roll = rng:NextNumber(-6, 6),
 			color = tone(rng, "Cliff", 0.04),
 		})
 	end
+	-- chips on the floor against the inward face, kept within the 1 stud envelope
 	for i, c in p.chips do
-		put(model, origin, "CliffDark", V3(T * 0.5, c.h, 2.6), V3(face - T * 0.3, 0.7 + c.h / 2, c.z), V3(rng:NextNumber(-8, 8), rng:NextNumber(-20, 20), rng:NextNumber(-10, 10)), {
+		put(model, origin, "CliffDark", V3(T * rng:NextNumber(0.35, 0.6), c.h * rng:NextNumber(0.7, 1.2), rng:NextNumber(1.8, 3.6)), V3(face - T * 0.3, 0.7 + c.h / 2, c.z + rng:NextNumber(-2, 2)), V3(rng:NextNumber(-8, 8), rng:NextNumber(-25, 25), rng:NextNumber(-12, 12)), {
 			name = "Chip_" .. i,
 		})
 	end
-	-- scree skirt on the playfield side, kept within the 1 stud envelope
-	put(model, origin, "CliffDark", V3(1.8, 1.4, p.L * 0.4), V3(T / 2 - 0.4, 0.6, p.scree), V3(0, 0, -25), { name = "Scree" })
+	put(model, origin, "CliffDark", V3(1.8, 1.4, L * rng:NextNumber(0.3, 0.45)), V3(T / 2 - 0.4, 0.6, p.scree), V3(0, 0, -25), { name = "Scree" })
 end
 
 ----------------------------------------------------------------------
 -- 3. Ridge masses
 ----------------------------------------------------------------------
+-- Strata count and heights come from random weights, each stratum leans its own way, caps
+-- are broken in two, and a leaning slab stands against the outward face of each long column.
+-- The playfield face stays pinned (+-0.45) so the envelope holds.
+local MASS_STRATA_WEIGHT = { 0.45, 1.8 } -- a stratum's share of the body height, before normalising
+local MASS_LEAN_RANGE = { -2.0, 2.2 } -- a stratum leans p.lean times this, about the length axis
+local MASS_SLAB_MIN_LEN = 10 -- columns at least this long get a leaning slab
+local MASS_SLAB_HEIGHT = { 0.5, 0.85 } -- of the mass height
+local MASS_SLAB_LEAN = { 8, 16 } -- degrees, away from the body
+
 local function buildMass(model: Model, origin: CFrame, p)
 	local rng = Random.new(p.seed)
 	local T, H = p.T, p.H
@@ -185,34 +218,41 @@ local function buildMass(model: Model, origin: CFrame, p)
 		name = "Base",
 	})
 	local face = T / 2 - 0.35 -- playfield face stays pinned here
-	local strata = if H >= 17 then 3 else 2
 	for ci, c in p.cols do
 		local top = H + c.off
-		local capH = 1.4
+		local capH = rng:NextNumber(1.0, 1.9)
 		local y0 = baseH - 1.2
 		local bodyTop = top - capH + 0.4
+		local strata = rng:NextInteger(if H >= 17 then 3 else 2, if H >= 17 then 4 else 3)
+		local weights, sum = {}, 0
+		for s = 1, strata do
+			weights[s] = rng:NextNumber(MASS_STRATA_WEIGHT[1], MASS_STRATA_WEIGHT[2])
+			sum += weights[s]
+		end
 		local w = T
 		local lo = y0
 		for s = 1, strata do
-			local hi = if s == strata then bodyTop + 0.2 else lo + (bodyTop - y0) / strata * rng:NextNumber(0.7, 1.3)
-			w = T - 0.2 + (s - 1) * 0.5 + rng:NextNumber(0, 0.5)
-			local len = c.len - (s - 1) * rng:NextNumber(0.2, 1.8)
-			local faceShift = rng:NextNumber(-0.4, 0.25) -- strata steps in and out, never a 1 stud ledge
-			put(model, origin, if s % 2 == 0 then "CliffDark" else "Cliff", V3(w, hi - lo + 0.4, len), V3(face + faceShift - w / 2, (lo + hi) / 2, c.zc + rng:NextNumber(-1.2, 1.2)), V3(rng:NextNumber(-2.5, 2.5), rng:NextNumber(-4, 4), p.lean * rng:NextNumber(0.6, 1.3)), {
+			local hi = if s == strata then bodyTop + 0.2 else lo + (bodyTop - y0) * weights[s] / sum
+			w = T - 0.2 + rng:NextNumber(0, 0.9)
+			local len = c.len - rng:NextNumber(0, 2.2)
+			local faceShift = rng:NextNumber(-0.45, 0.3)
+			local role = if rng:NextNumber() < 0.45 then "CliffDark" else "Cliff"
+			put(model, origin, role, V3(w, hi - lo + 0.4, len), V3(face + faceShift - w / 2, (lo + hi) / 2, c.zc + rng:NextNumber(-1.8, 1.8)), V3(rng:NextNumber(-3, 3), rng:NextNumber(-9, 9), p.lean * rng:NextNumber(MASS_LEAN_RANGE[1], MASS_LEAN_RANGE[2])), {
 				name = "Stratum_" .. ci .. "_" .. s,
-				color = tone(rng, if s % 2 == 0 then "CliffDark" else "Cliff", 0.06),
+				color = tone(rng, role, 0.06),
 			})
 			lo = hi - 0.2
 		end
-		put(model, origin, "CliffLight", V3(w - 0.5, capH, c.len - 1.0), V3(face - (w - 0.5) / 2 - 0.1, top - capH / 2, c.zc), V3(0, rng:NextNumber(-4, 4), p.lean + 1), {
-			name = "Cap_" .. ci,
-		})
-		if ci % 2 == 1 and not p.noMoss then
-			put(model, origin, "Turf", V3(w * 0.45, 0.18, c.len * 0.4), V3(face - w * 0.5, top + 0.1, c.zc), V3(0, rng:NextNumber(-10, 10), 0), {
-				name = "Moss_" .. ci,
+		-- cap in one or two pieces, each its own length, thickness and tilt
+		local nCap = if c.len > 11 then 2 else 1
+		for k = 1, nCap do
+			local cl = (c.len - 1.0) / nCap + rng:NextNumber(-1, 1)
+			local cz = c.zc + (k - (nCap + 1) / 2) * (c.len / nCap) + rng:NextNumber(-0.6, 0.6)
+			local ch = capH * rng:NextNumber(0.7, 1.1)
+			put(model, origin, "CliffLight", V3(w - 0.5 - rng:NextNumber(0, 0.8), ch, cl), V3(face - (w - 0.5) / 2 - 0.1, top - capH / 2 + rng:NextNumber(-0.3, 0.2), cz), V3(rng:NextNumber(-2, 2), rng:NextNumber(-5, 5), p.lean + rng:NextNumber(-3, 3)), {
+				name = "Cap_" .. ci .. "_" .. k,
 			})
 		end
-		-- buttress on the outward side, leaning onto the mass
 		-- skyline wedges: different heights and directions, playfield side within +-2 of the box top
 		local nWedges = p.capWedges or 2
 		for k = 1, nWedges do
@@ -233,6 +273,14 @@ local function buildMass(model: Model, origin: CFrame, p)
 			wedge(model, origin, "CliffDark", c.len * 0.5, bh, run, V3(-T / 2 - run / 2 + 0.6, bh / 2 - 0.2, c.zc), V3(1, 0, 0), {
 				name = "Buttress_" .. ci,
 				roll = rng:NextNumber(-3, 3),
+			})
+		end
+		-- a slab leaning against the outward face breaks the stack's straight edge
+		if c.len >= MASS_SLAB_MIN_LEN and not p.noSlab then
+			local sh = H * rng:NextNumber(MASS_SLAB_HEIGHT[1], MASS_SLAB_HEIGHT[2])
+			local side = if rng:NextNumber() < 0.5 then -1 else 1
+			put(model, origin, "CliffDark", V3(rng:NextNumber(1.6, 2.6), sh, c.len * rng:NextNumber(0.3, 0.5)), V3(-T / 2 - 0.6, sh / 2 - 0.3, c.zc + rng:NextNumber(-c.len * 0.25, c.len * 0.25)), V3(0, rng:NextNumber(-12, 12), side * rng:NextNumber(MASS_SLAB_LEAN[1], MASS_SLAB_LEAN[2])), {
+				name = "Slab_" .. ci,
 			})
 		end
 	end
@@ -300,7 +348,7 @@ end
 ----------------------------------------------------------------------
 local function stoneDisc(model: Model, origin: CFrame, cx: number, diam: number, top: number, seed: number, idx: number)
 	local rng = Random.new(seed)
-	put(model, origin, "Turf", V3(0.6, diam, diam), V3(cx, top - 0.3, 0), nil, { shape = "Cylinder", axisUp = true, name = "Top_" .. idx })
+	put(model, origin, "Soil", V3(0.6, diam, diam), V3(cx, top - 0.3, 0), nil, { shape = "Cylinder", axisUp = true, name = "Top_" .. idx }) -- Grass rendered mint
 	put(model, origin, "Cliff", V3(3.5, diam - 0.5, diam - 0.5), V3(cx, top - 2.25, 0), nil, {
 		shape = "Cylinder",
 		axisUp = true,
@@ -374,6 +422,23 @@ local function buildSpit(model: Model, origin: CFrame)
 		flatWedge(model, origin, "Cliff", 3, 3.3, 6, V3(s * 5.85, FILL_TOP - 1.5, 13.7), side, V3(0, 0, -1), "Bevel_Tip_" .. s)
 		wedge(model, origin, "CliffDark", 14, 5, 5.5, V3(s * 5, -8 - 2.5 + 0.3, -4), V3(-s, 0, 0), { hang = true, name = "Side_Mid_" .. s })
 		wedge(model, origin, "CliffDark", 12, 4.5, 5, V3(s * 8, -7.2 - 2.25 + 0.3, -24), V3(-s, 0, 0), { hang = true, name = "Side_Ramp_" .. s })
+	end
+end
+
+-- One walkable piece of the spit: the top face is the greybox box's top, edge to edge
+-- (the designer measured the old combined asset 2 to 6 studs off), rock hangs under it.
+local SPIT_TOP_THICK = 0.7
+local function buildSpitPiece(model: Model, origin: CFrame, box: Vector3, seed: number)
+	local rng = Random.new(seed)
+	local w, len, thick = box.X, box.Z, box.Y
+	put(model, origin, "CliffLight", V3(w, SPIT_TOP_THICK, len), V3(0, -SPIT_TOP_THICK / 2, 0), nil, { name = "Top", color = tone(rng, "CliffLight", 0.02) })
+	put(model, origin, "Cliff", V3(w - 0.4, thick - SPIT_TOP_THICK, len - 0.4), V3(0, -(SPIT_TOP_THICK + thick) / 2, 0), nil, { name = "Body", color = tone(rng, "Cliff", 0.03) })
+	-- rock hanging under, narrowing
+	put(model, origin, "CliffDark", V3(w * 0.8, 3.4, len * 0.8), V3(rng:NextNumber(-0.4, 0.4), -thick - 1.4, rng:NextNumber(-0.8, 0.8)), V3(0, rng:NextNumber(-4, 4), 0), { name = "Under_1" })
+	put(model, origin, "CliffDark", V3(w * 0.55, 3.2, len * 0.55), V3(rng:NextNumber(-0.5, 0.5), -thick - 4.4, rng:NextNumber(-1, 1)), V3(0, rng:NextNumber(-6, 6), 0), { name = "Under_2" })
+	put(model, origin, "Bedrock", V3(w * 0.3, 3, len * 0.32), V3(rng:NextNumber(-0.4, 0.4), -thick - 7.2, rng:NextNumber(-1, 1)), V3(0, rng:NextNumber(-8, 8), 0), { name = "Under_3" })
+	for _, s in { -1, 1 } do
+		wedge(model, origin, "CliffDark", len * rng:NextNumber(0.3, 0.5), rng:NextNumber(3.4, 5), 3.6, V3(s * (w * 0.4 - 0.3), -thick - rng:NextNumber(1.6, 2.4), rng:NextNumber(-len * 0.2, len * 0.2)), V3(-s, 0, 0), { hang = true, name = "Side_" .. s })
 	end
 end
 
@@ -541,31 +606,39 @@ ART.run("LevelArt: terrain kit", function()
 		cursor += 26 + GAP
 	end
 
-	-- back row: ridge lips and masses (yaw 90: length along +X, playfield face = world -Z)
-	local back = 250
-	local function backAsset(name: string, greybox: Vector3, class: string, note: string, build)
+	-- back rows: ridge lips and masses (yaw 90: length along +X, playfield face = world -Z).
+	-- A row that runs out of strip wraps to the next one.
+	local backRows = { { z = BACK_Z, x = 250 }, { z = BACK2_Z, x = 250 } }
+	local rowIndex = 1
+	local function backAsset(name: string, greybox: Vector3, class: string, note: string, build, refOffset: Vector3?, lift: number?)
+		local r = backRows[rowIndex]
+		if r.x + greybox.Z > row.xMax and backRows[rowIndex + 1] then
+			rowIndex += 1
+			r = backRows[rowIndex]
+		end
 		ART.asset({
 			kit = KIT,
 			name = name,
-			at = V3(back + greybox.Z / 2, FLOOR_Y, BACK_Z),
+			at = V3(r.x + greybox.Z / 2, FLOOR_Y + (lift or 0), r.z),
 			yaw = 90,
 			greybox = greybox,
+			refOffset = refOffset,
 			class = class,
 			note = note,
 			build = build,
 		})
-		back += greybox.Z + GAP
+		r.x += greybox.Z + GAP
 	end
 	backAsset("Ridge_Lip_A", V3(9, 5, 45), "Ridge", "yaw 90: length along +X, playfield face = -Z", function(m, o)
 		buildLip(m, o, {
-			T = 9, L = 45, seed = 2101, scree = -10,
-			segs = { { zc = -15.5, len = 13, top = 4.2 }, { zc = 0, len = 14, top = 5.2 }, { zc = 15.5, len = 12, top = 3.7 } },
+			T = 9, H = 5, L = 45, seed = 2101, scree = -10,
+			segs = { { zc = -15.5, len = 13, top = 4.2 }, { zc = 0, len = 14, top = 4.9 }, { zc = 15.5, len = 12, top = 3.7 } },
 			chips = { { z = -8, h = 2.2 }, { z = 8, h = 1.8 } },
 		})
 	end)
 	backAsset("Ridge_Lip_B", V3(6, 3.2, 26), "Ridge", "yaw 90: length along +X, playfield face = -Z", function(m, o)
 		buildLip(m, o, {
-			T = 6, L = 26, seed = 2102, scree = 6,
+			T = 6, H = 3.2, L = 26, seed = 2102, scree = 6,
 			segs = { { zc = -6.5, len = 11, top = 2.7 }, { zc = 6.5, len = 11, top = 3.0 } },
 			chips = { { z = 0, h = 1.6 } },
 		})
@@ -588,6 +661,57 @@ ART.run("LevelArt: terrain kit", function()
 			cols = { { zc = 0, len = 8, off = 1 } },
 		})
 	end)
+
+	-- Dress variants (2026-11-18): the real ridge has 34 parts of 30 different sizes, so
+	-- each size class gets several differently seeded assets instead of one stretched module.
+	local NOTE = "yaw 90: length along +X, playfield face = -Z"
+	local massVariants = {
+		{ "Ridge_Mass_A2", V3(10, 22, 44), { T = 10, H = 22, L = 44, seed = 3111, lean = 3, cols = { { zc = -15, len = 13, off = 1 }, { zc = -1, len = 14, off = -2 }, { zc = 14.5, len = 15, off = 1.5 } } } },
+		{ "Ridge_Mass_A3", V3(8, 20, 44), { T = 8, H = 20, L = 44, seed = 3112, lean = 4.5, cols = { { zc = -15, len = 14, off = 0.5 }, { zc = 0, len = 14, off = -1.5 }, { zc = 14.5, len = 15, off = 1 } } } },
+		{ "Ridge_Mass_B2", V3(8, 17, 46), { T = 8, H = 17, L = 46, seed = 3141, lean = 3, cols = { { zc = -16, len = 15, off = 1 }, { zc = 0, len = 16, off = -1 }, { zc = 16, len = 15, off = 2 } } } },
+		{ "Ridge_Mass_C", V3(10, 21, 25), { T = 10, H = 21, L = 25, seed = 3121, lean = 4, cols = { { zc = -6.5, len = 12, off = 1 }, { zc = 6.5, len = 12, off = -1 } } } },
+		{ "Ridge_Mass_C2", V3(10, 21, 25), { T = 10, H = 21, L = 25, seed = 3122, lean = 5, noMoss = true, cols = { { zc = -6, len = 11, off = -1.5 }, { zc = 6.5, len = 13, off = 1.5 } } } },
+		{ "Ridge_Mass_Low", V3(6, 12, 7), { T = 6, H = 12, L = 7, seed = 3131, lean = 4, noMoss = true, cols = { { zc = 0, len = 7, off = 0.5 } } } },
+		{ "Ridge_Mass_Small2", V3(6, 18, 8), { T = 6, H = 18, L = 8, seed = 3132, lean = 3, cols = { { zc = 0, len = 8, off = -1 } } } },
+	}
+	for _, v in massVariants do
+		backAsset(v[1], v[2], "Ridge", NOTE, function(m, o)
+			buildMass(m, o, v[3])
+		end)
+	end
+	local lipVariants = {
+		{ "Ridge_Lip_C", V3(8, 4.5, 68), { T = 8, H = 4.5, L = 68, seed = 2103, scree = -18,
+			segs = { { zc = -27.5, len = 12, top = 3.4 }, { zc = -14.5, len = 13, top = 4.0 }, { zc = -1, len = 12, top = 3.2 }, { zc = 12, len = 13.5, top = 3.9 }, { zc = 25.5, len = 12, top = 3.5 } },
+			chips = { { z = -20, h = 2.0 }, { z = 6, h = 1.6 }, { z = 19, h = 2.2 } } } },
+		{ "Ridge_Lip_C2", V3(9, 5, 66), { T = 9, H = 5, L = 66, seed = 2104, scree = 14,
+			segs = { { zc = -26.5, len = 12, top = 3.8 }, { zc = -13, len = 13, top = 4.4 }, { zc = 0.5, len = 12.5, top = 3.5 }, { zc = 13.5, len = 13, top = 4.2 }, { zc = 26, len = 12, top = 3.6 } },
+			chips = { { z = -19, h = 2.0 }, { z = -6.5, h = 1.7 }, { z = 19, h = 2.3 } } } },
+		{ "Ridge_Lip_D", V3(7, 5.2, 45), { T = 7, H = 5.2, L = 45, seed = 2105, scree = -8,
+			segs = { { zc = -15, len = 13, top = 4.0 }, { zc = 0, len = 14, top = 4.7 }, { zc = 15, len = 12, top = 3.7 } },
+			chips = { { z = -7, h = 2.0 }, { z = 9, h = 1.7 } } } },
+		{ "Ridge_Lip_E", V3(6, 5, 20), { T = 6, H = 5, L = 20, seed = 2106, scree = 4,
+			segs = { { zc = -5, len = 9, top = 3.6 }, { zc = 5, len = 9, top = 4.3 } },
+			chips = { { z = 0, h = 1.5 } } } },
+	}
+	for _, v in lipVariants do
+		backAsset(v[1], v[2], "Ridge", NOTE, function(m, o)
+			buildLip(m, o, v[3])
+		end)
+	end
+	-- the three ledge stones as separate assets, so each can be placed on its own cylinder
+	local discs = { { "Ledge_Stone_14", 14, -1, 5501 }, { "Ledge_Stone_11", 11, -2, 5502 }, { "Ledge_Stone_16", 16, -3, 5503 } }
+	for _, d in discs do
+		backAsset(d[1], V3(d[2], 4, d[2]), "Ledge", "Disc, top " .. d[3] .. ". Ref is the disc box (d x 4 x d)", function(m, o)
+			stoneDisc(m, o, 0, d[2], d[3], d[4], 1)
+		end, V3(0, d[3] - 2, 0), RAISE_STONES) -- the ref is the disc itself (top d[3], 4 thick); mounted like the stones
+	end
+	-- the three spit pieces, each built to its own greybox box so the visible top matches the
+	-- floor under it. The origin is the centre of the box's TOP face; the box is 3 thick.
+	for _, d in { { "Ledge_Spit_Ramp", V3(22, 3, 24.5), 6601 }, { "Ledge_Spit_Mid", V3(15, 3, 22), 6602 }, { "Ledge_Spit_Tip", V3(9, 3, 21), 6603 } } do
+		backAsset(d[1], d[2], "Ledge", "Ref is the piece's box; its top face is local y = 0. Mounted like the stones", function(m, o)
+			buildSpitPiece(m, o, d[2], d[3])
+		end, V3(0, -d[2].Y / 2, 0), RAISE_STONES)
+	end
 
 	ART.asset({
 		kit = KIT,

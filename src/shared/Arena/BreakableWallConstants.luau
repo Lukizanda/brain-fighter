@@ -101,6 +101,19 @@ BreakableWallConstants.DAMAGE_TINT_COLOR = Color3.fromRGB(46, 38, 32)
 -- "about to give", without letting a player see through cover early.
 BreakableWallConstants.CRITICAL_TRANSPARENCY = 0.15
 
+-- A broken wall is not drawn at all (until its regen ghost, below).
+BreakableWallConstants.BROKEN_TRANSPARENCY = 1
+
+-- Level art on a wall: BaseParts parented directly under the tagged part.
+-- The client draws them with the wall. `Deco_<n>` takes the damage tint and
+-- every fade; `Seam_<n>` (a glow strip) fades but keeps its colour. Lua
+-- patterns, matched against the child's Name. The level-art kit follows the
+-- same convention (src/server/Dev/LevelArt/README.md).
+BreakableWallConstants.Art = {
+	DECO_PATTERN = "^Deco_%d+$",
+	SEAM_PATTERN = "^Seam_%d+$",
+}
+
 -- How the regen is told. After a wall breaks the client waits out
 -- RegenSec minus this lead, then shows a faint ghost of the wall pulsing
 -- until it re-seals. Estimated from the client's own clock: the server
