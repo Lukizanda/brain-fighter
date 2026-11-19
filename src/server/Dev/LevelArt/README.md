@@ -38,9 +38,9 @@ are not in `tools/`.
    running a playtest; the Edit datamodel does not exist during Play. Wait and try
    again. Never stop someone else's playtest, and never call `screen_capture` with a
    camera position while Studio is in Play: it moves the playing client's camera.
-   A positioned capture also leaves the editor camera `Scriptable`: when you are done,
-   run `workspace.CurrentCamera.CameraType = Enum.CameraType.Fixed` on the Edit
-   datamodel.
+   Captures and code calls that overlap can leave the editor camera stuck on
+   `Scriptable`; the lead resets it when the work is done (see
+   `docs/agents/studio-and-playtests.md` § Editor camera).
 3. Run a file with one `execute_luau` call on the Edit datamodel:
    `return require(game.ServerStorage.LevelArtRun:Clone())("kits/rocks.luau")`
 

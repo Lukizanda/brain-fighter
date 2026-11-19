@@ -1,6 +1,6 @@
 ---
 type: reference
-description: Roblox_Studio MCP as tested here — execute_luau gets its own module copies, MCP-cloned instances arrive nil over remotes, start_stop_play wedges, a positioned screen_capture leaves the edit camera Scriptable
+description: Roblox_Studio MCP as tested here — execute_luau gets its own module copies, MCP-cloned instances arrive nil over remotes, start_stop_play wedges, the edit camera can stick on Scriptable (reset with a delayed task)
 updated: 2026-11-19
 ---
 
@@ -51,18 +51,36 @@ Pressing F5 in the focused Studio window cleared it once and failed the second t
 - **Plan around it:** settle the verification design *before* spending a working playtest. If Studio is already in Play, use that session rather than stopping and restarting it.
 - **If it wedges:** say plainly which half of the verification didn't run, and record the outstanding test in the wiki log, not just in chat.
 
-## A positioned `screen_capture` leaves the edit camera `Scriptable`
+## The edit camera can get stuck on `Scriptable`
 
-`screen_capture` with `camera_position` / `look_at_position` sets
-`workspace.CurrentCamera.CameraType` to `Scriptable` and does not set it back. It does
-restore the camera's `CFrame`, so nothing looks wrong until the user tries to fly the
-editor camera and it no longer responds normally. A capture without a camera position
-was not tested. Verified 2026-11-19: `Fixed` before one positioned capture, `Scriptable`
-after it, position unchanged.
+Both tools save and restore `workspace.CurrentCamera.CameraType`, and together they
+can leave it on `Scriptable`, which breaks the user's scene navigation in the editor.
+Verified 2026-11-19 with a listener logging every change:
 
-**The fix:** after the last positioned capture of a task, set it back on the Edit
-datamodel: `workspace.CurrentCamera.CameraType = Enum.CameraType.Fixed`. `Fixed` is
-the editor's normal value. Subagents that take captures must do this before they report.
+- **`execute_luau` restores the camera type it found when the call started**, about
+  20 ms after the call returns. A change made inside a call is undone, so
+  `workspace.CurrentCamera.CameraType = Enum.CameraType.Fixed` run directly never
+  sticks.
+- **`screen_capture` with a `camera_position`** switches to `Scriptable` for the shot
+  and restores the previous type about 0.3 s later. On its own it is harmless.
+- **Together they can stick.** If a call starts while a capture is holding `Scriptable`
+  (parallel agents capturing and running code at once), the call saves `Scriptable`,
+  the capture restores `Fixed`, then the call restores `Scriptable`. This is the likely
+  cause of the stuck camera after the level-art sessions; it was inferred from the two
+  behaviours above, not reproduced, because one session's calls run one at a time.
+  (A first reading on the same day blamed the capture alone. That test was confounded
+  by the restore described in the first point.)
+
+**The fix:** set it from a task that runs after the call has returned, then check it
+in a second call:
+
+```lua
+task.delay(0.5, function()
+	workspace.CurrentCamera.CameraType = Enum.CameraType.Fixed
+end)
+```
+
+`Fixed` is the editor's normal value.
 
 ## Only the Edit window
 

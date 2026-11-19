@@ -2229,3 +2229,7 @@ The user asked for a lighting pass as a senior lighting artist and chose an aren
 ## [2026-11-19] ingest | A positioned screen_capture leaves the edit camera Scriptable
 
 The user found the editor camera stuck after the level-art sessions. Traced in Studio: `screen_capture` with `camera_position` sets `workspace.CurrentCamera.CameraType` to `Scriptable` and leaves it, while restoring the camera position (`Fixed` before one capture, `Scriptable` after). Reset to `Fixed`. Recorded on [[reference/studio-mcp]]; the reset is now a rule in `docs/agents/studio-and-playtests.md` § Screenshots and in the level-art README. No code changed.
+
+## [2026-11-19] ingest | Edit camera stuck on Scriptable: corrected cause
+
+The earlier entry today blamed a positioned `screen_capture`. A listener on `CameraType` showed otherwise: `execute_luau` restores the camera type it found at call start about 20 ms after returning (so a reset inside a call never sticks), and a positioned capture switches to `Scriptable` and restores the previous type 0.3 s later. The stuck state most likely came from the two overlapping while parallel artist agents worked; inferred, not reproduced. Reset with a delayed task and confirmed `Fixed` across later calls and a capture. [[reference/studio-mcp]] and `docs/agents/studio-and-playtests.md` (now § Editor camera) rewritten; the level-art README points there. The probe's two listeners stay connected in the editor until Studio restarts; their attributes were cleared.

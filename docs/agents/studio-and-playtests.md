@@ -42,7 +42,7 @@ if recording then ChangeHistoryService:FinishRecording(recording, Enum.FinishRec
 - Instances that MCP clones arrive as `nil` when passed as RemoteEvent arguments. Use a real `.server.luau` dev harness instead.
 - Details, `datamodel_type`, simulated input and the `start_stop_play` wedge: [wiki/reference/studio-mcp.md](../../wiki/reference/studio-mcp.md).
 
-## Screenshots
-- `screen_capture` with a `camera_position` leaves the editor camera `Scriptable`, which breaks the user's scene navigation. After your last positioned capture, and before you report or hand back, run on the Edit datamodel: `workspace.CurrentCamera.CameraType = Enum.CameraType.Fixed`. Put this line in the brief of every subagent that takes captures.
+## Editor camera
+- The editor camera can get stuck on `Scriptable` after `screen_capture` and `execute_luau` overlap (parallel agents), which breaks the user's scene navigation. When work that took positioned captures is done, the parent session checks `workspace.CurrentCamera.CameraType` and, if it is not `Fixed`, resets it from a delayed task: `task.delay(0.5, function() workspace.CurrentCamera.CameraType = Enum.CameraType.Fixed end)`, then confirms in a second call. A plain assignment inside `execute_luau` is undone when the call returns.
 - Never take a positioned capture while Studio is in Play: it moves the playing client's camera.
 - Details: [wiki/reference/studio-mcp.md](../../wiki/reference/studio-mcp.md).
