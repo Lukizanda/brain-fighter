@@ -2254,3 +2254,7 @@ The user found the broken arch floating over the ridge. A review from inside the
 Three artist sessions audited the dressed island by sector, and the lead ran an island-wide contact check. Nothing floats like the POIs did.
 - Fixed in the terrain pass: the underside's first layer broke through the floor as pale slabs, a see-through window in the ridge at bearing 90 (tall masses now have hidden cores), and two underside spikes hanging free.
 - The gate-seam look waits for the user. See design/boss-arena § The island dressed.
+
+## [2026-11-19] ingest | Gate seams reworked with the designer
+
+The gate seams read as stray scratches. The designer ruled for masonry joints: light leaks round each gate's smooth key slab on three sides and from a few uneven joints in the pilasters and lintel, with nothing on the outer edges. Strips are 0.32 wide and GateSeam is now #b8cce4. All four gates were rebuilt (6 Deco_ + 6 Seam_ each) and checked under BossDusk. See design/boss-arena § The island dressed.

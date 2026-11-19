@@ -51,7 +51,9 @@ ART.PAL = {
 	-- Regenerating gate: cut pale stone with cool light in the seams.
 	GateStone = { M.Limestone, Color3.fromRGB(150, 150, 156) },
 	GateStoneDark = { M.Limestone, Color3.fromRGB(116, 117, 126) },
-	GateSeam = { M.Neon, Color3.fromRGB(216, 236, 255) },
+	-- A step down from #d8ecff, which bloomed into a white smear in a narrow
+	-- joint under the dusk (designer, 2026-11-19).
+	GateSeam = { M.Neon, Color3.fromRGB(184, 204, 228) },
 	-- Ground: dark, flat, low saturation. Moss is olive, never letter green.
 	Turf = { M.Grass, Color3.fromRGB(88, 98, 76) },
 	TurfLight = { M.LeafyGrass, Color3.fromRGB(96, 104, 80) },

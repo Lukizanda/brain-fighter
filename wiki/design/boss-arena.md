@@ -774,11 +774,34 @@ Nothing else floats like the POIs did. Fixed in `dress/terrain.luau`:
 
 Left as they are:
 - **Gate seams:** all three auditors found the white seam bars on the gates thin,
-  bright and uneven; they read as scratches more than glowing cracks. They are the
-  designer's bait tell, so a change waits for the user.
+  bright and uneven; they read as scratches more than glowing cracks. The user asked
+  for it to be worked out with the designer, and it was fixed the same day (below).
 - **The cave lintel:** the rock over it overhangs by a stud or two.
 - **The Spit walkway:** it has a 2.5-stud step down between the ramp and the middle
   piece, which is in the greybox.
+
+**Gate seams reworked (designer's ruling, 2026-11-19).** The seams are the bait tell,
+so the artist took four options to the designer: an even frame, masonry joints, a
+crack, and a pulse (which would need code). Ruling: masonry joints, amended so the
+boss-facing key square stays clear for the carved key letters:
+- **The key slab** (14 x 14 on the ridge gates, 10 x 10 on the plug) is one smooth
+  stone. Light leaks from its joint on both sides and the top, and the bottom joint
+  stays dark.
+- **The surround:** a few joints in the dark pilasters and the lintel glow, at uneven
+  heights.
+- **No seam on the part's outer edges.** Edge seams were what made it read as an
+  outline.
+- **Size and colour:** strips 0.32 wide (under 0.3 shimmers at about 60 studs), and
+  `GateSeam` steps down from #d8ecff to #b8cce4 so a narrow joint doesn't bloom into a
+  smear.
+- **Count:** 6 `Deco_` and 6 `Seam_` per gate, within the 12 allowed.
+- **The plug** uses the same construction, so players learn one rule: seams mean it
+  opens.
+
+Checked under `BossDusk`, applied by hand in Edit, at 45 and 120 studs: a continuous
+lit frame round the key slab that still reads at 120. **Not checked:** a real fight
+(fade and regeneration with the new children), and the carved key letters against
+the frame.
 
 Left open by the review:
 

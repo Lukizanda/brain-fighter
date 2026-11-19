@@ -451,9 +451,13 @@ local SPIRE_C = { -- a capstone slipped off to one side, a notch below it, a sho
 }
 
 ----------------------------------------------------------------------
--- Gates: cut pale stone, dark pilasters, a keystone lintel, and a few light leaks
--- from the joints (0.2 wide, open frame: the bottom stays dark).
+-- Gates: cut pale stone, dark pilasters, a keystone lintel, and light leaking
+-- from the masonry joints round the key slab (the bottom joint stays dark).
 ----------------------------------------------------------------------
+-- Seam strip width: under 0.3 a strip drops below a pixel at about 60 studs and
+-- shimmers; the ruling's ceiling is 0.4 (designer, 2026-11-19).
+local SEAM_W = 0.32
+
 -- Ridge gate: local X is the 4 thick axis, broad faces face +-X.
 local function gateRidgeBuild(body, origin)
 	local deco0 = decoAdder(body, origin)
@@ -465,15 +469,26 @@ local function gateRidgeBuild(body, origin)
 		s += 1
 		return pr(body, origin, "GateSeam", "Block", "Seam_" .. s, size, pos)
 	end
-	deco("GateStoneDark", Vector3.new(5.0, 17.6, 2.6), Vector3.new(0, 9.0, -8.8), "Block", nil, 0)
-	deco("GateStoneDark", Vector3.new(5.0, 17.6, 2.6), Vector3.new(0, 9.0, 8.8), "Block", nil, 0)
+	-- Light through masonry joints (designer's ruling, 2026-11-19): the central
+	-- 14x14 key slab (y 2..16, z -7..7) stays one smooth stone, light leaks from
+	-- the joint round it on three sides (the bottom joint stays dark), and a few
+	-- joints in the dark pilasters and the lintel glow, unevenly. No seam on the
+	-- part's outer edges. 6 Deco_ + 6 Seam_, within the 12 per wall.
+	deco("GateStoneDark", Vector3.new(5.0, 17.6, 2.2), Vector3.new(0, 9.0, -8.9), "Block", nil, 0)
+	deco("GateStoneDark", Vector3.new(5.0, 17.6, 2.2), Vector3.new(0, 9.0, 8.9), "Block", nil, 0)
 	deco("GateStone", Vector3.new(5.4, 2.0, 20.8), Vector3.new(0, 18.0, 0), "Block", nil, 0.04)
 	deco("GateStone", Vector3.new(5.6, 3.4, 5.0), Vector3.new(0, 18.2, 0), "Block", nil, 0.08)
 	deco("GateStoneDark", Vector3.new(5.0, 1.6, 20.6), Vector3.new(0, 0.7, 0), "Block", nil, -0.02)
-	-- joints: two vertical seams of unequal length, one short seam under the lintel
-	seam(Vector3.new(4.4, 14.2, 0.2), Vector3.new(0, 8.9, -7.3))
-	seam(Vector3.new(4.4, 9.0, 0.2), Vector3.new(0, 11.7, 7.3))
-	seam(Vector3.new(4.4, 0.2, 6.0), Vector3.new(0, 16.25, -2.0))
+	-- the dark groove the top joint's light sits in, under the lintel
+	deco("GateStoneDark", Vector3.new(4.3, 0.7, 15.6), Vector3.new(0, 16.6, 0), "Block", nil, -0.04)
+	-- the key slab's joint: both sides and the top
+	seam(Vector3.new(4.4, 15.0, SEAM_W), Vector3.new(0, 9.0, -7.6))
+	seam(Vector3.new(4.4, 15.0, SEAM_W), Vector3.new(0, 9.0, 7.6))
+	seam(Vector3.new(4.45, SEAM_W, 15.2), Vector3.new(0, 16.6, 0))
+	-- masonry joints in the surround, at uneven heights
+	seam(Vector3.new(5.2, SEAM_W, 2.2), Vector3.new(0, 6.0, -8.9))
+	seam(Vector3.new(5.2, SEAM_W, 2.2), Vector3.new(0, 11.5, 8.9))
+	seam(Vector3.new(5.5, 2.0, SEAM_W), Vector3.new(0, 18.0, -5.2))
 end
 
 -- Cave plug: same language, broad faces face +-Z.
@@ -487,14 +502,20 @@ local function cavePlugBuild(body, origin)
 		s += 1
 		return pr(body, origin, "GateSeam", "Block", "Seam_" .. s, size, pos)
 	end
-	deco("GateStoneDark", Vector3.new(2.6, 13.4, 4.0), Vector3.new(-7.0, 7.0, 0), "Block", nil, 0)
-	deco("GateStoneDark", Vector3.new(2.6, 13.4, 4.0), Vector3.new(7.0, 7.0, 0), "Block", nil, 0)
+	-- The same construction as the ridge gate, round a 10x10 key slab
+	-- (x -5..5, y 2..12): one rule for players, seams mean it opens.
+	deco("GateStoneDark", Vector3.new(2.4, 13.4, 4.0), Vector3.new(-7.1, 7.0, 0), "Block", nil, 0)
+	deco("GateStoneDark", Vector3.new(2.4, 13.4, 4.0), Vector3.new(7.1, 7.0, 0), "Block", nil, 0)
 	deco("GateStone", Vector3.new(17.6, 1.6, 4.0), Vector3.new(0, 13.8, 0), "Block", nil, 0.04)
 	deco("GateStone", Vector3.new(4.6, 3.0, 4.4), Vector3.new(0, 14.1, 0), "Block", nil, 0.08)
 	deco("GateStoneDark", Vector3.new(17.4, 1.0, 4.0), Vector3.new(0, 0.4, 0), "Block", nil, -0.02)
-	seam(Vector3.new(0.2, 11.4, 3.4), Vector3.new(-5.4, 6.9, 0))
-	seam(Vector3.new(0.2, 8.0, 3.4), Vector3.new(5.4, 8.6, 0))
-	seam(Vector3.new(6.0, 0.2, 3.4), Vector3.new(-1.0, 12.35, 0))
+	deco("GateStoneDark", Vector3.new(11.6, 0.7, 3.3), Vector3.new(0, 12.65, 0), "Block", nil, -0.04)
+	seam(Vector3.new(SEAM_W, 11.6, 3.4), Vector3.new(-5.55, 6.8, 0))
+	seam(Vector3.new(SEAM_W, 11.6, 3.4), Vector3.new(5.55, 6.8, 0))
+	seam(Vector3.new(11.2, SEAM_W, 3.45), Vector3.new(0, 12.65, 0))
+	seam(Vector3.new(2.4, SEAM_W, 4.2), Vector3.new(-7.1, 4.8, 0))
+	seam(Vector3.new(2.4, SEAM_W, 4.2), Vector3.new(7.1, 8.6, 0))
+	seam(Vector3.new(SEAM_W, 1.6, 4.1), Vector3.new(-3.6, 13.8, 0))
 end
 
 ----------------------------------------------------------------------
