@@ -11,6 +11,9 @@ local placed = {}
 local audit = ART.dress(PASS, function(folder)
 	for _, spot in ART.POI_SPOTS do
 		local model = ART.placePoi(folder, spot.poi, spot.at, spot.yaw, spot.why)
+		if not spot.floats then
+			table.insert(placed, ART.seatPoi(model, spot.sink))
+		end
 		local cf, size = model:GetBoundingBox()
 		local floorY = ART.islandCenter().Y
 		table.insert(

@@ -117,6 +117,15 @@ takes a rim crystal cluster's slot: `dress/setpieces.luau` counts that slot but 
 nothing there, so the other clusters do not move. Order: set pieces, then POIs, then
 lighting.
 
+**Seating.** A POI is built on the flat stage; the ridge is not flat. After placing,
+`ART.seatPoi` sinks the piece to the median ground height under its base, then fills
+what is still open with rock footings: a leaned block plus a wider skirt under each
+base part that has ground within 10 studs, and one rock outcrop under the whole piece
+(tapering to a point) if any base part is over open air or a deeper drop. The footings
+are `Footing_*` parts inside the POI model. A spot's `sink` sinks it further; the geode
+uses it to sit half buried. Check a seated piece from outside the ring as well as from
+the playfield: the gaps show from outside.
+
 ## Dressing the island
 
 The kits make assets on the showcase; the dress passes put them on

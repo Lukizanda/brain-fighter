@@ -135,19 +135,24 @@ ART.run("LevelArt: POI nature", function()
 				local function at(x: number, y: number, z: number): Vector3
 					return Vector3.new(side * x, y, z)
 				end
-				local function ball(role: string, x: number, y: number, z: number, size: Vector3)
+				-- A faceted chunk; yaw and roll are mirrored with the half.
+				local function chunk(role: string, x: number, y: number, z: number, size: Vector3, yaw: number?, roll: number?)
 					return ART.prim(model, {
 						role = role,
-						shape = "Ball",
 						size = size,
-						cf = halfCf * CFrame.new(at(x, y, z)),
+						cf = halfCf * CFrame.new(at(x, y, z)) * CFrame.Angles(0, rad(side * (yaw or 0)), rad(side * (roll or 0))),
 						color = ART.shade(role, rng:NextNumber(-0.03, 0.03)),
 					})
 				end
-				-- one big round mass per half, its lower third buried; its inner bulge stops
-				-- 0.3 behind the split plane, so the flat dark slab stands 0.3 proud of it
-				ball("Bedrock", 4.7, 3.4, 0, Vector3.new(8.6, 8.6, 8.6))
-				ball("BedrockLight", 5.0, 2.6, -4.3, Vector3.new(6.6, 6.6, 6.6))
+				-- Each half is a faceted boulder of overlapping chunks, not a ball: a
+				-- Ball cannot be squashed, and two spheres read as two balls, not a
+				-- split rock (user's review, 2026-11-19). The inner face stops behind
+				-- the split plane, so the flat dark slab stands proud of it.
+				chunk("Bedrock", 4.8, 3.2, 0, Vector3.new(8.0, 6.4, 8.6), 4)
+				chunk("BedrockLight", 4.4, 6.8, 0.3, Vector3.new(6.4, 2.4, 7.0), -6, -8)
+				chunk("BedrockLight", 6.2, 3.0, -4.2, Vector3.new(5.6, 5.0, 3.2), 34, -6)
+				chunk("Bedrock", 6.0, 3.6, 4.1, Vector3.new(5.2, 5.4, 3.0), -28, -4)
+				chunk("CliffDark", 8.4, 1.8, 0, Vector3.new(2.6, 3.6, 7.2), 0, -18)
 				ART.prim(model, {
 					role = "CliffDark",
 					size = Vector3.new(1.0, 9.0, 9.0),

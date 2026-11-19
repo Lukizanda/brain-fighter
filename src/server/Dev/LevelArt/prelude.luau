@@ -1041,14 +1041,27 @@ ART.POI_SPOTS = {
 	{ poi = "POI_BrokenArch", at = Vector3.new(848.6, 234.0, 642.5), yaw = 40, why = "marks the Stones exit" },
 	{
 		poi = "POI_GeodeBoulder",
-		at = Vector3.new(841.4, 229.5, 415.5),
+		-- r 140, not the designer's 143: more of it on the ridge mass, less hanging
+		-- over its outer face; 14.6 from Hold_Overhang (was 13.3 by the same measure).
+		at = Vector3.new(839.6, 229.5, 417.9),
 		yaw = 142,
 		why = "marks the Overhang",
 		replaces = "Crystals",
+		-- Half buried in the ridge: on top of it the two halves read as two balls.
+		sink = 4,
 	},
-	{ poi = "POI_Colonnade", at = Vector3.new(907.9, 211.5, 495.3), yaw = 102, why = "home landmark by the arrival point" },
+	-- r 154, not the designer's 158: at 158 the whole piece stood past the floor's
+	-- edge (r 152 on this bearing). Here its front is on the floor and its back
+	-- overhangs the lip on footings (artist's review, 2026-11-19).
+	{ poi = "POI_Colonnade", at = Vector3.new(904.0, 211.5, 496.2), yaw = 102, why = "home landmark by the arrival point" },
 	{ poi = "POI_ColossusHead", at = Vector3.new(614.1, 208.6, 625.7), yaw = 41, why = "gazes along the Spit" },
-	{ poi = "POI_Beacon", at = Vector3.new(546.6, 222.4, 491.7), yaw = 260, why = "opposite the arrival, past the dais" },
+	{
+		poi = "POI_Beacon",
+		at = Vector3.new(546.6, 222.4, 491.7),
+		yaw = 260,
+		why = "opposite the arrival, past the dais",
+		floats = true, -- on its own islet: not seated on the ground
+	},
 }
 -- A set piece within this many studs (flat) of a spot that `replaces` it is
 -- not built.
@@ -1070,6 +1083,302 @@ function ART.placePoi(folder: Instance, name: string, at: Vector3, yaw: number, 
 	clone:SetAttribute("ProxyCount", nil)
 	clone.Parent = folder
 	return clone
+end
+
+----------------------------------------------------------------------
+-- Seating a POI on uneven ground
+----------------------------------------------------------------------
+-- A POI is built on the flat stage; the ridge it lands on is not flat. Seating
+-- sinks it to the ground under its base, then fills what is still open with
+-- rock footings, so no part of it reads as floating.
+ART.SEAT_GRID = 5 -- samples per axis on each base part's underside
+ART.SEAT_BASE_BAND = 2.5 -- a part whose underside is this close to the lowest is a base part
+ART.SEAT_MIN_AREA = 4 -- base parts smaller than this (chips, moss) get no footing
+ART.SEAT_SINK_QUANTILE = 0.5 -- sink so this share of the base touches or enters the ground
+ART.SEAT_MAX_SINK = 6
+ART.SEAT_GAP = 0.6 -- a gap above this under a base part gets a footing
+ART.SEAT_EMBED = 1 -- how far a footing reaches into the ground below it
+ART.SEAT_VOID_DEPTH = 9 -- footing depth where there is no ground at all (past the cliff edge)
+ART.SEAT_INSET = 0.92 -- footing size relative to the base part's footprint
+ART.SEAT_SEARCH = 60
+ART.SEAT_MAX_DROP = 10 -- a footing reaching further than this down ends in a taper instead
+ART.SEAT_JITTER_YAW = 12 -- degrees a footing is turned off its base part
+ART.SEAT_JITTER_LEAN = 3 -- degrees it leans
+ART.SEAT_SKIRT_MIN = 4 -- footings shorter than this get no skirt
+ART.SEAT_SKIRT_HEIGHT = 0.4 -- skirt height as a share of the footing's
+ART.SEAT_SKIRT_WIDTH = 1.15 -- skirt footprint relative to the base part's
+
+-- Parts that count as ground: the island's colliding greybox and every dress
+-- pass's art except the POIs themselves. Working volumes do not collide.
+local function groundParts(near: Vector3): { BasePart }
+	local found = {}
+	local function consider(part: BasePart)
+		local d = Vector3.new(part.Position.X - near.X, 0, part.Position.Z - near.Z).Magnitude
+		if d < ART.SEAT_SEARCH + part.Size.Magnitude / 2 then
+			table.insert(found, part)
+		end
+	end
+	for _, d in ART.island():GetDescendants() do
+		if d:IsA("BasePart") and d.CanCollide and not d.Name:find("Collider") then
+			consider(d)
+		end
+	end
+	local root = workspace:FindFirstChild(ART.DRESS_ROOT_NAME)
+	if root then
+		for _, folder in root:GetChildren() do
+			if folder.Name ~= "Dress_POI" then
+				for _, d in folder:GetDescendants() do
+					if d:IsA("BasePart") and d.Transparency < 1 then
+						consider(d)
+					end
+				end
+			end
+		end
+	end
+	return found
+end
+
+-- Highest top of `parts` straight below (x, top, z); -inf where there is none.
+local function groundBelow(parts: { BasePart }, x: number, top: number, z: number): number
+	local best = -math.huge
+	local from = Vector3.new(x, top, z)
+	for _, part in parts do
+		local o = part.CFrame:PointToObjectSpace(from)
+		local dir = part.CFrame:VectorToObjectSpace(Vector3.new(0, -1, 0))
+		local tmin, tmax, hit = 0, 1000, true
+		for _, axis in { "X", "Y", "Z" } do
+			local h = (part.Size :: any)[axis] / 2
+			local oa, da = (o :: any)[axis], (dir :: any)[axis]
+			if math.abs(da) < 1e-6 then
+				if oa < -h or oa > h then
+					hit = false
+					break
+				end
+			else
+				local t1, t2 = (-h - oa) / da, (h - oa) / da
+				if t1 > t2 then
+					t1, t2 = t2, t1
+				end
+				tmin, tmax = math.max(tmin, t1), math.min(tmax, t2)
+				if tmin > tmax then
+					hit = false
+					break
+				end
+			end
+		end
+		if hit then
+			best = math.max(best, top - tmin)
+		end
+	end
+	return best
+end
+
+type BaseSample = { part: BasePart, point: Vector3, gap: number }
+
+-- World Y of a part's lowest point.
+local function underside(part: BasePart): number
+	local cf, size = part.CFrame, part.Size
+	return part.Position.Y
+		- (math.abs(cf.RightVector.Y) * size.X + math.abs(cf.UpVector.Y) * size.Y + math.abs(cf.LookVector.Y) * size.Z) / 2
+end
+
+local function baseSamples(model: Model, ground: { BasePart }): ({ BaseSample }, number)
+	local lowest = math.huge
+	local parts = {}
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") and d.Transparency < 1 and d ~= model.PrimaryPart then
+			table.insert(parts, d)
+			lowest = math.min(lowest, underside(d))
+		end
+	end
+	local samples = {}
+	for _, part in parts do
+		local bottom = underside(part)
+		if bottom <= lowest + ART.SEAT_BASE_BAND then
+			-- A ball touches down near its middle only.
+			local reach = if part:IsA("Part") and part.Shape == Enum.PartType.Ball then 0.5 else 0.95
+			for i = 0, ART.SEAT_GRID - 1 do
+				for j = 0, ART.SEAT_GRID - 1 do
+					local u = (i / (ART.SEAT_GRID - 1) - 0.5) * reach
+					local v = (j / (ART.SEAT_GRID - 1) - 0.5) * reach
+					local w = part.CFrame * Vector3.new(u * part.Size.X, 0, v * part.Size.Z)
+					local p = Vector3.new(w.X, bottom, w.Z)
+					local g = p.Y - groundBelow(ground, p.X, p.Y + ART.SEAT_MAX_SINK + 1, p.Z)
+					table.insert(samples, { part = part, point = p, gap = g })
+				end
+			end
+		end
+	end
+	return samples, lowest
+end
+
+-- Sink `model` onto the ground below it and add footings under the base parts
+-- still left in the air. Footings go in the model as Footing_<n>. Returns a
+-- one-line report.
+function ART.seatPoi(model: Model, extraSink: number?): string
+	local cf = model:GetPivot()
+	-- Seeded by the model's name, so a re-run builds the same footings.
+	local seed = 0
+	for i = 1, #model.Name do
+		seed += string.byte(model.Name, i) * i
+	end
+	local rng = Random.new(seed)
+	local ground = groundParts(cf.Position)
+	local samples = baseSamples(model, ground)
+	local gaps = {}
+	for _, s in samples do
+		if s.gap < math.huge then
+			table.insert(gaps, s.gap)
+		end
+	end
+	table.sort(gaps)
+	local sink = 0
+	if #gaps > 0 then
+		sink = math.clamp(gaps[math.max(1, math.ceil(#gaps * ART.SEAT_SINK_QUANTILE))], 0, ART.SEAT_MAX_SINK)
+	end
+	sink += extraSink or 0
+	model:PivotTo(cf - Vector3.new(0, sink, 0))
+
+	-- Footings, one per base part that still has air under it.
+	samples = baseSamples(model, ground)
+	local byPart: { [BasePart]: { BaseSample } } = {}
+	for _, s in samples do
+		byPart[s.part] = byPart[s.part] or {}
+		table.insert(byPart[s.part], s)
+	end
+	local footings, open = 0, 0
+	local overhang: { { part: BasePart, top: number } } = {}
+	-- A fixed order, so the seeded jitter lands on the same parts every run.
+	local order = {}
+	for part in byPart do
+		table.insert(order, part)
+	end
+	table.sort(order, function(a, b)
+		if a.Position.X ~= b.Position.X then
+			return a.Position.X < b.Position.X
+		end
+		return a.Position.Z < b.Position.Z
+	end)
+	for _, part in order do
+		local list = byPart[part]
+		local worst, lowestGround, void = 0, math.huge, false
+		for _, s in list do
+			if s.gap > ART.SEAT_GAP then
+				open += 1
+			end
+			worst = math.max(worst, s.gap)
+			if s.gap == math.huge then
+				void = true
+			else
+				lowestGround = math.min(lowestGround, s.point.Y - s.gap)
+			end
+		end
+		local area = part.Size.X * part.Size.Z
+		if worst > ART.SEAT_GAP and area >= ART.SEAT_MIN_AREA then
+			local top = list[1].point.Y + 0.2 -- tuck under the base part
+			-- Ground far below (the floor past a ridge's outer face) gets the same
+			-- hanging taper as the void, not a pillar all the way down.
+			if lowestGround < top - ART.SEAT_MAX_DROP then
+				void = true
+			end
+			if void then
+				-- Over open air: one ledge under all such parts, built after the loop.
+				-- Per-part posts under a head or a step hang like legs.
+				table.insert(overhang, { part = part, top = top })
+				continue
+			end
+			local bottom = lowestGround - ART.SEAT_EMBED
+			local height = top - bottom
+			local look = part.CFrame.LookVector
+			local yaw = math.atan2(-look.X, -look.Z)
+			footings += 1
+			-- Rough rock, not a clean pillar: the block is turned and leaned a
+			-- little, and a wider, shorter skirt of the other cliff tone sits at its foot.
+			local jitterYaw = math.rad(rng:NextNumber(-ART.SEAT_JITTER_YAW, ART.SEAT_JITTER_YAW))
+			local lean = math.rad(rng:NextNumber(-ART.SEAT_JITTER_LEAN, ART.SEAT_JITTER_LEAN))
+			local fcf = CFrame.new(part.Position.X, bottom + height / 2, part.Position.Z)
+				* CFrame.Angles(0, yaw + jitterYaw, 0)
+				* CFrame.Angles(lean, 0, -lean / 2)
+			local role = if footings % 2 == 0 then "Cliff" else "CliffDark"
+			local skirtRole = if footings % 2 == 0 then "CliffDark" else "Cliff"
+			ART.prim(model, {
+				role = role,
+				name = "Footing_" .. footings,
+				size = Vector3.new(part.Size.X * ART.SEAT_INSET, height, part.Size.Z * ART.SEAT_INSET),
+				cf = fcf,
+			})
+			if height > ART.SEAT_SKIRT_MIN then
+				local skirtH = height * ART.SEAT_SKIRT_HEIGHT
+				ART.prim(model, {
+					role = skirtRole,
+					name = "Footing_" .. footings .. "_Skirt",
+					size = Vector3.new(part.Size.X * ART.SEAT_SKIRT_WIDTH, skirtH, part.Size.Z * ART.SEAT_SKIRT_WIDTH),
+					cf = CFrame.new(part.Position.X, bottom + skirtH / 2, part.Position.Z)
+						* CFrame.Angles(0, yaw - jitterYaw * 2, 0),
+				})
+			end
+		end
+	end
+
+	-- The ledge: when any base part is over open air, one rock outcrop under the
+	-- whole piece (the box round every visible part, in the model's own frame),
+	-- with a smaller taper beneath. Under only the overhanging parts it reads as
+	-- a neck or a post.
+	local ledge = 0
+	if #overhang > 0 then
+		local frame = model:GetPivot()
+		local flat = CFrame.new(frame.Position) * CFrame.Angles(0, select(2, frame:ToOrientation()), 0)
+		local minX, maxX, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge
+		local top = -math.huge
+		for _, o in overhang do
+			top = math.max(top, o.top)
+		end
+		for _, p in model:GetDescendants() do
+			if p:IsA("BasePart") and p.Transparency < 1 and not p.Name:match("^Footing") then
+				local s = p.Size
+				for _, cx in { -1, 1 } do
+					for _, cz in { -1, 1 } do
+						local w = flat:PointToObjectSpace(p.CFrame * Vector3.new(cx * s.X / 2, 0, cz * s.Z / 2))
+						minX, maxX = math.min(minX, w.X), math.max(maxX, w.X)
+						minZ, maxZ = math.min(minZ, w.Z), math.max(maxZ, w.Z)
+					end
+				end
+			end
+		end
+		local width, depth = (maxX - minX) * ART.SEAT_INSET, (maxZ - minZ) * ART.SEAT_INSET
+		local mid = flat * Vector3.new((minX + maxX) / 2, 0, (minZ + maxZ) / 2)
+		local body = CFrame.new(mid.X, top - ART.SEAT_VOID_DEPTH / 2, mid.Z) * flat.Rotation
+		ART.prim(model, {
+			role = "CliffDark",
+			name = "Footing_Ledge",
+			size = Vector3.new(width, ART.SEAT_VOID_DEPTH, depth),
+			cf = body * CFrame.Angles(0, math.rad(rng:NextNumber(-4, 4)), 0),
+		})
+		ART.prim(model, {
+			role = "Cliff",
+			name = "Footing_Ledge_Taper",
+			size = Vector3.new(width * 0.6, ART.SEAT_VOID_DEPTH * 0.6, depth * 0.6),
+			cf = body * CFrame.new(0, -ART.SEAT_VOID_DEPTH * 0.75, 0) * CFrame.Angles(0, math.rad(rng:NextNumber(-10, 10)), 0),
+		})
+		ART.prim(model, {
+			role = "CliffDark",
+			name = "Footing_Ledge_Point",
+			size = Vector3.new(width * 0.25, ART.SEAT_VOID_DEPTH * 0.5, depth * 0.25),
+			cf = body * CFrame.new(0, -ART.SEAT_VOID_DEPTH * 1.2, 0) * CFrame.Angles(0, math.rad(rng:NextNumber(-20, 20)), 0),
+		})
+		ledge = 1
+	end
+	return string.format(
+		"%s: sank %.1f, %d of %d base samples over a %.1f gap, %d footings, %d ledge (%d parts over air)",
+		model.Name,
+		sink,
+		open,
+		#samples,
+		ART.SEAT_GAP,
+		footings,
+		ledge,
+		#overhang
+	)
 end
 
 return ART

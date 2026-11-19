@@ -910,10 +910,34 @@ heights from the floor at Y 202.5.
 | POI | Where | Stands on | Top / bottom | Job |
 |---|---|---|---|---|
 | Beacon | 190 deg, r 210, yaw 260 | Its own floating base rock | +40 / -15 | Opposite the arrival point, past the dais |
-| BrokenArch | 50 deg, r 148, yaw 40 | Ridge mass `Ridge_27` | +44.5 / +18 | Marks the Stones exit |
-| GeodeBoulder | 308 deg, r 143, yaw 142 | Ridge mass `Ridge_26` | +35 / +17 | Marks the Overhang; takes the rim crystal cluster's spot there |
-| Colonnade | 348 deg, r 158, yaw 102 | The rim apron, beside the low lip | +18 / 0 | "Home" landmark by the arrival point |
-| ColossusHead | 145 deg, r 170, yaw 41 | Rim apron, half buried | +16 / -8 | Gazes along the Spit; sits beside the blade-rock marker, does not replace it |
+| BrokenArch | 50 deg, r 148, yaw 40 | Ridge mass `Ridge_27`, legs sunk 3.9 into it | +40.6 / +14.5 | Marks the Stones exit |
+| GeodeBoulder | 308 deg, r 140, yaw 142 | Ridge mass `Ridge_26`, half buried | +30.7 / +13 | Marks the Overhang; takes the rim crystal cluster's spot there |
+| Colonnade | 348 deg, r 154, yaw 102 | The floor's edge outside the low lip, back half on a rock ledge | +16 / -2 | "Home" landmark by the arrival point |
+| ColossusHead | 145 deg, r 170, yaw 41 | A rock outcrop on the cliff edge | +16 / -8 | Gazes along the Spit; sits beside the blade-rock marker, does not replace it |
+
+Heights are of the piece itself, without its footings.
+
+**Fixed after the user's review (2026-11-19).** The user found the arch floating over the
+ridge. The artist checked all five from inside the ring, from outside it and from below:
+- **The placements were measured by bounding box, not by contact.** The ridge top is
+  uneven, so most of the arch's base was 1 to 21 studs above it.
+- **The colonnade at r 158 stood entirely past the floor's edge** (r 152 on that
+  bearing), a few studs of air from the island.
+- **The head's chin hung over the cliff.**
+- **The geode's two halves were plain spheres** sitting on top of the ridge.
+
+The fixes:
+- **`ART.seatPoi`** sinks each piece to the median ground under it and fills what is
+  left with rock footings, or with one outcrop where part of it is over open air. The
+  [README](../../src/server/Dev/LevelArt/README.md) § Points of interest has the
+  details.
+- **The colonnade moved to r 154**, so its front stands on the floor.
+- **The geode moved to r 140 and sinks 4 more** so it sits half buried. Its halves were
+  rebuilt from faceted blocks, since a Ball part cannot be squashed.
+
+After the fixes, every part of every piece, footings included, is at least 14 studs
+from any letter or hold zone; the closest is the geode, 14.1 from `Hold_Overhang`. The
+designer has not re-reviewed these changes.
 
 Every placement is clear of the letter zones, `Hold_` zones and boss lanes. The head's
 gate-front distance is 43 studs, just outside the 40-stud rule.

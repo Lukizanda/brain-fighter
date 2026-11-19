@@ -2241,3 +2241,10 @@ The artist worked with the designer to place the POI kit on the review island. F
 - The beacon's lamp strips are now a `Lamp` role, so the gate-seam glow stays unique to gates.
 - The designer reviewed the built pass and agreed. The natural arch and the four hub-only pieces stay off the island.
 - See design/boss-arena § Placed on IslandReview.
+
+## [2026-11-19] ingest | POIs seated on the island after the user's review
+
+The user found the broken arch floating over the ridge. A review from inside the ring, outside it and below found three more problems: the colonnade stood past the floor's edge, the head's chin hung over the cliff, and the geode read as two balls.
+- New `ART.seatPoi` sinks each POI to the ground under it and adds rock footings, or one outcrop where part of it is over open air.
+- The colonnade moved to r 154 and the geode to r 140; the geode's halves were rebuilt from faceted blocks.
+- Every piece is at least 14 studs from any letter or hold zone. The designer has not re-reviewed. See design/boss-arena § Placed on IslandReview.
