@@ -759,6 +759,27 @@ like masonry, a paving ring 6 studs outside the dais removed (it blurred Ground 
 edge), the Stones' tops off grass, and full decks on the ridge lips, six of which a
 player can step onto.
 
+**Art review for floating and gaps (2026-11-19).** After the POI fix, the user asked
+for the whole level to be checked for the same kind of problem. Three artist sessions
+each audited a third of the ring by screenshot and measurement, and the lead ran an
+island-wide contact check (which art clusters touch nothing connected to the island).
+Nothing else floats like the POIs did. Fixed in `dress/terrain.luau`:
+- **Pale slabs on the floor:** the underside's first layer topped out 0.05 under the
+  floor with a 2-degree roll, so all 48 of its blocks broke through along the ridge
+  foot. It now tops out 0.6 under the floor, flat.
+- **A see-through window** in the ridge at bearing 90, where a stretched mass's slabs
+  didn't meet. Every tall mass now has a hidden dark core inside its greybox box.
+- **Two underside spikes** hung up to 2 studs below the rock they should grow from.
+  Spikes now start inside it.
+
+Left as they are:
+- **Gate seams:** all three auditors found the white seam bars on the gates thin,
+  bright and uneven; they read as scratches more than glowing cracks. They are the
+  designer's bait tell, so a change waits for the user.
+- **The cave lintel:** the rock over it overhangs by a stud or two.
+- **The Spit walkway:** it has a 2.5-stud step down between the ramp and the middle
+  piece, which is in the greybox.
+
 Left open by the review:
 
 - ~~Ring-out edges (the Spit, the Overhang slab) fade into the pale horizon, and the

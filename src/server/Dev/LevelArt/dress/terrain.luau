@@ -32,6 +32,7 @@ local RAY_DOWN = 20
 
 -- Ridge classes (greybox sizes are (thickness, height, length)).
 local LIP_MAX_HEIGHT = 6 -- a part this low or lower is a lip, otherwise a mass
+local CORE_INSET = Vector3.new(0.8, 0.85, 0.92) -- a mass's hidden core, as a share of its greybox box
 local MARKER_MIN_LENGTH = 19 -- a mass long enough to carry an exit marker
 local MARKER_MIN_HEIGHT = 16
 local MARKER_MIN_GATE_DIST = 14 -- never the piece in the gate's own lane
@@ -80,7 +81,10 @@ local OBSTACLE_PREFIXES = { "Cover", "Core", "Pad", "Overlook", "Cave_", "Ledge_
 -- Underside layers, from the rim down: first stratum is just under the floor outline,
 -- each next one steps inward. top / bottom are studs below the floor top.
 local UNDER_LAYERS = {
-	{ n = 48, top = -0.05, bottom = -12, out = 0.2, thick = 14, role = "Cliff", wobble = 1.2 },
+	-- The first stratum's top stays 0.6 under the floor and does not roll: at -0.05
+	-- with a 2-degree roll the corners of every block rose through the floor as pale
+	-- slabs (art review, 2026-11-19).
+	{ n = 48, top = -0.6, bottom = -12, out = 0.2, thick = 14, role = "Cliff", wobble = 1.2, flat = true },
 	{ n = 32, top = -10, bottom = -30, out = -7, thick = 26, role = "CliffDark", wobble = 2 },
 	{ n = 24, top = -28, bottom = -56, out = -20, thick = 34, role = "CliffDark", wobble = 3 },
 	{ n = 16, top = -54, bottom = -84, out = -42, thick = 60, role = "Bedrock", wobble = 4 },
@@ -97,7 +101,9 @@ local UNDER_CORES = { -- the solid middle: { size, y top, y bottom, yaw }
 }
 local UNDER_TIP = { width = 30, height = 34, run = 24, top = -83 }
 local SPIKES = 16
-local SPIKE_FROM = -58 -- y the spikes hang from: just under the third stratum
+-- y the spikes hang from: inside the third stratum, whose bottom is -56 less a
+-- random 0..3. At -58 a spike under a shallow block hung free (Spike_7, Spike_13).
+local SPIKE_FROM = -55
 local SPIKE_LENGTH = { 22, 46 }
 
 -- Rim strip: a thin rock facing over each wedge's side face, so the floor's edge reads as rock.
@@ -239,7 +245,20 @@ local function placeRidge(part: BasePart, asset: string, name: string)
 		fitStats.worstHigh = math.max(fitStats.worstHigh, f)
 	end
 	fitStats.count += 1
-	ART.place(PASS, KIT, asset, part, { name = name, turn = turn })
+	local model = ART.place(PASS, KIT, asset, part, { name = name, turn = turn })
+	if part.Size.Y > LIP_MAX_HEIGHT then
+		-- A dark core inside the mass: the slabs of a stretched asset can leave a
+		-- window where the sky shows through the ridge (art review, 2026-11-19,
+		-- Ridge_16 at bearing 90). Inset so it never shows where the slabs meet.
+		local size = V3(part.Size.X * CORE_INSET.X, part.Size.Y * CORE_INSET.Y, part.Size.Z * CORE_INSET.Z)
+		ART.prim(model, {
+			role = "CliffDark",
+			name = "Core",
+			size = size,
+			cf = part.CFrame * CFrame.new(0, (size.Y - part.Size.Y) / 2, 0),
+			shadow = false,
+		})
+	end
 	pace()
 end
 
@@ -552,7 +571,10 @@ local function dressUnderside(folder: Folder)
 			local rOut = reach + layer.out + rng:NextNumber(-layer.wobble, layer.wobble)
 			local bottom = layer.bottom - rng:NextNumber(0, UNDER_BOTTOM_DROP)
 			local radial = V3(math.cos(theta), 0, math.sin(theta))
-			local roll = math.rad(rng:NextNumber(-2, 2))
+			local roll = math.rad(rng:NextNumber(-2, 2)) -- drawn even when flat, so the seed's later draws stay put
+			if layer.flat then
+				roll = 0
+			end
 			local function frame(out: number): (CFrame, Vector3)
 				local width = 2 * out * math.tan(step / 2) + UNDER_OVERLAP
 				local size = V3(width, layer.top - bottom, layer.thick)

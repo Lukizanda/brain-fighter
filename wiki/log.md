@@ -2248,3 +2248,9 @@ The user found the broken arch floating over the ridge. A review from inside the
 - New `ART.seatPoi` sinks each POI to the ground under it and adds rock footings, or one outcrop where part of it is over open air.
 - The colonnade moved to r 154 and the geode to r 140; the geode's halves were rebuilt from faceted blocks.
 - Every piece is at least 14 studs from any letter or hold zone. The designer has not re-reviewed. See design/boss-arena § Placed on IslandReview.
+
+## [2026-11-19] ingest | Level-wide art review for floating and gaps
+
+Three artist sessions audited the dressed island by sector, and the lead ran an island-wide contact check. Nothing floats like the POIs did.
+- Fixed in the terrain pass: the underside's first layer broke through the floor as pale slabs, a see-through window in the ridge at bearing 90 (tall masses now have hidden cores), and two underside spikes hanging free.
+- The gate-seam look waits for the user. See design/boss-arena § The island dressed.
