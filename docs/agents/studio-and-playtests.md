@@ -41,3 +41,8 @@ if recording then ChangeHistoryService:FinishRecording(recording, Enum.FinishRec
 - Injected Luau gets its own copies of modules. Drive gameplay through attributes, and observe it through `DescendantAdded`.
 - Instances that MCP clones arrive as `nil` when passed as RemoteEvent arguments. Use a real `.server.luau` dev harness instead.
 - Details, `datamodel_type`, simulated input and the `start_stop_play` wedge: [wiki/reference/studio-mcp.md](../../wiki/reference/studio-mcp.md).
+
+## Screenshots
+- `screen_capture` with a `camera_position` leaves the editor camera `Scriptable`, which breaks the user's scene navigation. After your last positioned capture, and before you report or hand back, run on the Edit datamodel: `workspace.CurrentCamera.CameraType = Enum.CameraType.Fixed`. Put this line in the brief of every subagent that takes captures.
+- Never take a positioned capture while Studio is in Play: it moves the playing client's camera.
+- Details: [wiki/reference/studio-mcp.md](../../wiki/reference/studio-mcp.md).

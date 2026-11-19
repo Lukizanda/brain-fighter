@@ -1,7 +1,7 @@
 ---
 type: reference
-description: Roblox_Studio MCP as tested here — execute_luau gets its own module copies, MCP-cloned instances arrive nil over remotes, start_stop_play wedges
-updated: 2026-10-15
+description: Roblox_Studio MCP as tested here — execute_luau gets its own module copies, MCP-cloned instances arrive nil over remotes, start_stop_play wedges, a positioned screen_capture leaves the edit camera Scriptable
+updated: 2026-11-19
 ---
 
 # Roblox Studio MCP (`Roblox_Studio`)
@@ -50,6 +50,19 @@ Pressing F5 in the focused Studio window cleared it once and failed the second t
 
 - **Plan around it:** settle the verification design *before* spending a working playtest. If Studio is already in Play, use that session rather than stopping and restarting it.
 - **If it wedges:** say plainly which half of the verification didn't run, and record the outstanding test in the wiki log, not just in chat.
+
+## A positioned `screen_capture` leaves the edit camera `Scriptable`
+
+`screen_capture` with `camera_position` / `look_at_position` sets
+`workspace.CurrentCamera.CameraType` to `Scriptable` and does not set it back. It does
+restore the camera's `CFrame`, so nothing looks wrong until the user tries to fly the
+editor camera and it no longer responds normally. A capture without a camera position
+was not tested. Verified 2026-11-19: `Fixed` before one positioned capture, `Scriptable`
+after it, position unchanged.
+
+**The fix:** after the last positioned capture of a task, set it back on the Edit
+datamodel: `workspace.CurrentCamera.CameraType = Enum.CameraType.Fixed`. `Fixed` is
+the editor's normal value. Subagents that take captures must do this before they report.
 
 ## Only the Edit window
 

@@ -84,7 +84,7 @@ Start here. See [[WIKI]] for conventions and operations.
 Platform behaviour we verified ourselves: what the docs don't say, or got wrong. Check here before working around Rojo, Studio MCP, Open Cloud or engine edge cases.
 
 - [[reference/rojo]] — Rojo 7.7: `.model.json` creates instances, `.meta.json` only modifies; a lone `.meta.json` silently creates nothing
-- [[reference/studio-mcp]] — `execute_luau` gets its own module copies (drive via attributes), `datamodel_type` Client/Server/Edit, MCP-cloned instances arrive nil over remotes, `start_stop_play` wedge
+- [[reference/studio-mcp]] — `execute_luau` gets its own module copies (drive via attributes), `datamodel_type` Client/Server/Edit, MCP-cloned instances arrive nil over remotes, `start_stop_play` wedge, a positioned `screen_capture` leaves the edit camera `Scriptable` (reset to `Fixed`)
 - [[reference/roblox-engine]] — server `Emit()` doesn't replicate, `os.clock()` is per-VM, Studio fps is paced (measure with RenderBreakdown counts), third-party images don't load
 - [[reference/open-cloud]] — "Invalid API Key" 401 → regenerate the key; Open Cloud Decals need `rbxthumb://`
 
