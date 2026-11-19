@@ -841,8 +841,8 @@ preset too).
 The user asked for level pieces to use as POIs, built by the art team and added to the
 showcase. Ten landmark pieces now stand on a fourth strip of
 `Workspace.LevelArtShowcase` (`Kit_POI`, centred at (400, 200, 1690), behind the
-vignette). **Nothing was placed on the island.** They are in the place file, so the
-place has to be saved to keep them.
+vignette). Five of them were later placed on the island (§ Placed on IslandReview).
+They are in the place file, so the place has to be saved to keep them.
 
 A POI has no greybox box of its own, so each one carries its own proposed collision:
 1 to 8 invisible `Collide_<n>` boxes, the only colliding parts in the showcase. Each
@@ -893,24 +893,67 @@ except where the earlier rulings already said so; **the user has not confirmed t
   proxy in the playfield is permanent cover, counts in the cover budget and stays
   under +12.
 
-### Proposed placement on IslandReview (designer, not decided)
+### Placed on IslandReview (2026-11-19)
 
-Bearings clockwise from east, radius from the island centre.
+The user asked the artist to work with the designer on where the POIs go. The
+designer turned its first proposal into measured placements, the artist built them,
+and the designer reviewed the result: **agree**. The user has not reviewed them yet,
+and the place has to be saved to keep them.
 
-| POI | Where | Purpose |
-|---|---|---|
-| Beacon | 190 deg, r 225, on an islet at least 12 studs from the Spit tip | Opposite the overlook, so arriving players see it beyond the dais |
-| BrokenArch | 57 deg, r 150, legs on the ridge masses | Marks the Stones exit |
-| ColossusHead | 150 deg, r 165, outside the ring, gazing along the Spit | Marks the Spit exit; would replace the blade-rock marker |
-| GeodeBoulder | 300 deg, r 152, on the ridge | Marks the Overhang; it is the "split boulder" tell |
-| Colonnade | 355 deg, r 160, behind the overlook, top at most +18 | A "home" landmark for the arrival point |
-| NaturalArch (optional) | 120 deg, r 230, floating | Frames the sky |
+**How.** A fifth dress pass, `dress/poi.luau` (`Dress_POI`), clones five showcase POIs
+to the spots in `ART.POI_SPOTS` (the prelude). All five are on or beyond the ridge
+ring, out of reach, so their `Collide_` proxies are dropped: **nothing on the island
+gained collision**. Audit `problems: 0`. The showcase copies keep their proxies for hub
+use. Bearings clockwise from east, radius from the island centre (753.4, 528.2),
+heights from the floor at Y 202.5.
 
-Off the island: stone ring, ring shrine, petrified tree, bridge stub. Keep 210 to 245
-degrees clear: the cave outcrop is its own tell. The designer also suggested, unbuilt:
-a framed window in the ready room looking at the island and the beacon, a hanging-rock
-cluster under the island for its silhouette from the ready room, and no POI for the
-premium ring (the dais already marks it).
+| POI | Where | Stands on | Top / bottom | Job |
+|---|---|---|---|---|
+| Beacon | 190 deg, r 210, yaw 260 | Its own floating base rock | +40 / -15 | Opposite the arrival point, past the dais |
+| BrokenArch | 50 deg, r 148, yaw 40 | Ridge mass `Ridge_27` | +44.5 / +18 | Marks the Stones exit |
+| GeodeBoulder | 308 deg, r 143, yaw 142 | Ridge mass `Ridge_26` | +35 / +17 | Marks the Overhang; takes the rim crystal cluster's spot there |
+| Colonnade | 348 deg, r 158, yaw 102 | The rim apron, beside the low lip | +18 / 0 | "Home" landmark by the arrival point |
+| ColossusHead | 145 deg, r 170, yaw 41 | Rim apron, half buried | +16 / -8 | Gazes along the Spit; sits beside the blade-rock marker, does not replace it |
+
+Every placement is clear of the letter zones, `Hold_` zones and boss lanes. The head's
+gate-front distance is 43 studs, just outside the 40-stud rule.
+
+Changes from the first proposal, all designer's judgment:
+- **The arch moved from 57 to 50 degrees.** At 57 it touched the Stones return stair.
+- **The colonnade moved from 355 to 348 degrees.** Directly behind the shelf, only 1 to
+  2 studs of it showed from the dais.
+- **The head moved from 150 to 145 degrees.** A ridge mass hid it at 150.
+- **The geode replaces `Crystals_4`.** The two would clash at that spot. The set-pieces
+  pass now counts that crystal slot but builds nothing there, so the other three
+  clusters did not move. The lighting pass builds three crystal lights, not four.
+- **The beacon's lantern strips** are now `Lamp` (a new palette role: Neon, greyer than
+  `GateSeam`), so the sealed-gate glow stays unique to gates.
+
+Dropped:
+- **NaturalArch.** A floating rock already holds its spot, and a free-standing arch
+  beyond the rim reads as a way through.
+- **Hub-only, the ready room included:** stone ring, ring shrine, petrified tree and
+  bridge stub. The ready room may still move.
+- **The 210 to 245 degree band stays empty:** the cave outcrop is its own tell.
+
+**Seen.** Screenshots in Edit with `BossDusk` applied by hand, then restored:
+- **Beacon:** a faint but clear tower over the far ridge from the arrival point. From
+  the dais only the lantern shows.
+- **Geode and colonnade:** clear from the dais.
+- **Arch:** from the dais the `Cover_02` spire hides most of it. It reads from the
+  arrival point and the Stones approach, and shows when the spire breaks. The designer
+  kept it there; moving it far enough to clear the spire lands it on the return stair
+  or over a letter zone.
+- **Head:** a Spit-only landmark. It reads as a face from the Spit tip, and the ridge
+  hides it from the playfield. Raising it would put a giant face watching the
+  playfield, competing with the boss.
+
+**Not checked:** a real player camera in Play, frame rate with about 140 more parts,
+the arch's view once a fight breaks the spire.
+
+Designer's suggestions, still unbuilt: a framed window in the ready room looking at the
+island and the beacon, a hanging-rock cluster under the island for its silhouette from
+the ready room, and no POI for the premium ring (the dais already marks it).
 
 ## Pick up here (rewritten 2026-11-14 at the end of the session)
 

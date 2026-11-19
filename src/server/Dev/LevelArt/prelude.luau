@@ -70,6 +70,9 @@ ART.PAL = {
 	PadEnter = { M.Neon, Color3.fromRGB(255, 170, 60) },
 	PadReturn = { M.Neon, Color3.fromRGB(240, 240, 250) },
 	Crystal = { M.Glass, Color3.fromRGB(196, 206, 232) },
+	-- A landmark's light (the beacon's lantern): cooler and greyer than
+	-- GateSeam, so the sealed-gate glow stays unique to gates (designer, 2026-11-19).
+	Lamp = { M.Neon, Color3.fromRGB(196, 206, 232) },
 	-- Stage only.
 	Stage = { M.SmoothPlastic, Color3.fromRGB(40, 42, 48) },
 	StageSign = { M.SmoothPlastic, Color3.fromRGB(24, 25, 30) },
@@ -999,8 +1002,7 @@ function ART.poi(def: PoiDef): Model
 			proxies += 1
 		end
 	end
-	assert(proxies > 0, def.name .. ": a POI needs at least one ART.proxy collision box")
-	model:SetAttribute("ProxyCount", proxies)
+	assert(proxies > 0, def.name .. ": a POI needs at least one ART.proxy collision box")	model:SetAttribute("ProxyCount", proxies)
 	-- PartCount is the visible art only.
 	model:SetAttribute("PartCount", (model:GetAttribute("PartCount") :: number) - proxies)
 	return model
@@ -1027,6 +1029,47 @@ function ART.proxy(model: Model, origin: CFrame, center: Vector3, size: Vector3,
 	part.CastShadow = false
 	part.Parent = model
 	return part
+end
+
+-- Where POIs stand on the island: the designer's measured placements of
+-- 2026-11-19 (wiki boss-arena § Points of interest). `at` is the world centre
+-- of the piece's GreyboxRef (its pivot), `yaw` degrees about +Y. Every one is
+-- on or beyond the ridge ring, so none keeps its Collide_ proxies.
+-- `replaces` names set-piece art the POI takes the place of: the set-pieces
+-- pass leaves that spot empty.
+ART.POI_SPOTS = {
+	{ poi = "POI_BrokenArch", at = Vector3.new(848.6, 234.0, 642.5), yaw = 40, why = "marks the Stones exit" },
+	{
+		poi = "POI_GeodeBoulder",
+		at = Vector3.new(841.4, 229.5, 415.5),
+		yaw = 142,
+		why = "marks the Overhang",
+		replaces = "Crystals",
+	},
+	{ poi = "POI_Colonnade", at = Vector3.new(907.9, 211.5, 495.3), yaw = 102, why = "home landmark by the arrival point" },
+	{ poi = "POI_ColossusHead", at = Vector3.new(614.1, 208.6, 625.7), yaw = 41, why = "gazes along the Spit" },
+	{ poi = "POI_Beacon", at = Vector3.new(546.6, 222.4, 491.7), yaw = 260, why = "opposite the arrival, past the dais" },
+}
+-- A set piece within this many studs (flat) of a spot that `replaces` it is
+-- not built.
+ART.POI_REPLACE_RADIUS = 20
+
+-- Clone showcase POI `name` to a world pivot, its Collide_ proxies dropped (a
+-- POI out of reach needs no collision). The clone lives in `folder`.
+function ART.placePoi(folder: Instance, name: string, at: Vector3, yaw: number, why: string?): Model
+	local source = showcaseAsset("Kit_POI", name)
+	local clone = source:Clone()
+	for _, child in clone:GetChildren() do
+		if child.Name:match("^Collide_%d+$") then
+			child:Destroy()
+		end
+	end
+	clone:PivotTo(CFrame.new(at) * CFrame.Angles(0, math.rad(yaw), 0))
+	clone:SetAttribute(ATTR_FOR, "POI")
+	clone:SetAttribute("PoiWhy", why)
+	clone:SetAttribute("ProxyCount", nil)
+	clone.Parent = folder
+	return clone
 end
 
 return ART

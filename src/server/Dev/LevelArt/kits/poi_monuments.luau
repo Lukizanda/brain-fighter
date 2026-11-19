@@ -68,11 +68,11 @@ local function buildBeacon(model, origin)
 	ART.prim(model, { role = "Crystal", size = Vector3.new(3.0, 3.0, 3.0), cf = core, transparency = 0.2, name = "BeaconCore" })
 	for _, sx in { -1, 1 } do
 		for _, sz in { -1, 1 } do
-			P(model, core, "GateSeam", Vector3.new(sx * 1.5, 0, sz * 1.5), Vector3.new(0.3, 3.0, 0.3))
+			P(model, core, "Lamp", Vector3.new(sx * 1.5, 0, sz * 1.5), Vector3.new(0.3, 3.0, 0.3), 0, 0, 0, { name = "Lamp" })
 		end
 	end
 	for _, sz in { -1, 1 } do
-		P(model, core, "GateSeam", Vector3.new(0, 1.5, sz * 1.5), Vector3.new(3.1, 0.3, 0.3))
+		P(model, core, "Lamp", Vector3.new(0, 1.5, sz * 1.5), Vector3.new(3.1, 0.3, 0.3), 0, 0, 0, { name = "Lamp" })
 			end
 	P(model, origin, "GateStone", Vector3.new(0, 38.6, 0), Vector3.new(8.4, 1.2, 8.4), 0, 2, 0, { color = ART.shade("GateStone", 0.07) })
 	P(model, origin, "GateStone", Vector3.new(0, 39.6, 0), Vector3.new(4.2, 0.8, 4.2), 0, -4, 0, { color = ART.shade("GateStone", 0.08) })

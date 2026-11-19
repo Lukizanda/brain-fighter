@@ -293,7 +293,18 @@ local function crystals(folder: Folder)
 				ok = false
 			end
 		end
-		if ok then
+		-- A POI that replaces crystals takes the cluster's slot and spot: the slot
+		-- is counted, so the clusters elsewhere stay where they were.
+		local taken = false
+		for _, spot in ART.POI_SPOTS do
+			if spot.replaces == "Crystals" and (flat(spot.at) - pos).Magnitude < ART.POI_REPLACE_RADIUS then
+				taken = true
+			end
+		end
+		if ok and taken then
+			table.insert(chosen, pos)
+			count += 1
+		elseif ok then
 			table.insert(chosen, pos)
 			count += 1
 			local sign = if mass.CFrame.RightVector:Dot(mass.Position - center) >= 0 then 1 else -1

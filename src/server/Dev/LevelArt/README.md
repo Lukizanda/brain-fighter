@@ -23,6 +23,7 @@ Nothing here is game code and nothing in the game requires it.
 | `vignette.luau` | A slice of the island assembled from the kits |
 | `dress/rocks.luau`, `dress/terrain.luau`, `dress/setpieces.luau` | The dress passes: each puts one kit on the real island |
 | `dress/lead.luau` | The lead's pass: hides the greybox's working volumes. Run it last |
+| `dress/poi.luau` | Puts five showcase POIs on and around the island at `ART.POI_SPOTS`. Run after `dress/setpieces.luau` |
 | `dress/lighting.luau` | Local lights on the island (dais, cave, rim crystals). Run after `dress/setpieces.luau`. The sky, sun and haze are game code, not here: `client/Arena/ArenaLighting` |
 
 ## Running a file
@@ -106,6 +107,15 @@ Designer's rules for POIs (2026-11-19):
 - **Proxies on `rim` and `outside` pieces**: no top a player could step onto from the
   ground (a step is about 7 studs) and no overhang to shelter under, because a perch
   the boss cannot path to is a safe spot. `hub` pieces may be walkable.
+
+**On the island.** `ART.POI_SPOTS` in the prelude holds the designer's measured
+placements (pivot = the `GreyboxRef` centre in world space, yaw about +Y), and
+`dress/poi.luau` (`Dress_POI`) clones each one there with `ART.placePoi`. Every spot is
+on or beyond the ridge ring, out of reach, so the clone's `Collide_` proxies are
+dropped and nothing on the island gains collision. A spot with `replaces = "Crystals"`
+takes a rim crystal cluster's slot: `dress/setpieces.luau` counts that slot but builds
+nothing there, so the other clusters do not move. Order: set pieces, then POIs, then
+lighting.
 
 ## Dressing the island
 

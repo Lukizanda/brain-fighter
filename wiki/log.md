@@ -2233,3 +2233,11 @@ The user found the editor camera stuck after the level-art sessions. Traced in S
 ## [2026-11-19] ingest | Edit camera stuck on Scriptable: corrected cause
 
 The earlier entry today blamed a positioned `screen_capture`. A listener on `CameraType` showed otherwise: `execute_luau` restores the camera type it found at call start about 20 ms after returning (so a reset inside a call never sticks), and a positioned capture switches to `Scriptable` and restores the previous type 0.3 s later. The stuck state most likely came from the two overlapping while parallel artist agents worked; inferred, not reproduced. Reset with a delayed task and confirmed `Fixed` across later calls and a capture. [[reference/studio-mcp]] and `docs/agents/studio-and-playtests.md` (now § Editor camera) rewritten; the level-art README points there. The probe's two listeners stay connected in the editor until Studio restarts; their attributes were cleared.
+
+## [2026-11-19] ingest | Five POIs placed on IslandReview
+
+The artist worked with the designer to place the POI kit on the review island. Five went on: beacon, broken arch, geode, colonnade and colossus head. They were placed at the designer's measured spots by a new `Dress_POI` pass. Their proxies were dropped, so no collision was added.
+- The geode takes a rim crystal cluster's slot.
+- The beacon's lamp strips are now a `Lamp` role, so the gate-seam glow stays unique to gates.
+- The designer reviewed the built pass and agreed. The natural arch and the four hub-only pieces stay off the island.
+- See design/boss-arena § Placed on IslandReview.
