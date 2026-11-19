@@ -1,7 +1,7 @@
 ---
 type: design
 description: Visual direction — chunky lowpoly sci-fi proportions, greybox-first levels, no surface decoration on weapons
-updated: 2026-11-18
+updated: 2026-11-19
 ---
 
 # Art Direction
@@ -34,6 +34,10 @@ updated: 2026-11-18
   fades in while the player is there. The boss island is a high-altitude dusk. Local
   lights take their colours from palette roles, cast no shadows and never sit on a
   breakable. Details: [[design/boss-arena]] § Lighting.
+
+- **Points of interest** (2026-11-19) are landmark pieces with their own invisible
+  collision proxies and a placement class. Cold cut stone, never the breakable tan; no
+  readable letters; nothing cube-like that floats. [[design/boss-arena]] § Points of interest.
 
 ## Characters
 

@@ -19,6 +19,7 @@ Nothing here is game code and nothing in the game requires it.
 | `kits/rocks.luau` | Cover, cores, spires, gates, cave |
 | `kits/terrain.luau` | Floor, ridge, ledges, island underside |
 | `kits/setpieces.luau` | Dais, overlook, pads, ready room, dressing |
+| `kits/poi_ruins.luau`, `kits/poi_nature.luau`, `kits/poi_monuments.luau` | Points of interest: landmark pieces, all in `Kit_POI` |
 | `vignette.luau` | A slice of the island assembled from the kits |
 | `dress/rocks.luau`, `dress/terrain.luau`, `dress/setpieces.luau` | The dress passes: each puts one kit on the real island |
 | `dress/lead.luau` | The lead's pass: hides the greybox's working volumes. Run it last |
@@ -75,6 +76,33 @@ The `:Clone()` is required: Edit mode caches `require` results across calls
 - **Stay in your strip.** `ART.ROWS[<row>]` gives each kit its Z line and X range.
 - **Leave the rest of the place alone.** No changes to the Lighting service (the arena's look is `ArenaLightingConstants`; local lights go in `dress/lighting.luau`), Terrain,
   `Workspace.Arena`, the lobby or any script.
+
+## Points of interest
+
+A POI is a landmark with no greybox box of its own: an arch, a tower, a fallen head.
+It is made with `ART.poi` instead of `ART.asset`, lands in `Kit_POI` on the stage's
+POI strip, and differs from a kit asset in three ways.
+
+- **It brings its own collision.** The art still does not collide. Each POI carries 1
+  to 8 invisible boxes named `Collide_<n>`, made with `ART.proxy`: the greybox a
+  designer would have drawn. They are the only colliding parts in the showcase.
+- **`footprint`** is the box the whole piece fits in (its `GreyboxRef`).
+- **`placement`** says where it may stand, and is stored on the model as
+  `PoiPlacement`: `rim` (on the ridge ring), `outside` (beyond the ring, on its own
+  floating islet), `playfield` (inside the ring: nothing above +12, lanes and letter
+  bands clear) or `hub` (lobby, ready room, another level: no arena rules).
+
+Designer's rules for POIs (2026-11-19):
+
+- **No tan.** `Letterstone*` means breakable cover. Ruins and monuments are cut
+  `GateStone` with `Cliff` / `Bedrock`.
+- **No readable letters**, no letter-like runes, no SurfaceGuis. Letters are gameplay.
+- **Nothing hovers on the boss island** and no floating piece is cube-like: it would
+  read as a letter block or the word ward.
+- **No Light objects**, no glowing eyes, glow only as `GateSeam` strips or `Crystal`.
+- **Proxies on `rim` and `outside` pieces**: no top a player could step onto from the
+  ground (a step is about 7 studs) and no overhang to shelter under, because a perch
+  the boss cannot path to is a safe spot. `hub` pieces may be walkable.
 
 ## Dressing the island
 

@@ -4,7 +4,7 @@ local ART = require(game.ServerStorage.LevelArtPrelude:Clone())
 ART.run("LevelArt: stage", function()
 	local stage = ART.folder("_Stage")
 	stage:ClearAllChildren()
-	local titles = { Rocks = "ROCKS  ·  cover, cores, spires, gates, cave", Terrain = "TERRAIN  ·  floor, ridge, ledges, underside", SetPieces = "SET PIECES  ·  dais, overlook, pads, dressing" }
+	local titles = { Rocks = "ROCKS  ·  cover, cores, spires, gates, cave", Terrain = "TERRAIN  ·  floor, ridge, ledges, underside", SetPieces = "SET PIECES  ·  dais, overlook, pads, dressing", POI = "POINTS OF INTEREST  ·  ruins, natural wonders, monuments" }
 	for name, row in ART.ROWS do
 		local length = row.xMax - row.xMin + 40
 		local midX = (row.xMin + row.xMax) / 2

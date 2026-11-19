@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phase 8 plan (2026-11-13) for the PvE boss arena layout. Three concentric value rings (premium letters inside Ground Slam range, exposed standard letters mid, common letters behind outer cover), a permanent rim, breakable cover the boss destroys when its attacks miss, regenerating gates in front of wildcard balconies, and two single-colour vaults opened by baiting the boss. Fixes the tag and attribute contract between the new BreakableWalls system, the BlockSpawner zone extension and the Studio greybox. Revised the same day into an irregular floating island with three different ways out past the ridge, two caves, and a one-way teleporter in place of the bridge. Stages 1, 2 and 5 (code) built; the Studio greybox is next.
-updated: 2026-11-18
+updated: 2026-11-19
 ---
 
 # Boss Arena Layout
@@ -835,6 +835,82 @@ a player who looks for it will find it. `IslandGreybox` goes with the swap alrea
 under this light), frame rate, the Overhang slab from outside the ring, the cave with
 its plug broken, the ready room (it shares the island's `ArenaId`, so it gets the
 preset too).
+
+## Points of interest (2026-11-19)
+
+The user asked for level pieces to use as POIs, built by the art team and added to the
+showcase. Ten landmark pieces now stand on a fourth strip of
+`Workspace.LevelArtShowcase` (`Kit_POI`, centred at (400, 200, 1690), behind the
+vignette). **Nothing was placed on the island.** They are in the place file, so the
+place has to be saved to keep them.
+
+A POI has no greybox box of its own, so each one carries its own proposed collision:
+1 to 8 invisible `Collide_<n>` boxes, the only colliding parts in the showcase. Each
+also carries a placement class (`PoiPlacement`): `rim`, `outside` (on its own floating
+islet beyond the ring), `playfield` or `hub`. Conventions:
+[README](../../src/server/Dev/LevelArt/README.md) § Points of interest. Sources:
+`kits/poi_ruins.luau`, `kits/poi_nature.luau`, `kits/poi_monuments.luau`.
+
+| Piece | Size (W x H x D) | Placement | What it is |
+|---|---|---|---|
+| `POI_BrokenArch` | 28 x 26 x 8 | rim | A monumental arch: one leg and half the span standing, the far leg a broken pier |
+| `POI_Colonnade` | 40 x 18 x 10 | rim | Five columns on a stepped base, two still carrying a broken entablature |
+| `POI_StoneRing` | 36 x 14 x 36 | hub | A henge of leaning slabs with two lintels round a plinth; slash runes, no letters |
+| `POI_BridgeStub` | 14 x 10 x 40 | hub | The broken end of a stone bridge reaching into nothing |
+| `POI_NaturalArch` | 30 x 34 x 14 | outside | A wind-cut rock arch on its own floating islet |
+| `POI_GeodeBoulder` | 20 x 16 x 16 | rim | A boulder split in two with pale crystal in the cleft |
+| `POI_PetrifiedTree` | 18 x 26 x 18 | outside | A bare tree turned to stone |
+| `POI_Beacon` | 18 x 40 x 18 | outside | A stone watchtower with a pale lantern, on its own islet |
+| `POI_ColossusHead` | 22 x 20 x 24 | outside | A fallen giant stone head, half buried |
+| `POI_RingShrine` | 20 x 22 x 20 | hub | A stepped altar under a broken, levitating stone halo |
+
+Three artist agents (Sonnet) built them in two rounds, with the lead's notes from
+screenshots between. Checked by script: no part tagged, none with an `ArenaId`, no
+Light or SurfaceGui, nothing colliding but the proxies. Checked by screenshot only, on
+the stage: each piece reads as what it is from about 80 studs. **Not checked:** any
+piece from a real player camera or at arena distance, the proxies against the art, the
+saturation rule numerically. The lead's ranking: the beacon, the broken arch and the
+colonnade are the strongest; the geode and the tree are the weakest.
+
+### Designer's rulings on POIs
+
+The same designer session, read-only, before the second round. All its own judgment
+except where the earlier rulings already said so; **the user has not confirmed these.**
+
+- **No tan.** Letter-stone means breakable cover, so ruins and monuments are cold cut
+  stone. The ruins and the head were rebuilt in it.
+- **Bridge stub: hub only.** On the rim it would read as an exit and a second Spit.
+- **Stone ring, colonnade: never in the playfield** (uprights read as cover or spires).
+- **Ring shrine: hub only**, and built from irregular slabs: floating blocks circling
+  something read as letter blocks or the word ward. **Nothing may hover on the island.**
+- **Geode: rim only**; a light in a split rock looks like a cracked fossil wall.
+- **Head: no glowing eyes** (a second boss), no plum.
+- **Natural arch: not on the rim**, where it would look like a way through the ridge.
+- **Beacon: glow above +35 only**, and no light that reaches the floor inside the ring.
+- **Proxies:** no top a player can step onto from the playfield or an exit and no
+  overhang to shelter under (a perch the boss cannot path to repeats the overlook safe
+  spot); none in a `Hold_` zone, a boss lane or the 40 studs in front of a gate; any
+  proxy in the playfield is permanent cover, counts in the cover budget and stays
+  under +12.
+
+### Proposed placement on IslandReview (designer, not decided)
+
+Bearings clockwise from east, radius from the island centre.
+
+| POI | Where | Purpose |
+|---|---|---|
+| Beacon | 190 deg, r 225, on an islet at least 12 studs from the Spit tip | Opposite the overlook, so arriving players see it beyond the dais |
+| BrokenArch | 57 deg, r 150, legs on the ridge masses | Marks the Stones exit |
+| ColossusHead | 150 deg, r 165, outside the ring, gazing along the Spit | Marks the Spit exit; would replace the blade-rock marker |
+| GeodeBoulder | 300 deg, r 152, on the ridge | Marks the Overhang; it is the "split boulder" tell |
+| Colonnade | 355 deg, r 160, behind the overlook, top at most +18 | A "home" landmark for the arrival point |
+| NaturalArch (optional) | 120 deg, r 230, floating | Frames the sky |
+
+Off the island: stone ring, ring shrine, petrified tree, bridge stub. Keep 210 to 245
+degrees clear: the cave outcrop is its own tell. The designer also suggested, unbuilt:
+a framed window in the ready room looking at the island and the beacon, a hanging-rock
+cluster under the island for its silhouette from the ready room, and no POI for the
+premium ring (the dais already marks it).
 
 ## Pick up here (rewritten 2026-11-14 at the end of the session)
 

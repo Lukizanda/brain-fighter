@@ -22,6 +22,9 @@ ART.ROWS = {
 	Rocks = { z = 1120, xMin = 170, xMax = 630, depth = 80 },
 	Terrain = { z = 1250, xMin = 170, xMax = 630, depth = 110 },
 	SetPieces = { z = 1380, xMin = 170, xMax = 630, depth = 90 },
+	-- Points of interest: landmark pieces with no greybox box of their own. Behind
+	-- the vignette, because they are tall.
+	POI = { z = 1690, xMin = 170, xMax = 630, depth = 120 },
 }
 
 ----------------------------------------------------------------------
@@ -952,6 +955,78 @@ function ART.undressed(): string
 	end
 	table.sort(lines)
 	return if #lines > 0 then table.concat(lines, "\n") else "nothing left"
+end
+
+----------------------------------------------------------------------
+-- Points of interest
+----------------------------------------------------------------------
+-- A POI is a landmark with no greybox box of its own, so it carries its own
+-- proposed collision: a few invisible boxes named Collide_<n> (ART.proxy). The
+-- visible art still does not collide. `footprint` is the box the whole piece
+-- fits in (its GreyboxRef), and `placement` says where it may stand:
+--   "rim"       on or just outside the ridge ring, any height
+--   "outside"   beyond the ring: floating, or on another island
+--   "playfield" inside the ring: nothing above +12, lanes and letter bands clear
+--   "hub"       lobby, ready room or a future level; no arena rules apply
+type PoiDef = {
+	name: string,
+	at: Vector3,
+	yaw: number?,
+	footprint: Vector3,
+	placement: string,
+	note: string?,
+	build: (model: Model, origin: CFrame) -> (),
+}
+
+local POI_PLACEMENTS = { rim = true, outside = true, playfield = true, hub = true }
+
+function ART.poi(def: PoiDef): Model
+	assert(POI_PLACEMENTS[def.placement], def.name .. ": unknown placement " .. tostring(def.placement))
+	local model = ART.asset({
+		kit = "Kit_POI",
+		name = def.name,
+		at = def.at,
+		yaw = def.yaw,
+		greybox = def.footprint,
+		class = "POI",
+		note = def.placement .. (if def.note then " · " .. def.note else ""),
+		build = def.build,
+	})
+	model:SetAttribute("PoiPlacement", def.placement)
+	local proxies = 0
+	for _, child in model:GetChildren() do
+		if child.Name:match("^Collide_%d+$") then
+			proxies += 1
+		end
+	end
+	assert(proxies > 0, def.name .. ": a POI needs at least one ART.proxy collision box")
+	model:SetAttribute("ProxyCount", proxies)
+	-- PartCount is the visible art only.
+	model:SetAttribute("PartCount", (model:GetAttribute("PartCount") :: number) - proxies)
+	return model
+end
+
+-- One invisible collision box of a POI. `center` and `size` are in the asset's
+-- local space (origin = footprint centre at floor level); `rotation` is an
+-- optional local CFrame rotation. Keep them few (at most 8) and simple: they
+-- are the greybox a designer would have drawn.
+function ART.proxy(model: Model, origin: CFrame, center: Vector3, size: Vector3, rotation: CFrame?): BasePart
+	local index = 1
+	while model:FindFirstChild("Collide_" .. index) do
+		index += 1
+	end
+	local part = Instance.new("Part")
+	part.Name = "Collide_" .. index
+	part.Anchored = true
+	part.Size = size
+	part.CFrame = origin * CFrame.new(center) * (rotation or CFrame.new())
+	part.Transparency = 1
+	part.CanCollide = true
+	part.CanQuery = true
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Parent = model
+	return part
 end
 
 return ART

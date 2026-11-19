@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phased build plan for Brain Fighter's core gameplay systems — construction order, parallel vs sequential dependencies, parallel-session strategy
-updated: 2026-11-17
+updated: 2026-11-19
 ---
 
 # Build Plan
@@ -398,6 +398,7 @@ Plan, metric matrix, personas, results and stages: [[design/ai-playtest]]. Tier 
 ## Plan changelog
 
 - **2026-11-18**: **Phase 8 stage 11 added** — boss movement, at the user's request: the Brain's body should telegraph its attacks and show when it is vulnerable, using only native Roblox tools. The user chose both vulnerability windows (after Ground Slam, on ward break, x1.5), a separate spore-lob tell and a rebuilt rig ([[design/boss-movement]]).
+- **2026-11-19**: **Phase 8 stage 10e added** — points of interest. The user asked for landmark level pieces; ten were built on the showcase with their own collision proxies and placement classes ([[design/boss-arena]] § Points of interest). Placing any on `IslandReview` (the designer proposed five) is a separate, undecided step.
 - **2026-11-18**: **Phase 8 stage 10 added** — level art for the boss island, at the user's request: native Roblox shapes and built-in materials, built by a team of artist agents in a showcase beside the level, greybox not replaced. A senior-designer session ruled on collision, breakables, colour and air space first ([[design/boss-arena]] § Level art); its own-judgment rulings are not yet confirmed by the user.
 - **2026-11-17**: **Phase 9 added** — an automated playtest of the boss arena ([[design/ai-playtest]]). The user asked for an AI-driven playtest with metrics that stand for fun before any human playtest, and is open to new boss moves, phases and minions destroyed by letter gathering. A designer pass fixed six pillars, eighteen metrics and six personas; the simulator's first run found the novice cannot win, the strong speller wins in under 50 s, and the overlook is a complete safe spot. No tuning has been changed.
 

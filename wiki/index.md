@@ -1,7 +1,7 @@
 ---
 type: index
 description: Catalog of every Brain Fighter wiki page, grouped by category. Updated on every ingest.
-updated: 2026-11-18
+updated: 2026-11-19
 ---
 
 # Wiki Index
@@ -12,7 +12,7 @@ Start here. See [[WIKI]] for conventions and operations.
 
 - [[design/gameplay-loop]] — canonical core loop: aim → shoot letter blocks → buffer/arrange → cast color-typed spells; tuning, spell roster, worked examples
 - [[design/build-plan]] — phased build plan with parallel/sequential dependencies; one tracker per system
-- [[design/ArtDirection]] — lowpoly / chunky / oversized sci-fi proportions; greybox-first level building; level art from native Roblox primitives on a fixed palette
+- [[design/ArtDirection]] — POI kit added 2026-11-19 (ten landmark pieces in the showcase, see [[design/boss-arena]] § Points of interest); lowpoly / chunky / oversized sci-fi proportions; greybox-first level building; level art from native Roblox primitives on a fixed palette
 - [[design/ui-architecture-review]] — Phase 4.8 audit of `src/client/UI/` + `src/shared/Hud/` (re-audited 2026-06-05); R-1..R-4 cleanup landed + verified, no High open; 2 Medium / 3 Low deferred; Phase 5 gate = GO
 - [[design/system-audit-2026-06]] — whole-repo architecture/tech-debt audit (2026-06-05); ~half the repo is dormant template code; Tier 1 = Skills Humanoid leak + BossAdapter retirement + split-brain damage; key call = template keep-or-cut. **Superseded by [[design/system-audit-2026-09]]** — kept as the baseline it was audited against.
 - [[design/system-audit-2026-09]] — whole-`src/` design audit (2026-09-07): June's leak/BossAdapter/template items closed; **the damage path is the blocker** — spells write `Humanoid.Health` directly so a spell kill fires no `PlayerEliminated` (no duel credit); `ScoreTracker`/spawn threat/boss targeting still server-wide; HudGate reveal on DeathScreenGui; client-trusted `BroadcastSpellVfx` relay; ledger never resets. 45 findings, 12 wiki-vs-code drifts, 11 questions waiting on the user
