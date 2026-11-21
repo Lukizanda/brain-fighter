@@ -1,7 +1,7 @@
 ---
 type: design
 description: Phase 8 plan (2026-11-13) for the PvE boss arena layout. Three concentric value rings (premium letters inside Ground Slam range, exposed standard letters mid, common letters behind outer cover), a permanent rim, breakable cover the boss destroys when its attacks miss, regenerating gates in front of wildcard balconies, and two single-colour vaults opened by baiting the boss. Fixes the tag and attribute contract between the new BreakableWalls system, the BlockSpawner zone extension and the Studio greybox. Revised the same day into an irregular floating island with three different ways out past the ridge, two caves, and a one-way teleporter in place of the bridge. Stages 1, 2 and 5 (code) built; the Studio greybox is next.
-updated: 2026-11-19
+updated: 2026-11-21
 ---
 
 # Boss Arena Layout
@@ -1022,6 +1022,89 @@ the arch's view once a fight breaks the spire.
 Designer's suggestions, still unbuilt: a framed window in the ready room looking at the
 island and the beacon, a hanging-rock cluster under the island for its silhouette from
 the ready room, and no POI for the premium ring (the dais already marks it).
+
+## Fall containment (2026-11-21)
+
+The user found that a player who jumps off behind a broken gate falls into open sky,
+and asked that a height hazard end in a visible hazard at the bottom, with walls or
+level objects stopping any other fall, "at least for now". Built the same day on
+`IslandReview` and its ready room. **The place has to be saved to keep it.**
+
+**What the survey found.** Measured by raycast before anything was built:
+- **The ridge's collider ring is closed except at the three exits** (and the three
+  return stairs, which lead into the same areas). The overlook, the cave mound and the
+  ridge lips are all inside it. So the only falls are off the Stones, the Spit and the
+  Overhang.
+- **Those falls did kill, but invisibly.** The island's `DeathZone` is 77 studs below
+  the floor and has no look, so the player dropped through haze and died for no
+  reason they could see.
+- **A strip of floor 6 to 8 studs wide lies outside the ring** most of the way round.
+  From an exit's apron a player could work sideways onto it.
+- **The ready room was outside every kill volume**, and its rails are 5 studs high
+  against a 7.2-stud jump: a fall there ran 700 studs to `FallenPartsDestroyHeight`.
+
+**The rule.** A fall never ends in open sky. Ring-outs stay (the Spit still punishes a
+knock-up, the Stones a missed jump, the Overhang a dropped slab), but each ends in a
+pit the player can see from the ledge.
+
+**What was built.** One pit per exit, in the exit's own frame (r from the island
+centre, t along the tangent, heights over the floor top):
+
+| Exit | Bearing | Shelf (t x r) | Far wall | Furthest ledge |
+|---|---|---|---|---|
+| Stones | 71 | -30..30 x 120..232 | r 232 | r 208 |
+| Spit | 169.5 | -32..23 x 120..230 | r 230 | r 206 |
+| Overhang | 289 | -29..27 x 120..194 | r 194 | r 170 |
+
+- **`Pit_Floor_<Exit>`**: a rock shelf with its top at -40, reaching about 25 studs
+  under the island so it reads as part of it. It collides.
+- **`Pit_Kill_<Exit>`**: a clone of the island's `DeathZone` lying on the shelf, top
+  at -30. The fall is 25 to 34 studs, under a second, and ends at the spike tips.
+- **`Fall_Collider`**: invisible walls, clones of a `Ridge_Collider`. Two side walls
+  and a far wall rise to +70 like the ring and join it, so a jump, a dash or a
+  knock-up cannot carry a player past the pit or onto the outside strip. Low walls
+  under the island close the bowl.
+- **Ready room**: a `Fall_Collider` on each rail, 40 studs up. No kill volume was
+  added there; nothing can leave it now.
+- The island's big `DeathZone` is unchanged, as the backstop.
+
+Source: [`greybox/hazards.luau`](../../src/server/Dev/LevelArt/greybox/hazards.luau)
+(`Greybox_Hazards`). It is the first greybox on the island generated from a file: its
+parts carry `GreyboxPass`, a re-run rebuilds them, and the three footprints are the
+`EXITS` table.
+
+**The look** (an artist agent, two rounds with the lead's notes from screenshots):
+[`dress/hazards.luau`](../../src/server/Dev/LevelArt/dress/hazards.luau)
+(`Dress_Hazards`). A dark Bedrock shelf under a field of pale bone fangs, ringed by a
+broken jaw of crags, with rocks stepping up to the island's underside. Two palette
+roles were added for it, `Fang` (Salt, pale bone) and `FangDark`, used nowhere else:
+pale and sharp means lethal, with no reserved hue and no neon. No fang top is above
+-30 and nothing is above -12, so the letter zones, hold zones and the view from the
+ledges are clear.
+
+**Checked.**
+- **By simulation**
+  ([`greybox/hazards_check.luau`](../../src/server/Dev/LevelArt/greybox/hazards_check.luau)):
+  25,680 bodies thrown from every standable spot above the pits, twelve directions,
+  as a walk-off, a jump, a jump with a dash and a knock-up harder than the boss's.
+  None got below a pit alive.
+- **In one playtest**, with a scripted character: walking off the Spit's side, jumping
+  off its tip, jumping outward from the last Stone and walking off the Overhang's far
+  edge each ended in that exit's `Pit_Kill` (the server log names the volume), in 1.0
+  to 1.4 s. Four seconds of jumping at a ready-room rail left the character inside.
+
+**Not checked:** the pits under `BossDusk` and from a real player camera; a real
+knock-up or a dropped Overhang slab in a fight; frame rate with about 550 more parts.
+
+**Known limit: the walls stop block taps.** A colliding part always answers raycasts,
+and `BlockTapController` excludes only the character. A camera zoomed out past a wall
+(the far walls stand 24 studs beyond the furthest ledge; `CameraMaxZoomDistance` is
+128) cannot pop a letter on the near side of it. The ridge's own colliders have
+always done the same from outside the ring. The fix belongs in the tap ray (skip
+invisible colliders), not in the level; **not decided**.
+
+**Left for the user:** `IslandGreybox` (the baseline) and the old `Default` arena were
+not touched. The return stairs still stand.
 
 ## Pick up here (rewritten 2026-11-14 at the end of the session)
 

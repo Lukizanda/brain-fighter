@@ -75,6 +75,11 @@ ART.PAL = {
 	-- A landmark's light (the beacon's lantern): cooler and greyer than
 	-- GateSeam, so the sealed-gate glow stays unique to gates (designer, 2026-11-19).
 	Lamp = { M.Neon, Color3.fromRGB(196, 206, 232) },
+	-- The fall pits under the three exits (2026-11-21): pale bone fangs on a
+	-- dark shelf, so "you die here" reads from a ledge 40 studs up with no
+	-- reserved hue and no neon. Pits only: pale and sharp must mean lethal.
+	Fang = { M.Salt, Color3.fromRGB(206, 200, 188) },
+	FangDark = { M.Slate, Color3.fromRGB(128, 124, 120) },
 	-- Stage only.
 	Stage = { M.SmoothPlastic, Color3.fromRGB(40, 42, 48) },
 	StageSign = { M.SmoothPlastic, Color3.fromRGB(24, 25, 30) },

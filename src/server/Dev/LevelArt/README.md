@@ -24,6 +24,8 @@ Nothing here is game code and nothing in the game requires it.
 | `dress/rocks.luau`, `dress/terrain.luau`, `dress/setpieces.luau` | The dress passes: each puts one kit on the real island |
 | `dress/lead.luau` | The lead's pass: hides the greybox's working volumes. Run it last |
 | `dress/poi.luau` | Puts five showcase POIs on and around the island at `ART.POI_SPOTS`. Run after `dress/setpieces.luau` |
+| `greybox/hazards.luau` | **Not art: gameplay parts.** The fall pits under the three exits (shelf, kill volume, invisible walls) and the ready room's walls. See § Fall pits |
+| `dress/hazards.luau` | The fall pits' art (`Dress_Hazards`): fangs, jaw rim, underside. Run after `greybox/hazards.luau` |
 | `dress/lighting.luau` | Local lights on the island (dais, cave, rim crystals). Run after `dress/setpieces.luau`. The sky, sun and haze are game code, not here: `client/Arena/ArenaLighting` |
 
 ## Running a file
@@ -163,6 +165,29 @@ it.
 - **`ART.undressed()`** lists the greybox parts that are still visible and unclaimed.
 - Greybox names repeat (three `Cover_10`), so a pass works from `ART.greybox(prefix)`
   and part sizes, never from a name.
+
+## Fall pits
+
+`greybox/hazards.luau` is the one file here that makes gameplay parts. It builds, inside
+`Workspace.Arena.IslandReview`, a pit under each exit (`EXITS` at the top of the file
+holds the three footprints) and, in the ready room, an invisible wall on each rail:
+
+| Part | What it is |
+|---|---|
+| `Pit_Floor_<Exit>` | The shelf, top at -40. Collides; `dress/hazards.luau` skins it |
+| `Pit_Kill_<Exit>` | A clone of the island's `DeathZone`, lying on the shelf, top at -30 |
+| `Fall_Collider` | Clones of a `Ridge_Collider`: two side walls and a far wall to +70, joined to the ridge's collider ring, plus low walls under the island |
+
+- Everything it makes carries `GreyboxPass = "Greybox_Hazards"`. A re-run deletes those
+  parts and rebuilds them, so a layout change is an edit to `EXITS`.
+- A side wall must meet a run of `Ridge_Collider`; the file errors if its line passes
+  through a gap in the ring.
+- **The walls stop block-tap rays** (a colliding part always answers raycasts, whatever
+  `CanQuery` says), which is why they stand 24 studs past the furthest ledge.
+- `Dress_Hazards` art: no fang top above -30 (the kill volume's top), nothing above -12.
+  `Fang` and `FangDark` are the pits' roles and are used nowhere else.
+- After changing the layout, re-run the containment check in
+  [boss-arena.md § Fall containment](../../../../wiki/design/boss-arena.md).
 
 ## Designer rulings (digest)
 
