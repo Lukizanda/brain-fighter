@@ -14,8 +14,13 @@
 -- names a persona (PlaytestPersonas). `PlaytestArena` names the arena.
 -- The server half is src/server/Playtest/PlaytestRecorder.
 --
--- Spores and ward letters are popped on sight (popSpore).
--- Not played yet: cover, reacting to the boss's telegraph, stealing tows.
+-- Spores and ward letters are popped on sight (popSpore). The boss's scramble
+-- puzzle is played by solvePuzzles, mirroring FightSim's two-phase puzzle
+-- (`tune.bomb.hatch`): while it RESTS, notice it, walk into reach of its
+-- centre, think, tap the letters in order through RequestBombTap; once its
+-- letters HATCH into seekers, pop them nearest first.
+-- Not played yet: cover (so the sim's coverSkill has no counterpart here),
+-- reacting to the boss's telegraph, stealing tows.
 ----------------------------------------------------------------------
 
 local CollectionService = game:GetService("CollectionService")
@@ -31,6 +36,8 @@ local Shared = ReplicatedStorage.Shared
 local Arena = require(Shared.GameMode.Arena)
 local ArenaEntryConstants = require(Shared.Arena.ArenaEntryConstants)
 local BlockShoot = require(Shared.BlockShoot)
+local BombConstants = require(Shared.Boss.BombConstants)
+local BombRules = require(Shared.Boss.BombRules)
 local WardConstants = require(Shared.BlockSpawner.WardConstants)
 local Dictionary = require(Shared.Dictionary)
 local LetterBlocks = require(Shared.LetterBlocks)
@@ -53,6 +60,23 @@ local portalRequest = Shared.Lobby.Remotes.PortalRequest :: RemoteEvent
 type Phase = "lobby" | "ready" | "island"
 type Mode = "idle" | "think" | "pop" | "charge"
 type SporeState = { willPop: boolean, popAfter: number, fails: number }
+-- One scramble puzzle, as FightSim's bomb: what this persona decided when it
+-- first saw it, and what it has seen since.
+type PuzzleState = {
+	noticed: boolean,
+	engageAt: number,
+	letterCount: number,
+	thinkUntil: number?,
+	nextPuzzleTapAt: number,
+	abandoned: boolean,
+	chasingSince: number?,
+	hurt: boolean,
+	liveCount: number,
+	lastHealth: number,
+	vanishedAt: number,
+	hurtAt: number,
+}
+type Seeker = { index: number, part: BasePart }
 
 local runId = 0
 
@@ -108,6 +132,19 @@ local function run(persona: PlaytestPersonas.Persona, myRun: number)
 		log:warn("RequestPop or RequestCast not found - the bot cannot play")
 		return
 	end
+	-- Created by BombTapController at start, as RequestPop is by
+	-- BlockTapController, but not required: waited for off to the side, and
+	-- bombs are skipped while it is missing.
+	local requestBombTap: BindableFunction? = nil
+	task.spawn(function()
+		local bombController = clientRoot:WaitForChild(C.BOMB_TAP_CONTROLLER_NAME, C.BOMB_BINDABLE_WAIT_SEC)
+		local found = bombController and bombController:WaitForChild(C.REQUEST_BOMB_TAP_NAME, C.BOMB_BINDABLE_WAIT_SEC)
+		if found and found:IsA("BindableFunction") then
+			requestBombTap = found
+		else
+			log:warn(string.format("%s not found under %s - scramble bombs will be skipped", C.REQUEST_BOMB_TAP_NAME, C.BOMB_TAP_CONTROLLER_NAME))
+		end
+	end)
 	BotVocabulary.preload(persona)
 	log:info(string.format("started as %s", persona.name))
 
@@ -136,6 +173,12 @@ local function run(persona: PlaytestPersonas.Persona, myRun: number)
 	local sporeStates: { [Model]: SporeState } = {}
 	-- When the bot got into the ready room (see PAD_WAIT_SEC).
 	local readySince = 0
+	-- Per puzzle seen: whether this persona notices it, from when, and progress.
+	local puzzleStates: { [Model]: PuzzleState } = {}
+	-- When the next seeker tap may go out, and whether the bot is walking to or
+	-- standing at a resting puzzle (so it walks back to its spot afterwards).
+	local seekerTapAt = 0
+	local puzzleWalking = false
 
 	local function setPhase(to: Phase)
 		if to ~= phase then
@@ -476,7 +519,230 @@ local function run(persona: PlaytestPersonas.Persona, myRun: number)
 		walkTo(humanoid, goal :: Vector3, now)
 	end
 
+	-- The letter parts of a puzzle Model (`Tile<i>`), in index order. `hatched`
+	-- keeps only those that have turned into seekers (part attribute Hatched).
+	local function tileParts(model: Model, hatched: boolean): { Seeker }
+		local out: { Seeker } = {}
+		for _, child in model:GetChildren() do
+			local index = child:GetAttribute(BombConstants.TILE_INDEX_ATTRIBUTE)
+			if child:IsA("BasePart") and type(index) == "number"
+				and (child:GetAttribute(BombConstants.HATCHED_ATTRIBUTE) == true) == hatched then
+				table.insert(out, { index = index, part = child })
+			end
+		end
+		table.sort(out, function(a: Seeker, b: Seeker): boolean
+			return a.index < b.index
+		end)
+		return out
+	end
+
+	-- Time spent on a puzzle is taken from the word search (FightSim
+	-- chargeSeekers): while thinking the search's deadline moves out, while
+	-- popping the next word tap does.
+	local function chargeSearch(sec: number, now: number)
+		if mode == "think" then
+			modeUntil += sec
+		elseif mode == "pop" then
+			nextTapAt = math.max(nextTapAt, now) + sec
+		end
+	end
+
+	local function newPuzzleState(model: Model, now: number, humanoid: Humanoid): PuzzleState
+		local lettersText = model:GetAttribute(BombConstants.LETTERS_ATTRIBUTE)
+		local state: PuzzleState = {
+			noticed = rng:NextNumber() < PlaytestPersonas.bombNoticeChance(persona),
+			engageAt = now + persona.reactDelaySec,
+			letterCount = if type(lettersText) == "string" then #lettersText else 0,
+			thinkUntil = nil,
+			nextPuzzleTapAt = 0,
+			abandoned = false,
+			chasingSince = nil,
+			liveCount = 0,
+			lastHealth = humanoid.Health,
+			vanishedAt = -math.huge,
+			hurtAt = math.huge,
+			hurt = false,
+		}
+		log:info(string.format("puzzle seen, noticed=%s", tostring(state.noticed)))
+		return state
+	end
+
+	-- RESTING puzzle, as FightSim's static puzzle: a persona that noticed it
+	-- starts after reactDelaySec, walks to PUZZLE_STAND_SHARE of BombReach from
+	-- the CENTRE, thinks for unscrambleSecPerLetter per letter (never past the
+	-- hint), then taps one letter per tap interval through RequestBombTap: before
+	-- BombHintAt a tap is wrong with the invalid-word rate (a letter that
+	-- BombRules refuses; the timer loses a second), otherwise BombRules.hintTile.
+	-- A persona that would heal (healBelowHp) gives the puzzle up for good.
+	-- True while the bot is walking to or standing at the puzzle (no steering,
+	-- casting or word search meanwhile, as the simulator).
+	local function solveResting(
+		model: Model, state: PuzzleState, root: BasePart, humanoid: Humanoid,
+		tap: BindableFunction, now: number, serverNow: number
+	): boolean
+		if state.abandoned or not state.noticed or now < state.engageAt then
+			return false
+		end
+		if persona.healBelowHp and humanoid.Health <= persona.healBelowHp then
+			state.abandoned = true
+			log:info("puzzle abandoned: hurt")
+			return false
+		end
+		local centre = model:GetAttribute(BombConstants.CENTRE_ATTRIBUTE)
+		local reach = model:GetAttribute(BombConstants.REACH_ATTRIBUTE)
+		local lettersText = model:GetAttribute(BombConstants.LETTERS_ATTRIBUTE)
+		local wordsText = model:GetAttribute(BombConstants.WORDS_ATTRIBUTE)
+		local acceptedText = model:GetAttribute(BombConstants.ACCEPTED_ATTRIBUTE)
+		local hintAt = model:GetAttribute(BombConstants.HINT_AT_ATTRIBUTE)
+		if typeof(centre) ~= "Vector3" or type(reach) ~= "number" or type(lettersText) ~= "string"
+			or type(wordsText) ~= "string" or type(acceptedText) ~= "string" or type(hintAt) ~= "number" then
+			return false
+		end
+		local away = flat(root.Position) - flat(centre)
+		if away.Magnitude > reach then
+			-- Out of reach: walk in to the edge of it.
+			local direction = if away.Magnitude > 1 then away.Unit else Vector3.xAxis
+			local spot = flat(centre) + direction * reach * C.PUZZLE_STAND_SHARE
+			walkTo(humanoid, Vector3.new(spot.X, root.Position.Y, spot.Z), now)
+			chargeSearch(C.TICK_SEC, now)
+			return true
+		end
+		walkTo(humanoid, root.Position, now) -- stand still while solving
+		chargeSearch(C.TICK_SEC, now)
+		local thinkUntil: number = state.thinkUntil
+			or (now + PlaytestPersonas.bombUnscrambleSecPerLetter(persona) * state.letterCount)
+		local hinted = serverNow >= hintAt
+		if hinted then
+			thinkUntil = math.min(thinkUntil, now)
+		end
+		state.thinkUntil = thinkUntil
+		if now < thinkUntil or now < state.nextPuzzleTapAt then
+			return true
+		end
+		local letters = BombRules.lettersOf(lettersText)
+		local allowed = BombRules.decodeWords(wordsText)
+		local accepted = BombRules.decodeIndices(acceptedText)
+		local pick = BombRules.hintTile(letters, allowed, accepted)
+		if pick == nil then
+			return true
+		end
+		if not hinted and rng:NextNumber() < persona.invalidRate then
+			local wrong: { number } = {}
+			for index in letters do
+				if not BombRules.isLockedTile(accepted, index) and not BombRules.isAccepted(letters, allowed, accepted, index) then
+					table.insert(wrong, index)
+				end
+			end
+			if #wrong > 0 then
+				pick = wrong[rng:NextInteger(1, #wrong)]
+			end
+		end
+		local ok, sent = pcall(function(): any
+			return tap:Invoke(model, pick)
+		end)
+		state.nextPuzzleTapAt = now + (if ok and sent == true then 1 / persona.tapsPerSec else C.TICK_SEC)
+		return true
+	end
+
+	-- CHASING puzzle (its letters hatched into seekers), as FightSim's
+	-- seekerPlayer minus cover (this bot has no cover routine, so coverSkill is
+	-- not played): a persona that noticed the puzzle starts reactDelaySec after
+	-- it first sees the hatch; one that did not only after a seeker has burst on
+	-- it. Then it pops the nearest Hatched part within BombSeekerReach of the
+	-- root, one per tap interval, through RequestBombTap only.
+	local function solveChasing(
+		model: Model, state: PuzzleState, root: BasePart, humanoid: Humanoid,
+		tap: BindableFunction, now: number
+	)
+		local seekers = tileParts(model, true)
+		-- A seeker that vanished on its own (a burst), not by this bot's pop:
+		-- being hurt just after it means it burst on the bot.
+		if #seekers < state.liveCount then
+			state.vanishedAt = now
+		end
+		state.liveCount = #seekers
+		if humanoid.Health < state.lastHealth then
+			state.hurtAt = now
+		end
+		if math.abs(state.hurtAt - state.vanishedAt) <= C.SEEKER_HURT_WINDOW_SEC then
+			state.hurt = true
+		end
+		state.lastHealth = humanoid.Health
+		if state.chasingSince == nil then
+			state.chasingSince = now
+		end
+		local engaged = if state.noticed then now >= state.chasingSince + persona.reactDelaySec else state.hurt
+		local reach = model:GetAttribute(BombConstants.SEEKER_REACH_ATTRIBUTE)
+		if not engaged or now < seekerTapAt or #seekers == 0 or type(reach) ~= "number" then
+			return
+		end
+		local best: Seeker? = nil
+		local bestDist = reach
+		for _, seeker in seekers do
+			local d = (seeker.part.Position - root.Position).Magnitude
+			if d <= bestDist then
+				best, bestDist = seeker, d
+			end
+		end
+		if not best then
+			return
+		end
+		local picked: Seeker = best
+		local interval = 1 / persona.tapsPerSec
+		seekerTapAt = now + interval
+		chargeSearch(interval, now)
+		local ok, sent = pcall(function(): any
+			return tap:Invoke(model, picked.index)
+		end)
+		if ok and sent == true then
+			state.liveCount = math.max(state.liveCount - 1, 0) -- its own pop, not a burst
+		else
+			seekerTapAt = now + C.TICK_SEC
+		end
+	end
+
+	-- Play the two-phase puzzles of this arena. True while the bot is walking
+	-- to or standing at a resting puzzle (steering, casts and word search wait).
+	local function solvePuzzles(root: BasePart, humanoid: Humanoid, arenaId: string, now: number): boolean
+		local tap = requestBombTap
+		if not tap then
+			return false
+		end
+		local serverNow = workspace:GetServerTimeNow()
+		for model in puzzleStates do
+			if not model:IsDescendantOf(workspace) then
+				puzzleStates[model] = nil
+			end
+		end
+		local busy = false
+		for _, instance in CollectionService:GetTagged(BombConstants.TAG) do
+			if not instance:IsA("Model") or not instance:IsDescendantOf(workspace) or Arena.idOf(instance) ~= arenaId then
+				continue
+			end
+			local state = puzzleStates[instance]
+			if not state then
+				state = newPuzzleState(instance, now, humanoid)
+				puzzleStates[instance] = state
+			end
+			local phaseName = instance:GetAttribute(BombConstants.PHASE_ATTRIBUTE)
+			if phaseName == BombConstants.Phase.Chasing then
+				solveChasing(instance, state, root, humanoid, tap, now)
+			elseif phaseName == BombConstants.Phase.Resting then
+				busy = solveResting(instance, state, root, humanoid, tap, now, serverNow) or busy
+			end
+		end
+		if busy then
+			puzzleWalking = true
+			return true
+		elseif puzzleWalking then
+			puzzleWalking = false
+			goal, movedTo = nil, nil -- walk back to the usual spot
+		end
+		return false
+	end
+
 	local function onNewCharacter(now: number)
+		puzzleWalking = false
 		lastPos, goal, movedTo = nil, nil, nil
 		casting = nil
 		queue = {}
@@ -541,8 +807,17 @@ local function run(persona: PlaytestPersonas.Persona, myRun: number)
 				walkTo(humanoid, pad.Position, now)
 			end
 		else
-			steer(humanoid, root, now)
-			if mode == "charge" then
+			-- A resting puzzle comes before steering (the bot walks to it and
+			-- stands there), then a cast, spores and words run as usual (as in
+			-- FightSim); a cast already being held is let go first.
+			local bombBusy = mode ~= "charge" and solvePuzzles(root, humanoid, arenaId, now)
+			if not bombBusy then
+				steer(humanoid, root, now)
+			end
+			if bombBusy then
+				lastPos = position
+				return
+			elseif mode == "charge" then
 				if now >= modeUntil then
 					releaseCast(char, root, now)
 				end

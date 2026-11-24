@@ -22,6 +22,11 @@ local HealthConstants = {
 	-- Hit points a character cannot be damaged below while set, owned by
 	-- Health (`shared/Health/HealthFloor`). The boss's word ward sets it.
 	HEALTH_FLOOR_ATTRIBUTE = "_healthFloor",
+	-- A time-boxed damage multiplier, owned by Health
+	-- (`shared/Health/Vulnerability`): the GetServerTimeNow() instant the
+	-- window closes, and the multiplier. The boss's exposure sets them.
+	VULNERABLE_UNTIL_ATTRIBUTE = "_vulnerableUntil",
+	VULNERABLE_MULTIPLIER_ATTRIBUTE = "_vulnerableMultiplier",
 
 	-- Time-boxed invulnerability, owned by Health (`shared/Health/Protection`).
 	-- The attribute holds the `workspace:GetServerTimeNow()` instant the

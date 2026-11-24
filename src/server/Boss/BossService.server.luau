@@ -105,7 +105,10 @@ local BOSS_POINT_NAME     = "BossPoint"
 -- Seconds before retrying a spawn BossSpawner refused.
 local SPAWN_RETRY_SEC     = 5
 -- Seconds the corpse stays for the death effect before the Model goes.
-local DEATH_LINGER_SEC    = 1
+-- Long enough for the client's death sequence (deflate, spin, burst: see
+-- client/Vfx/BossPoses/CeremonyConstants DEATH_BURST_AT_SEC) to finish on the
+-- body before the model goes; the burst's debris outlives the model.
+local DEATH_LINGER_SEC    = 2
 
 type BossControllerInstance = BossController.BossControllerInstance
 type BossTypeSpec = BossTypes.BossTypeSpec
@@ -495,7 +498,20 @@ local function stopArena(arenaId: string)
 		local audience = BroadcastAudience.forArena(arenaId)
 		BroadcastAudience.fire(BossHealthChanged, audience, 0, maxHealth, PHASE_DEFEATED)
 		BroadcastAudience.fire(BossPhaseChanged, audience, PHASE_DEFEATED)
-		boss:Destroy()
+		if humanoid and humanoid.Health <= 0 then
+			-- Killed: a PvEBoss round ends within a tick of the death, so
+			-- destroying it here would cut the client's death sequence short
+			-- (seen 2026-11-18: gone 0.8 s after death). Leave it the same
+			-- linger the death handler gives it.
+			local corpse = boss
+			task.delay(DEATH_LINGER_SEC, function()
+				if corpse.Parent then
+					corpse:Destroy()
+				end
+			end)
+		else
+			boss:Destroy()
+		end
 	end
 	cycle.boss = nil
 

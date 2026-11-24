@@ -6,12 +6,13 @@
 ----------------------------------------------------------------------
 -- REAL BOSS: the real BossService spawns a real rig in a throwaway arena
 -- (bossEntranceFixture); BossController ticks its hunger on Heartbeat with a
--- short interval and a modest pull speed from config. Three blocks of the
+-- short interval and a short mark and yank from config. Three blocks of the
 -- test's own pool: one HIGH above the boss but close horizontally (the
 -- farthest in 3D, the nearest horizontally), one low and farther
 -- horizontally (the nearest in 3D), one beyond the radius. The first tow takes
--- the high one, which moves toward the boss, and on arrival is eaten and
--- raises health by the configured fraction of max health; the others stay.
+-- the high one, which is HELD where it is for the mark, then yanked in; it is
+-- eaten no sooner than mark + yank and raises health by the configured
+-- fraction of max health; the others stay.
 --
 -- NOT covered: the tether the players would see (a client view is needed,
 -- vfx-sfx.md).
@@ -24,7 +25,8 @@ local hungerFixture = require(ReplicatedStorage.Shared.Tests.Helpers.hungerFixtu
 
 local INTERVAL_SEC = 0.4
 local RADIUS_STUDS = 50
-local PULL_SPEED = 60
+local MARK_SEC = 0.8
+local SNAP_SEC = 0.3
 local REACH_STUDS = 4
 local FRACTION = 0.1
 local START_HEALTH_FRACTION = 0.5
@@ -40,8 +42,11 @@ local TOW_TIMEOUT_SEC = 3
 local EAT_TIMEOUT_SEC = 4
 -- How far a block may already have travelled when first seen in tow.
 local FIRST_SEEN_SLACK_STUDS = 8
-local PROGRESS_WAIT_SEC = 0.15
-local PROGRESS_MIN_STUDS = 1
+-- Well inside the mark.
+local HELD_WAIT_SEC = 0.3
+local HELD_TOLERANCE_STUDS = 0.01
+-- How late the poll may have noticed the tow, and the eat.
+local ARRIVE_SLACK_SEC = 0.3
 local NEVER_REFILL_SEC = 600
 local HEALTH_TOLERANCE = 0.01
 
@@ -64,7 +69,8 @@ return {
 			configureSpec = function(spec: any)
 				spec.eatIntervalSec = INTERVAL_SEC
 				spec.eatRadius = RADIUS_STUDS
-				spec.eatPullSpeed = PULL_SPEED
+				spec.eatMarkSec = MARK_SEC
+				spec.eatSnapSec = SNAP_SEC
 				spec.eatReach = REACH_STUDS
 				spec.eatHealFraction = FRACTION
 			end,
@@ -109,14 +115,19 @@ return {
 		ctx.towStarted = true
 		ctx.pulledHigh = (block:GetPivot().Position - highAt).Magnitude <= FIRST_SEEN_SLACK_STUDS
 
-		local before = (block:GetPivot().Position - root.Position).Magnitude
-		task.wait(PROGRESS_WAIT_SEC)
-		ctx.moving = block.Parent ~= nil
-			and (block:GetPivot().Position - root.Position).Magnitude < before - PROGRESS_MIN_STUDS
+		-- The mark: the letter is held where it was, not travelling.
+		local seenAt = os.clock()
+		local heldAt = block:GetPivot().Position
+		task.wait(HELD_WAIT_SEC)
+		ctx.held = block.Parent ~= nil and pool:isTowed(block)
+			and (block:GetPivot().Position - heldAt).Magnitude < HELD_TOLERANCE_STUDS
 
 		ctx.healed = bf:waitFor(function()
 			return humanoid.Health > startHealth
 		end, EAT_TIMEOUT_SEC) ~= nil
+		-- Eaten after the mark and the yank, not before (measured from when the
+		-- test first saw the tow, which is no earlier than it began).
+		ctx.eatSec = os.clock() - seenAt
 		ctx.gain = humanoid.Health - startHealth
 		ctx.highGone = block.Parent == nil
 		ctx.lowKept = hf:blockAt(pool, lowAt) ~= nil
@@ -136,11 +147,16 @@ return {
 		if not ctx.pulledHigh then
 			return false, "the first letter pulled was not the horizontally nearest (high) one"
 		end
-		if not ctx.moving then
-			return false, "the letter in tow did not move toward the boss"
+		if not ctx.held then
+			return false, "the letter in tow moved (or went) during the mark instead of being held"
 		end
 		if not ctx.healed then
 			return false, "the boss never ate and healed within the timeout"
+		end
+		if ctx.eatSec < MARK_SEC + SNAP_SEC - ARRIVE_SLACK_SEC then
+			return false, string.format(
+				"eaten %.2f s after the tow was seen, sooner than mark + snap (%.2f s)", ctx.eatSec, MARK_SEC + SNAP_SEC
+			)
 		end
 		if math.abs(ctx.gain - ctx.expectedGain) > HEALTH_TOLERANCE then
 			return false, string.format("health rose by %s, expected %s", tostring(ctx.gain), tostring(ctx.expectedGain))

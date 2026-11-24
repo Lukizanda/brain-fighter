@@ -55,6 +55,9 @@ export type Persona = {
 	reactChance: number,
 	reactDelaySec: number,
 	stealTow: number,
+	-- Scramble bomb (unbuilt): a persona that heals gives up a bomb it is
+	-- solving at or below this health. Nil = never gives up.
+	healBelowHp: number?,
 	chooseCast: (ctx: CastContext) -> CastChoice?,
 }
 
@@ -188,6 +191,7 @@ local novice: Persona = {
 	reactChance = 0.3,
 	reactDelaySec = 1.2,
 	stealTow = 0.1,
+	healBelowHp = MEND_AT_HP,
 	chooseCast = castNovice,
 }
 
@@ -216,6 +220,7 @@ local average: Persona = {
 	reactChance = 0.6,
 	reactDelaySec = 0.7,
 	stealTow = 0.4,
+	healBelowHp = MEND_AT_HP,
 	chooseCast = castAverage,
 }
 
@@ -244,6 +249,7 @@ local strong: Persona = {
 	reactChance = 0.9,
 	reactDelaySec = 0.4,
 	stealTow = 0.8,
+	healBelowHp = MEND_AT_HP,
 	chooseCast = castStrong,
 }
 
@@ -255,6 +261,7 @@ turtle.noticeGate = 0
 turtle.stealTow = 0.6
 turtle.reactChance = 0
 turtle.coverUse = 0
+turtle.healBelowHp = nil -- never heals
 
 local rusher: Persona = table.clone(average)
 rusher.name = "Rusher"
@@ -266,6 +273,7 @@ rusher.coverUse = 0
 rusher.reactDelaySec = 0.8
 rusher.stealTow = 0.2
 rusher.chooseCast = castRusher
+rusher.healBelowHp = nil -- never heals
 
 local combo: Persona = table.clone(strong)
 combo.name = "Combo"
@@ -276,8 +284,27 @@ combo.coverUse = 0.7
 combo.distMin = 80
 combo.distMax = 120
 combo.chooseCast = castCombo
+combo.healBelowHp = nil -- never heals
 
 PlaytestPersonas.ALL = { novice, average, strong, turtle, rusher, combo }
+
+-- Scramble bomb behaviour shared by the simulator (Sim/FightSim) and the
+-- real bot (client/Playtest), so the two solve bombs alike. Designer guesses
+-- (wiki/design/scramble-bomb.md § Simulator results).
+-- A bomb is noticed with chance BOMB_NOTICE_BASE + reactChance * BOMB_NOTICE_REACT_SHARE.
+local BOMB_NOTICE_BASE = 0.5
+local BOMB_NOTICE_REACT_SHARE = 0.5
+-- Seconds of unscrambling per letter before the first tap.
+local BOMB_UNSCRAMBLE_SEC_DEFAULT = 0.7
+local BOMB_UNSCRAMBLE_SEC_BY_PERSONA: { [string]: number } = { Novice = 1.5, Average = 0.7, Strong = 0.3, Combo = 0.3 }
+
+function PlaytestPersonas.bombNoticeChance(persona: Persona): number
+	return math.clamp(BOMB_NOTICE_BASE + persona.reactChance * BOMB_NOTICE_REACT_SHARE, 0, 1)
+end
+
+function PlaytestPersonas.bombUnscrambleSecPerLetter(persona: Persona): number
+	return BOMB_UNSCRAMBLE_SEC_BY_PERSONA[persona.name] or BOMB_UNSCRAMBLE_SEC_DEFAULT
+end
 
 function PlaytestPersonas.byName(name: string): Persona?
 	for _, persona in PlaytestPersonas.ALL do

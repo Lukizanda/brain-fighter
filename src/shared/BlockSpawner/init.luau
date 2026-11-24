@@ -1128,13 +1128,17 @@ end
 
 -- Spawns a spore of `letter` / `color` at `position`. `fuseSec` is what the
 -- client counts down; the block itself only removes itself a grace period
--- later, as a safety net. Returns nil on a destroyed pool.
+-- later, as a safety net. `burstRadius` and `groundY` are optional: given, they
+-- are published so the client can draw the burst radius on the ground under the
+-- block for the whole fuse (SporeConstants). Returns nil on a destroyed pool.
 function BlockSpawner.spawnSpore(
 	self: BlockSpawner,
 	letter: string,
 	color: string,
 	position: Vector3,
-	fuseSec: number
+	fuseSec: number,
+	burstRadius: number?,
+	groundY: number?
 ): Model?
 	local block = self:spawnTimedBlock(letter, color, CFrame.new(position), fuseSec + SporeConstants.REMOVAL_GRACE_SEC)
 	if block == nil then
@@ -1142,6 +1146,11 @@ function BlockSpawner.spawnSpore(
 	end
 	-- Fuse time first: a client woken by the mark reads a time that is there.
 	block:SetAttribute(SporeConstants.EXPIRES_ATTRIBUTE, workspace:GetServerTimeNow() + fuseSec)
+	block:SetAttribute(SporeConstants.FUSE_SEC_ATTRIBUTE, fuseSec)
+	if burstRadius ~= nil and groundY ~= nil then
+		block:SetAttribute(SporeConstants.BURST_RADIUS_ATTRIBUTE, burstRadius)
+		block:SetAttribute(SporeConstants.GROUND_Y_ATTRIBUTE, groundY)
+	end
 	block:SetAttribute(SporeConstants.ATTRIBUTE, true)
 	self._spores[block] = true
 	block.Destroying:Connect(function()
@@ -1344,6 +1353,7 @@ function BlockSpawner.beginTow(self: BlockSpawner, point: Vector3, radius: numbe
 		self._towed[block] = nil
 	end)
 	local position = block:GetPivot().Position
+	block:SetAttribute(TowConstants.FROM_ATTRIBUTE, position)
 	publishTow(block, position, point)
 	CollectionService:AddTag(block, TowConstants.TAG)
 	return {
@@ -1385,6 +1395,30 @@ function BlockSpawner.advanceTow(
 	block:PivotTo(CFrame.new(newPosition) * pivot.Rotation)
 	publishTow(block, newPosition, target)
 	return TOW_MOVING
+end
+
+-- When a tow holds, then snaps: the caller keeps the block still (advanceTow
+-- with speed 0) until `snapAt`, then moves it to the target so that it lands
+-- at `arriveAt`. Published for clients, in `workspace:GetServerTimeNow()`
+-- seconds, so they can draw the hold and the snap as a function of server
+-- time. `pausedAt`, when given, says the schedule's clock is stopped at that
+-- time (the caller is held); republish without it, with the times shifted,
+-- to resume. Does nothing for a block that is not in tow.
+export type TowSchedule = {
+	beganAt: number,
+	snapAt: number,
+	arriveAt: number,
+	pausedAt: number?,
+}
+
+function BlockSpawner.scheduleTow(self: BlockSpawner, block: Model, schedule: TowSchedule)
+	if not self._towed[block] or block.Parent == nil then
+		return
+	end
+	block:SetAttribute(TowConstants.BEGAN_AT_ATTRIBUTE, schedule.beganAt)
+	block:SetAttribute(TowConstants.SNAP_AT_ATTRIBUTE, schedule.snapAt)
+	block:SetAttribute(TowConstants.ARRIVE_AT_ATTRIBUTE, schedule.arriveAt)
+	block:SetAttribute(TowConstants.PAUSED_AT_ATTRIBUTE, schedule.pausedAt)
 end
 
 -- Ends a tow by removing the block (the boss died, the round ended). It goes

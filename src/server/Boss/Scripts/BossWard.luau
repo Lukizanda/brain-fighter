@@ -88,6 +88,8 @@ export type BossWardInstance = typeof(setmetatable(
 		_upSec: number,
 		_pulseInSec: number,
 		_destroyed: boolean,
+		-- Called once when the ward is broken (its last letter popped).
+		_onBroken: (() -> ())?,
 	},
 	BossWard
 ))
@@ -159,6 +161,7 @@ function BossWard.new(boss: Model, humanoid: Humanoid, root: BasePart, spec: Bos
 		_upSec = 0,
 		_pulseInSec = 0,
 		_destroyed = false,
+		_onBroken = nil,
 	}, BossWard)
 	HealthFloor.set(boss, self._floor)
 	return self
@@ -167,6 +170,12 @@ end
 -- Is the ward holding right now (letters out, the boss unhurtable)?
 function BossWard.isUp(self: BossWardInstance): boolean
 	return self._state == STATE_UP
+end
+
+-- Hear about the ward breaking (BossController hands it to BossExposure).
+-- Not called when the ward ends without being popped away.
+function BossWard.setOnBroken(self: BossWardInstance, callback: (() -> ())?)
+	self._onBroken = callback
 end
 
 -- Ward letters still to pop.
@@ -226,6 +235,10 @@ function BossWard._drop(self: BossWardInstance, broken: boolean)
 	if broken then
 		VfxBroadcast.playAt(BossConstants.WARD_DOWN_VFX, self._root.Position)
 		log:info(string.format("[%s] word ward broken", Arena.idOf(self._boss)))
+		local onBroken = self._onBroken
+		if onBroken then
+			onBroken()
+		end
 	end
 end
 

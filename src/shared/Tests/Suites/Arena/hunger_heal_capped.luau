@@ -44,7 +44,7 @@ return {
 		-- A short respawn delay so the zone is back for the cap check.
 		local pool = hf:pool({ hf:zone(zoneAt) }, RESPAWN_SEC)
 		local hunger = BossHunger.new(boss, humanoid, root, hungerFixture.spec(
-			INTERVAL_SEC, RADIUS_STUDS, FRACTION, hungerFixture.FAST_PULL_SPEED, hungerFixture.REACH_STUDS
+			INTERVAL_SEC, RADIUS_STUDS, FRACTION, hungerFixture.FAST_MARK_SEC, hungerFixture.FAST_SNAP_SEC, hungerFixture.REACH_STUDS
 		))
 		ctx.enabled = hunger ~= nil
 		if not hunger then

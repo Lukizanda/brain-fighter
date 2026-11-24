@@ -56,14 +56,19 @@ local bossTypes: { [string]: BossTypeSpec } = {
 		},
 		continuousFacing = true,
 		-- Hungry brain: every eatIntervalSec the boss pulls the nearest
-		-- letter within eatRadius studs (horizontal; height ignored) toward
-		-- itself at eatPullSpeed studs a second, and eats it on coming within
-		-- eatReach, healing eatHealFraction of its health. A player can pop
-		-- the letter first. At these values it heals at most about 6% a
-		-- minute, less in practice since a pull takes several seconds.
+		-- letter within eatRadius studs (horizontal; height ignored): it marks
+		-- it and holds it in place for eatMarkSec, then yanks it to itself in
+		-- eatSnapSec (an ease-in), eating it on arrival within eatReach and
+		-- healing eatHealFraction of its health. A player can pop the letter
+		-- at any point first. At these values it heals at most about 6% a
+		-- minute, less in practice since a tow takes about 1.75 seconds.
 		-- Setting eatHealFraction to 0 keeps the pressure and drops the heal.
 		eatIntervalSec   = 5,
 		eatRadius        = 60,
+		eatMarkSec       = 1.4,
+		eatSnapSec       = 0.35,
+		-- Legacy: read only by the fight simulator (src/shared/Playtest/Sim/FightSim.luau),
+		-- which still models the old constant pull. The live boss ignores it.
 		eatPullSpeed     = 12,
 		eatReach         = 8,
 		eatHealFraction  = 0.005,
@@ -74,6 +79,10 @@ local bossTypes: { [string]: BossTypeSpec } = {
 		-- after landing for 15 damage to every player within 8 studs; popping
 		-- one is a normal pop and costs the boss 3% of its health. Numbers
 		-- from the fight simulator's sweep (FightSim tune.spore).
+		-- The scramble bomb below took the spore lob's slot (2026-11-21): a
+		-- type with both configured lobs the bomb only (BossStates picks
+		-- `bombs or spores`), so the Brain no longer lobs spores. The spore
+		-- values and code stay, and stay tested, until the spores are retired.
 		sporeEveryNthAttack    = 2,
 		sporeCount             = 3,
 		sporeLandRadius        = 12,
@@ -87,6 +96,71 @@ local bossTypes: { [string]: BossTypeSpec } = {
 		sporeHoverHeight       = 4,
 		sporeLetterTable       = LetterTables.COMMON,
 		sporeColors            = { "red", "blue" },
+		-- Scramble bomb as a two-phase puzzle (wiki/design/scramble-bomb.md;
+		-- starting numbers): every second attack that would have been a volley
+		-- (never while the ward is up) lobs ONE puzzle at the target: 1.5 s in
+		-- the air, landing within 12 studs of where the target stood. It rests
+		-- there as a scrambled key word (3 letters, 4 from phase 2), red or blue,
+		-- tapped in order from within 20 studs of its centre; the timer is 8 s
+		-- (3 letters) / 10 s (4 letters) and a wrong tap costs 1 s. Solving it
+		-- costs the boss 9% / 12% of its health. If the timer runs out the
+		-- unsolved letters hatch 0.3 s apart into seekers that chase the nearest
+		-- player at 20 studs/s for up to 6 s, 5 studs over the ground, each keeping
+		-- its own 6-stud side slot until 10 studs from the player. A seeker bursts
+		-- (15 damage within 6 studs) within 3 studs of the player, on a wall, or
+		-- when its life ends; a pop reaches 45 studs from the seeker and only
+		-- removes it. The hint shows 2 s after landing. bombEnergyScale (the share of the
+		-- word's energy) rides on BombDefused.
+		bombEveryNthAttack        = 2,
+		bombFlightSec             = 1.5,
+		bombLandRadius            = 12,
+		bombFuseSecByLetters      = { [3] = 6, [4] = 8 },
+		bombWrongTapPenaltySec    = 1,
+		bombHatchStaggerSec       = 0.3,
+		-- Fast but wide-turning (user, 2026-11-25): nearly twice a walk, so it
+		-- cannot be outrun, with a turning circle of about 25 studs, so a
+		-- sidestep in the last few studs makes it fly past and come round again.
+		bombSeekerSpeed           = 30,
+		bombSeekerSpeedMax        = 30,
+		bombSeekerTurnDegPerSec   = 70,
+		-- Final approach (user, 2026-11-25): 20 studs out it locks onto where
+		-- the player stands, stops tracking and goes straight at 34 (half a
+		-- second to step aside), bursting after 45 studs if it meets nothing.
+		bombSeekerCommitStuds     = 30,
+		bombSeekerDashSpeed       = 100,
+		bombSeekerDashStuds       = 50,
+		-- A hatched seeker hangs still this long first (first bot fight,
+		-- 2026-11-24: without it the first burst came 0 to 0.7 s after the hatch).
+		bombSeekerArmSec          = 1,
+		-- They go one at a time, 0.7 s apart, each rising 5 studs in an arc
+		-- over its first second (user, 2026-11-25).
+		bombSeekerLaunchStaggerSec = 0.7,
+		bombSeekerArcHeight       = 5,
+		bombSeekerArcSec          = 1,
+		bombSeekerLifetimeSec     = 9,
+		bombSeekerSpacing         = 6,
+		bombSeekerConvergeStuds   = 10,
+		bombSeekerTriggerStuds    = 3,
+		bombHoverHeight           = 5,
+		bombLettersByPhase        = { 3, 4 },
+		bombHintAfterSec          = 2,
+		-- Switch for the boss damage of a solved puzzle. true: the boss loses
+		-- bombDefuseDamageByLetters of its health. false: no damage, the word's
+		-- energy (bombEnergyScale) is the whole reward. Off for now, with the
+		-- energy at the full word, so the user can feel it (2026-11-25).
+		bombDefuseDamageEnabled   = false,
+		bombDefuseDamageByLetters = { [3] = 0.09, [4] = 0.12 },
+		bombBurstDamage           = 15,
+		bombBurstRadius           = 6,
+		-- Switch for the distance needed to solve a resting puzzle. true: the
+		-- player must be within bombTapReach of it. false: it can be solved from
+		-- anywhere a letter block could be tapped (200 studs). Off for now so
+		-- the user can feel the difference (2026-11-25).
+		bombTapReachEnabled       = false,
+		bombTapReach              = 20,
+		bombSeekerTapReach        = 45,
+		bombColors                = { "red", "blue" },
+		bombEnergyScale           = 1,
 		-- Word ward (wiki/design/ai-playtest.md, the ward decision): the
 		-- boss's health stops at half and 4 Common-table letters circle it,
 		-- 10 studs out and 6 up, once round every 8 s; nothing hurts it until
@@ -100,6 +174,13 @@ local bossTypes: { [string]: BossTypeSpec } = {
 		wardOrbitPeriodSec     = 8,
 		wardLetterTable        = LetterTables.COMMON,
 		wardColors             = { "red", "green", "blue" },
+		-- Vulnerability windows (wiki/design/boss-movement.md, stage 11c):
+		-- after a Ground Slam the boss is stuck 1.5 s with its core open, and
+		-- when the ward breaks it staggers open for 3 s; every hit in a window
+		-- does x1.5. Swept in the fight simulator (FightSim `exposure`).
+		exposedAfterAttackSec  = { GroundSlam = 1.5 },
+		exposedOnWardBreakSec  = 3,
+		exposedDamageMultiplier = 1.5,
 		skills = {
 			FireballVolley = {
 				name      = "FireballVolley",

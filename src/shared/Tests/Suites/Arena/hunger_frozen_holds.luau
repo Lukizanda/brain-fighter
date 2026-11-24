@@ -8,22 +8,26 @@
 -- (SkillConstants.FROZEN_ATTRIBUTE), which the test sets and clears by hand:
 -- it does not cast a freeze spell.
 --   A. Frozen from the start: over several intervals nothing goes into tow.
---   B. Thawed, a letter goes into tow; frozen again mid-tow, the letter hangs
---      exactly where it is and the boss does not heal; thawed, it carries on
---      and the boss eats it.
+--   B. Thawed, a letter goes into tow; frozen again mid-tow (frozen for longer
+--      than the whole mark, so the clock stopping is what holds it), the letter
+--      hangs exactly where it is and the boss does not heal; the schedule
+--      published for clients says paused. Thawed, the pause is lifted, the
+--      snap time has moved on by the time held, and the boss eats it.
 --
 -- Stun: no stun status exists in the code today, so there is nothing to test.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local TowConstants = require(ReplicatedStorage.Shared.BlockSpawner.TowConstants)
 local SkillConstants = require(ReplicatedStorage.Shared.Skills.SkillConstants)
 local bossEntranceFixture = require(ReplicatedStorage.Shared.Tests.Helpers.bossEntranceFixture)
 local hungerFixture = require(ReplicatedStorage.Shared.Tests.Helpers.hungerFixture)
 
 local INTERVAL_SEC = 0.4
 local RADIUS_STUDS = 60
-local PULL_SPEED = 20
+local MARK_SEC = 0.6
+local SNAP_SEC = 0.3
 local REACH_STUDS = 4
 local FRACTION = 0.1
 local START_HEALTH_FRACTION = 0.5
@@ -35,6 +39,9 @@ local FROZEN_OBSERVE_SEC = INTERVAL_SEC * 4
 local TOW_TIMEOUT_SEC = 3
 local EAT_TIMEOUT_SEC = 5
 local HELD_TOLERANCE_STUDS = 0.01
+-- The held time, minus what the frame before the freeze and the poll round off.
+local SHIFT_SLACK_SEC = 0.2
+local RESUME_TIMEOUT_SEC = 1
 local NEVER_REFILL_SEC = 600
 
 return {
@@ -56,7 +63,8 @@ return {
 			configureSpec = function(spec: any)
 				spec.eatIntervalSec = INTERVAL_SEC
 				spec.eatRadius = RADIUS_STUDS
-				spec.eatPullSpeed = PULL_SPEED
+				spec.eatMarkSec = MARK_SEC
+				spec.eatSnapSec = SNAP_SEC
 				spec.eatReach = REACH_STUDS
 				spec.eatHealFraction = FRACTION
 			end,
@@ -115,7 +123,20 @@ return {
 			and (block:GetPivot().Position - heldAt).Magnitude <= HELD_TOLERANCE_STUDS
 		ctx.healthWhileFrozen = humanoid.Health
 
+		-- Published for clients: the schedule's clock stopped while frozen.
+		ctx.pausedPublished = typeof(block:GetAttribute(TowConstants.PAUSED_AT_ATTRIBUTE)) == "number"
+		local snapBefore = block:GetAttribute(TowConstants.SNAP_AT_ATTRIBUTE)
+
 		boss:SetAttribute(SkillConstants.FROZEN_ATTRIBUTE, nil)
+		bf:waitFor(function()
+			return block.Parent == nil or block:GetAttribute(TowConstants.PAUSED_AT_ATTRIBUTE) == nil
+		end, RESUME_TIMEOUT_SEC)
+		-- Thawed: the pause is lifted and the times moved on by the time held.
+		local snapAfter = block:GetAttribute(TowConstants.SNAP_AT_ATTRIBUTE)
+		ctx.resumedShifted = block.Parent ~= nil
+			and block:GetAttribute(TowConstants.PAUSED_AT_ATTRIBUTE) == nil
+			and type(snapBefore) == "number" and type(snapAfter) == "number"
+			and snapAfter - snapBefore >= FROZEN_OBSERVE_SEC - SHIFT_SLACK_SEC
 		ctx.ateAfterThaw = bf:waitFor(function()
 			return block.Parent == nil
 		end, EAT_TIMEOUT_SEC) ~= nil
@@ -137,6 +158,12 @@ return {
 		end
 		if not ctx.hung then
 			return false, "a letter in tow kept moving (or went) while the boss was frozen"
+		end
+		if not ctx.pausedPublished then
+			return false, "clients were not told the letter's schedule was paused while the boss was frozen"
+		end
+		if not ctx.resumedShifted then
+			return false, "on the thaw the pause was not lifted and the snap time shifted by the time held"
 		end
 		if ctx.healthWhileFrozen ~= ctx.startHealth then
 			return false, "the frozen boss healed"

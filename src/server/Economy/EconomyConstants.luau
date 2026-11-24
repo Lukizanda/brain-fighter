@@ -66,4 +66,12 @@ EconomyConstants.REJECTION_LOG_THROTTLE_SEC = 10
 EconomyConstants.REPORT_BURST_CAPACITY = 5
 EconomyConstants.REPORT_REFILL_PER_SEC = 4
 
+-- Word grants: energy credited for a word the player did not memorize
+-- through the buffer (the scramble bomb's defuse).
+-- `source` tags on the WordGranted event and the client remote's listeners.
+EconomyConstants.GRANT_SOURCE_BOMB = "bomb"
+-- A grant is a SHARE of the word's energy; above one would out-pay a
+-- memorize of the same word, so the ledger refuses it.
+EconomyConstants.WORD_GRANT_SCALE_MAX = 1
+
 return EconomyConstants

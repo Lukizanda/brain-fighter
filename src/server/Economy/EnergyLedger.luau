@@ -35,6 +35,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Colors = require(ReplicatedStorage.Shared.Core.Colors)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 -- Only for CAP_PER_COLOR (line ~282) — the color list itself now comes
 -- from Core.Colors, not this require.
@@ -301,6 +302,57 @@ function EnergyLedger._applyMemorize(account: Account, tiles: { WordBuffer.Tile 
 		local credited = (account.ceiling[color] or EMPTY) + amount
 		account.ceiling[color] = math.min(credited, EnergyReservoirs.CAP_PER_COLOR)
 	end
+end
+
+----------------------------------------------------------------------
+-- Grant: a word credited without passing through the buffer
+----------------------------------------------------------------------
+
+-- Credit a share of `word`'s energy in the single colour `color` (the
+-- scramble bomb's defuse). Scored by MemorizeAction.scoreTiles, the same
+-- function a memorize uses, so the same dictionary check and the same
+-- minimum-energy floor apply; each colour's amount is then
+-- math.floor(amount * scale). Floor, so a grant never pays more than its
+-- stated share (0.5 of a floored 5 is 2, not 3).
+--
+-- Touches ONLY the ceiling: the held letters and held count are the
+-- player's half-built word and a grant must not disturb them (contrast
+-- _applyMemorize, which clears them). The clamp at the reservoir cap is
+-- the same one _applyMemorize applies.
+--
+-- Returns the amounts credited so the caller can send the client exactly
+-- these numbers instead of having it recompute them.
+function EnergyLedger.creditWordGrant(userId: number, word: string, color: string, scale: number): Verdict
+	if typeof(word) ~= "string" or typeof(color) ~= "string" or typeof(scale) ~= "number" then
+		return { ok = false, reason = "grant arguments have the wrong types" }
+	end
+	if not Colors.isSpellColor(color) then
+		return { ok = false, reason = string.format("%q is not a reservoir colour", color) }
+	end
+	if scale ~= scale or scale <= EMPTY or scale > EconomyConstants.WORD_GRANT_SCALE_MAX then
+		return { ok = false, reason = string.format("grant scale %s is outside (0, %d]", tostring(scale), EconomyConstants.WORD_GRANT_SCALE_MAX) }
+	end
+
+	local tiles: { WordBuffer.Tile } = {}
+	for i = 1, #word do
+		table.insert(tiles, { letter = string.upper(string.sub(word, i, i)), color = color :: any })
+	end
+
+	local scored = MemorizeAction.scoreTiles(tiles)
+	if not scored then
+		return { ok = false, reason = string.format("%q is not a dictionary word", word) }
+	end
+
+	local account = accountFor(userId)
+	local amounts: { [string]: number } = {}
+	for amountColor, amount in scored.energyByColor do
+		local share = math.floor(amount * scale)
+		amounts[amountColor] = share
+		local credited = (account.ceiling[amountColor] or EMPTY) + share
+		account.ceiling[amountColor] = math.min(credited, EnergyReservoirs.CAP_PER_COLOR)
+	end
+
+	return { ok = true, word = scored.word, energyByColor = amounts }
 end
 
 ----------------------------------------------------------------------

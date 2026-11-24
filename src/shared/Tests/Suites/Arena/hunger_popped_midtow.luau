@@ -3,7 +3,7 @@
 ----------------------------------------------------------------------
 -- hunger_popped_midtow — a player can pop a letter in tow; the boss goes hungry
 ----------------------------------------------------------------------
--- REAL BOSS (as hunger_eats_nearest), with a slow pull so the letter is in
+-- REAL BOSS (as hunger_eats_nearest), with a long mark so the letter is in
 -- the air for seconds. Once a letter is in tow the test pops it the way the
 -- BlockShoot service does on an accepted tap (the block is destroyed). The
 -- boss does not heal, the zone refills (short respawn delay) and the interval
@@ -21,7 +21,8 @@ local hungerFixture = require(ReplicatedStorage.Shared.Tests.Helpers.hungerFixtu
 
 local INTERVAL_SEC = 0.6
 local RADIUS_STUDS = 60
-local PULL_SPEED = 8
+local MARK_SEC = 2
+local SNAP_SEC = 0.35
 local REACH_STUDS = 4
 local FRACTION = 0.1
 local START_HEALTH_FRACTION = 0.5
@@ -54,7 +55,8 @@ return {
 			configureSpec = function(spec: any)
 				spec.eatIntervalSec = INTERVAL_SEC
 				spec.eatRadius = RADIUS_STUDS
-				spec.eatPullSpeed = PULL_SPEED
+				spec.eatMarkSec = MARK_SEC
+				spec.eatSnapSec = SNAP_SEC
 				spec.eatReach = REACH_STUDS
 				spec.eatHealFraction = FRACTION
 			end,

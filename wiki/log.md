@@ -2258,3 +2258,51 @@ Three artist sessions audited the dressed island by sector, and the lead ran an 
 ## [2026-11-19] ingest | Gate seams reworked with the designer
 
 The gate seams read as stray scratches. The designer ruled for masonry joints: light leaks round each gate's smooth key slab on three sides and from a few uneven joints in the pilasters and lintel, with nothing on the outer edges. Strips are 0.32 wide and GateSeam is now #b8cce4. All four gates were rebuilt (6 Deco_ + 6 Seam_ each) and checked under BossDusk. See design/boss-arena § The island dressed.
+
+## [2026-11-21] decision | The scramble bomb replaces the spore lob (Phase 8 stage 12)
+
+The user found spore letters carry no risk. A design pass with three agent roles traced it to the timeline (about five quiet seconds between landing and the next volley, a 200-stud tap) and showed in the simulator that every way of making the pop harder costs the Novice its win. Offered pop-tuning packages, the user asked for more creative ideas and chose a letter-puzzle bomb, and said the 3% a pop rule may be replaced. New page `design/scramble-bomb`: the rule, starting numbers, simulator rows with the ward on (Novice 63 to 70% in 229 to 240 s, Average 148 to 156 s, Strong 134 to 150 s), the engineer's contract and six stages. The build plan and the index updated. Nothing is built; `src/shared/Playtest/` gained opt-in `tune.spore` knobs and a `tune.bomb` model, not type-checked beyond loading in Studio and not committed. The numbers rest on guesses about how a young child notices and unscrambles.
+
+## [2026-11-21] ingest | Scramble bomb built and run once
+
+At the user's request the bomb was built the same day (stages 12a to 12e) by four builder agents and run by a playtest session. `design/scramble-bomb` § Built and first runs: the Boss bomb and tap path, the word credit through the ledger, the client look and tap input, the bot, the recorder and the simulator's as-built default. Tests: bomb, ledger and spore suites pass; a second full run was 126/131 with `NPC deals damage` and four `gate_*` tests failing for a cause not found (they passed in the first run and touch no bomb code). One Average bot fight on `IslandReview`: won in 142 s, 5 of 9 bombs defused, 47% of boss damage, credit and next cast confirmed on both sides. Not seen by a person: screen captures do not draw the letter tiles. The header was cut from 8 by 5 studs to a fixed 280 by 170 px, unseen. Spores stay in the code, switched off for the Brain by precedence. `BlockTapController` no longer starts its cooldown on a missed tap. Nothing committed; the systems pages (Boss, BlockShoot, Tests, Analytics) are to be updated with the commit.
+
+## [2026-11-21] ingest | Fall containment on the boss island
+
+The user asked that no fall on the boss arena end in open sky. A raycast survey found the ridge collider ring closed except at the three exits, the kill volume invisible 77 studs down, and the ready room outside every kill volume behind rails a jump clears. Built on `IslandReview`: a spike pit with its own `DeathZone` under the Stones, the Spit and the Overhang, invisible `Fall_Collider` walls joined to the ring, and walls on the ready-room rails. Generated from `src/server/Dev/LevelArt/greybox/hazards.luau` (gameplay parts) and `dress/hazards.luau` (art, by an artist agent); `greybox/hazards_check.luau` throws 25,680 simulated bodies and none escapes; one playtest confirmed the four falls and the rail. Open: the walls stop block-tap rays from a camera beyond them. See design/boss-arena § Fall containment.
+
+## [2026-11-21] decision | Letter missiles replace the static scramble bomb
+
+The user played the bomb and found its tiles overlapped and blocked each other by camera angle. A client fix put the tiles in a camera-facing row (compiled, unseen). Offered that, a chasing bomb or homing letter missiles, the user chose the missiles: pop them in spelling order to fire the word back, pop out of order to be safe with no reward, ignore them and they hit. `design/scramble-bomb` § Revision holds the rule and starting numbers; the tap rule, word credit and ownership carry over. Being modelled and built.
+
+## [2026-11-23] ingest | Synthesized audio FX plan proposed (Phase 10)
+
+The user asked to replace the stand-in sound effects and fill the silent events with sounds synthesized from scratch. New page `design/audio-sfx-synthesis`: a code audit (40 effect entries on 6 assets, about 60 silent events, no looping path, three probable audio bugs), the Roblox constraints researched the same day (no in-place audio update, an unresolved upload quota, moderation risk for short sounds), a kit of seven voices, cue tiers A to D, the `tools/sfx/` pipeline, the team and nine stages. Proposed only: five decisions wait on the user and nothing is built. `design/build-plan` gained Phase 10 and a changelog line. `systems/AudioSFX` is stale in places and is left for stage 8.
+
+## [2026-11-23] decision | The puzzle rests, then hatches seekers
+
+Chase-from-launch letter seekers were built and run (135/135; an Average bot won twice and no seeker ever hurt it; walking away was free). The user then said what they had meant: the letters land and are solved on a timer, and only an unsolved puzzle turns into seekers that chase and burst. `design/scramble-bomb` § The two-phase puzzle is now the current design, with the sweep: failing costs 15 to 21 health a puzzle, the Novice wins 0% if it never solves and about 70 to 80% as played with a 6 and 8 s timer and a 2 s hint. Built the same day, compiles, not yet run. Nothing committed.
+
+## [2026-11-24] ingest | The two-phase puzzle run; seekers given a pause and made to respect cover
+
+A playtest session ran the rest-then-hatch puzzle: 136/138 (two tests read a deferred event too early, fixed), and an Average bot won on `IslandReview` in 102 s with 5 of 7 puzzles solved and 47% of boss damage from solves. A failed puzzle cost 15 to 30 health and cannot be walked away from. The first burst came 0 to 0.7 s after the hatch and reached through cover, so a hatched seeker now hangs still for 1 s (`bombSeekerArmSec`) and a burst needs line of sight and a like height; Arena re-run 69/69, the changes unseen in a fight. `design/scramble-bomb` § The two-phase puzzle and the build plan (stage 12) updated. Nothing committed.
+
+## [2026-11-25] ingest | Hatched seekers are fireballs that fly fast and turn wide
+
+At the user's request a hatched letter is drawn as a fireball (no letter, border or "!"; `client/Vfx/BombVisuals`), and seekers fly at 30 studs a second with a limited turn of 70 degrees a second (`bombSeekerTurnDegPerSec`, a turning circle of about 25 studs) so a sidestep when one is 10 to 20 studs off makes it fly past. Worked out on paper: standing still or running straight away is hit in under a second; a sidestep at 7 studs or less is too late; at 100 degrees a second no sidestep works. Arena 69/69 (the fixture switches the turn limit off, so no test covers a miss). Not seen in a fight; the simulator and the bot do not model dodging. `design/scramble-bomb` to be brought up to date with the commit.
+
+## [2026-11-25] ingest | Seekers lock their course on the final approach
+
+At the user's request a seeker stops tracking 20 studs from its player (`bombSeekerCommitStuds`), locks onto where the player stands at that instant and flies straight at 34 studs a second (`bombSeekerDashSpeed`) for at most 45 studs before bursting; the fireball turns white-hot and larger as the cue (`Committed` on the part). On paper a player who starts stepping aside within about 0.3 s of the lock is missed when it locks at 20 studs; a letter that hatches closer than that leaves less time. Compiles; the test fixture switches the lock off, so no test covers it and it has not been seen in a fight.
+
+## [2026-11-25] ingest | Seekers launch one at a time, in an arc
+
+At the user's request the seekers of a puzzle start chasing 0.7 s apart (`bombSeekerLaunchStaggerSec`, on top of the 1 s arming pause) and each rises 5 studs in an arc over its first second (`bombSeekerArcHeight`, `bombSeekerArcSec`); the lifetime went from 7 to 9 s so the last of four still has its flight. Arena 69/69, but the fixture switches the stagger and the arc off, so no test covers either and neither has been seen in a fight.
+
+## [2026-11-25] ingest | Two switches on the puzzle, both off for the user's trial
+
+`BossConfig` gained `bombTapReachEnabled` (false: a resting puzzle can be solved from the ordinary 200-stud tap range, published through `BombReach` so the client follows) and `bombDefuseDamageEnabled` (false: a solved puzzle does not hurt the boss; the word's energy is the whole reward). Both are set false at the user's request to feel the difference, with `bombEnergyScale` raised from 0.5 to 1. The test fixture forces both on. Full run 137/138: `ledger_grants_bomb_word` expected the boss type's scale where its own event carried a half; fixed, Economy 4/4. Not seen in a fight.
+
+## [2026-11-25] ingest | Scramble puzzle committed
+
+The scramble puzzle (Phase 8 stage 12a to 12e) is committed with the boss work it was built on (the spore-lob telegraph, the lash-and-yank hunger, the exposure windows). `design/scramble-bomb` gains § As committed, the page's statement of what the code does now, including the user's own flight tuning (lock at 30 studs, dash at 100) and the two trial switches left off. `systems/Boss` § Scramble puzzle, `systems/Tests` (138 tests, 137/138 then fixed), the index and the build plan updated. Known gaps recorded: no test covers the newer flight options, the simulator and bot do not model them, spores are not retired, no strict type check.

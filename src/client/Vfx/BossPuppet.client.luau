@@ -56,6 +56,9 @@ type Puppet = {
 	joints: { [string]: Motor6D },
 	neurons: { Motor6D },
 	lobeMeshes: { { mesh: SpecialMesh, base: Vector3 } },
+	-- Ridges welded to a lobe: scaled with it, and carried out or in with
+	-- it, so a squash or a deflate keeps them on the surface.
+	gyri: { { mesh: SpecialMesh, base: Vector3, weld: Weld, offset: Vector3 } },
 	coreLight: PointLight?,
 	coreLightColor: Color3,
 	synapses: { { beam: Beam, width: number } },
@@ -167,6 +170,14 @@ local function track(model: Model)
 			table.insert(lobeMeshes, { mesh = mesh, base = mesh.Scale })
 		end
 	end
+	local gyri = {}
+	for _, child in model:GetChildren() do
+		local mesh = child:FindFirstChildOfClass("SpecialMesh")
+		local weld = child:FindFirstChildOfClass("Weld")
+		if child:IsA("BasePart") and child:GetAttribute("GyrusOf") and mesh and weld then
+			table.insert(gyri, { mesh = mesh, base = mesh.Scale, weld = weld, offset = weld.C0.Position })
+		end
+	end
 	local core = model:FindFirstChild("Core")
 	local found = core and core:FindFirstChild(BrainBody.CORE_LIGHT_NAME)
 	local coreLight: PointLight? = if found and found:IsA("PointLight") then found else nil
@@ -195,6 +206,7 @@ local function track(model: Model)
 		joints = joints,
 		neurons = neurons,
 		lobeMeshes = lobeMeshes,
+		gyri = gyri,
 		coreLight = coreLight,
 		coreLightColor = if coreLight then coreLight.Color else Color3.new(1, 1, 1),
 		synapses = synapses,
@@ -357,6 +369,10 @@ local function step(puppet: Puppet, dt: number, now: number, serverNow: number, 
 	local scale = Vector3.new(breath * (1 + squash / 2), breath * (1 - squash), breath * (1 + squash / 2)) * pose.lobeScale
 	for _, entry in puppet.lobeMeshes do
 		entry.mesh.Scale = entry.base * scale
+	end
+	for _, gyrus in puppet.gyri do
+		gyrus.mesh.Scale = gyrus.base * scale
+		gyrus.weld.C0 = CFrame.new(gyrus.offset * scale)
 	end
 
 	-- The stem trails the lean and sways.

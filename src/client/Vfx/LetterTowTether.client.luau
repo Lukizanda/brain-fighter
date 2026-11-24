@@ -18,6 +18,13 @@
 -- toward the published target. Tinted with the block's own colour, the way
 -- the collect stream is. Everything here is client-local and is removed when
 -- the tag comes off or the block goes (eaten, popped, torn down).
+--
+-- A tow with a hold-then-snap schedule (TowConstants BEGAN/SNAP_AT, server
+-- time) is also the warning on the letter: the tether tightens (wider, more
+-- opaque) toward the snap, a Highlight on the block blinks faster toward it,
+-- and a ring on a BillboardGui closes from 2.5x the block to its size exactly
+-- at the snap. All of it is a function of server time, full strength from the
+-- snap on. Created when the schedule is first readable, removed with the tag.
 ----------------------------------------------------------------------
 
 local CollectionService = game:GetService("CollectionService")
@@ -36,12 +43,79 @@ local END_PART_SIZE = Vector3.one * 0.2
 
 type Tether = {
 	endPart: Part,
+	beam: Beam,
 	-- Whether the end part has been placed yet; it snaps to the first
 	-- published target instead of easing in from the origin.
 	placed: boolean,
+	-- The warning on a marked letter (a tow with a hold-then-snap schedule),
+	-- made on the first frame the schedule is readable: a blinking Highlight
+	-- and a closing ring. Nil until then, and for a tow without a schedule.
+	highlight: Highlight?,
+	ringGui: BillboardGui?,
+	ringFrame: Frame?,
+	-- Blink phase in radians, advanced by the current rate so the speed-up
+	-- toward the snap does not jump.
+	blinkPhase: number,
 }
 
 local tethers: { [Model]: Tether } = {}
+
+local TAU = math.pi * 2
+local HALF = 0.5
+
+local function lerp(from: number, to: number, alpha: number): number
+	return from + (to - from) * alpha
+end
+
+-- The Highlight (outline plus fill, in the hungry colour, through walls).
+local function makeHighlight(block: Model): Highlight
+	local highlight = Instance.new("Highlight")
+	highlight.Name = TowConstants.HIGHLIGHT_NAME
+	highlight.Adornee = block
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.FillColor = TowConstants.HIGHLIGHT_FILL_COLOR
+	highlight.OutlineColor = TowConstants.HIGHLIGHT_OUTLINE_COLOR
+	highlight.OutlineTransparency = TowConstants.HIGHLIGHT_OUTLINE_TRANSPARENCY
+	highlight.FillTransparency = TowConstants.HIGHLIGHT_FILL_TRANSPARENCY_MAX
+	highlight.Parent = block
+	return highlight
+end
+
+-- The closing ring: a round outline on a BillboardGui over the block. The
+-- gui is RING_START_SCALE times the block wide and the ring is a Frame that
+-- starts filling it and shrinks to the block's own size. Not AlwaysOnTop (that
+-- did not draw in this game's client view); pushed toward the camera instead
+-- so the cube does not hide it.
+local function makeRing(cube: BasePart): (BillboardGui, Frame)
+	local side = if cube.Size.X > 0 then cube.Size.X else TowConstants.RING_FALLBACK_BLOCK_STUDS
+	local gui = Instance.new("BillboardGui")
+	gui.Name = TowConstants.RING_NAME
+	gui.Adornee = cube
+	gui.AlwaysOnTop = false
+	gui.LightInfluence = 0
+	gui.Size = UDim2.fromScale(side * TowConstants.RING_START_SCALE, side * TowConstants.RING_START_SCALE)
+	gui.StudsOffset = Vector3.new(0, 0, TowConstants.RING_CAMERA_OFFSET_STUDS)
+
+	local frame = Instance.new("Frame")
+	frame.AnchorPoint = Vector2.new(HALF, HALF)
+	frame.Position = UDim2.fromScale(HALF, HALF)
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.BackgroundTransparency = 1
+	frame.BorderSizePixel = 0
+	frame.Parent = gui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(HALF, 0)
+	corner.Parent = frame
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = TowConstants.RING_COLOR
+	stroke.Thickness = TowConstants.RING_STROKE_PIXELS
+	stroke.Parent = frame
+
+	gui.Parent = cube
+	return gui, frame
+end
 
 local function removeTether(block: Model)
 	local tether = tethers[block]
@@ -50,6 +124,12 @@ local function removeTether(block: Model)
 	end
 	tethers[block] = nil
 	tether.endPart:Destroy()
+	if tether.highlight ~= nil then
+		tether.highlight:Destroy()
+	end
+	if tether.ringGui ~= nil then
+		tether.ringGui:Destroy()
+	end
 	local cube = block:FindFirstChild(CUBE_CHILD_NAME)
 	local attachment = cube and cube:FindFirstChild(TowConstants.TETHER_BLOCK_ATTACHMENT_NAME)
 	if attachment then
@@ -107,7 +187,15 @@ local function addTether(instance: Instance)
 	endPart.Position = cube.Position
 	endPart.Parent = workspace
 
-	tethers[block] = { endPart = endPart, placed = false }
+	tethers[block] = {
+		endPart = endPart,
+		beam = beam,
+		placed = false,
+		highlight = nil,
+		ringGui = nil,
+		ringFrame = nil,
+		blinkPhase = 0,
+	}
 end
 
 for _, block in ipairs(CollectionService:GetTagged(TowConstants.TAG)) do
@@ -120,11 +208,67 @@ CollectionService:GetInstanceRemovedSignal(TowConstants.TAG):Connect(function(in
 	end
 end)
 
+-- How far through the hold the schedule is (0 at the start, 1 from the snap
+-- on), or nil when the tow has no schedule (yet).
+local function markProgress(block: Model): number?
+	local beganAt = block:GetAttribute(TowConstants.BEGAN_AT_ATTRIBUTE)
+	local snapAt = block:GetAttribute(TowConstants.SNAP_AT_ATTRIBUTE)
+	if type(beganAt) ~= "number" or type(snapAt) ~= "number" or snapAt <= beganAt then
+		return nil
+	end
+	local now = workspace:GetServerTimeNow()
+	local pausedAt = block:GetAttribute(TowConstants.PAUSED_AT_ATTRIBUTE)
+	if type(pausedAt) == "number" then
+		now = math.min(now, pausedAt)
+	end
+	return math.clamp((now - beganAt) / (snapAt - beganAt), 0, 1)
+end
+
+-- The tether tightens, the highlight blinks faster and the ring closes as the
+-- snap nears; from the snap on all three are at full strength.
+local function drawMark(block: Model, tether: Tether, progress: number, dt: number)
+	local widthScale = lerp(TowConstants.TETHER_WIDTH_SCALE_START, 1, progress)
+	tether.beam.Width0 = TowConstants.TETHER_WIDTH_AT_BLOCK * widthScale
+	tether.beam.Width1 = TowConstants.TETHER_WIDTH_AT_TARGET * widthScale
+	tether.beam.Transparency = NumberSequence.new(
+		lerp(TowConstants.TETHER_TRANSPARENCY_START, TowConstants.TETHER_TRANSPARENCY_FULL, progress)
+	)
+
+	local highlight = tether.highlight
+	if highlight == nil then
+		highlight = makeHighlight(block)
+		tether.highlight = highlight
+	end
+	local rate = lerp(TowConstants.BLINK_HZ_START, TowConstants.BLINK_HZ_END, progress)
+	tether.blinkPhase = (tether.blinkPhase + rate * TAU * dt) % TAU
+	local wave = (math.sin(tether.blinkPhase) + 1) * HALF
+	highlight.FillTransparency = TowConstants.HIGHLIGHT_FILL_TRANSPARENCY_MAX
+		- (TowConstants.HIGHLIGHT_FILL_TRANSPARENCY_MAX - TowConstants.HIGHLIGHT_FILL_TRANSPARENCY_MIN) * wave
+
+	if tether.ringFrame == nil then
+		local cube = block:FindFirstChild(CUBE_CHILD_NAME)
+		if cube ~= nil and cube:IsA("BasePart") then
+			tether.ringGui, tether.ringFrame = makeRing(cube)
+		end
+	end
+	local ringFrame = tether.ringFrame
+	if ringFrame ~= nil then
+		-- From RING_START_SCALE times the block (the gui's full size) down to
+		-- the block's size, which is 1 / RING_START_SCALE of the gui.
+		local fraction = lerp(1, 1 / TowConstants.RING_START_SCALE, progress)
+		ringFrame.Size = UDim2.fromScale(fraction, fraction)
+	end
+end
+
 RunService.Heartbeat:Connect(function(dt)
 	for block, tether in pairs(tethers) do
 		if block.Parent == nil then
 			removeTether(block)
 			continue
+		end
+		local progress = markProgress(block)
+		if progress ~= nil then
+			drawMark(block, tether, progress, dt)
 		end
 		local target = block:GetAttribute(TowConstants.TARGET_ATTRIBUTE)
 		if typeof(target) ~= "Vector3" then

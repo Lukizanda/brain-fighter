@@ -1,7 +1,7 @@
 ---
 type: system
 description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. One boss cycle per arena session, started on RoundStarted and stopped on RoundEnded; HUD remotes, perception and skill targets are all scoped to the BossPoint's arena (Phase 6 stage 3 + refactor chunk 9).
-updated: 2026-11-18
+updated: 2026-11-25
 ---
 
 # Boss
@@ -479,6 +479,30 @@ Verified 2026-11-18: `ward_holds_then_breaks`, `ward_ends_with_boss` and
 Seen in one real bot fight the same day ([[design/ai-playtest]] § Third and fourth
 runs): health stopped at 750 of 1500, four letters popped, floor cleared, walk speed
 6 to 9. **No person has watched one on a client**, so the cues are unjudged.
+
+## Scramble puzzle (Phase 8 stage 12, 2026-11-25)
+
+Takes the spore lob's slot: a type with both `bomb*` and `spore*` configured lobs the
+puzzle only (`bossbb.bombs or bossbb.spores` in `BossStates`), so the Brain no longer
+lobs spores, though their code and tests remain. The rule, the numbers and the history
+are in [[design/scramble-bomb]] § As committed.
+
+- `Boss/Scripts/BossBombs.luau` is one object per boss, like `BossSpores`: it picks
+  the word and the scramble, guards the landing, owns the timer, judges taps, hatches
+  the unsolved letters and flies them. `BossController` ticks it with the real `dt`.
+- A puzzle is a Model tagged `ScrambleBomb` in `workspace.ScrambleBombs`, created at
+  landing; its state is attributes (`BombLetters`, `BombAccepted`, `BombHatchAt`,
+  `BombPhase`, `BombCentre`, `BombReach` and others). `Shared/Boss/BombConstants` is
+  the contract. `BossBombs` is their only writer.
+- Taps arrive on `Shared.Boss.BossEvents.BombTap` through `Boss/BombTapService`
+  (rate, arena, living character, reach) and are judged by `Shared/Boss/BombRules`,
+  the same module the client predicts with ([[concepts/ClientServerPredictionParity]]).
+- Server events in `Boss/Events`: `BombLanded`, `BombPopped`, `BombDefused` (carries
+  the energy share), `BombBroken`, `BombHatched`, `BombBurst`. Economy credits the
+  word from `BombDefused`; the boss credits nothing itself.
+- The client draws everything: `client/Vfx/BombVisuals` (on Heartbeat, because
+  `RenderStepped` does not fire on the MCP-driven test client) and
+  `client/BombTapController`.
 
 ## Future Work
 

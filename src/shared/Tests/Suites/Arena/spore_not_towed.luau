@@ -46,7 +46,7 @@ return {
 		local spore = BlockPoolRegistry.spawnSpore(ARENA_ID, SPORE_LETTER, SPORE_COLOR, sporeAt, SPORE_FUSE_SEC)
 		ctx.sporeMade = spore ~= nil
 		local hunger = BossHunger.new(boss, humanoid, root, hungerFixture.spec(
-			INTERVAL_SEC, RADIUS_STUDS, FRACTION, hungerFixture.FAST_PULL_SPEED, hungerFixture.REACH_STUDS
+			INTERVAL_SEC, RADIUS_STUDS, FRACTION, hungerFixture.FAST_MARK_SEC, hungerFixture.FAST_SNAP_SEC, hungerFixture.REACH_STUDS
 		))
 		if not hunger or not spore then
 			return

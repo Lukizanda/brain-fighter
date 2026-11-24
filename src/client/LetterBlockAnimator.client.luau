@@ -31,6 +31,7 @@ local TweenService = game:GetService("TweenService")
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 local TowConstants = require(ReplicatedStorage.Shared.BlockSpawner.TowConstants)
+local TowCurve = require(ReplicatedStorage.Shared.BlockSpawner.TowCurve)
 
 local NEAR_THRESHOLD_STUDS = 60
 local FAR_THRESHOLD_STUDS  = 150
@@ -464,11 +465,48 @@ RunService.Heartbeat:Connect(function(dt)
 			-- held-still pivot is very visible on a block that is moving.
 			local towPosition = block:GetAttribute(TowConstants.POSITION_ATTRIBUTE)
 			local towed = typeof(towPosition) == "Vector3"
+			-- A tow with a schedule (hold, then snap) is placed differently in
+			-- its two phases. Held, the block follows the published position
+			-- (where it began) and trembles, more as the snap nears. Snapping,
+			-- it is placed here as a pure function of server time on TowCurve,
+			-- from where it was held to the current target, so it arrives at
+			-- the published arrive time instead of being smeared by smoothing
+			-- a 0.35 s move.
+			local trembleOffset = Vector3.zero
 			if towed then
-				state.basePosition = state.basePosition:Lerp(
-					towPosition :: Vector3,
-					1 - math.exp(-TowConstants.FOLLOW_RATE_PER_SEC * dt)
-				)
+				local snapAt = block:GetAttribute(TowConstants.SNAP_AT_ATTRIBUTE)
+				local arriveAt = block:GetAttribute(TowConstants.ARRIVE_AT_ATTRIBUTE)
+				local from = block:GetAttribute(TowConstants.FROM_ATTRIBUTE)
+				local target = block:GetAttribute(TowConstants.TARGET_ATTRIBUTE)
+				local scheduled = type(snapAt) == "number" and type(arriveAt) == "number"
+					and typeof(from) == "Vector3" and typeof(target) == "Vector3"
+				local serverNow = workspace:GetServerTimeNow()
+				local pausedAt = block:GetAttribute(TowConstants.PAUSED_AT_ATTRIBUTE)
+				if type(pausedAt) == "number" then
+					serverNow = math.min(serverNow, pausedAt)
+				end
+				if scheduled and serverNow >= snapAt then
+					state.basePosition = TowCurve.position(from, target, serverNow, snapAt, arriveAt)
+				else
+					state.basePosition = state.basePosition:Lerp(
+						towPosition :: Vector3,
+						1 - math.exp(-TowConstants.FOLLOW_RATE_PER_SEC * dt)
+					)
+					local beganAt = block:GetAttribute(TowConstants.BEGAN_AT_ATTRIBUTE)
+					if scheduled and type(beganAt) == "number" and snapAt > beganAt then
+						local progress = math.clamp((serverNow - beganAt) / (snapAt - beganAt), 0, 1)
+						local amplitude = lerp(
+							TowConstants.TREMBLE_STUDS_START, TowConstants.TREMBLE_STUDS_END, progress
+						)
+						local phase = (now + state.phaseOffset) * TowConstants.TREMBLE_HZ * TAU
+						local ratios = TowConstants.TREMBLE_AXIS_RATIOS
+						trembleOffset = Vector3.new(
+							math.sin(phase * ratios.X),
+							math.sin(phase * ratios.Y),
+							math.sin(phase * ratios.Z)
+						) * amplitude
+					end
+				end
 			end
 
 			local shouldUpdate: boolean
@@ -493,7 +531,7 @@ RunService.Heartbeat:Connect(function(dt)
 			if shouldUpdate then
 				local bobOffset = math.sin((now + state.phaseOffset) * BOB_FREQUENCY) * BOB_AMPLITUDE_STUDS
 				block:PivotTo(
-					CFrame.new(state.basePosition + Vector3.new(0, bobOffset, 0))
+					CFrame.new(state.basePosition + Vector3.new(0, bobOffset, 0) + trembleOffset)
 					* CFrame.fromAxisAngle(state.spinAxis, state.rotation)
 				)
 			end

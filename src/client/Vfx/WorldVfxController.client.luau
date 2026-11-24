@@ -20,12 +20,16 @@
 -- server-simulated, so without this nothing would be visible for boss and
 -- NPC fire at all — see wiki/systems/SkillPipeline.md § "Projectile
 -- visuals are client-local" for why the seen shot is client-local.
+--
+-- `lob` payloads draw the boss's spore lob telegraph (CosmeticLob): pods in
+-- flight and a landing marker each, drawn even with Reduced effects on.
 ----------------------------------------------------------------------
 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Arena           = require(ReplicatedStorage.Shared.GameMode.Arena)
+local CosmeticLob      = require(ReplicatedStorage.Shared.Vfx.CosmeticLob)
 local CosmeticProjectile = require(ReplicatedStorage.Shared.Vfx.CosmeticProjectile)
 local HealthConstants = require(ReplicatedStorage.Shared.Health.HealthConstants)
 local Hittables       = require(ReplicatedStorage.Shared.Skills.Hittables)
@@ -39,6 +43,9 @@ local spawnEffect     = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
 local log         = Logger.new("WorldVfxController")
 local LocalPlayer = Players.LocalPlayer
+
+-- A lob draws a pod and a marker per landing; more than this is a bad payload.
+local MAX_LOB_LANDINGS = 16
 
 local Remotes       = ReplicatedStorage.Shared.Vfx.Remotes
 local WorldVfxEvent = Remotes:WaitForChild("WorldVfxEvent") :: RemoteEvent
@@ -241,6 +248,37 @@ local handlers: { [string]: (payload: any) -> () } = {
 			drawAt           = SkillVisuals.spawnEffectAtPoint,
 			shellContactFor  = shellContactFor(payload.source),
 			rigWithin        = rigWithinFor(payload.source),
+		})
+	end,
+
+	-- Pods in flight plus a landing marker each. Every field is checked; a
+	-- landing that fails is skipped and the rest still draw.
+	lob = function(payload: any)
+		if typeof(payload.origin) ~= "Vector3" then return end
+		if typeof(payload.launchedAt) ~= "number" or typeof(payload.arriveAt) ~= "number" then return end
+		if typeof(payload.color) ~= "Color3" then return end
+		if typeof(payload.markerRadius) ~= "number" or payload.markerRadius <= 0 then return end
+		if typeof(payload.landings) ~= "table" then return end
+		local landings: { CosmeticLob.LobLanding } = {}
+		for index, landing in payload.landings do
+			if #landings >= MAX_LOB_LANDINGS then break end
+			if typeof(index) ~= "number" or typeof(landing) ~= "table" then continue end
+			if typeof(landing.arrival) ~= "Vector3" or typeof(landing.ground) ~= "Vector3" then continue end
+			table.insert(landings, {
+				arrival    = landing.arrival,
+				ground     = landing.ground,
+				glyph      = if typeof(landing.glyph) == "string" then landing.glyph else nil,
+				glyphColor = if typeof(landing.glyphColor) == "Color3" then landing.glyphColor else nil,
+			})
+		end
+		if #landings == 0 then return end
+		CosmeticLob.launch({
+			origin       = payload.origin,
+			landings     = landings,
+			launchedAt   = payload.launchedAt,
+			arriveAt     = payload.arriveAt,
+			color        = payload.color,
+			markerRadius = payload.markerRadius,
 		})
 	end,
 

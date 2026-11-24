@@ -28,6 +28,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Arena = require(ReplicatedStorage.Shared.GameMode.Arena)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 local TowConstants = require(ReplicatedStorage.Shared.BlockSpawner.TowConstants)
+local TowCurve = require(ReplicatedStorage.Shared.BlockSpawner.TowCurve)
 local BossHunger = require(ServerScriptService.Server.Boss.Scripts.BossHunger)
 local BlockShootConstants = require(ServerScriptService.Server.BlockShoot.BlockShootConstants)
 local BlockShootValidation = require(ServerScriptService.Server.BlockShoot.BlockShootValidation)
@@ -35,10 +36,15 @@ local hungerFixture = require(ReplicatedStorage.Shared.Tests.Helpers.hungerFixtu
 
 local ARENA_ID = "HungerPop"
 local INTERVAL_SEC = 1
-local PULL_SPEED = 80
+local MARK_SEC = 1
+local SNAP_SEC = 1
+-- A tick that finishes the mark and carries the yank most of the way (not all).
+local YANK_FRACTION_OF_SNAP = 0.9
+local MID_MARK_SEC = MARK_SEC * 0.5
+local YANK_TICK_SEC = MARK_SEC - MID_MARK_SEC + SNAP_SEC * YANK_FRACTION_OF_SNAP
 local REACH_STUDS = 1
--- Starts this far beyond the pop range; one 1 s tow tick carries it
--- PULL_SPEED studs, which puts it PULL_SPEED - BEYOND_RANGE_STUDS inside.
+-- Starts this far beyond the pop range; the yank tick carries it
+-- most of the way in, which puts it inside range.
 local BEYOND_RANGE_STUDS = 30
 local NEVER_REFILL_SEC = 600
 local POSITION_TOLERANCE_STUDS = 0.01
@@ -67,7 +73,7 @@ return {
 		local zoneAt = root.Position + startOffset
 		local pool = hf:pool({ hf:zone(zoneAt) }, NEVER_REFILL_SEC)
 		local hunger = BossHunger.new(boss, humanoid, root, hungerFixture.spec(
-			INTERVAL_SEC, startOffset.X + 1, 0, PULL_SPEED, REACH_STUDS
+			INTERVAL_SEC, startOffset.X + 1, 0, MARK_SEC, SNAP_SEC, REACH_STUDS
 		))
 		local block = hf:blockAt(pool, zoneAt)
 		if not hunger or not block then
@@ -82,9 +88,12 @@ return {
 		ctx.rangeBefore = BlockShootValidation.checkRange(character, block)
 
 		hunger:tick(INTERVAL_SEC) -- begins the tow
-		hunger:tick(INTERVAL_SEC) -- one carry of PULL_SPEED studs
+		hunger:tick(MID_MARK_SEC) -- mid-mark: the letter is held
+		ctx.heldInMark = (block:GetPivot().Position - startAt).Magnitude < POSITION_TOLERANCE_STUDS
+		hunger:tick(YANK_TICK_SEC) -- the mark ends and the yank carries it most of the way
 		ctx.inTow = pool:isTowed(block) and CollectionService:HasTag(block, TowConstants.TAG)
 		ctx.moved = (block:GetPivot().Position - startAt).Magnitude
+		ctx.expectedMoved = (root.Position - startAt).Magnitude * TowCurve.fraction(SNAP_SEC * YANK_FRACTION_OF_SNAP, SNAP_SEC)
 
 		local checked, _ = BlockShootValidation.checkBlock(block)
 		ctx.checkBlock = checked == block
@@ -120,8 +129,11 @@ return {
 		if not ctx.inTow then
 			return false, "the block was not in tow (or lacked the tow tag)"
 		end
-		if math.abs(ctx.moved - PULL_SPEED) > POSITION_TOLERANCE_STUDS then
-			return false, string.format("the block moved %s studs, expected %d", tostring(ctx.moved), PULL_SPEED)
+		if not ctx.heldInMark then
+			return false, "the block moved during the mark instead of being held"
+		end
+		if math.abs(ctx.moved - ctx.expectedMoved) > POSITION_TOLERANCE_STUDS then
+			return false, string.format("the block moved %s studs, expected %s", tostring(ctx.moved), tostring(ctx.expectedMoved))
 		end
 		if not ctx.checkBlock or not ctx.stillBlockTag then
 			return false, "the block in tow no longer passes the block check (tag or workspace)"

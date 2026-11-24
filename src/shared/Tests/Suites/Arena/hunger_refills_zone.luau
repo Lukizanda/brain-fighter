@@ -27,7 +27,6 @@ local TOO_EARLY_SEC = 0.15
 local REFILL_TIMEOUT_SEC = 2
 local POLL_SEC = 0.05
 local ZONES = 2
-local SLOW_PULL_SPEED = 0.01
 
 local function waitForZone(hf: any, pool: any, at: Vector3): boolean
 	local waited = 0
@@ -52,10 +51,10 @@ return {
 		local beyondAt = root.Position + BEYOND_OFFSET
 		local pool = hf:pool({ hf:zone(nearAt), hf:zone(beyondAt) }, RESPAWN_SEC)
 		local fast = BossHunger.new(boss, humanoid, root, hungerFixture.spec(
-			INTERVAL_SEC, RADIUS_STUDS, 0, hungerFixture.FAST_PULL_SPEED, hungerFixture.REACH_STUDS
+			INTERVAL_SEC, RADIUS_STUDS, 0, hungerFixture.FAST_MARK_SEC, hungerFixture.FAST_SNAP_SEC, hungerFixture.REACH_STUDS
 		))
 		local slow = BossHunger.new(boss, humanoid, root, hungerFixture.spec(
-			INTERVAL_SEC, RADIUS_STUDS, 0, SLOW_PULL_SPEED, hungerFixture.REACH_STUDS
+			INTERVAL_SEC, RADIUS_STUDS, 0, hungerFixture.HOLD_FOREVER_MARK_SEC, hungerFixture.FAST_SNAP_SEC, hungerFixture.REACH_STUDS
 		))
 		if not fast or not slow then
 			return

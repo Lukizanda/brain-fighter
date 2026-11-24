@@ -28,11 +28,14 @@
 -- fires, with a trailing `wasSpore` flag it read off the block before
 -- destroying it; BlockShootService does nothing else with the flag.
 --
--- What the player sees goes through VfxBroadcast with existing effect ids as
--- stand-ins (BossConstants.SPORE_*): the throw, a ring where each spore will
--- land, the landing and the burst. The fuse itself is drawn on the block by
--- the client script SporeLetterVisuals from the expiry time the pool
--- publishes. Nothing here draws or makes a sound of its own.
+-- What the player sees goes through VfxBroadcast: the throw (a stand-in sound
+-- cue, BossConstants.SPORE_*), one `lob` for the pods in flight and a landing
+-- marker each (the letter and colour of every spore are rolled at the throw so
+-- the pod shows what is coming, and the landing spawns exactly those), then the
+-- landing and the burst with existing effect ids as stand-ins. The fuse and
+-- its burst radius are drawn on the block by the client script
+-- SporeLetterVisuals from what the pool publishes. Nothing here draws or makes
+-- a sound of its own.
 --
 -- Damage goes through Health's applyDamage.process, the one writer of
 -- Humanoid.Health: the burst with `sourcePlayer = nil` (it is the boss's, and
@@ -77,6 +80,7 @@ local BlockPoolRegistry = require(ServerScriptService.Server.BlockSpawner.BlockP
 local log = Logger.new("BossSpores")
 
 local TAU = math.pi * 2
+local WHITE = Color3.new(1, 1, 1)
 
 local BossSpores = {}
 BossSpores.__index = BossSpores
@@ -90,10 +94,19 @@ type Spore = {
 	burstAt: number,
 }
 
--- A lob in flight: where each spore will land (ground point) and when.
+-- One spore of a lob in flight: where it will land (ground point) and the
+-- letter and colour rolled at the throw, so the pod can show what is coming and
+-- _land spawns exactly that.
+type LobSpore = {
+	ground: Vector3,
+	letter: string,
+	color: string,
+}
+
+-- A lob in flight: its spores and when they land.
 type Lob = {
 	landAt: number,
-	grounds: { Vector3 },
+	spores: { LobSpore },
 	onLanded: () -> (),
 }
 
@@ -266,32 +279,43 @@ function BossSpores.beginLob(self: BossSporesInstance, targetPosition: Vector3, 
 		return false
 	end
 	local arenaId = Arena.idOf(self._boss)
-	local grounds: { Vector3 } = {}
+	local landAt = workspace:GetServerTimeNow() + self._flightSec
+	local sporeRolls: { LobSpore } = {}
+	local landings: { VfxBroadcast.LobLanding } = {}
 	for _ = 1, self._count do
 		local angle = math.random() * TAU
 		local distance = math.random() * self._landRadius
 		local x = targetPosition.X + math.cos(angle) * distance
 		local z = targetPosition.Z + math.sin(angle) * distance
 		local groundY = self:_groundBelow(Vector3.new(x, targetPosition.Y, z), targetPosition.Y, arenaId)
-		table.insert(grounds, Vector3.new(x, groundY, z))
+		local ground = Vector3.new(x, groundY, z)
+		-- Rolled now, not at the landing, so the pod can show the letter.
+		local letter = LetterTables.pick(self._letterTable)
+		local color = if Wildcard.isWildcard(letter) then Wildcard.COLOR else self._colors[math.random(1, #self._colors)]
+		table.insert(sporeRolls, { ground = ground, letter = letter, color = color })
+		table.insert(landings, {
+			arrival = ground + Vector3.new(0, self._hoverHeight, 0),
+			ground = ground,
+			glyph = Wildcard.toDisplay(letter),
+			glyphColor = LetterBlocks.COLOR_TINTS[color]:Lerp(WHITE, BossConstants.SPORE_GLYPH_LIGHTEN),
+		})
 	end
 	self._lob = {
-		landAt = workspace:GetServerTimeNow() + self._flightSec,
-		grounds = grounds,
+		landAt = landAt,
+		spores = sporeRolls,
 		onLanded = onLanded,
 	}
 
-	-- The throw, and a ring on the ground at each landing spot for the flight.
-	VfxBroadcast.playAt(
-		BossConstants.SPORE_LOB_VFX,
-		self._root.Position + Vector3.new(0, BossConstants.SPORE_LOB_ORIGIN_HEIGHT_STUDS, 0)
-	)
-	for _, ground in grounds do
-		VfxBroadcast.shockwave(ground, self._burstRadius, {
-			color = BossConstants.SPORE_RING_COLOR,
-			lifetimeSec = self._flightSec,
-		})
-	end
+	-- The throw (a sound at the boss), and the pods with a landing marker each.
+	local origin = self._root.Position + Vector3.new(0, BossConstants.SPORE_LOB_ORIGIN_HEIGHT_STUDS, 0)
+	VfxBroadcast.playAt(BossConstants.SPORE_LOB_VFX, origin)
+	VfxBroadcast.lob({
+		origin = origin,
+		landings = landings,
+		arriveAt = landAt,
+		color = BossConstants.SPORE_LOB_COLOR,
+		markerRadius = BossConstants.SPORE_LOB_MARKER_RADIUS_STUDS,
+	})
 	log:info(string.format("[%s] lobbing %d spores (land in %.1fs)", arenaId, self._count, self._flightSec))
 	return true
 end
@@ -299,11 +323,18 @@ end
 -- The flight is over: the spores appear at their landing spots.
 function BossSpores._land(self: BossSporesInstance, lob: Lob)
 	local arenaId = Arena.idOf(self._boss)
-	for _, ground in lob.grounds do
-		local letter = LetterTables.pick(self._letterTable)
-		local color = if Wildcard.isWildcard(letter) then Wildcard.COLOR else self._colors[math.random(1, #self._colors)]
+	for _, rolled in lob.spores do
+		local ground = rolled.ground
 		local position = ground + Vector3.new(0, self._hoverHeight, 0)
-		local block = BlockPoolRegistry.spawnSpore(arenaId, letter, color, position, self._fuseSec)
+		local block = BlockPoolRegistry.spawnSpore(
+			arenaId,
+			rolled.letter,
+			rolled.color,
+			position,
+			self._fuseSec,
+			self._burstRadius,
+			ground.Y
+		)
 		if block ~= nil then
 			local published = block:GetAttribute(SporeConstants.EXPIRES_ATTRIBUTE)
 			table.insert(self._live, {
@@ -332,6 +363,7 @@ function BossSpores._burst(self: BossSporesInstance, spore: Spore)
 	VfxBroadcast.shockwave(spore.ground, self._burstRadius, {
 		color = BossConstants.SPORE_RING_COLOR,
 		lifetimeSec = BossConstants.SPORE_BURST_RING_SEC,
+		yOffset = BossConstants.SPORE_BURST_RING_Y_OFFSET_STUDS,
 	})
 
 	local hit = 0

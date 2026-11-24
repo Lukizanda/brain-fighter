@@ -32,6 +32,7 @@ local BlockPoolRegistry = {}
 
 export type Tow = BlockSpawner.Tow
 export type TowStep = BlockSpawner.TowStep
+export type TowSchedule = BlockSpawner.TowSchedule
 
 function BlockPoolRegistry.register(arenaId: string, pool: BlockSpawner.BlockSpawner)
 	pools[arenaId] = pool
@@ -73,6 +74,15 @@ function BlockPoolRegistry.advanceTow(
 	return pool:advanceTow(block, target, speed, reach, dt)
 end
 
+-- Publish a tow's hold-then-snap schedule for clients (see
+-- BlockSpawner.scheduleTow). Does nothing when the arena has no pool.
+function BlockPoolRegistry.scheduleTow(arenaId: string, block: Model, schedule: TowSchedule)
+	local pool = pools[arenaId]
+	if pool ~= nil then
+		pool:scheduleTow(block, schedule)
+	end
+end
+
 -- End a tow by removing the block.
 function BlockPoolRegistry.cancelTow(arenaId: string, block: Model)
 	local pool = pools[arenaId]
@@ -82,20 +92,23 @@ function BlockPoolRegistry.cancelTow(arenaId: string, block: Model)
 end
 
 -- Spawns a spore (a timed, marked, poppable block; see BlockSpawner.spawnSpore)
--- at `position` in `arenaId`'s pool, with a fuse of `fuseSec`. nil when the
--- arena has no pool.
+-- at `position` in `arenaId`'s pool, with a fuse of `fuseSec`. The optional
+-- `burstRadius` and `groundY` are published for the client's burst ring. nil
+-- when the arena has no pool.
 function BlockPoolRegistry.spawnSpore(
 	arenaId: string,
 	letter: string,
 	color: string,
 	position: Vector3,
-	fuseSec: number
+	fuseSec: number,
+	burstRadius: number?,
+	groundY: number?
 ): Model?
 	local pool = pools[arenaId]
 	if pool == nil then
 		return nil
 	end
-	return pool:spawnSpore(letter, color, position, fuseSec)
+	return pool:spawnSpore(letter, color, position, fuseSec, burstRadius, groundY)
 end
 
 -- Removes one spore (it burst). False when the arena has no pool or the block

@@ -18,7 +18,8 @@ local DELAY_SEC = 1
 local INTERVAL_SEC = 0.2
 -- Generous: the block is a few studs from the BossPoint and the boss stands on it.
 local RADIUS_STUDS = 40
-local PULL_SPEED = 200
+local MARK_SEC = 0.1
+local SNAP_SEC = 0.1
 local REACH_STUDS = 4
 local BLOCK_OFFSET = Vector3.new(12, 4, 0)
 -- Several intervals of hold with nobody arrived.
@@ -46,7 +47,8 @@ return {
 			configureSpec = function(spec: any)
 				spec.eatIntervalSec = INTERVAL_SEC
 				spec.eatRadius = RADIUS_STUDS
-				spec.eatPullSpeed = PULL_SPEED
+				spec.eatMarkSec = MARK_SEC
+				spec.eatSnapSec = SNAP_SEC
 				spec.eatReach = REACH_STUDS
 				spec.eatHealFraction = 0
 			end,

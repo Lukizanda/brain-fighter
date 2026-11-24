@@ -3,7 +3,7 @@
 ----------------------------------------------------------------------
 -- hunger_ends_with_boss — a letter in tow is removed when the boss dies or the round ends
 ----------------------------------------------------------------------
--- REAL BOSS (as hunger_eats_nearest), with a slow pull so a letter is in tow
+-- REAL BOSS (as hunger_eats_nearest), with a long mark so a letter is in tow
 -- for seconds. Two scenarios, each with its own boss and arena:
 --   death     the boss's health goes to 0 (its death handler destroys the
 --             controller): the letter is removed, the boss does not heal
@@ -20,7 +20,8 @@ local hungerFixture = require(ReplicatedStorage.Shared.Tests.Helpers.hungerFixtu
 
 local INTERVAL_SEC = 0.4
 local RADIUS_STUDS = 60
-local PULL_SPEED = 5
+local MARK_SEC = 30
+local SNAP_SEC = 0.35
 local REACH_STUDS = 4
 local FRACTION = 0.1
 local ZONE_OFFSET = Vector3.new(40, 0, 0)
@@ -49,7 +50,8 @@ local function runScenario(ctx: any, scenario: Scenario): string?
 		configureSpec = function(spec: any)
 			spec.eatIntervalSec = INTERVAL_SEC
 			spec.eatRadius = RADIUS_STUDS
-			spec.eatPullSpeed = PULL_SPEED
+			spec.eatMarkSec = MARK_SEC
+			spec.eatSnapSec = SNAP_SEC
 			spec.eatReach = REACH_STUDS
 			spec.eatHealFraction = FRACTION
 		end,

@@ -30,6 +30,7 @@ local SimRunner = {}
 local DEFAULT_FIGHTS = 50
 -- Yield this often so Studio's main thread is not held for the batch.
 local FIGHTS_PER_YIELD = 5
+local PERCENT = 100
 
 export type Options = {
 	arenaId: string,
@@ -55,6 +56,7 @@ local COLUMNS: { { any } } = {
 	{ "m10_deadTime", "dead", "%4.0f", true, 1 },
 	{ "m5_pacing", "pace", "%4.2f", false, 1 },
 	{ "m13_burst", "burst%", "%3.0f", false, 100 },
+	{ "exposedShare", "exp%", "%3.0f", false, 100 },
 	{ "m12_t1", "T1%", "%3.0f", false, 100 },
 	{ "m12_t2", "T2%", "%3.0f", false, 100 },
 	{ "m12_t3", "T3%", "%3.0f", false, 100 },
@@ -118,6 +120,78 @@ function SimRunner.run(options: Options): (string, { [string]: any })
 				else
 					table.insert(cells, column[2] .. "=-")
 				end
+			end
+			-- Scramble bomb columns, only for fights that had bombs. Rates are
+			-- of the bombs landed (ratio of the per-fight means).
+			local landed = agg.bombLanded
+			if landed and landed.mean > 0 then
+				local function rate(key: string): number
+					local entry = agg[key]
+					return if entry then entry.mean / landed.mean * PERCENT else 0
+				end
+				table.insert(cells, string.format("defused%%=%3.0f", rate("bombDefused")))
+				table.insert(cells, string.format("burstHit%%=%3.0f", rate("bombBurstHit")))
+				local share = agg.bombShare
+				table.insert(cells, string.format("defuseShare%%=%3.0f", if share then share.mean * PERCENT else 0))
+				local lost = agg.bombLostSec
+				table.insert(cells, string.format("solveSec=%4.0f", if lost then lost.mean else 0))
+				-- Two-phase puzzle (rest, then hatch into seekers): only when a
+				-- puzzle hatched. Per fight unless noted.
+				local hatched = agg.bombHatched
+				if hatched ~= nil and hatched.mean > 0 then
+					local function perFight(key: string): number
+						local entry = agg[key]
+						return if entry then entry.mean else 0
+					end
+					table.insert(cells, string.format("puzzles=%4.1f", landed.mean))
+					table.insert(cells, string.format("hatched%%=%3.0f", rate("bombHatched")))
+					table.insert(cells, string.format("seekers=%4.1f", perFight("seekersHatched")))
+					table.insert(cells, string.format("sk[pop/plr/wall/exp]=%.1f/%.1f/%.1f/%.1f",
+						perFight("seekersPopped"), perFight("seekersOnPlayer"), perFight("seekersOnWall"), perFight("seekersExpired")))
+					table.insert(cells, string.format("seekDmg=%4.0f", perFight("seekerDamage")))
+					table.insert(cells, string.format("seekDeaths=%3.2f", perFight("seekerDeaths")))
+					table.insert(cells, string.format("searchLostSec=%4.0f", perFight("searchLostSec")))
+				end
+			end
+			-- Letter missile columns, only for fights that fired salvos. Rates are
+			-- of the salvos (or of the missiles launched), ratios of the per-fight means.
+			local salvoMean = agg.salvos
+			if salvoMean and salvoMean.mean > 0 then
+				local function ofSalvos(key: string): number
+					local entry = agg[key]
+					return if entry then entry.mean / salvoMean.mean * PERCENT else 0
+				end
+				local fired = agg.missiles
+				local function ofMissiles(key: string): number
+					local entry = agg[key]
+					return if entry and fired and fired.mean > 0 then entry.mean / fired.mean * PERCENT else 0
+				end
+				local function perFight(key: string): number
+					local entry = agg[key]
+					return if entry then entry.mean else 0
+				end
+				table.insert(cells, string.format("salvos=%4.1f", salvoMean.mean))
+				table.insert(cells, string.format("done%%=%3.0f", ofSalvos("salvoDone")))
+				table.insert(cells, string.format("broke%%=%3.0f", ofSalvos("salvoWrongPop")))
+				table.insert(cells, string.format("broken%%=%3.0f", ofSalvos("salvoBroken")))
+				table.insert(cells, string.format("fled%%=%3.0f", ofSalvos("salvoFled")))
+				local fledMean = agg.salvoFled
+				local fledHit = agg.salvoFledHit
+				table.insert(cells, string.format("fledHit%%=%3.0f",
+					if fledMean and fledHit and fledMean.mean > 0 then fledHit.mean / fledMean.mean * PERCENT else 0))
+				local doneSec = agg.salvoDoneSec
+				table.insert(cells, string.format("doneSec=%4.1f", if doneSec then doneSec.median else 0))
+				table.insert(cells, string.format("salvoHit%%=%3.0f", ofSalvos("salvoHit")))
+				table.insert(cells, string.format("popOk%%=%3.0f", ofMissiles("missilePopOk")))
+				table.insert(cells, string.format("popHarmless%%=%3.0f", ofMissiles("missilePopHarmless")))
+				table.insert(cells, string.format("onPlayer%%=%3.0f", ofMissiles("missileOnPlayer")))
+				table.insert(cells, string.format("wallExp%%=%3.0f", ofMissiles("missileOther")))
+				table.insert(cells, string.format("missDmg=%4.0f", perFight("missileDamage")))
+				table.insert(cells, string.format("missDeaths=%3.1f", perFight("missileDeaths")))
+				local share = agg.bombShare
+				table.insert(cells, string.format("wordShare%%=%3.0f", if share then share.mean * PERCENT else 0))
+				table.insert(cells, string.format("energy=%4.0f", perFight("missileEnergy")))
+				table.insert(cells, string.format("searchLost=%4.0f", perFight("salvoLostSec")))
 			end
 			table.insert(lines, table.concat(cells, " "))
 		end

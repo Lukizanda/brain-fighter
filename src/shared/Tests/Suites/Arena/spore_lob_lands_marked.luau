@@ -18,7 +18,12 @@
 --   * destroying the object removes them, and a lob still in the air then
 --     lands nothing.
 --
--- NOT covered: the throw and landing cues (a client view is needed).
+-- The letter and colour are rolled at the throw (beginLob) and spawned as
+-- rolled at the landing; the checks above hold either way.
+--
+-- NOT covered: the throw and landing cues, the lob pods and markers and the
+-- burst-radius ring (a client view is needed), and that the letters landed are
+-- the ones rolled at the throw (not observable from here).
 ----------------------------------------------------------------------
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

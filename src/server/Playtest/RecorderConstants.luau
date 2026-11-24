@@ -49,6 +49,31 @@ RecorderConstants.LOB_BATCH_SEC = 0.25
 -- having burst (clock and rounding slack); earlier it was popped or cleared.
 RecorderConstants.BURST_SLACK_SEC = 0.25
 
+-- Scramble bombs: a defuse is a `boss_damage` with this spell name at this
+-- tier (FightSim's "Bomb"); a burst's player damage carries it as its source.
+-- The bomb events are looked up under ServerScriptService.Server.Boss.Events
+-- and waited for this long.
+RecorderConstants.BOMB_SPELL = "Bomb"
+RecorderConstants.BOMB_DAMAGE_TIER = 1
+RecorderConstants.BOMB_EVENT_WAIT_SEC = 10
+-- Seekers: a burst's player damage and death carry this source (FightSim's
+-- name for it, which PlaytestMetrics counts as seeker damage / deaths).
+RecorderConstants.SEEKER_BURST_SOURCE = "Seeker"
+-- A removed seeker is told apart (burst, pop) by the BombBurst event that
+-- arrives in the same frame; one nobody claims within this long is taken to be
+-- a pop. A puzzle's end is also written this long after its model went, so the
+-- word's events have arrived.
+RecorderConstants.SEEKER_RESOLVE_SEC = 0.5
+-- How a burst came about is judged from the removed part: it is "expired"
+-- within this long before its SeekerExpiresAt, and "player" within the
+-- trigger distance plus this many studs of the recorded player (a frame of
+-- flight). The Brain's numbers are read from BossConfig; these are the values
+-- used when a boss type does not set them.
+RecorderConstants.SEEKER_EXPIRE_SLACK_SEC = 0.3
+RecorderConstants.SEEKER_CLASSIFY_SLACK_STUDS = 1.5
+RecorderConstants.SEEKER_LIFETIME_FALLBACK_SEC = 6
+RecorderConstants.SEEKER_TRIGGER_FALLBACK_STUDS = 3
+
 RecorderConstants.OUTCOME_WIN = "win"
 RecorderConstants.OUTCOME_TIMEOUT = "timeout"
 

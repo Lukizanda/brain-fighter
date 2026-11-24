@@ -86,6 +86,20 @@ local BossConstants = {
 	-- and where it burst (briefly): the burst radius, in this colour.
 	SPORE_RING_COLOR = Color3.fromRGB(255, 70, 20),
 	SPORE_BURST_RING_SEC = 0.4,
+	-- The burst ring is SkillVisuals' shockwave disc (0.4 studs thick, centred on
+	-- its Y). Its default offset (-2) is for a centre at a character's root and
+	-- buries a ground-level ring, so the burst passes this: half the thickness
+	-- plus a hair, which puts the disc's underside just above the surface.
+	SPORE_BURST_RING_Y_OFFSET_STUDS = 0.3,
+	-- The lob's pods and landing markers (VfxBroadcast.lob). The colour is the
+	-- spore violet and MUST match TelegraphConstants.SPORE_TINT on the client
+	-- (src/client/Vfx/BossPoses), so the windup glow and the pods read as one.
+	SPORE_LOB_COLOR = Color3.fromRGB(170, 90, 230),
+	-- The landing marker's radius: the spot the spore lands on, not the burst.
+	SPORE_LOB_MARKER_RADIUS_STUDS = 3,
+	-- A pod's glyph is the block's face colour: the colour tint lightened by this
+	-- much toward white. Matches LetterBlocks' LETTER_LIGHTEN (private there).
+	SPORE_GLYPH_LIGHTEN = 0.75,
 	-- Finding the ground under a landing point: probe down from this far above
 	-- the target's root for this far. Without a hit (no floor, a test arena) the
 	-- ground is taken to be this far below the target's root, a character's
@@ -147,6 +161,16 @@ local BossConstants = {
 	WARD_LETTERS_LEFT_ATTRIBUTE = "WardLettersLeft",
 	-- Where the letter the boss is eating is (Vector3), while it pulls one.
 	EATING_AT_ATTRIBUTE = "EatingAt",
+	-- EatingAt is re-published only once the letter has moved this far
+	-- (studs), so a pull does not replicate every frame.
+	EATING_AT_MIN_MOVE = 1,
+	-- When the yank of the letter in tow starts, and when it lands (number,
+	-- workspace:GetServerTimeNow() seconds), so the body can whip and gulp.
+	-- Cleared with EatingAt when the tow ends without the letter being eaten;
+	-- left in place when it was eaten, so the client can still play the gulp
+	-- that follows the landing (the next tow overwrites them).
+	EAT_SNAP_AT_ATTRIBUTE = "EatSnapAt",
+	EAT_LANDS_AT_ATTRIBUTE = "EatLandsAt",
 }
 
 return BossConstants

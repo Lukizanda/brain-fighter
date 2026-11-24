@@ -19,6 +19,12 @@
 -- lob of three, one lob in about two attacks), so the engine's cap on drawn
 -- Highlights is not a worry here, unlike one per field block.
 --
+-- The same script draws the burst radius: a ground ring (CosmeticRing, outline
+-- plus a fill) under the block for the whole fuse, in the fuse orange, filling
+-- from the centre to the full radius exactly at the expiry time. The pool
+-- publishes the radius, the ground height and the fuse's length next to the
+-- expiry (SporeConstants), so the client does not raycast for the floor.
+--
 -- Everything is client-local and is removed with the block.
 ----------------------------------------------------------------------
 
@@ -27,6 +33,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local SporeConstants = require(ReplicatedStorage.Shared.BlockSpawner.SporeConstants)
+local CosmeticRing = require(ReplicatedStorage.Shared.Vfx.CosmeticRing)
 local LetterBlocks = require(ReplicatedStorage.Shared.LetterBlocks)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
 
@@ -37,6 +44,10 @@ local HALF = 0.5
 
 type Fuse = {
 	highlight: Highlight,
+	-- The burst-radius ring on the ground. Made on the first frame the block's
+	-- published radius and ground height are readable, so it may be nil for a
+	-- frame or for good (a spore spawned without them).
+	ring: CosmeticRing.Ring?,
 	-- Pulse phase in radians, advanced by the current rate so a change of
 	-- rate speeds the pulse up without a jump.
 	phase: number,
@@ -44,6 +55,25 @@ type Fuse = {
 }
 
 local fuses: { [Model]: Fuse } = {}
+
+-- The ring under a spore, centred on the block horizontally and on the ground
+-- height the pool published; nil until the block carries both it and the burst
+-- radius.
+local function makeRing(block: Model): CosmeticRing.Ring?
+	local radius = block:GetAttribute(SporeConstants.BURST_RADIUS_ATTRIBUTE)
+	local groundY = block:GetAttribute(SporeConstants.GROUND_Y_ATTRIBUTE)
+	if type(radius) ~= "number" or radius <= 0 or type(groundY) ~= "number" then
+		return nil
+	end
+	local centre = block:GetPivot().Position
+	return CosmeticRing.new(Vector3.new(centre.X, groundY, centre.Z), {
+		radius = radius,
+		color = SporeConstants.FILL_COLOR,
+		strokeStuds = SporeConstants.RING_STROKE_STUDS,
+		outlineTransparency = SporeConstants.RING_OUTLINE_TRANSPARENCY,
+		fillTransparency = SporeConstants.RING_FILL_TRANSPARENCY,
+	})
+end
 
 local function removeFuse(block: Model)
 	local fuse = fuses[block]
@@ -53,6 +83,9 @@ local function removeFuse(block: Model)
 	fuses[block] = nil
 	fuse.connection:Disconnect()
 	fuse.highlight:Destroy()
+	if fuse.ring ~= nil then
+		fuse.ring.destroy()
+	end
 end
 
 -- Adds the fuse look once the block is marked. The mark and the tag replicate
@@ -79,7 +112,7 @@ local function refresh(block: Model)
 	local connection = block.Destroying:Connect(function()
 		removeFuse(block)
 	end)
-	fuses[block] = { highlight = highlight, phase = 0, connection = connection }
+	fuses[block] = { highlight = highlight, ring = nil, phase = 0, connection = connection }
 end
 
 local function track(instance: Instance)
@@ -120,6 +153,16 @@ RunService.Heartbeat:Connect(function(dt)
 		local wave = (math.sin(fuse.phase) + 1) * HALF
 		fuse.highlight.FillTransparency = SporeConstants.FILL_TRANSPARENCY_MAX
 			- (SporeConstants.FILL_TRANSPARENCY_MAX - SporeConstants.FILL_TRANSPARENCY_MIN) * wave
+
+		-- The burst radius on the ground, filling to the full radius exactly
+		-- at the expiry time.
+		local fuseSec = block:GetAttribute(SporeConstants.FUSE_SEC_ATTRIBUTE)
+		if fuse.ring == nil then
+			fuse.ring = makeRing(block)
+		end
+		if fuse.ring ~= nil and type(expiresAt) == "number" and type(fuseSec) == "number" and fuseSec > 0 then
+			fuse.ring.setFill(1 - remaining / fuseSec)
+		end
 	end
 end)
 

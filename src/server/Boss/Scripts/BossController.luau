@@ -13,7 +13,13 @@
 --   3. StateMachine.tick(bb)         — advance AI state
 --   4. BossHunger.tick(dt)           — pull a nearby letter in and eat it, on a timer
 --   5. BossSpores.tick()             — land lobbed spores, burst the ones whose fuse ran out
+--      BossBombs.tick(dt)            — land the lobbed puzzle, run its timer, hatch the unsolved letters, fly the seekers
 --   6. BossWard.tick(dt)             — raise the word ward at its line, carry its letters round
+--   7. BossExposure.tick()           — take down the stun / exposed instants once they close
+--
+-- BossExposure hears an attack finishing through the blackboard's
+-- `onAttackFinished` (BossStates calls it on entering Cooldown) and the ward
+-- breaking through BossWard's `onBroken`; both are wired here.
 --
 -- The ward runs before hunger in the tick so the boss does not eat on the
 -- frame its ward goes up; it is listed last because it was added last.
@@ -37,8 +43,10 @@ local StateMachine = require(ServerScriptService.Server.AI.Scripts.StateMachine)
 local BossStates      = require(script.Parent.BossStates)
 local BossPhaseManager = require(script.Parent.BossPhaseManager)
 local BossHunger       = require(script.Parent.BossHunger)
+local BossBombs        = require(script.Parent.BossBombs)
 local BossSpores       = require(script.Parent.BossSpores)
 local BossWard         = require(script.Parent.BossWard)
+local BossExposure     = require(script.Parent.BossExposure)
 
 type BB                   = BossTypes.BossBlackboard
 type BossTypeSpec         = BossTypes.BossTypeSpec
@@ -68,7 +76,9 @@ export type BossControllerInstance = {
 	_phaseManager: PhaseManagerInstance,
 	_hunger: BossHunger.BossHungerInstance?,
 	_spores: BossSpores.BossSporesInstance?,
+	_bombs: BossBombs.BossBombsInstance?,
 	_ward: BossWard.BossWardInstance?,
+	_exposure: BossExposure.BossExposureInstance?,
 	_onPhaseChanged: ((number, any) -> ())?,
 	_alive: boolean,
 }
@@ -96,6 +106,8 @@ function BossController.new(
 	-- The spore lob, nil for a type that does not lob. Built first: the blackboard
 	-- hands it to the attack states.
 	local spores = BossSpores.new(boss, humanoid, hrp :: BasePart, typeSpec)
+	-- The scramble bomb takes the same slot and is preferred when a type has both.
+	local bombs = BossBombs.new(boss, humanoid, hrp :: BasePart, typeSpec)
 
 	local bb: BB = {
 		-- ── NPCTypes.Blackboard fields ──────────────────────────
@@ -127,6 +139,7 @@ function BossController.new(
 		attackComplete       = false,
 		cooldownStart        = 0,
 		spores               = spores :: any,
+		bombs                = bombs :: any,
 	}
 
 	-- Load per-skill windup animations into bb.animations["windup_<skillName>"]
@@ -154,13 +167,29 @@ function BossController.new(
 
 	local phaseManager = BossPhaseManager.new(humanoid, typeSpec)
 
+	-- Vulnerability windows: after a listed attack, and when the ward breaks.
+	local exposure = BossExposure.new(boss, bb, typeSpec)
+	local ward = BossWard.new(boss, humanoid, hrp :: BasePart, typeSpec)
+	if exposure then
+		bb.onAttackFinished = function(attack: string)
+			exposure:onAttackFinished(attack)
+		end
+		if ward then
+			ward:setOnBroken(function()
+				exposure:onWardBroken()
+			end)
+		end
+	end
+
 	local self = setmetatable({
 		_blackboard     = bb,
 		_decision       = decision,
 		_phaseManager   = phaseManager,
 		_hunger         = BossHunger.new(boss, humanoid, hrp :: BasePart, typeSpec),
 		_spores         = spores,
-		_ward           = BossWard.new(boss, humanoid, hrp :: BasePart, typeSpec),
+		_bombs          = bombs,
+		_ward           = ward,
+		_exposure       = exposure,
 		_onPhaseChanged = onPhaseChanged,
 		_alive          = true,
 	}, BossController)
@@ -253,6 +282,18 @@ function BossController:tick(dt: number)
 	if spores then
 		spores:tick()
 	end
+
+	-- 5b. Bombs: land the puzzle, run its timer and hatch/move seekers with the real dt.
+	local bombs = self._bombs
+	if bombs then
+		bombs:tick(dt)
+	end
+
+	-- 7. Exposure: the windows close on the clock; this tidies what was published.
+	local exposure = self._exposure
+	if exposure then
+		exposure:tick()
+	end
 end
 
 -- ---------------------------------------------------------------
@@ -274,10 +315,22 @@ function BossController:destroy()
 		ward:destroy()
 	end
 
+	-- And any window still open: a dead boss is not exposed.
+	local exposure = self._exposure
+	if exposure then
+		exposure:destroy()
+	end
+
 	-- So do the spores it lobbed, and a lob still in the air.
 	local spores = self._spores
 	if spores then
 		spores:destroy()
+	end
+
+	-- And the bombs: silently, no burst.
+	local bombs = self._bombs
+	if bombs then
+		bombs:destroy()
 	end
 
 	Perception.cleanup(asNPC(self._blackboard))

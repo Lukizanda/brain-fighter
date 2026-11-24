@@ -23,6 +23,15 @@ local SporeConstants = {
 	-- `workspace:GetServerTimeNow()` seconds (never os.clock(), which differs
 	-- per VM). The client counts down to it; the boss bursts the spore then.
 	EXPIRES_ATTRIBUTE = "SporeExpiresAt",
+	-- Numbers on the block model, published with the fuse time so the client can
+	-- draw the burst radius for the whole fuse: the fuse's total length (seconds,
+	-- how full the fill is), the burst radius (studs) and the ground height under
+	-- the block (world Y). The boss already knows all three; the client would
+	-- otherwise have to guess the ground with a raycast. Optional: a spore
+	-- spawned without them simply shows no ring.
+	FUSE_SEC_ATTRIBUTE = "SporeFuseSec",
+	BURST_RADIUS_ATTRIBUTE = "SporeBurstRadius",
+	GROUND_Y_ATTRIBUTE = "SporeGroundY",
 
 	-- The pool removes a spore this long after its fuse as a safety net, so a
 	-- spore whose boss is gone cannot float forever. The boss normally bursts
@@ -42,6 +51,12 @@ local SporeConstants = {
 	FILL_TRANSPARENCY_MAX = 0.85,
 	OUTLINE_TRANSPARENCY = 0,
 	-- Pulses a second while the fuse is long, and in its last FAST_WINDOW_SEC.
+	-- The burst-radius ring on the ground under a live spore: outline plus a
+	-- fill (in FILL_COLOR) that grows to the full radius as the fuse runs out.
+	-- Up to three overlap, so the fill is light and the outline does the work.
+	RING_STROKE_STUDS = 0.6,
+	RING_FILL_TRANSPARENCY = 0.7,
+	RING_OUTLINE_TRANSPARENCY = 0.05,
 	PULSE_BASE_HZ = 1.5,
 	PULSE_FAST_HZ = 6,
 	FAST_WINDOW_SEC = 2,

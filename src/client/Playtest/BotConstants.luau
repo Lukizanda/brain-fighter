@@ -81,4 +81,23 @@ BotConstants.COLORS = { "red", "green", "blue" }
 BotConstants.SPORE_CHANCE_DIVISOR = 2
 BotConstants.SPORE_CHANCE_BASE = 0.5
 
+-- Scramble bombs (FightSim's bomb block; wiki/design/scramble-bomb.md). The
+-- notice chance and unscramble seconds per letter are the simulator's, read
+-- from PlaytestPersonas. The taps go through BombTapController's Studio-only
+-- `RequestBombTap` bindable (Invoke(bomb: Model, tileIndex: number) -> boolean),
+-- so a bot tap passes the client's own checks; it drops a tap within 0.25 s
+-- of the last. It is waited for this long without blocking the bot; if it
+-- never appears bombs are skipped.
+BotConstants.BOMB_TAP_CONTROLLER_NAME = "BombTapController"
+BotConstants.REQUEST_BOMB_TAP_NAME = "RequestBombTap"
+BotConstants.BOMB_BINDABLE_WAIT_SEC = 10
+-- The two-phase puzzle (FightSim `tune.bomb.hatch`; the same numbers, copied,
+-- so keep the two together). A resting puzzle is walked to and stood at this
+-- share of the CENTRE reach from the centre (FightSim SPORE_STAND_SHARE).
+BotConstants.PUZZLE_STAND_SHARE = 0.8
+-- Hurt this soon after a seeker vanished on its own = it burst on the bot
+-- (the bot cannot see a burst; this is how a persona that missed the puzzle
+-- engages its seekers).
+BotConstants.SEEKER_HURT_WINDOW_SEC = 1
+
 return BotConstants

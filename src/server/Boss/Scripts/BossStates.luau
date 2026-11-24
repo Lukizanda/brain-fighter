@@ -31,7 +31,9 @@
 -- Spore lob: a type with the `spore*` config has every Nth would-be
 -- FireballVolley replaced by "SporeLob" in AttackPrep (BossSpores counts).
 -- It winds up as the volley, and Attack hands the throw to BossSpores and
--- completes when the spores land.
+-- completes when the spores land. A type with the `bomb*` config (the scramble
+-- bomb, BossBombs) takes the same slot under the same "SporeLob" name, so the
+-- client telegraph still plays; a type with both prefers the bomb.
 ----------------------------------------------------------------------
 
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
@@ -183,9 +185,10 @@ local AttackPrepState: StateDefinition = {
 		end
 		if #candidates > 0 then
 			bossbb.selectedAttack = candidates[math.random(1, #candidates)]
-			-- A volley that is due to be a spore lob is one (BossSpores counts them).
-			local spores = bossbb.spores
-			if bossbb.selectedAttack == BossConstants.VOLLEY_ATTACK and spores and spores:replacesVolley() then
+			-- A volley that is due to be a lob is one (the lobber counts them): the
+			-- bomb when the type has one, else the spores.
+			local lobber = bossbb.bombs or bossbb.spores
+			if bossbb.selectedAttack == BossConstants.VOLLEY_ATTACK and lobber and lobber:replacesVolley() then
 				bossbb.selectedAttack = BossConstants.SPORE_LOB_ATTACK
 			end
 		else
@@ -202,7 +205,10 @@ local AttackPrepState: StateDefinition = {
 			local windupName = windupSkillName(selectedAtk)
 			local skill: SkillTypes.SkillSpec? = bossbb.bossTypeSpec.skills[windupName]
 			if skill then
-				if skill.windupVfx then
+				-- A lob skips the volley's red charge orb: the body's own tell
+				-- (stem swells, gulp) is the warning, and the orb would read as
+				-- "dodge" when the answer is to run to the spores.
+				if skill.windupVfx and selectedAtk ~= BossConstants.SPORE_LOB_ATTACK then
 					-- The whole window the player has to react in, which for an
 					-- aoe is this boss's windup plus the delivery's own: the
 					-- disc has to still be pulsing when the circle fires.
@@ -263,20 +269,20 @@ local AttackState: StateDefinition = {
 			return
 		end
 
-		-- A spore lob delivers blocks, not a skill: hand it to BossSpores and
-		-- finish when the spores land.
+		-- A lob delivers blocks or a bomb, not a skill: hand it to BossBombs (or
+		-- BossSpores) and finish when it lands.
 		if attack == BossConstants.SPORE_LOB_ATTACK then
 			local windupTrack = bossbb.animations["windup_" .. windupSkillName(attack)]
 			if windupTrack then
 				local wt = windupTrack :: any
 				if wt.IsPlaying then wt:Stop(0.1) end
 			end
-			local spores = bossbb.spores
+			local lobber = bossbb.bombs or bossbb.spores
 			local target = bossbb.targetRootPart
-			local started = spores ~= nil and target ~= nil and target.Parent ~= nil
-				and spores:beginLob(target.Position, function()
+			local started = lobber ~= nil and target ~= nil and target.Parent ~= nil
+				and lobber:beginLob(target.Position, function()
 					bossbb.attackComplete = true
-				end)
+				end, target)
 			if not started then
 				bossbb.attackComplete = true
 			end

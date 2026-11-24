@@ -24,6 +24,8 @@
 --                                                    onto a moving player
 --   VfxBroadcast.projectile(payload)               — the seen copy of a
 --                                                    server-simulated shot
+--   VfxBroadcast.lob(payload)                      — pods in flight plus a
+--                                                    landing marker each
 --   VfxBroadcast.telegraph(style, rig, ...)        — a rig's windup
 --                                                    warning
 --
@@ -94,6 +96,24 @@ export type ShockwavePayloadOpts = {
 	cosmeticEffectId: string?,
 	yOffset: number?,
 	drawnLocallyBy: number?,
+}
+
+export type LobLanding = {
+	-- Where the pod arrives (a block's hover position).
+	arrival: Vector3,
+	-- The ground point under it, where the marker is drawn.
+	ground: Vector3,
+	-- Shown on the pod, as the players will see it on the block.
+	glyph: string?,
+	glyphColor: Color3?,
+}
+
+export type LobPayload = {
+	origin: Vector3,
+	landings: { LobLanding },
+	arriveAt: number,
+	color: Color3,
+	markerRadius: number,
 }
 
 -- Resolved lazily rather than at module scope. This module is required
@@ -283,6 +303,28 @@ function VfxBroadcast.projectile(payload: ProjectilePayload)
 		hasImpactCue     = payload.hasImpactCue,
 		source           = payload.source,
 		drawnLocallyBy   = payload.drawnLocallyBy,
+	})
+end
+
+-- A lob: pods flying from `origin` to their landing points, and a marker on
+-- the ground at each that fills up as its pod arrives. Generic, not
+-- spore-specific; see CosmeticLob for what a client draws.
+--
+-- `arriveAt` is `workspace:GetServerTimeNow()` seconds (never os.clock). The
+-- send time is stamped here as `launchedAt`: clients derive the pods' position
+-- from server time between the two, so latency does not move the arrival.
+-- Landings hold plain Vector3s, never Instances (the blocks do not exist yet).
+function VfxBroadcast.lob(payload: LobPayload)
+	local r = outbound("lob")
+	if not r then return end
+	r:FireAllClients({
+		kind         = "lob",
+		origin       = payload.origin,
+		landings     = payload.landings,
+		launchedAt   = workspace:GetServerTimeNow(),
+		arriveAt     = payload.arriveAt,
+		color        = payload.color,
+		markerRadius = payload.markerRadius,
 	})
 end
 

@@ -197,10 +197,9 @@ local function popBlock(block: Model): boolean
 end
 
 local function tryPop(screenPosition: Vector2)
-	if not beginPop() then
-		return
-	end
-
+	-- The cooldown and mind-full gate (beginPop) run only once a letter block
+	-- is under the pointer, below: a tap on a scramble-bomb tile or on empty
+	-- ground is not a pop and must not play the mind-full fizzle.
 	local camera = workspace.CurrentCamera
 	if not camera then
 		log:warn("no CurrentCamera")
@@ -247,6 +246,9 @@ local function tryPop(screenPosition: Vector2)
 		return
 	end
 
+	if not beginPop() then
+		return
+	end
 	sendPop(block)
 end
 

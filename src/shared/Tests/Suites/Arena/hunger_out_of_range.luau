@@ -40,7 +40,7 @@ return {
 		local outsideAt = root.Position + JUST_OUTSIDE_OFFSET
 		local pool = hf:pool({ hf:zone(outsideAt) }, NEVER_REFILL_SEC)
 		local hunger = BossHunger.new(boss, humanoid, root, hungerFixture.spec(
-			INTERVAL_SEC, RADIUS_STUDS, FRACTION, hungerFixture.FAST_PULL_SPEED, hungerFixture.REACH_STUDS
+			INTERVAL_SEC, RADIUS_STUDS, FRACTION, hungerFixture.FAST_MARK_SEC, hungerFixture.FAST_SNAP_SEC, hungerFixture.REACH_STUDS
 		))
 		if not hunger then
 			return

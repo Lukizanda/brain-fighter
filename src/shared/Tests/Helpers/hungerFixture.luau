@@ -46,9 +46,14 @@ fixture.__index = fixture
 
 fixture.FAKE_BOSS_ORIGIN = FAKE_BOSS_ORIGIN
 fixture.KIT_LENGTH = KIT_LENGTH
--- A pull so fast that one tick of a stand-in boss carries a letter all the
--- way, and a reach small enough that "arrived" means "on the boss".
-fixture.FAST_PULL_SPEED = 1000
+-- A mark and yank so short that one tick of a stand-in boss carries a letter
+-- all the way, and a reach small enough that "arrived" means "on the boss".
+fixture.FAST_MARK_SEC = 0.01
+-- (A mark and a yank this short: one tick of 0.02 s or more carries a letter
+-- all the way.)
+fixture.FAST_SNAP_SEC = 0.01
+-- A mark so long that a letter in tow is only ever held, never yanked.
+fixture.HOLD_FOREVER_MARK_SEC = 1000
 fixture.REACH_STUDS = 3
 
 export type Fixture = typeof(setmetatable({} :: {
@@ -127,14 +132,16 @@ function fixture.spec(
 	intervalSec: number?,
 	radius: number?,
 	healFraction: number?,
-	pullSpeed: number?,
+	markSec: number?,
+	snapSec: number?,
 	reach: number?
 ): any
 	return {
 		eatIntervalSec = intervalSec,
 		eatRadius = radius,
 		eatHealFraction = healFraction,
-		eatPullSpeed = pullSpeed,
+		eatMarkSec = markSec,
+		eatSnapSec = snapSec,
 		eatReach = reach,
 	}
 end

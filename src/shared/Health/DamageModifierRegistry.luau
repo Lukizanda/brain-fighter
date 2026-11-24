@@ -1,6 +1,7 @@
 local HealthConstants = require(script.Parent.HealthConstants)
 local DamageTypes = require(script.Parent.DamageTypes)
 local HealthFloor = require(script.Parent.HealthFloor)
+local Vulnerability = require(script.Parent.Vulnerability)
 
 type DamageRequest = DamageTypes.DamageRequest
 
@@ -15,6 +16,23 @@ local function headshotModifier(request: DamageRequest): (DamageRequest, string?
 		return request, "Limb"
 	end
 	return request, nil
+end
+
+-- A character inside a vulnerability window (Vulnerability; the boss's
+-- exposed core) takes its multiplier on every hit. Before armor and shield,
+-- so it multiplies the hit itself, and before the floor, which still cuts
+-- whatever would cross it.
+local function vulnerabilityModifier(request: DamageRequest): (DamageRequest, string?)
+	local character = request.targetHumanoid:FindFirstAncestorOfClass("Model")
+	if not character then
+		return request, nil
+	end
+	local multiplier = Vulnerability.multiplierFor(character)
+	if multiplier == 1 then
+		return request, nil
+	end
+	request.baseDamage = request.baseDamage * multiplier
+	return request, string.format("Exposed(x%.2f)", multiplier)
 end
 
 local function armorModifier(request: DamageRequest): (DamageRequest, string?)
@@ -78,6 +96,7 @@ end
 
 DamageModifierRegistry.modifiers = {
 	headshotModifier,
+	vulnerabilityModifier,
 	armorModifier,
 	shieldModifier,
 	floorModifier,

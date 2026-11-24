@@ -25,6 +25,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local BlockShoot = require(Shared.BlockShoot)
+local BombConstants = require(Shared.Boss.BombConstants)
 local BossConfig = require(Shared.Boss.BossConfig)
 local BreakableWallConstants = require(Shared.Arena.BreakableWallConstants)
 local EnergyEconomy = require(Shared.EnergyEconomy)
@@ -37,6 +38,7 @@ local SpellRegistry = require(Shared.SpellRegistry)
 local Wildcard = require(Shared.Wildcard)
 local WordKits = require(Shared.BlockSpawner.WordKits)
 
+local PlaytestPersonas = require(script.Parent.Parent.PlaytestPersonas)
 local SimLevel = require(script.Parent.SimLevel)
 
 local FightSim = {}
@@ -89,6 +91,78 @@ local COVER_STANDOFF = 9
 -- A lobbed spore is in the air this long, and floats this high once down.
 local SPORE_FLIGHT_SEC = 1.5
 local SPORE_HEIGHT = 4
+-- Opt-in spore rules (`tune.spore.popReach`, `ripeWindowSec`, `popTaps`,
+-- `landMinRadius`, `landTowardBoss`, `fuseSecs`, `withVolley`). A player
+-- walking to a spore stops at this share of the pop reach.
+local SPORE_STAND_SHARE = 0.8
+-- A player who waits for ripe and mistimes either pops this long before the
+-- ripe window opens (unripe), or taps too late and eats the burst. This
+-- share of the mistimes are early.
+local SPORE_MISTIME_EARLY_LEAD_SEC = 0.5
+local SPORE_MISTIME_EARLY_SHARE = 0.5
+local SPORE_LATE_MARGIN_SEC = 1
+-- How often each persona waits for ripe instead of popping at once.
+local SPORE_GREED_DEFAULT = 0.6
+local SPORE_GREED_BY_PERSONA: { [string]: number } = { Novice = 0.3, Average = 0.6, Strong = 0.9, Combo = 0.9 }
+-- Opt-in scramble bomb (`tune.bomb`; replaces the spore lob when set).
+-- Everything below is a designer guess, see the tune.bomb doc comment.
+local BOMB_HINT_FUSE_SHARE = 0.5 -- the next letter glows after this share of the fuse
+local BOMB_DEFAULT_REACH = 20
+local BOMB_DEFAULT_LAND_RADIUS = 12
+local BOMB_DEFAULT_BURST_DAMAGE = 25
+local BOMB_DEFAULT_BURST_RADIUS = 10
+local BOMB_DEFAULT_PENALTY_SEC = 1
+local BOMB_DEFAULT_COUNT = 1
+local BOMB_DEFAULT_LETTERS_BY_PHASE: { number } = { 3, 4 }
+local BOMB_DEFAULT_FUSE_BY_LETTERS: { [number]: number } = { [3] = 8, [4] = 10 }
+local BOMB_DEFAULT_DAMAGE_BY_LETTERS: { [number]: number } = { [3] = 0.09, [4] = 0.12 }
+-- Letter missiles (`tune.bomb.missiles`; a salvo of homing missiles instead of
+-- one static bomb). Game numbers are wiki/design/scramble-bomb.md § Revision;
+-- persona behaviour numbers are designer guesses, each a tune.bomb.missiles key.
+local MISSILE_DEFAULT_SPEED = 8
+local MISSILE_DEFAULT_LAUNCH_INTERVAL_SEC = 0.4
+local MISSILE_DEFAULT_LIFETIME_SEC = 14
+local MISSILE_DEFAULT_SIDE_OFFSET = 6
+local MISSILE_DEFAULT_SIDE_CLOSE_STUDS = 10
+local MISSILE_DEFAULT_TRIGGER_STUDS = 3
+local MISSILE_DEFAULT_DAMAGE = 15
+local MISSILE_DEFAULT_RADIUS = 6
+local MISSILE_DEFAULT_REACH = 45
+local MISSILE_DEFAULT_HINT_AFTER_SEC = 3
+local MISSILE_DEFAULT_PANIC_STUDS = 8
+-- A kiting player aims this far ahead of themselves, away from the missile.
+local MISSILE_KITE_GOAL_STUDS = 10
+-- Chance a persona tries for the word rather than popping the nearest.
+local MISSILE_ORDER_SKILL_DEFAULT = 0.8
+local MISSILE_ORDER_SKILL_BY_PERSONA: { [string]: number } = { Novice = 0.4, Average = 0.8, Strong = 0.95 }
+-- Chance a persona backs off from a not-yet-wanted missile instead of popping it.
+local MISSILE_KITE_SKILL_DEFAULT = 0.6
+local MISSILE_KITE_SKILL_BY_PERSONA: { [string]: number } = { Novice = 0.2, Average = 0.6, Strong = 0.9 }
+-- Running away (`tune.bomb.missiles.fleeChance`, per salvo; 0 = nobody flees).
+-- A fleeing player walks away from the nearest seeker at walk speed instead of
+-- popping, and the word search stands still meanwhile. The player tries these
+-- headings (degrees off straight away) until one has floor under it.
+local MISSILE_FLEE_CHANCE_DEFAULT = 0
+local MISSILE_FLEE_HEADINGS_DEG: { number } = { 0, 45, -45, 90, -90, 135, -135 }
+-- The two-phase puzzle (`tune.bomb.hatch`): the static puzzle's resting phase,
+-- then its unlocked letters hatch into seekers. Defaults are the game's
+-- (BossConfig bombSeeker* / bombBurst* values and BombConstants); each is a
+-- `tune.bomb.hatch` key. Persona behaviour numbers are designer guesses.
+local HATCH_DEFAULT_SPEED = 20
+local HATCH_DEFAULT_LIFETIME_SEC = 6
+local HATCH_DEFAULT_STAGGER_SEC = 0.3
+local HATCH_DEFAULT_DAMAGE = 15
+local HATCH_DEFAULT_RADIUS = 6
+local HATCH_DEFAULT_TRIGGER_STUDS = 3
+local HATCH_DEFAULT_REACH = 45
+local HATCH_DEFAULT_SPACING = 6
+local HATCH_DEFAULT_CONVERGE_STUDS = 10
+local HATCH_DEFAULT_HOVER_STUDS = 5
+-- A persona behind cover stands this far behind the rock's centre, on the
+-- side away from where the seekers come from (COVER_STANDOFF is for the boss).
+local HATCH_COVER_STANDOFF = 9
+-- Notice chance and unscramble seconds per letter live in PlaytestPersonas
+-- (the real bot reads the same).
 -- Letters a player can carry outside a planned word (spores, ward
 -- letters) before the 12-slot buffer would be in the way.
 local MAX_HELD_LETTERS = 6
@@ -244,10 +318,65 @@ end
 --   ampMult, freezeImmunitySec, minWordEnergy, eatHealFraction,
 --   popReach = { [tableName] = studs }, gateHealth, timeLimit,
 --   zoneQuota = { [tableName] = blocks } (starting letters per zone of that table),
---   spore = { everyNthAttack, count, landRadius, fuseSec, burstDmg, burstRadius, popDamage? }
+--   spore = { everyNthAttack, count, landRadius, fuseSec, burstDmg, burstRadius, popDamage?,
+--     (opt-in, absent = as built:) popReach (studs; walk there to pop), landMinRadius,
+--     landTowardBoss (0..1 of landRadius), fuseSecs = {..} (cycled per spore),
+--     ripeWindowSec + unripePopDamage (0) + ripeGreed + mistimeChance + mistimeEarlyShare,
+--     popTaps, withVolley }
 --     (defaults to BossConfig's spore numbers now that spores are built;
 --     pass `spore = false` for a fight without them),
 --   ward = { atHp, letters, orbitRadius, cooldown, walkSpeed },
+--   bomb = { (defaults to BossConfig's bomb* numbers now that the Brain configures one, with no
+--     spores; `bomb = false` for a fight without; an explicit `spore = {...}` models spores instead.
+--     Replaces the spore lob, no spores while set)
+--     everyNthAttack (boss's spore cadence), count (1 bombs a lob), landRadius (12), reach (20),
+--     lettersByPhase ({3,4}: before / after the boss's ward fraction),
+--     fuseSecByLetters ({[3]=8,[4]=10}), defuseDamageByLetters ({[3]=.09,[4]=.12}),
+--     burstDmg (25), burstRadius (10), wrongTapPenaltySec (1), hint (true; half fuse),
+--     energy (true; the defused word's energy is memorized), energyScale (1; share of it credited), hintAfterSec (half the fuse; a fixed delay instead), noticeChance (0.5 + reactChance/2),
+--     unscrambleSecPerLetter (by persona), wrongTapChance (persona.invalidRate),
+--     missiles = { (a table switches the bomb to a salvo of homing letter missiles, one per letter,
+--       launched from the boss at the lob's slot; not while the ward is up; reads the bomb's
+--       lettersByPhase / defuseDamageByLetters / energyScale / hint / hintAfterSec / noticeChance /
+--       unscrambleSecPerLetter / wrongTapChance too, and bomb.everyNthAttack)
+--       speed (8), launchIntervalSec (0.4), lifetimeSec (14), sideOffsetStuds (6), sideCloseStuds (10),
+--       triggerStuds (3), explosionDamage (15), explosionRadius (6), reach (45; own tap reach),
+--       hintAfterSec (3), tapThroughCover (false: taps need line of sight), refuseWrongPop (false: an out-of-order pop is refused, nothing breaks),
+--       persona behaviour, each a number or { [personaName] = number }:
+--       orderSkill (N .4 / A .8 / S .95), kiteSkill (N .2 / A .6 / S .9), panicStuds (8), noticeChance }
+--       speedMax (absent = constant speed; else the speed ramps linearly from `speed` at release to
+--       `speedMax` at the end of the lifetime), fleeChance (0; per salvo, a number or { [personaName] =
+--       number }: a player who flees and is not going for the word, or whose wanted seeker is not
+--       the nearest, walks away from the nearest seeker instead of popping, and the word search
+--       stands still meanwhile; the search seconds lost count in `searchLost`)
+--       The OLD chase-from-launch seekers: only when `missiles` is passed explicitly.
+--       Explicit tables get only what they list (refuseWrongPop and tapThroughCover default to false).)
+--     hatch = { (a table makes the bomb the TWO-PHASE PUZZLE as built: everything about the resting phase is
+--       the static puzzle above, unchanged (fuseSecByLetters, landRadius, hintAfterSec, wrongTapPenaltySec, reach,
+--       ...); at the fuse's end, instead of bursting in place, every UNLOCKED letter becomes a seeker.
+--       Defaults are BossConfig's bomb* values.)
+--       speed (bombSeekerSpeed 20), speedMax (bombSeekerSpeedMax; ramps over the lifetime), lifetimeSec (6),
+--       staggerSec (0.3, between hatches in letter order), burstDamage (15), burstRadius (6), triggerStuds (3),
+--       seekerReach (45; a pop reaches a seeker this far from the player's root), spacing (6) and
+--       convergeStuds (10) (the side slots, as BossBombs), hoverStuds (5),
+--       poppable (true; false = nobody can pop a seeker), tapThroughCover (true: the server checks reach only),
+--       persona behaviour, each a number or { [personaName] = number }:
+--       coverSkill (the persona's own coverUse: the chance, per puzzle, that a persona with cover in
+--       range steps behind it instead of popping), coverSearchStuds (45: how far a persona looks for
+--       cover), reactDelaySec (persona.reactDelaySec: pops start this long after the hatch if the
+--       puzzle was noticed; else after the first burst that hurts the player).
+--       The AS-BUILT default (no `tune.bomb`, no `tune.spore`) is this model, every number read from
+--       the BossConfig bomb* fields. A `tune.bomb` without `hatch` or `missiles` is the static puzzle
+--       with its own defaults (fuse, land radius, count, wrong-tap penalty). }
+--   attackPrepSec = { [attack] = sec } (defaults to BossConfig's per-attack
+--     prep; `attackPrepSec = false` for the old single attackWindupSec),
+--   exposure = { afterAttackSec = { [attack] = sec }, wardBreakSec, damageMult }
+--     (stage 11c vulnerability windows: after a listed attack the boss stands
+--     still and is exposed for that long, and for wardBreakSec after its ward
+--     breaks; damage to it is xdamageMult while exposed. Defaults to
+--     BossConfig's exposed* fields; `exposure = false` for a fight without;
+--     `timeCasts = true` makes every player hold a cast through the tell of
+--     an attack that exposes the boss, as an upper bound),
 --   keys = { gateCount, caveCount, popReach, noticeChance?, noticeRange? }
 --     (key letters; defaults to the level's key kit volumes now that they
 --     are built, `keys = false` for a fight without them: noticeChance overrides every persona's own
@@ -298,7 +427,33 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		keys = nil
 	end
 	local spore = tune.spore
-	if spore == nil and boss.sporeEveryNthAttack then
+	-- The game as built lobs a bomb when the Brain configures one: with no
+	-- `tune.bomb` and no `tune.spore` the bomb comes from BossConfig's bomb*
+	-- values and there are no spores. `bomb = false` switches it off (spores
+	-- then default from config as before); `spore = {...}` models spores.
+	local bombTune: any = tune.bomb
+	if bombTune == nil and spore == nil and (boss.bombEveryNthAttack or boss.bombSeekerSpeed) then
+		bombTune = {
+			everyNthAttack = boss.bombEveryNthAttack,
+			reach = boss.bombTapReach, lettersByPhase = boss.bombLettersByPhase,
+			defuseDamageByLetters = boss.bombDefuseDamageByLetters,
+			burstDmg = boss.bombBurstDamage, burstRadius = boss.bombBurstRadius,
+			hintAfterSec = boss.bombHintAfterSec, energyScale = boss.bombEnergyScale,
+			-- The resting phase of the two-phase puzzle, from the config.
+			landRadius = boss.bombLandRadius, fuseSecByLetters = boss.bombFuseSecByLetters,
+			wrongTapPenaltySec = boss.bombWrongTapPenaltySec,
+		}
+		-- The two-phase puzzle: a resting puzzle whose unlocked letters hatch
+		-- into seekers (the knobs are read from the config in `hatchKnobs`).
+		if boss.bombSeekerSpeed then
+			bombTune.hatch = {}
+		end
+	elseif bombTune == false then
+		bombTune = nil
+	end
+	if bombTune then
+		spore = nil
+	elseif spore == nil and boss.sporeEveryNthAttack then
 		spore = {
 			everyNthAttack = boss.sporeEveryNthAttack, count = boss.sporeCount, landRadius = boss.sporeLandRadius,
 			fuseSec = boss.sporeFuseSec, burstDmg = boss.sporeBurstDamage, burstRadius = boss.sporeBurstRadius,
@@ -307,6 +462,131 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 	elseif spore == false then
 		spore = nil
 	end
+	-- Opt-in scramble bomb: replaces the spore lob (no spores while it is on).
+	local bomb: any = bombTune
+	local bombs: { any } = {}
+	local bombReach: number = 0
+	local bombWrongChance: number = 0
+	local bombUnscrambleSec: number = 0
+	local bombNotice: number = 0
+	local bombLetters: { number } = BOMB_DEFAULT_LETTERS_BY_PHASE
+	local bombFuse: { [number]: number } = BOMB_DEFAULT_FUSE_BY_LETTERS
+	local bombDamage: { [number]: number } = BOMB_DEFAULT_DAMAGE_BY_LETTERS
+	if bomb then
+		spore = nil
+		bombReach = bomb.reach or BOMB_DEFAULT_REACH
+		bombWrongChance = bomb.wrongTapChance or persona.invalidRate
+		bombUnscrambleSec = bomb.unscrambleSecPerLetter or PlaytestPersonas.bombUnscrambleSecPerLetter(persona)
+		bombNotice = bomb.noticeChance or PlaytestPersonas.bombNoticeChance(persona)
+		bombLetters = bomb.lettersByPhase or bombLetters
+		bombFuse = bomb.fuseSecByLetters or bombFuse
+		bombDamage = bomb.defuseDamageByLetters or bombDamage
+	end
+	-- Letter missiles: a mode of the bomb (`bomb.missiles` is a table).
+	local missiles: any = if bomb and type(bomb.missiles) == "table" then bomb.missiles else nil
+	local salvos: { any } = {}
+	local missileKnobs: any = {}
+	local missileTapAt = 0
+	if missiles then
+		local function knob(value: any, default: number): number
+			if type(value) == "table" then
+				return value[persona.name] or default
+			end
+			return value or default
+		end
+		missileKnobs = {
+			speed = missiles.speed or MISSILE_DEFAULT_SPEED,
+			-- Absent = a constant speed; else the speed ramps linearly from
+			-- `speed` at release to `speedMax` at the end of the lifetime.
+			speedMax = missiles.speedMax,
+			fleeChance = knob(missiles.fleeChance, MISSILE_FLEE_CHANCE_DEFAULT),
+			launchInterval = missiles.launchIntervalSec or MISSILE_DEFAULT_LAUNCH_INTERVAL_SEC,
+			lifetime = missiles.lifetimeSec or MISSILE_DEFAULT_LIFETIME_SEC,
+			sideOffset = missiles.sideOffsetStuds or MISSILE_DEFAULT_SIDE_OFFSET,
+			sideClose = missiles.sideCloseStuds or MISSILE_DEFAULT_SIDE_CLOSE_STUDS,
+			trigger = missiles.triggerStuds or MISSILE_DEFAULT_TRIGGER_STUDS,
+			damage = missiles.explosionDamage or MISSILE_DEFAULT_DAMAGE,
+			radius = missiles.explosionRadius or MISSILE_DEFAULT_RADIUS,
+			reach = missiles.reach or MISSILE_DEFAULT_REACH,
+			hintAfter = missiles.hintAfterSec or MISSILE_DEFAULT_HINT_AFTER_SEC,
+			hint = missiles.hint ~= false and bomb.hint ~= false,
+			refuse = missiles.refuseWrongPop == true,
+			throughCover = missiles.tapThroughCover == true,
+			damageByLetters = missiles.defuseDamageByLetters or bombDamage,
+			energyScale = missiles.energyScale or bomb.energyScale or 1,
+			orderSkill = knob(missiles.orderSkill, MISSILE_ORDER_SKILL_BY_PERSONA[persona.name] or MISSILE_ORDER_SKILL_DEFAULT),
+			kiteSkill = knob(missiles.kiteSkill, MISSILE_KITE_SKILL_BY_PERSONA[persona.name] or MISSILE_KITE_SKILL_DEFAULT),
+			panic = knob(missiles.panicStuds, MISSILE_DEFAULT_PANIC_STUDS),
+			notice = knob(missiles.noticeChance, bombNotice),
+		}
+		-- The bomb's hint delay, when the missile table does not set its own.
+		if missiles.hintAfterSec == nil and bomb.hintAfterSec then
+			missileKnobs.hintAfter = bomb.hintAfterSec
+		end
+	end
+	-- The two-phase puzzle: `bomb.hatch` is a table (and the old missiles are not on).
+	local hatch: any = if bomb and not missiles and type(bomb.hatch) == "table" then bomb.hatch else nil
+	local hatchKnobs: any = {}
+	local seekers: { any } = {} -- every seeker of every hatched puzzle, alive or waiting to hatch
+	local hatchedPuzzles: { any } = {} -- puzzles with seekers still to resolve
+	local seekerTapAt = 0
+	if hatch then
+		local function knob(value: any, default: number): number
+			if type(value) == "table" then
+				return value[persona.name] or default
+			end
+			return value or default
+		end
+		local speed: number = hatch.speed or boss.bombSeekerSpeed or HATCH_DEFAULT_SPEED
+		hatchKnobs = {
+			speed = speed,
+			speedMax = hatch.speedMax or boss.bombSeekerSpeedMax or speed,
+			lifetime = hatch.lifetimeSec or boss.bombSeekerLifetimeSec or HATCH_DEFAULT_LIFETIME_SEC,
+			stagger = hatch.staggerSec or boss.bombHatchStaggerSec or HATCH_DEFAULT_STAGGER_SEC,
+			damage = hatch.burstDamage or boss.bombBurstDamage or HATCH_DEFAULT_DAMAGE,
+			radius = hatch.burstRadius or boss.bombBurstRadius or HATCH_DEFAULT_RADIUS,
+			trigger = hatch.triggerStuds or boss.bombSeekerTriggerStuds or HATCH_DEFAULT_TRIGGER_STUDS,
+			reach = hatch.seekerReach or boss.bombSeekerTapReach or HATCH_DEFAULT_REACH,
+			spacing = hatch.spacing or boss.bombSeekerSpacing or HATCH_DEFAULT_SPACING,
+			converge = hatch.convergeStuds or boss.bombSeekerConvergeStuds or HATCH_DEFAULT_CONVERGE_STUDS,
+			hover = hatch.hoverStuds or boss.bombHoverHeight or HATCH_DEFAULT_HOVER_STUDS,
+			poppable = hatch.poppable ~= false,
+			throughCover = hatch.tapThroughCover ~= false,
+			coverSkill = knob(hatch.coverSkill, persona.coverUse),
+			coverSearch = knob(hatch.coverSearchStuds, COVER_SEARCH_RADIUS),
+			reactDelay = knob(hatch.reactDelaySec, persona.reactDelaySec),
+		}
+	end
+	-- Per-attack prep (the slam's long tell), as BossStates.prepSecFor.
+	local prepByAttack = tune.attackPrepSec
+	if prepByAttack == nil then
+		prepByAttack = boss.attackPrepSec
+	elseif prepByAttack == false then
+		prepByAttack = nil
+	end
+	local function prepSecFor(attack: string): number
+		return (prepByAttack and prepByAttack[attack]) or boss.attackWindupSec
+	end
+	-- Vulnerability windows (stage 11c).
+	local exposure = tune.exposure
+	if exposure == nil and boss.exposedDamageMultiplier then
+		exposure = {
+			afterAttackSec = boss.exposedAfterAttackSec or {}, wardBreakSec = boss.exposedOnWardBreakSec or 0,
+			damageMult = boss.exposedDamageMultiplier,
+		}
+	elseif exposure == false then
+		exposure = nil
+	end
+	-- Opt-in spore pop rules; with none set the player pops on sight from anywhere.
+	local sporeReach: number = (spore and spore.popReach) or BlockShoot.MAX_RAYCAST_DISTANCE
+	local sporeWindow: number = (spore and spore.ripeWindowSec) or 0
+	local sporeTaps: number = (spore and spore.popTaps) or 1
+	local sporeSteers = spore ~= nil and (spore.popReach ~= nil or spore.ripeWindowSec ~= nil)
+	local sporeGreed: number = (spore and spore.ripeGreed) or SPORE_GREED_BY_PERSONA[persona.name] or SPORE_GREED_DEFAULT
+	-- Chance a waiter taps off the ripe moment: the less they react and the
+	-- longer they take to, against the width of the window.
+	local sporeMistime: number = (spore and spore.mistimeChance)
+		or math.clamp((1 - persona.reactChance + persona.reactDelaySec / math.max(sporeWindow, 0.01)) / 2, 0, 1)
 	local sporeFlightSec: number = boss.sporeFlightSec or SPORE_FLIGHT_SEC
 	local sporeHeight: number = boss.sporeHoverHeight or SPORE_HEIGHT
 	local center = flat(level.bossPoint)
@@ -542,6 +822,14 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		gateForced = {},
 		trip = nil,
 		keyWord = false,
+		-- Opt-in spore steering: where the player is headed to pop one, and
+		-- the seconds of word search lost walking to it.
+		sporeGoal = nil,
+		sporeWalkSec = 0,
+		-- Opt-in scramble bomb: the one being solved, and where the player
+		-- is headed (or standing) to solve it.
+		bomb = nil,
+		bombGoal = nil,
 	}
 
 	local b: any = {
@@ -564,6 +852,8 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		wardDone = false,
 		cooldown = phase.attackCooldown,
 		walkSpeed = phase.walkSpeed,
+		stunnedUntil = 0,
+		exposedUntil = 0,
 	}
 	local held: { any } = {} -- letters the player carries outside a plan
 
@@ -604,7 +894,7 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		local absorbed = math.min(p.shield, amount)
 		p.shield -= absorbed
 		p.hp -= amount - absorbed
-		emit("player_damage", { amount = amount, absorbed = absorbed, source = source, hp = math.max(p.hp, 0) })
+		emit("player_damage", { amount = amount, absorbed = absorbed, source = source, hp = math.max(p.hp, 0), solving = p.bomb ~= nil })
 		if p.hp <= 0 then
 			-- The word in progress survives: the client's buffer and the
 			-- player's train of thought both outlive the character.
@@ -623,9 +913,19 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				p.mode = "think"
 			end
 			p.keyWord = false
+			p.seekerGoal = nil
 			endTrip(true, nil)
 			p.vel = Vector3.zero
-			emit("death", { source = source, bossHp = b.hp })
+			emit("death", { source = source, bossHp = b.hp, solving = p.bomb ~= nil })
+			if p.bomb then
+				-- Death abandons the bomb; its progress stays with it.
+				if p.bomb.alive then
+					emit("bomb_abandon", { lost = p.bomb.lost, died = true })
+				end
+				p.bomb.engaged = false
+				p.bomb = nil
+				p.bombGoal = nil
+			end
 		end
 	end
 
@@ -635,6 +935,10 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 			return
 		end
 		local mult = if now < b.ampUntil then b.ampMult else 1
+		local exposed = exposure ~= nil and now < b.exposedUntil
+		if exposed then
+			mult *= exposure.damageMult
+		end
 		local dealt = math.min(b.hp, frac * mult)
 		local ward = tune.ward
 		if ward and not b.wardDone and b.hp - dealt <= ward.atHp then
@@ -656,7 +960,7 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 			emit("ward_up", {})
 		end
 		b.hp -= dealt
-		emit("boss_damage", { amount = dealt, spell = spell, tier = tier, bossHp = b.hp })
+		emit("boss_damage", { amount = dealt, spell = spell, tier = tier, bossHp = b.hp, exposed = exposed })
 	end
 
 	-- The last key of a gate breaks it. A key popped as part of an ordinary
@@ -923,6 +1227,13 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 	-- Ask the persona what to cast; begin the hold if it names a spell
 	-- that can reach. Returns true when a charge started.
 	local function tryCast(): boolean
+		-- A player who times the window holds a ready cast through a slam's
+		-- tell and lets it go as the core opens (an upper bound; no persona
+		-- is known to do this).
+		if exposure and exposure.timeCasts and (b.state == "AttackPrep" or b.state == "Attack")
+			and (exposure.afterAttackSec[b.attack] or 0) > 0 then
+			return false
+		end
 		local choice = persona.chooseCast({
 			mana = p.mana, hp = p.hp, shield = p.shield,
 			bossAmped = now < b.ampUntil, bossHp = b.hp,
@@ -989,6 +1300,12 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		local goal: Vector3? = nil
 		if p.excursion then
 			goal = p.excursion.spot
+		elseif p.sporeGoal then
+			goal = p.sporeGoal
+		elseif p.seekerGoal then
+			goal = p.seekerGoal
+		elseif p.bombGoal then
+			goal = p.bombGoal
 		else
 			local d = bossDist()
 			local settled = p.goal and hdist(p.pos, p.goal) < 2
@@ -1004,7 +1321,8 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 			end
 		end
 
-		local strafing = now < p.strafeUntil
+		-- A player solving a bomb stands still: no dodging.
+		local strafing = now < p.strafeUntil and p.bombGoal == nil and p.seekerGoal == nil
 		if strafing and b.spawned then
 			local toBoss = flat(b.pos) - flat(p.pos)
 			if toBoss.Magnitude > 1 then
@@ -1096,6 +1414,573 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		return false
 	end
 
+	-- Letter missiles ------------------------------------------------------
+	-- The salvo (one missile per letter) is fired by the boss in the lob's
+	-- slot; the persona's handling is salvoPlayer, the flight is stepMissiles.
+	-- Reading the scramble and tapping missiles compete with the word search:
+	-- see chargeSearch.
+
+	-- Time spent on the salvo is taken from the word search: while thinking
+	-- (and kiting) every tick, and one tap interval per pop. In "think" the
+	-- search's deadline moves out, in "pop" the next word tap does.
+	local function chargeSearch(sal: any, sec: number)
+		sal.lost += sec
+		if p.mode == "think" then
+			p.until_ += sec
+		elseif p.mode == "pop" then
+			p.nextTapAt = math.max(p.nextTapAt, now) + sec
+		end
+	end
+
+	local function spawnSalvo(): number
+		local phaseIndex = if b.hp <= (boss.wardAtHpFraction or 0.5) then 2 else 1
+		local letters: number = bombLetters[math.min(phaseIndex, #bombLetters)]
+		local order: { number } = {}
+		for i = 1, letters do
+			order[i] = i
+		end
+		for i = letters, 2, -1 do
+			local j = rng:NextInteger(1, i)
+			order[i], order[j] = order[j], order[i]
+		end
+		local engageAt = now + persona.reactDelaySec
+		local hintAt = now + missileKnobs.hintAfter
+		local thinkUntil = engageAt + bombUnscrambleSec * letters
+		if missileKnobs.hint then
+			thinkUntil = math.min(thinkUntil, math.max(hintAt, engageAt))
+		end
+		local sal: any = {
+			letters = letters, color = if rng:NextNumber() < 0.5 then "red" else "blue", missiles = {},
+			launched = 0, popped = 0, broken = false, wrongPop = false, hit = false, hurt = false, done = false,
+			completed = false, lost = 0, hintAt = hintAt, engageAt = engageAt, thinkUntil = thinkUntil,
+			noticed = rng:NextNumber() < missileKnobs.notice, wantsWord = rng:NextNumber() < missileKnobs.orderSkill,
+			kites = rng:NextNumber() < missileKnobs.kiteSkill, learned = false, fled = false, startAt = now,
+		}
+		-- Rolled only when it can matter, so a run without fleeing keeps the
+		-- random stream (and every other number) it always had.
+		sal.flees = missileKnobs.fleeChance > 0 and rng:NextNumber() < missileKnobs.fleeChance
+		for i = 1, letters do
+			table.insert(sal.missiles, {
+				sal = sal, order = order[i], launchAt = now + (i - 1) * missileKnobs.launchInterval,
+				launched = false, alive = false, pos = b.pos, bornAt = now,
+				sideOffset = (i - (letters + 1) / 2) * missileKnobs.sideOffset,
+			})
+		end
+		table.insert(salvos, sal)
+		emit("salvo_start", { letters = letters })
+		return (letters - 1) * missileKnobs.launchInterval
+	end
+
+	-- The word fires back: boss damage and a share of the word's energy, as
+	-- the static bomb's defuse.
+	local function completeWord(sal: any)
+		sal.completed = true
+		sal.completedAt = now
+		local word = loadAllWords()[sal.letters]
+		local text = word[rng:NextInteger(1, #word)]
+		hurtBoss(missileKnobs.damageByLetters[sal.letters], "Bomb", 1)
+		local tiles = {}
+		for i = 1, #text do
+			table.insert(tiles, { letter = text:sub(i, i), color = sal.color })
+		end
+		local energy = EnergyEconomy.splitByColor(tiles)
+		local scale: number = missileKnobs.energyScale
+		if scale ~= 1 then
+			local scaled = {}
+			for _, color in COLORS do
+				scaled[color] = (energy[color] or 0) * scale
+			end
+			energy = scaled
+		end
+		if tune.minWordEnergy then
+			local top, topValue = "red", -1
+			for _, color in COLORS do
+				if (energy[color] or 0) > topValue then
+					top, topValue = color, energy[color] or 0
+				end
+			end
+			energy[top] = math.max(topValue, tune.minWordEnergy)
+		end
+		local wasted = 0
+		for _, color in COLORS do
+			local gain = energy[color] or 0
+			wasted += math.max(0, gain - (manaCap - p.mana[color]))
+			p.mana[color] = math.min(manaCap, p.mana[color] + gain)
+		end
+		emit("memorize", {
+			word = text, red = energy.red or 0, green = energy.green or 0, blue = energy.blue or 0,
+			wasted = wasted, kit = false, key = false, bomb = true,
+		})
+	end
+
+	local function explodeMissile(m: any, at: Vector3, how: string, part: Instance?)
+		m.alive = false
+		local sal = m.sal
+		local hit = false
+		if how ~= "dead" and p.alive and (at - (p.pos + Vector3.new(0, ROOT_HEIGHT, 0))).Magnitude <= missileKnobs.radius then
+			hit = true
+			sal.hit = true
+			sal.hurt = true
+			hurtPlayer(missileKnobs.damage, "Missile")
+		end
+		if m.order > sal.popped then
+			sal.broken = true -- a letter still needed is gone: the word cannot be finished
+		end
+		emit("missile_end", { how = how, hit = hit, part = if part then part:GetFullName() else nil, age = now - m.bornAt, y = at.Y, bossDist = hdist(at, b.pos) })
+	end
+
+	-- Flight: launch on schedule, home on the player with a side offset that
+	-- closes in the last stretch, explode on trigger, wall or lifetime.
+	local function stepMissiles()
+		for i = #salvos, 1, -1 do
+			local sal = salvos[i]
+			for _, m in sal.missiles do
+				if not m.launched and now >= m.launchAt then
+					m.launched = true
+					m.alive = true
+					m.bornAt = now
+					m.pos = b.pos + Vector3.new(0, MUZZLE_HEIGHT, 0)
+					sal.launched += 1
+					emit("missile_launch", {})
+				end
+				if m.alive then
+					if not p.alive then
+						explodeMissile(m, m.pos, "dead")
+					elseif now - m.bornAt >= missileKnobs.lifetime then
+						explodeMissile(m, m.pos, "expired")
+					else
+						local target = p.pos + Vector3.new(0, ROOT_HEIGHT, 0)
+						local to = target - m.pos
+						local dist = to.Magnitude
+						if dist <= missileKnobs.trigger then
+							explodeMissile(m, m.pos, "player")
+						else
+							local dir = to.Unit
+							local side = Vector3.new(-dir.Z, 0, dir.X)
+							local sideDir = if side.Magnitude > 0 then side.Unit else Vector3.zero
+							local closing = math.clamp(dist / missileKnobs.sideClose, 0, 1)
+							local toAim = target + sideDir * m.sideOffset * closing - m.pos
+							local speed: number = missileKnobs.speed
+							if missileKnobs.speedMax then
+								speed += (missileKnobs.speedMax - speed) * math.clamp((now - m.bornAt) / missileKnobs.lifetime, 0, 1)
+							end
+							local stepLen = math.min(speed * TICK_SEC, toAim.Magnitude)
+							local nextPos = if toAim.Magnitude > 0 then m.pos + toAim.Unit * stepLen else m.pos
+							local wall = workspace:Raycast(m.pos, nextPos - m.pos, rayParams)
+							if wall then
+								explodeMissile(m, wall.Position, "wall", wall.Instance)
+							else
+								m.pos = nextPos
+								if (target - nextPos).Magnitude <= missileKnobs.trigger then
+									explodeMissile(m, nextPos, "player")
+								end
+							end
+						end
+					end
+				end
+			end
+			if sal.launched == #sal.missiles then
+				local flying = false
+				for _, m in sal.missiles do
+					flying = flying or m.alive
+				end
+				if not flying then
+					sal.done = true
+					emit("salvo_end", {
+						completed = sal.completed, wrongPop = sal.wrongPop, hit = sal.hit, lost = sal.lost, letters = sal.letters,
+						fled = sal.fled, broken = sal.broken, sec = if sal.completedAt then sal.completedAt - sal.startAt else nil,
+					})
+					table.remove(salvos, i)
+				end
+			end
+		end
+	end
+
+	-- The player's side. A persona that noticed starts at `engageAt`; one
+	-- that did not waits for a missile to explode on it, then pops on sight.
+	-- Going for the word (orderSkill): think, then pop in order, nothing
+	-- before the hint is certain (invalid-word rate breaks the chain);
+	-- while waiting, a wrong missile inside panicStuds is backed away from
+	-- (kiteSkill; costs search time) or popped (breaks the chain). Anyone
+	-- else (or after the chain is lost) pops the nearest, one per tap.
+	local function salvoPlayer()
+		if not p.alive then
+			return
+		end
+		local eye = p.pos + Vector3.new(0, EYE_HEIGHT, 0)
+		local root = p.pos + Vector3.new(0, ROOT_HEIGHT, 0)
+		local interval = 1 / persona.tapsPerSec
+		local tapReady = now >= missileTapAt and p.mode ~= "charge"
+		local kiteGoal: Vector3? = nil
+
+		local function poppable(m: any): boolean
+			return m.alive and (m.pos - eye).Magnitude <= missileKnobs.reach and (missileKnobs.throughCover or clearBetween(eye, m.pos))
+		end
+
+		for _, sal in salvos do
+			local engaged = if sal.noticed then now >= sal.engageAt else sal.hurt
+			if sal.done or sal.launched == 0 or not engaged then
+				continue
+			end
+			local want: any = nil
+			for _, m in sal.missiles do
+				if m.alive and m.order == sal.popped + 1 then
+					want = m
+				end
+			end
+			local wantsWord = sal.noticed and sal.wantsWord and not sal.broken
+			-- Running away: a player who flees this salvo and is not (or no longer)
+			-- going for the word, or whose wanted seeker is not the nearest, walks
+			-- away from the nearest seeker and does not search for words meanwhile.
+			if sal.flees then
+				local nearest: any = nil
+				local nearestDist = math.huge
+				for _, m in sal.missiles do
+					local d = (m.pos - root).Magnitude
+					if m.alive and d < nearestDist then
+						nearest, nearestDist = m, d
+					end
+				end
+				if nearest and not (wantsWord and want == nearest) then
+					local away = flat(p.pos) - flat(nearest.pos)
+					away = if away.Magnitude > 1 then away.Unit else Vector3.new(1, 0, 0)
+					local fleeGoal: Vector3? = nil
+					for _, deg in MISSILE_FLEE_HEADINGS_DEG do
+						local rad = math.rad(deg)
+						local heading = Vector3.new(
+							away.X * math.cos(rad) - away.Z * math.sin(rad), 0, away.X * math.sin(rad) + away.Z * math.cos(rad))
+						local goal = flat(p.pos) + heading * MISSILE_KITE_GOAL_STUDS
+						if SimLevel.floorAt(level, goal.X, goal.Z, rayParams) then
+							fleeGoal = goal
+							break
+						end
+					end
+					-- Cornered (no floor any way): falls through to the normal play.
+					if fleeGoal and not p.excursion then
+						kiteGoal = fleeGoal
+						sal.fled = true
+						chargeSearch(sal, TICK_SEC)
+						continue
+					end
+				end
+			end
+			local target: any = nil
+			local charged = false
+			if wantsWord then
+				local waiting = false
+				if now < sal.thinkUntil then
+					waiting = true
+					charged = true
+					chargeSearch(sal, TICK_SEC)
+				elseif want and poppable(want) then
+					target = want
+				else
+					waiting = true
+				end
+				if waiting then
+					local threat: any, threatDist = nil, missileKnobs.panic
+					for _, m in sal.missiles do
+						local d = (m.pos - root).Magnitude
+						if m.alive and m ~= want and d <= threatDist then
+							threat, threatDist = m, d
+						end
+					end
+					if threat then
+						local away = flat(p.pos) - flat(threat.pos)
+						away = if away.Magnitude > 1 then away.Unit else Vector3.new(1, 0, 0)
+						local goal = flat(p.pos) + away * MISSILE_KITE_GOAL_STUDS
+						if sal.kites and not p.excursion and SimLevel.floorAt(level, goal.X, goal.Z, rayParams) then
+							kiteGoal = goal
+							if not charged then
+								chargeSearch(sal, TICK_SEC)
+							end
+						elseif tapReady and poppable(threat) then
+							target = threat -- panic: a wrong pop
+						end
+					end
+				else
+					-- Before the hint a pop is a guess at the word.
+					local hinted = missileKnobs.hint and now >= sal.hintAt
+					if target and not hinted and not sal.learned and rng:NextNumber() < bombWrongChance then
+						local others: { any } = {}
+						for _, m in sal.missiles do
+							if m ~= want and poppable(m) then
+								table.insert(others, m)
+							end
+						end
+						if #others > 0 then
+							target = others[rng:NextInteger(1, #others)]
+						end
+					end
+				end
+			else
+				if sal.learned and not sal.broken and want and poppable(want) then
+					target = want
+				else
+					local near: { any } = {}
+					for _, m in sal.missiles do
+						if m.alive and (m.pos - eye).Magnitude <= missileKnobs.reach then
+							table.insert(near, m)
+						end
+					end
+					table.sort(near, function(x: any, y: any): boolean
+						return (x.pos - eye).Magnitude < (y.pos - eye).Magnitude
+					end)
+					for _, m in near do
+						if missileKnobs.throughCover or clearBetween(eye, m.pos) then
+							target = m
+							break
+						end
+					end
+				end
+			end
+			if target and tapReady then
+				tapReady = false
+				missileTapAt = now + interval
+				chargeSearch(sal, interval)
+				local inOrder = not sal.broken and target.order == sal.popped + 1
+				if not inOrder and missileKnobs.refuse then
+					sal.learned = true
+					emit("missile_refused", {})
+				else
+					target.alive = false
+					emit("missile_pop", { ok = inOrder })
+					if inOrder then
+						sal.popped += 1
+						if sal.popped >= sal.letters then
+							completeWord(sal)
+						end
+					else
+						sal.broken = true
+						if not sal.wrongPop then
+							sal.wrongPop = true
+							emit("salvo_broken", {})
+						end
+					end
+				end
+			end
+		end
+
+		if kiteGoal then
+			p.bombGoal = kiteGoal
+			p.kiting = true
+		elseif p.kiting then
+			p.kiting = false
+			p.bombGoal = nil
+			p.goal = nil -- walk back to the usual spot
+		end
+	end
+
+	-- The two-phase puzzle's second phase -----------------------------------
+	-- When a resting puzzle's timer ends, every unlocked letter becomes a seeker
+	-- (hatchPuzzle), released `staggerSec` apart; stepSeekers flies them (as
+	-- BossBombs: side slots closing in, hover over the ground, a wall cast, a
+	-- burst within the trigger distance, at a wall or at the end of the
+	-- lifetime); seekerPlayer is the persona's handling (pop nearest first, or
+	-- step behind cover). Word-search seconds spent on it are charged to the
+	-- puzzle (`seekerLost`), as chargeSearch does for the old salvo.
+	local function chargeSeekers(bs: any, sec: number)
+		bs.seekerLost += sec
+		if p.mode == "think" then
+			p.until_ += sec
+		elseif p.mode == "pop" then
+			p.nextTapAt = math.max(p.nextTapAt, now) + sec
+		end
+	end
+
+	local function endSeeker(s: any, how: string, at: Vector3)
+		s.alive = false
+		local bs = s.puzzle
+		local hit = false
+		if how ~= "popped" and p.alive and hdist(at, p.pos) <= hatchKnobs.radius then
+			hit = true
+			bs.hurt = true
+			hurtPlayer(hatchKnobs.damage, "Seeker")
+		end
+		emit("seeker_end", { how = how, hit = hit, age = now - s.bornAt })
+		bs.seekersLeft -= 1
+		if bs.seekersLeft <= 0 then
+			emit("seekers_done", { lost = bs.seekerLost })
+			local listAt = table.find(hatchedPuzzles, bs)
+			if listAt then
+				table.remove(hatchedPuzzles, listAt)
+			end
+		end
+	end
+
+	local function hatchPuzzle(bs: any)
+		bs.alive = false
+		-- Which letters were locked is not tracked, only how many: a random set.
+		local order: { number } = {}
+		for i = 1, bs.letters do
+			order[i] = i
+		end
+		for i = bs.letters, 2, -1 do
+			local j = rng:NextInteger(1, i)
+			order[i], order[j] = order[j], order[i]
+		end
+		local unlocked: { number } = {}
+		for i = bs.tapsDone + 1, bs.letters do
+			table.insert(unlocked, order[i])
+		end
+		table.sort(unlocked)
+		emit("bomb_hatch", {
+			seekers = #unlocked, locked = bs.tapsDone, engaged = bs.engagedAt ~= nil,
+			-- An abandoned puzzle's lost seconds were counted when it was dropped.
+			lost = if bs.abandoned then 0 else bs.lost,
+		})
+		if p.bomb == bs then
+			p.bomb = nil
+			p.bombGoal = nil
+			p.goal = nil
+		end
+		bs.hatchAt = now
+		bs.seekerLost = 0
+		bs.seekersLeft = #unlocked
+		bs.hurt = false
+		bs.coverRolled = false
+		bs.coverSpot = nil
+		for k, index in unlocked do
+			local angle = (index - 1) / bs.letters * math.pi * 2
+			local rest = Vector3.new(bs.pos.X, bs.pos.Y + hatchKnobs.hover, bs.pos.Z)
+				+ Vector3.new(math.cos(angle), 0, math.sin(angle)) * BombConstants.REST_RADIUS_STUDS
+			table.insert(seekers, {
+				puzzle = bs, index = index, alive = true, released = false, pos = rest, bornAt = now,
+				releaseAt = now + (k - 1) * hatchKnobs.stagger, heading = Vector3.zAxis,
+			})
+		end
+		if #unlocked > 0 then
+			table.insert(hatchedPuzzles, bs)
+		end
+	end
+
+	local function stepSeekers(dt: number)
+		for i = #seekers, 1, -1 do
+			local s = seekers[i]
+			if not s.alive then
+				table.remove(seekers, i)
+				continue
+			end
+			if not s.released and now >= s.releaseAt then
+				s.released = true
+				s.bornAt = now
+			end
+			if not s.released then
+				continue
+			end
+			local age = now - s.bornAt
+			if age >= hatchKnobs.lifetime then
+				endSeeker(s, "expired", s.pos)
+				continue
+			end
+			local dir: Vector3 = s.heading
+			local remaining = math.huge
+			if p.alive then
+				local toPlayer = flat(p.pos) - flat(s.pos)
+				local dist = toPlayer.Magnitude
+				if dist <= hatchKnobs.trigger then
+					endSeeker(s, "player", s.pos)
+					continue
+				end
+				if dist > BombConstants.MIN_DIRECTION_STUDS then
+					s.heading = toPlayer.Unit
+				end
+				-- The side slot, closing to nothing inside the converge distance.
+				local slot = s.index - (s.puzzle.letters + 1) / 2
+				local lateral = slot * hatchKnobs.spacing * math.clamp(dist / hatchKnobs.converge, 0, 1)
+				local side = Vector3.new(-s.heading.Z, 0, s.heading.X)
+				local aim = toPlayer + side * lateral
+				remaining = aim.Magnitude
+				dir = if remaining > BombConstants.MIN_DIRECTION_STUDS then aim.Unit else s.heading
+			end
+			local speed: number = hatchKnobs.speed
+				+ (hatchKnobs.speedMax - hatchKnobs.speed) * math.clamp(age / hatchKnobs.lifetime, 0, 1)
+			local step = math.min(speed * dt, remaining)
+			local horizontal = s.pos + dir * step
+			local groundY = ground(Vector3.new(horizontal.X, 0, horizontal.Z)).Y
+			local climb = BombConstants.VERTICAL_SPEED_STUDS * dt
+			local y = s.pos.Y + math.clamp(groundY + hatchKnobs.hover - s.pos.Y, -climb, climb)
+			local nextPos = Vector3.new(horizontal.X, y, horizontal.Z)
+			local wall = workspace:Raycast(s.pos, (nextPos - s.pos) + dir * BombConstants.WALL_CAST_MARGIN_STUDS, rayParams)
+			if wall then
+				endSeeker(s, "wall", wall.Position)
+			else
+				s.pos = nextPos
+				if p.alive and hdist(nextPos, p.pos) <= hatchKnobs.trigger then
+					endSeeker(s, "player", nextPos)
+				end
+			end
+		end
+	end
+
+	-- The persona's side. Engaged when it noticed the puzzle (reactDelay after
+	-- the hatch) or, when it did not, after the first burst that hurt it. Then,
+	-- with chance coverSkill (rolled once per puzzle) and cover in range, it
+	-- walks behind the nearest rock and does not pop; otherwise it pops the
+	-- nearest seeker in reach at its tap rate. Walking costs word-search time.
+	local function seekerPlayer()
+		local wantGoal: Vector3? = nil
+		if p.alive and not p.excursion then
+			local root = p.pos + Vector3.new(0, ROOT_HEIGHT, 0)
+			local interval = 1 / persona.tapsPerSec
+			local tapReady = now >= seekerTapAt and p.mode ~= "charge"
+			for i = #hatchedPuzzles, 1, -1 do
+				local bs = hatchedPuzzles[i]
+				local engaged = if bs.willEngage then now >= bs.hatchAt + hatchKnobs.reactDelay else bs.hurt
+				if not engaged then
+					continue
+				end
+				if not bs.coverRolled then
+					bs.coverRolled = true
+					if hatchKnobs.coverSkill > 0 and rng:NextNumber() < hatchKnobs.coverSkill then
+						local nearest: any, nearestDist = nil, hatchKnobs.coverSearch
+						for _, w in walls do
+							if not w.broken and w.def.regenSec == 0 then
+								local d = hdist(w.def.position, p.pos)
+								if d < nearestDist then
+									nearest, nearestDist = w, d
+								end
+							end
+						end
+						if nearest then
+							local behind = flat(nearest.def.position) - flat(bs.pos)
+							if behind.Magnitude > 1 then
+								bs.coverSpot = flat(nearest.def.position) + behind.Unit * HATCH_COVER_STANDOFF
+							end
+						end
+					end
+				end
+				if bs.coverSpot then
+					wantGoal = bs.coverSpot
+					if hdist(p.pos, bs.coverSpot) > 2 then
+						chargeSeekers(bs, TICK_SEC)
+					end
+				elseif hatchKnobs.poppable and tapReady then
+					local target: any = nil
+					local targetDist = hatchKnobs.reach
+					for _, s in seekers do
+						if s.puzzle == bs and s.alive and s.released then
+							local d = (s.pos - root).Magnitude
+							if d <= targetDist and (hatchKnobs.throughCover or clearBetween(p.pos + Vector3.new(0, EYE_HEIGHT, 0), s.pos)) then
+								target, targetDist = s, d
+							end
+						end
+					end
+					if target then
+						tapReady = false
+						seekerTapAt = now + interval
+						chargeSeekers(bs, interval)
+						endSeeker(target, "popped", target.pos)
+					end
+				end
+			end
+		end
+		if wantGoal == nil and p.seekerGoal ~= nil then
+			p.goal = nil -- walk back to the usual spot
+		end
+		p.seekerGoal = wantGoal
+	end
+
 	local function stepPlayer(dt: number)
 		if not p.alive then
 			if now >= p.returnAt then
@@ -1118,6 +2003,12 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 
 		movePlayer(dt)
 		considerExcursion()
+		if missiles then
+			salvoPlayer()
+		end
+		if hatch then
+			seekerPlayer()
+		end
 
 		if p.mode == "charge" then
 			if now >= p.until_ then
@@ -1129,23 +2020,81 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 			return
 		end
 
-		if b.spawned and tryCast() then
+		-- Solving a bomb comes before starting a new cast.
+		if b.spawned and p.bomb == nil and tryCast() then
 			return
+		end
+
+		-- Opt-in: a player who means to pop a spore out of reach walks to it
+		-- (pausing the word search); one waiting for ripe holds position.
+		local walkingToSpore = false
+		if sporeSteers then
+			local eye = p.pos + Vector3.new(0, EYE_HEIGHT, 0)
+			local pending: any, needWalk: any = nil, nil
+			for _, block in blocks do
+				if block.alive and block.spore and block.willPop and now >= block.popAfter then
+					pending = pending or block
+					local reached = (block.pos - eye).Magnitude <= sporeReach and clearBetween(eye, block.pos)
+					if not reached and (not needWalk or block.burstAt < needWalk.burstAt) then
+						needWalk = block
+					end
+				end
+			end
+			if p.excursion then
+				p.sporeGoal = nil
+			elseif needWalk then
+				local away = flat(p.pos) - flat(needWalk.pos)
+				if away.Magnitude < 1 then
+					away = Vector3.new(1, 0, 0)
+				end
+				if (needWalk.pos - eye).Magnitude <= sporeReach then
+					p.sporeGoal = flat(needWalk.pos) -- in reach but no line of sight: go closer
+				else
+					p.sporeGoal = flat(needWalk.pos) + away.Unit * sporeReach * SPORE_STAND_SHARE
+				end
+				walkingToSpore = true
+				p.sporeWalkSec += dt
+				p.nextTapAt += dt
+				if p.mode == "think" then
+					p.until_ += dt
+				end
+			elseif pending then
+				p.sporeGoal = p.pos
+			elseif p.sporeGoal then
+				p.sporeGoal = nil
+				p.goal = nil -- walk back to the usual spot
+				if p.sporeWalkSec > 0 then
+					emit("spore_walk", { sec = p.sporeWalkSec })
+					p.sporeWalkSec = 0
+				end
+			end
 		end
 
 		-- Spores and ward letters are popped on sight, one tap each.
 		if now >= p.nextTapAt then
 			local eye = p.pos + Vector3.new(0, EYE_HEIGHT, 0)
 			for _, block in blocks do
-				if block.alive and (block.ward or (block.spore and block.willPop and now >= block.popAfter))
-					and (block.pos - eye).Magnitude <= BlockShoot.MAX_RAYCAST_DISTANCE and clearBetween(eye, block.pos) then
+				if block.alive and (block.ward or (block.spore and block.willPop and now >= block.targetAt))
+					and (block.pos - eye).Magnitude <= (if block.spore then sporeReach else BlockShoot.MAX_RAYCAST_DISTANCE)
+					and clearBetween(eye, block.pos) then
+					if block.spore and sporeTaps > 1 then
+						block.tapsLeft = (block.tapsLeft or sporeTaps) - 1
+						if block.tapsLeft > 0 then
+							p.nextTapAt = now + 1 / persona.tapsPerSec
+							break
+						end
+					end
 					block.alive = false
 					holdLetter(block.letter, block.color)
 					p.nextTapAt = now + 1 / persona.tapsPerSec
-					emit("pop", { letter = block.letter, color = block.color, zone = if block.ward then "Ward" else "Spore", value = 0 })
+					local ripe = block.spore and (sporeWindow == 0 or now >= block.ripeAt)
+					emit("pop", { letter = block.letter, color = block.color, zone = if block.ward then "Ward" else "Spore", value = 0, ripe = ripe })
 					-- Optional rule: a popped spore snaps back at the boss.
 					if block.spore and spore and spore.popDamage then
-						hurtBoss(spore.popDamage, "Spore", 1)
+						local snap: number = if ripe then spore.popDamage else (spore.unripePopDamage or 0)
+						if snap > 0 then
+							hurtBoss(snap, "Spore", 1)
+						end
 					end
 					break
 				end
@@ -1161,6 +2110,10 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				if not left then
 					b.warded = false
 					emit("ward_down", {})
+					if exposure and exposure.wardBreakSec > 0 then
+						b.exposedUntil = math.max(b.exposedUntil, now + exposure.wardBreakSec)
+						emit("boss_exposed", { cause = "ward", sec = exposure.wardBreakSec })
+					end
 				end
 			end
 		end
@@ -1176,6 +2129,131 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				b.tow = nil
 				b.nextEatAt = now + boss.eatIntervalSec
 			end
+		end
+
+		-- Opt-in scramble bomb: notice one, walk into reach, unscramble and tap
+		-- it out. The word search waits for all of it.
+		if bomb and not missiles then
+			local bs = p.bomb
+			if bs and (not bs.alive or p.excursion) then
+				p.bomb = nil
+				p.bombGoal = nil
+				bs = nil
+			end
+			if not bs and not p.excursion then
+				for _, candidate in bombs do
+					if candidate.alive and candidate.willEngage and not candidate.abandoned and now >= candidate.engageAt
+						and (not bs or candidate.burstAt < bs.burstAt) then
+						bs = candidate
+					end
+				end
+				if bs then
+					p.bomb = bs
+					bs.engaged = true
+					if not bs.engagedAt then
+						bs.engagedAt = now
+						emit("bomb_engage", { letters = bs.letters })
+					end
+				end
+			end
+			if bs and persona.healBelowHp and p.hp <= persona.healBelowHp then
+				-- Hurt enough that the persona would heal: gives up the bomb for good.
+				bs.abandoned = true
+				bs.engaged = false
+				emit("bomb_abandon", { lost = bs.lost, died = false })
+				p.bomb = nil
+				p.bombGoal = nil
+				p.goal = nil
+				bs = nil
+			end
+			if bs then
+				bs.lost += TICK_SEC
+				if p.mode == "think" then
+					p.until_ += TICK_SEC
+				end
+				local away = flat(p.pos) - flat(bs.pos)
+				if away.Magnitude <= bombReach then
+					p.bombGoal = p.pos -- stand still while solving
+					if not bs.thinkUntil then
+						bs.thinkUntil = now + bombUnscrambleSec * bs.letters
+					end
+					local hinted = bomb.hint ~= false and now >= bs.hintAt
+					if hinted then
+						bs.thinkUntil = math.min(bs.thinkUntil, now)
+					end
+					local interval = 1 / persona.tapsPerSec
+					while bs.alive and bs.tapsDone < bs.letters and now >= bs.thinkUntil and now >= bs.nextTapAt do
+						local tapAt = math.max(bs.nextTapAt, bs.thinkUntil)
+						bs.nextTapAt = tapAt + interval
+						if not hinted and rng:NextNumber() < bombWrongChance then
+							bs.wrong += 1
+							bs.burstAt -= (bomb.wrongTapPenaltySec or BOMB_DEFAULT_PENALTY_SEC)
+							emit("bomb_wrong", {})
+						else
+							bs.tapsDone += 1
+							emit("bomb_accept", {})
+						end
+					end
+					if bs.tapsDone >= bs.letters then
+						bs.alive = false
+						local word = loadAllWords()[bs.letters]
+						local text = word[rng:NextInteger(1, #word)]
+						hurtBoss(bombDamage[bs.letters], "Bomb", 1)
+						local gained = 0
+						if bomb.energy ~= false then
+							local tiles = {}
+							for i = 1, #text do
+								table.insert(tiles, { letter = text:sub(i, i), color = bs.color })
+							end
+							local energy = EnergyEconomy.splitByColor(tiles)
+							local scale: number = bomb.energyScale or 1
+							if scale ~= 1 then
+								local scaled = {}
+								for _, color in COLORS do
+									scaled[color] = (energy[color] or 0) * scale
+								end
+								energy = scaled
+							end
+							if tune.minWordEnergy then
+								local top, topValue = "red", -1
+								for _, color in COLORS do
+									if (energy[color] or 0) > topValue then
+										top, topValue = color, energy[color] or 0
+									end
+								end
+								energy[top] = math.max(topValue, tune.minWordEnergy)
+							end
+							local wasted = 0
+							for _, color in COLORS do
+								local gain = energy[color] or 0
+								wasted += math.max(0, gain - (manaCap - p.mana[color]))
+								p.mana[color] = math.min(manaCap, p.mana[color] + gain)
+								gained += gain
+							end
+							emit("memorize", {
+								word = text, red = energy.red or 0, green = energy.green or 0, blue = energy.blue or 0,
+								wasted = wasted, kit = false, key = false, bomb = true,
+							})
+						end
+						emit("bomb_defuse", {
+							sec = now - (bs.engagedAt or now), wrong = bs.wrong, lost = bs.lost, energy = gained,
+							letters = bs.letters, sinceLand = now - bs.landedAt,
+						})
+						p.bomb = nil
+						p.bombGoal = nil
+						p.goal = nil -- walk back to the usual spot
+					end
+				else
+					-- Out of reach: walk in to the edge of it.
+					p.bombGoal = flat(bs.pos) + away.Unit * bombReach * SPORE_STAND_SHARE
+				end
+				return
+			end
+			p.bombGoal = nil
+		end
+
+		if walkingToSpore then
+			return -- the word search waits while the player walks to a spore
 		end
 
 		if p.mode == "travel" then
@@ -1372,7 +2450,8 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		local hasTarget = p.alive and d <= boss.detectionRange
 
 		-- Walking: toward the player until the stop range.
-		local walking = b.state == "Patrol" or (stopRange < attackRange and b.state == "Cooldown")
+		local stunned = now < b.stunnedUntil
+		local walking = not stunned and (b.state == "Patrol" or (stopRange < attackRange and b.state == "Cooldown"))
 		if walking and hasTarget and not frozen and d > stopRange and reachable() then
 			local delta = flat(p.pos) - flat(b.pos)
 			b.pos = ground(b.pos + delta.Unit * math.min(b.walkSpeed * dt, d - stopRange))
@@ -1383,12 +2462,14 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 		if b.state == "Patrol" then
 			if canAttack then
 				b.state = "AttackPrep"
-				b.stateUntil = now + boss.attackWindupSec
 				b.attack = if d <= slam.maxSelectRange and rng:NextNumber() < SLAM_PICK_CHANCE then "GroundSlam" else "FireballVolley"
 				b.attacks += 1
-				if spore and b.attack == "FireballVolley" and b.attacks % spore.everyNthAttack == 0 then
+				local lobEvery: number? = if bomb then (bomb.everyNthAttack or boss.sporeEveryNthAttack) elseif spore then spore.everyNthAttack else nil
+				-- Missiles are never fired while the ward is up.
+				if lobEvery and b.attack == "FireballVolley" and b.attacks % lobEvery == 0 and not (missiles and b.warded) then
 					b.attack = "SporeLob"
 				end
+				b.stateUntil = now + prepSecFor(b.attack)
 				emit("boss_windup", { attack = b.attack, dist = d })
 				-- The telegraph: does the player start dodging?
 				if not p.coverWall and rng:NextNumber() < persona.reactChance then
@@ -1403,6 +2484,20 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 					b.stateUntil = now + slam.deliveryParams.windupSec
 				elseif b.attack == "SporeLob" then
 					b.stateUntil = now + sporeFlightSec
+					if missiles then
+						-- A salvo: the attack lasts until the last missile launches.
+						b.stateUntil = now + spawnSalvo()
+					end
+					if spore and spore.withVolley then
+						-- Opt-in: the volley fires as well, inside the lob's
+						-- flight time (the lob adds no cycle time).
+						local params = volley.deliveryParams
+						b.shots = {}
+						for i = 0, params.count - 1 do
+							table.insert(b.shots, now + i * params.staggerSec)
+						end
+						b.stateUntil = math.max(b.stateUntil, now + params.count * params.staggerSec)
+					end
 				else
 					local params = volley.deliveryParams
 					b.shots = {}
@@ -1413,7 +2508,7 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 				end
 			end
 		elseif b.state == "Attack" then
-			if b.attack == "FireballVolley" then
+			if b.attack == "FireballVolley" or (b.attack == "SporeLob" and spore and spore.withVolley) then
 				while b.shots[1] and b.shots[1] <= now do
 					table.remove(b.shots, 1)
 					fireShot()
@@ -1431,26 +2526,74 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 						end
 					end
 				end
-				if b.attack == "SporeLob" then
+				if b.attack == "SporeLob" and bomb and not missiles then
+					local phaseIndex = if b.hp <= (boss.wardAtHpFraction or 0.5) then 2 else 1
+					local letters: number = bombLetters[math.min(phaseIndex, #bombLetters)]
+					for _ = 1, (bomb.count or BOMB_DEFAULT_COUNT) do
+						local angle = rng:NextNumber(0, math.pi * 2)
+						local offset = Vector3.new(math.cos(angle), 0, math.sin(angle))
+							* rng:NextNumber(0, bomb.landRadius or BOMB_DEFAULT_LAND_RADIUS)
+						local fuse: number = bombFuse[letters]
+						table.insert(bombs, {
+							pos = ground(p.pos + offset), color = if rng:NextNumber() < 0.5 then "red" else "blue",
+							letters = letters, alive = true, burstAt = now + fuse, hintAt = now + (bomb.hintAfterSec or fuse * BOMB_HINT_FUSE_SHARE),
+							willEngage = rng:NextNumber() < bombNotice, engageAt = now + persona.reactDelaySec,
+							tapsDone = 0, wrong = 0, lost = 0, nextTapAt = 0, abandoned = false, engaged = false,
+							landedAt = now,
+						})
+						emit("bomb_land", { letters = letters })
+					end
+				elseif b.attack == "SporeLob" and spore then
 					local chance = math.max(persona.reactChance, persona.stealTow) / 2 + 0.5
+					-- Opt-in: the landing ring's centre moves toward the boss.
+					local ringShift = Vector3.zero
+					local toBoss = flat(b.pos) - flat(p.pos)
+					if (spore.landTowardBoss or 0) > 0 and toBoss.Magnitude > 1 then
+						ringShift = toBoss.Unit * spore.landTowardBoss * spore.landRadius
+					end
 					for i = 1, spore.count do
 						local angle = rng:NextNumber(0, math.pi * 2)
-						local offset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * rng:NextNumber(0, spore.landRadius)
+						local offset = Vector3.new(math.cos(angle), 0, math.sin(angle))
+							* rng:NextNumber(spore.landMinRadius or 0, spore.landRadius)
 						local zoneLike = { letterTable = LetterTables.COMMON, name = "Spore" }
-						table.insert(blocks, {
+						local fuse: number = if spore.fuseSecs then spore.fuseSecs[(i - 1) % #spore.fuseSecs + 1] else spore.fuseSec
+						local block: any = {
 							letter = rollLetter(rng, LetterTables.COMMON), color = if rng:NextNumber() < 0.5 then "red" else "blue",
-							pos = ground(p.pos + offset) + Vector3.new(0, sporeHeight, 0), zone = zoneLike, alive = true,
-							spore = true, fossil = true, burstAt = now + spore.fuseSec,
+							pos = ground(p.pos + ringShift + offset) + Vector3.new(0, sporeHeight, 0), zone = zoneLike, alive = true,
+							spore = true, fossil = true, burstAt = now + fuse,
 							willPop = rng:NextNumber() < chance, popAfter = now + persona.reactDelaySec + (i - 1) / persona.tapsPerSec,
-						})
+						}
+						block.targetAt = block.popAfter
+						if sporeWindow > 0 then
+							block.ripeAt = block.burstAt - sporeWindow
+							-- A greedy player waits for ripe instead of popping at once.
+							if block.willPop and rng:NextNumber() < sporeGreed then
+								if rng:NextNumber() < sporeMistime then
+									if rng:NextNumber() < (spore.mistimeEarlyShare or SPORE_MISTIME_EARLY_SHARE) then
+										block.targetAt = math.max(block.popAfter, block.ripeAt - SPORE_MISTIME_EARLY_LEAD_SEC)
+									else
+										block.targetAt = block.burstAt + SPORE_LATE_MARGIN_SEC -- taps too late: the burst wins
+									end
+								else
+									block.targetAt = math.max(block.popAfter, block.ripeAt)
+								end
+							end
+						end
+						table.insert(blocks, block)
 					end
 					emit("spore_lob", { count = spore.count })
 				end
 				b.state = "Cooldown"
 				b.stateUntil = now + b.cooldown
+				local afterSec = exposure and exposure.afterAttackSec[b.attack]
+				if afterSec and afterSec > 0 then
+					b.stunnedUntil = math.max(b.stunnedUntil, now + afterSec)
+					b.exposedUntil = math.max(b.exposedUntil, now + afterSec)
+					emit("boss_exposed", { cause = b.attack, sec = afterSec })
+				end
 			end
 		elseif b.state == "Cooldown" then
-			if now >= b.stateUntil then
+			if now >= b.stateUntil and not stunned then
 				b.state = "Patrol"
 			end
 		end
@@ -1501,6 +2644,29 @@ function FightSim.run(level: SimLevel.Level, persona: any, tuning: any?, seed: n
 			if now >= respawns[i].at then
 				spawnBlock(respawns[i].zone)
 				table.remove(respawns, i)
+			end
+		end
+		if missiles then
+			stepMissiles()
+		end
+		if hatch then
+			stepSeekers(TICK_SEC)
+		end
+		for _, bs in bombs do
+			if bs.alive and hatch and now >= bs.burstAt then
+				hatchPuzzle(bs)
+			elseif bs.alive and now >= bs.burstAt then
+				bs.alive = false
+				local hit = p.alive and hdist(bs.pos, p.pos) <= (bomb.burstRadius or BOMB_DEFAULT_BURST_RADIUS)
+				emit("bomb_burst", { hit = hit, lost = bs.lost, engaged = bs.engagedAt ~= nil })
+				if hit then
+					hurtPlayer(bomb.burstDmg or BOMB_DEFAULT_BURST_DAMAGE, "Bomb")
+				end
+				if p.bomb == bs then
+					p.bomb = nil
+					p.bombGoal = nil
+					p.goal = nil
+				end
 			end
 		end
 		for _, block in blocks do

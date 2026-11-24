@@ -3,8 +3,8 @@
 ----------------------------------------------------------------------
 -- hunger_one_at_a_time — one letter in tow at a time; the rest stay put
 ----------------------------------------------------------------------
--- MODULE LEVEL: BossHunger on a stand-in boss, ticked by hand, with a pull
--- so slow that nothing arrives. Two letters are in range. The first interval
+-- MODULE LEVEL: BossHunger on a stand-in boss, ticked by hand, with a mark
+-- so long that nothing is ever yanked. Two letters are in range. The first interval
 -- takes the nearer one into tow; over several more intervals the boss still
 -- has exactly that one in tow, the other has not moved and is not in tow, and
 -- no second tow was begun. The pool's count is unchanged throughout.
@@ -19,7 +19,6 @@ local hungerFixture = require(ReplicatedStorage.Shared.Tests.Helpers.hungerFixtu
 local ARENA_ID = "HungerOne"
 local INTERVAL_SEC = 1
 local RADIUS_STUDS = 25
-local SLOW_PULL_SPEED = 0.1
 local REACH_STUDS = 1
 local NEAR_OFFSET = Vector3.new(8, 0, 0)
 local OTHER_OFFSET = Vector3.new(0, 0, 14)
@@ -41,7 +40,7 @@ return {
 		local otherAt = root.Position + OTHER_OFFSET
 		local pool = hf:pool({ hf:zone(nearAt), hf:zone(otherAt) }, NEVER_REFILL_SEC)
 		local hunger = BossHunger.new(boss, humanoid, root, hungerFixture.spec(
-			INTERVAL_SEC, RADIUS_STUDS, 0, SLOW_PULL_SPEED, REACH_STUDS
+			INTERVAL_SEC, RADIUS_STUDS, 0, hungerFixture.HOLD_FOREVER_MARK_SEC, hungerFixture.FAST_SNAP_SEC, REACH_STUDS
 		))
 		if not hunger then
 			return

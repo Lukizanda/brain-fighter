@@ -68,6 +68,8 @@ function PlaytestMetrics.compute(events: { [number]: { [string]: any } }): Metri
 	local castCount = 0
 	local damageByTier = { 0, 0, 0 }
 	local damageTotal = 0
+	-- Boss damage dealt while the boss was exposed (stage 11c).
+	local damageExposed = 0
 	local damageTimes: { { number } } = {}
 	local hitTimes: { number } = {}
 	local damageTaken = 0
@@ -80,6 +82,27 @@ function PlaytestMetrics.compute(events: { [number]: { [string]: any } }): Metri
 	-- M14 for gates: gates opened by key letters, and trips beyond a gate.
 	local keyedOnPurpose, keyedByAccident = 0, 0
 	local trips, tripDeaths, tripSec, tripEnergy, tripMemorized = 0, 0, 0, 0, 0
+	-- Scramble bomb (opt-in mechanic): boss damage by source, bomb outcomes.
+	local bombDamage, sporeDamage = 0, 0
+	local bombLanded, bombEngaged, bombDefused, bombBurst, bombBurstHit, bombAbandoned = 0, 0, 0, 0, 0, 0
+	local bombWrong, bombLost, bombEnergy, bombSolveDamage, bombBurstDamage, bombSolveDeaths = 0, 0, 0, 0, 0, 0
+	local bombSolveSecs: { number } = {}
+	-- Letter missiles: salvo and missile outcomes, damage taken from them.
+	local salvos, salvoDone, salvoWrongPop, salvoHit, salvoLostSec = 0, 0, 0, 0, 0
+	local missilesLaunched, missilePopOk, missilePopHarmless, missileOnPlayer, missileOther = 0, 0, 0, 0, 0
+	local missileDamage, missileDeaths, missileRefused = 0, 0, 0
+	-- Seekers: salvos broken (a burst), salvos the player ran from, and from
+	-- first release to completion.
+	local salvoBroken, salvoFled, salvoFledHit = 0, 0, 0
+	local salvoDoneSecs: { number } = {}
+	-- The two-phase puzzle (rest, then hatch into seekers): puzzles hatched,
+	-- seekers hatched and how each one ended, damage and deaths from them,
+	-- word-search seconds lost to them, accepted resting taps.
+	local bombHatched, bombAccepted = 0, 0
+	local seekersHatched, seekersPopped, seekersOnPlayer, seekersOnWall, seekersExpired = 0, 0, 0, 0, 0
+	local seekersEndedUnknown, seekerBurstHits = 0, 0
+	local seekerDamage, seekerDeaths, seekerLost = 0, 0, 0
+	local puzzleSolveSecs: { number } = {} -- landing to solve
 
 	-- M10 bookkeeping: the longest quiet stretch while in the arena.
 	local lastActivity: number? = nil
@@ -114,9 +137,102 @@ function PlaytestMetrics.compute(events: { [number]: { [string]: any } }): Metri
 		elseif kind == "memorize" then
 			words += 1
 			energy += e.red + e.green + e.blue
+			if e.bomb then
+				bombEnergy += e.red + e.green + e.blue
+			end
 			earned.red += e.red
 			earned.green += e.green
 			earned.blue += e.blue
+		elseif kind == "salvo_start" then
+			salvos += 1
+		elseif kind == "salvo_end" then
+			salvoLostSec += e.lost
+			if e.completed then
+				salvoDone += 1
+				if type(e.sec) == "number" then
+					table.insert(salvoDoneSecs, e.sec)
+				end
+			end
+			if e.broken then
+				salvoBroken += 1
+			end
+			if e.fled then
+				salvoFled += 1
+				if e.hit then
+					salvoFledHit += 1
+				end
+			end
+			if e.wrongPop then
+				salvoWrongPop += 1
+			end
+			if e.hit then
+				salvoHit += 1
+			end
+		elseif kind == "missile_launch" then
+			missilesLaunched += 1
+		elseif kind == "missile_pop" then
+			if e.ok then
+				missilePopOk += 1
+			else
+				missilePopHarmless += 1
+			end
+		elseif kind == "missile_refused" then
+			missileRefused += 1
+		elseif kind == "missile_end" then
+			if e.how == "player" then
+				missileOnPlayer += 1
+			else
+				missileOther += 1
+			end
+		elseif kind == "bomb_land" then
+			bombLanded += 1
+		elseif kind == "bomb_engage" then
+			bombEngaged += 1
+		elseif kind == "bomb_wrong" then
+			bombWrong += 1
+		elseif kind == "bomb_accept" then
+			bombAccepted += 1
+		elseif kind == "bomb_hatch" then
+			-- The timer ran out: this many letters become seekers. (`lost` is
+			-- the resting phase's word-search seconds when not already counted.)
+			bombHatched += 1
+			seekersHatched += e.seekers
+			bombLost += e.lost
+		elseif kind == "seeker_end" then
+			-- how: popped | player | wall | expired | unknown (a recorder that
+			-- cannot tell which kind of burst it saw).
+			if e.how == "popped" then
+				seekersPopped += 1
+			elseif e.how == "player" then
+				seekersOnPlayer += 1
+			elseif e.how == "wall" then
+				seekersOnWall += 1
+			elseif e.how == "expired" then
+				seekersExpired += 1
+			else
+				seekersEndedUnknown += 1
+			end
+			if e.hit then
+				seekerBurstHits += 1
+			end
+		elseif kind == "seekers_done" then
+			seekerLost += e.lost
+		elseif kind == "bomb_defuse" then
+			bombDefused += 1
+			bombLost += e.lost
+			table.insert(bombSolveSecs, e.sec)
+			if type(e.sinceLand) == "number" then
+				table.insert(puzzleSolveSecs, e.sinceLand)
+			end
+		elseif kind == "bomb_burst" then
+			bombBurst += 1
+			bombLost += e.lost
+			if e.hit then
+				bombBurstHit += 1
+			end
+		elseif kind == "bomb_abandon" then
+			bombAbandoned += 1
+			bombLost += e.lost
 		elseif kind == "fizzle" then
 			fizzles += 1
 		elseif kind == "cast" then
@@ -132,7 +248,15 @@ function PlaytestMetrics.compute(events: { [number]: { [string]: any } }): Metri
 			end
 		elseif kind == "boss_damage" then
 			damageTotal += e.amount
+			if e.spell == "Bomb" then
+				bombDamage += e.amount
+			elseif e.spell == "Spore" then
+				sporeDamage += e.amount
+			end
 			damageByTier[e.tier] += e.amount
+			if e.exposed then
+				damageExposed += e.amount
+			end
 			table.insert(damageTimes, { t, e.amount })
 			if not halfAt and e.bossHp <= HALF_HEALTH and t0 then
 				halfAt = t - t0
@@ -147,9 +271,26 @@ function PlaytestMetrics.compute(events: { [number]: { [string]: any } }): Metri
 			end
 		elseif kind == "player_damage" then
 			damageTaken += e.amount
+			if e.source == "Missile" then
+				missileDamage += e.amount
+			elseif e.source == "Bomb" then
+				bombBurstDamage += e.amount
+			elseif e.source == "Seeker" then
+				seekerDamage += e.amount
+			elseif e.solving then
+				bombSolveDamage += e.amount
+			end
 			table.insert(hitTimes, t)
 		elseif kind == "death" then
 			deaths += 1
+			if e.source == "Missile" then
+				missileDeaths += 1
+			elseif e.source == "Seeker" then
+				seekerDeaths += 1
+			end
+			if e.solving then
+				bombSolveDeaths += 1
+			end
 			lastActivity = nil
 		elseif kind == "reenter" then
 			lastActivity = if t0 then t else nil
@@ -248,6 +389,7 @@ function PlaytestMetrics.compute(events: { [number]: { [string]: any } }): Metri
 		m.m12_t2 = damageByTier[2] / damageTotal
 		m.m12_t3 = damageByTier[3] / damageTotal
 		m.m15_healShare = healed / damageTotal
+		m.exposedShare = damageExposed / damageTotal
 	end
 
 	-- M13: the heaviest 5 seconds.
@@ -289,6 +431,66 @@ function PlaytestMetrics.compute(events: { [number]: { [string]: any } }): Metri
 		m.m17_healWhileDead = healedWhileDead
 	end
 
+	-- Scramble bomb columns (absent from fights without bombs).
+	if damageTotal > 0 then
+		m.sporeShare = sporeDamage / damageTotal
+		m.bombShare = bombDamage / damageTotal
+	end
+	if bombLanded > 0 then
+		m.bombLanded = bombLanded
+		m.bombEngaged = bombEngaged
+		m.bombDefused = bombDefused
+		m.bombBurst = bombBurst
+		m.bombBurstHit = bombBurstHit
+		m.bombAbandoned = bombAbandoned
+		m.bombWrong = bombWrong
+		m.bombLostSec = bombLost
+		m.bombEnergy = bombEnergy
+		m.bombSolveDamage = bombSolveDamage
+		m.bombBurstDamage = bombBurstDamage
+		m.bombSolveDeaths = bombSolveDeaths
+		m.bombSolveSec = median(bombSolveSecs) :: any
+		-- Two-phase puzzle columns: zeros are kept so a per-fight mean counts
+		-- the fights without a hatch.
+		m.bombHatched = bombHatched
+		m.bombAccepted = bombAccepted
+		m.seekersHatched = seekersHatched
+		m.seekersPopped = seekersPopped
+		m.seekersOnPlayer = seekersOnPlayer
+		m.seekersOnWall = seekersOnWall
+		m.seekersExpired = seekersExpired
+		m.seekersEndedUnknown = seekersEndedUnknown
+		m.seekerBurstHits = seekerBurstHits
+		m.seekerDamage = seekerDamage
+		m.seekerDeaths = seekerDeaths
+		m.seekerLostSec = seekerLost
+		m.searchLostSec = bombLost + seekerLost
+		if #puzzleSolveSecs > 0 then
+			m.puzzleSolveSec = median(puzzleSolveSecs) :: any
+		end
+	end
+	if salvos > 0 then
+		m.salvos = salvos
+		m.salvoDone = salvoDone
+		m.salvoWrongPop = salvoWrongPop
+		m.salvoHit = salvoHit
+		m.salvoLostSec = salvoLostSec
+		m.missiles = missilesLaunched
+		m.missilePopOk = missilePopOk
+		m.missilePopHarmless = missilePopHarmless
+		m.missileOnPlayer = missileOnPlayer
+		m.missileOther = missileOther
+		m.missileRefused = missileRefused
+		m.missileDamage = missileDamage
+		m.missileDeaths = missileDeaths
+		m.missileEnergy = bombEnergy
+		m.salvoBroken = salvoBroken
+		m.salvoFled = salvoFled
+		m.salvoFledHit = salvoFledHit
+		if #salvoDoneSecs > 0 then
+			m.salvoDoneSec = median(salvoDoneSecs) :: any
+		end
+	end
 	m.damageTaken = damageTaken
 	m.damageDealt = damageTotal
 	m.words = words

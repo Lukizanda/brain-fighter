@@ -38,7 +38,7 @@ return {
 		local zoneAt = root.Position + BLOCK_OFFSET
 		local pool = hf:pool({ hf:zone(zoneAt) }, NEVER_REFILL_SEC)
 		local hunger = BossHunger.new(boss, humanoid, root, hungerFixture.spec(
-			INTERVAL_SEC, RADIUS_STUDS, 0, hungerFixture.FAST_PULL_SPEED, hungerFixture.REACH_STUDS
+			INTERVAL_SEC, RADIUS_STUDS, 0, hungerFixture.FAST_MARK_SEC, hungerFixture.FAST_SNAP_SEC, hungerFixture.REACH_STUDS
 		))
 		if not hunger then
 			return
@@ -55,7 +55,7 @@ return {
 		-- gone, so a second pool gives the second object one.
 		local pool2 = hf:pool({ hf:zone(zoneAt) }, NEVER_REFILL_SEC)
 		local hungerNoFraction = BossHunger.new(boss, humanoid, root, hungerFixture.spec(
-			INTERVAL_SEC, RADIUS_STUDS, nil, hungerFixture.FAST_PULL_SPEED, hungerFixture.REACH_STUDS
+			INTERVAL_SEC, RADIUS_STUDS, nil, hungerFixture.FAST_MARK_SEC, hungerFixture.FAST_SNAP_SEC, hungerFixture.REACH_STUDS
 		))
 		if not hungerNoFraction then
 			return
