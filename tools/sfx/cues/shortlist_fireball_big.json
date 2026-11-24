@@ -1,0 +1,137 @@
+{
+  "family": "fireball_big",
+  "count": 400,
+  "seed": 2026,
+  "targets": {
+    "spark_hz": {
+      "low": 2500.0,
+      "high": null,
+      "why": "'tch': a bright spark first"
+    },
+    "two_events_db": {
+      "low": 4.0,
+      "high": 10.0,
+      "why": "'ba-boom': two events with a dip between, but joined like the spoken word (13-20 dB is near silence: two sounds)"
+    },
+    "boom_vs_hit_db": {
+      "low": -5.0,
+      "high": 3.0,
+      "why": "the boom is at least nearly as big as the hit"
+    },
+    "late_level_db": {
+      "low": -15.0,
+      "high": null,
+      "why": "'big': still going 0.3-0.8 s in (#1, 'not big', measures -30)"
+    },
+    "ring_sec": {
+      "low": 0.9,
+      "high": 1.7,
+      "why": "'big': rolls on for about a second or more"
+    },
+    "pitch_clarity": {
+      "low": null,
+      "high": 0.35,
+      "why": "noise-led like #1 (0.29); 'drum tom' takes were 0.69"
+    },
+    "phone_band": {
+      "low": 0.25,
+      "high": null,
+      "why": "heard on phones"
+    }
+  },
+  "picks": [
+    {
+      "id": "impact_damage_t2",
+      "rank": 1,
+      "penalty": 0.0,
+      "measured": {
+        "punch_db": 4.0,
+        "pitch_clarity": 0.27,
+        "centroid_hz": 203,
+        "above_4k": 0.002,
+        "phone_band": 0.297,
+        "ring_sec": 1.6,
+        "spark_hz": 4387,
+        "two_events_db": 7.5,
+        "boom_vs_hit_db": -1.8,
+        "late_level_db": -5.3
+      },
+      "params": {
+        "tch_gain": 0.4727,
+        "tch_sec": 0.0139,
+        "tch_highpass_hz": 2626.4834,
+        "tch_lead": 0.0637,
+        "boom_delay": 0.1273,
+        "boom_db": -0.2278,
+        "boom_attack": 0.0333,
+        "boom_half_life": 0.4478,
+        "boom_cut_hz": 537.7925,
+        "body_level": 0.4799,
+        "rumble_gain": 0.4632,
+        "drive": 1.7375
+      }
+    },
+    {
+      "id": "md_boom_big2",
+      "rank": 2,
+      "penalty": 0.0,
+      "measured": {
+        "punch_db": 2.6,
+        "pitch_clarity": 0.32,
+        "centroid_hz": 198,
+        "above_4k": 0.002,
+        "phone_band": 0.288,
+        "ring_sec": 1.58,
+        "spark_hz": 4738,
+        "two_events_db": 9.8,
+        "boom_vs_hit_db": -0.0,
+        "late_level_db": -5.5
+      },
+      "params": {
+        "tch_gain": 0.5848,
+        "tch_sec": 0.0248,
+        "tch_highpass_hz": 3043.3476,
+        "tch_lead": 0.034,
+        "boom_delay": 0.0903,
+        "boom_db": 0.8692,
+        "boom_attack": 0.0555,
+        "boom_half_life": 0.3859,
+        "boom_cut_hz": 333.9649,
+        "body_level": 0.3894,
+        "rumble_gain": 0.4579,
+        "drive": 1.7242
+      }
+    },
+    {
+      "id": "md_boom_big3",
+      "rank": 3,
+      "penalty": 0.0,
+      "measured": {
+        "punch_db": 2.6,
+        "pitch_clarity": 0.31,
+        "centroid_hz": 295,
+        "above_4k": 0.004,
+        "phone_band": 0.42,
+        "ring_sec": 1.6,
+        "spark_hz": 4797,
+        "two_events_db": 8.8,
+        "boom_vs_hit_db": -0.7,
+        "late_level_db": -6.5
+      },
+      "params": {
+        "tch_gain": 0.2484,
+        "tch_sec": 0.0331,
+        "tch_highpass_hz": 3135.4394,
+        "tch_lead": 0.0417,
+        "boom_delay": 0.1161,
+        "boom_db": 0.3241,
+        "boom_attack": 0.0743,
+        "boom_half_life": 0.2032,
+        "boom_cut_hz": 454.1696,
+        "body_level": 0.2386,
+        "rumble_gain": 0.4835,
+        "drive": 1.7359
+      }
+    }
+  ]
+}

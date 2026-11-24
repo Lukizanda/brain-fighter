@@ -49,3 +49,6 @@ nimbalyst-local/
 
 # Graphify generated outputs — rebuild with `graphify update .`
 graphify-out/
+
+# Rendered sound effects (tools/sfx/render.py) — reproducible, not committed.
+/build/

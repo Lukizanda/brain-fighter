@@ -38,6 +38,7 @@ To add one: the fact must already be on a `wiki/reference/` page, fit on one lin
 | Rojo sync, `ignoreUnknownInstances`, pre-sync safety checks | [docs/agents/rojo-sync.md](docs/agents/rojo-sync.md) |
 | Studio MCP, playtest lock, test suites, DataModel mutations | [docs/agents/studio-and-playtests.md](docs/agents/studio-and-playtests.md) |
 | Player-facing VFX/SFX: server vs client, how to verify | [docs/agents/vfx-sfx.md](docs/agents/vfx-sfx.md) |
+| Making sound effects: the sound theme, synthesis tools, auditioning, turning feedback into measurements | [docs/agents/audio-sfx.md](docs/agents/audio-sfx.md) |
 | Luau style, naming, cleanup pattern | [docs/agents/luau-conventions.md](docs/agents/luau-conventions.md) |
 | `src/` layout and the spelling-combat chain | [docs/agents/project-structure.md](docs/agents/project-structure.md) |
 | Subagents, parallel sessions, model choice, session phases | [docs/agents/sessions-and-subagents.md](docs/agents/sessions-and-subagents.md) |

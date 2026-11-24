@@ -1,0 +1,120 @@
+{
+  "family": "fireball",
+  "count": 800,
+  "seed": 2026,
+  "targets": {
+    "punch_db": {
+      "low": 9.0,
+      "high": null,
+      "why": "user: 'no distinct boom' measured 1.0-1.8 dB; the punch takes 9"
+    },
+    "pitch_clarity": {
+      "low": null,
+      "high": 0.45,
+      "why": "user: 'sounds like a drum tom' on takes scoring 0.68-0.69; noise scores ~0.15. 0.45 is a judgement, not yet confirmed by ear"
+    },
+    "centroid_hz": {
+      "low": 120.0,
+      "high": 380.0,
+      "why": "user: 'more round and boomy' after the bright take at 449 Hz; kept well under it"
+    },
+    "above_4k": {
+      "low": null,
+      "high": 0.02,
+      "why": "round: little hiss"
+    },
+    "phone_band": {
+      "low": 0.2,
+      "high": null,
+      "why": "phones play little below 150 Hz; the punch takes had only 0.09"
+    },
+    "ring_sec": {
+      "low": 0.45,
+      "high": 1.1,
+      "why": "an explosion lingers longer than a drum, not forever"
+    }
+  },
+  "picks": [
+    {
+      "id": "impact_damage_t2",
+      "rank": 1,
+      "penalty": 0.0,
+      "measured": {
+        "punch_db": 14.7,
+        "pitch_clarity": 0.29,
+        "centroid_hz": 222,
+        "above_4k": 0.001,
+        "phone_band": 0.392,
+        "ring_sec": 0.56
+      },
+      "params": {
+        "blast_cut_hz": 419.9645,
+        "blast_half_life": 0.0332,
+        "blast_rate": 10298.6159,
+        "blast_drive": 2.8614,
+        "sub_level": 0.169,
+        "sub_start_hz": 80.9344,
+        "body_db": -21.7215,
+        "bloom_level": 0.7315,
+        "rumble_gain": 0.1172,
+        "crack_gain": 0.0402,
+        "duck": 0.4743,
+        "drive": 1.2943
+      }
+    },
+    {
+      "id": "md_boom_pick2",
+      "rank": 2,
+      "penalty": 0.0,
+      "measured": {
+        "punch_db": 11.2,
+        "pitch_clarity": 0.25,
+        "centroid_hz": 329,
+        "above_4k": 0.009,
+        "phone_band": 0.451,
+        "ring_sec": 0.72
+      },
+      "params": {
+        "blast_cut_hz": 385.0217,
+        "blast_half_life": 0.035,
+        "blast_rate": 8782.7792,
+        "blast_drive": 2.0925,
+        "sub_level": 0.0035,
+        "sub_start_hz": 131.8117,
+        "body_db": -17.4133,
+        "bloom_level": 0.2725,
+        "rumble_gain": 0.0039,
+        "crack_gain": 0.241,
+        "duck": 0.3575,
+        "drive": 1.742
+      }
+    },
+    {
+      "id": "md_boom_pick3",
+      "rank": 3,
+      "penalty": 0.0,
+      "measured": {
+        "punch_db": 10.3,
+        "pitch_clarity": 0.24,
+        "centroid_hz": 350,
+        "above_4k": 0.003,
+        "phone_band": 0.552,
+        "ring_sec": 0.68
+      },
+      "params": {
+        "blast_cut_hz": 626.9853,
+        "blast_half_life": 0.052,
+        "blast_rate": 7520.1061,
+        "blast_drive": 1.7085,
+        "sub_level": 0.2627,
+        "sub_start_hz": 147.2383,
+        "body_db": -19.1327,
+        "bloom_level": 0.736,
+        "rumble_gain": 0.1618,
+        "crack_gain": 0.0239,
+        "duck": 0.9238,
+        "drive": 1.3784
+      }
+    }
+  ]
+}

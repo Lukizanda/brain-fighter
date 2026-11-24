@@ -1,0 +1,93 @@
+{
+  "about": "Sounds the user has chosen for the game. package.py copies exactly these into build/sfx/upload/ for upload, and records each file's sha256 the first time; after that, a render that no longer matches is refused, because the code that makes it has changed since the user approved it. To accept a deliberate change, bump `version` and clear `sha256`: Roblox cannot replace an uploaded sound, so a new render is a new asset.",
+  "sounds": [
+    {
+      "cue": "impact_damage_t2",
+      "kit": "md",
+      "name": "BF_Fireball_Explosion",
+      "version": 1,
+      "chosen": "2026-11-25",
+      "plays_when": "A Fireball explodes (the splash impact).",
+      "game_hook": "VfxConfig.EFFECTS.impact_damage_t2. It currently uses SFX.impactDamage, which other spells share, so it gets its own SFX entry when wired.",
+      "sha256": "49574c7883af892d8d95442795abbf4cec63bfc720bf391176d4dc32fd22c02f",
+      "assetId": null
+    },
+    {
+      "cue": "md_frost_blast",
+      "kit": "md",
+      "name": "BF_FrostNip_Cast",
+      "version": 1,
+      "chosen": "2026-11-25",
+      "plays_when": "Frost Nip (blue tier 1) is cast. Take B, blast: a cold rush into a clashing ice strike and crackle.",
+      "game_hook": "VfxConfig.EFFECTS.cast_blue_t1. It currently uses SFX.cast, which every cast shares, so it gets its own SFX entry when wired.",
+      "sha256": "323979a11932f889f1260dce87b9f0329e2e9265652e7f979a67171ccd5c5bbf",
+      "assetId": null
+    },
+    {
+      "cue": "md_burn_roar",
+      "kit": "md",
+      "name": "BF_Burning_Loop",
+      "version": 1,
+      "chosen": "2026-11-25",
+      "plays_when": "Loops for as long as a target is burning (Inferno's burn). Take B, roaring: a 3 s seamless loop.",
+      "game_hook": "None yet: the game has no way to play a looping sound. Needs the loop path (tier D) and a listener on the burning status (InfernoVfxController). Set Looped = true.",
+      "sha256": "c120e62d89ca9b203a508c6c9378a31d60bc61f5b0967c0dd67065ca13a7f08c",
+      "assetId": null
+    },
+    {
+      "cue": "collect_pop_red",
+      "kit": "md",
+      "name": "BF_Collect_Crack_Red",
+      "version": 1,
+      "chosen": "2026-11-25",
+      "plays_when": "A red letter block is popped: the block cracking apart.",
+      "game_hook": "VfxConfig.EFFECTS.block_pop_red: its sound entry (now SFX.blockPop, shared by all four colours) becomes this file. Plays at the block for everyone; the popper hears it on the tap (BlockTapController).",
+      "sha256": "a026344c216399b28174701ce796538fb015a7ef53749ec7e4ab0a683faa26d0",
+      "assetId": null
+    },
+    {
+      "cue": "collect_pop_green",
+      "kit": "md",
+      "name": "BF_Collect_Crack_Green",
+      "version": 1,
+      "chosen": "2026-11-25",
+      "plays_when": "A green letter block is popped: the block cracking apart.",
+      "game_hook": "VfxConfig.EFFECTS.block_pop_green: its sound entry (now SFX.blockPop, shared by all four colours) becomes this file. Plays at the block for everyone; the popper hears it on the tap (BlockTapController).",
+      "sha256": "ec9143981469a7a789ed4c625806cf848407ced0cc45063f1f3cecfef1ca4144",
+      "assetId": null
+    },
+    {
+      "cue": "collect_pop_blue",
+      "kit": "md",
+      "name": "BF_Collect_Crack_Blue",
+      "version": 1,
+      "chosen": "2026-11-25",
+      "plays_when": "A blue letter block is popped: the block cracking apart.",
+      "game_hook": "VfxConfig.EFFECTS.block_pop_blue: its sound entry (now SFX.blockPop, shared by all four colours) becomes this file. Plays at the block for everyone; the popper hears it on the tap (BlockTapController).",
+      "sha256": "597752c3c045de7600aedc6dd15541017134849c233960784a179104b9bf9574",
+      "assetId": null
+    },
+    {
+      "cue": "collect_pop_wild",
+      "kit": "md",
+      "name": "BF_Collect_Crack_Gold",
+      "version": 1,
+      "chosen": "2026-11-25",
+      "plays_when": "A gold letter block is popped: the block cracking apart.",
+      "game_hook": "VfxConfig.EFFECTS.block_pop_wild: its sound entry (now SFX.blockPop, shared by all four colours) becomes this file. Plays at the block for everyone; the popper hears it on the tap (BlockTapController).",
+      "sha256": "f8e8cf880ab5ac271addf7bd8b6364bfd182cd83d1c2175bf02360950c7a6b8e",
+      "assetId": null
+    },
+    {
+      "cue": "collect_stream",
+      "kit": "md",
+      "name": "BF_Collect_Stream",
+      "version": 1,
+      "chosen": "2026-11-25",
+      "plays_when": "A popped letter's mana is drawn into the player: the swirl, the spark ticks and the landing (0.4 s).",
+      "game_hook": "collectStream.play, which has no sound yet: start this on the collector's HumanoidRootPart when the stream starts (on the server's confirmation). The landing is baked in at 0.4 s = collectStream.FLIGHT_SEC; if that changes, re-render and bump the version.",
+      "sha256": "d2e7e8bc63ad34ff9e8e1cb7678e05793ec30602a115617a5d33f1e59784788e",
+      "assetId": null
+    }
+  ]
+}

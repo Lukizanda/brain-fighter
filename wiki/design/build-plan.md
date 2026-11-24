@@ -396,12 +396,13 @@ Added 2026-11-13 at the user's request. Full design, measured arena, layout tabl
 
 Plan, metric matrix, personas, results and stages: [[design/ai-playtest]]. Tier 1 (a fight simulator in `src/shared/Playtest/`, run from Edit mode) and Tier 2 (a real in-Studio bot and a server recorder) are both built; Tier 2 has run one fight. Runs alongside Phase 8 stage 4, whose tuning it feeds.
 
-## Phase 10 — Synthesized audio FX (proposed)
+## Phase 10 — Synthesized audio FX (in progress)
 
-Plan, audit, constraints, team and stages: [[design/audio-sfx-synthesis]]. Proposed 2026-11-23 at the user's request; **not approved yet**, five decisions are open on that page. It replaces the buy-or-free-sources question in § Current focus item 4: sounds are synthesized offline from a script-defined kit of voices and uploaded through Open Cloud. Stage 0 is a risk spike (moderation of short sounds, own-audio permission, the real upload quota). Nothing is built.
+Plan, audit, constraints and the history of each round: [[design/audio-sfx-synthesis]]. The sound theme every cue follows: [[design/AudioDirection]]. It replaces the buy-or-free-sources question in § Current focus item 4: sounds are synthesized offline through a model of the 16-bit console sound chip (`tools/sfx/`) and uploaded to Roblox. **State 2026-11-25:** the pipeline is built (render, lint, audition page, measurement screening, packaging); eight sounds are chosen and packaged for a hand upload (Fireball explosion, Frost Nip cast, Burning loop, four collect cracks, collect stream). Nothing is uploaded or wired into the game yet. Next: the user uploads, the agent wires the ids in and playtests; then the rest of tiers A and B.
 
 ## Plan changelog
 
+- **2026-11-25**: **Phase 10 under way.** The user approved the outline (tiers A and B first, musical spelling, start now, uploads by hand), chose the 16-bit console style after a bake-off, and picked the first eight sounds. The style rules became [[design/AudioDirection]].
 - **2026-11-23**: **Phase 10 proposed** — synthesized audio FX. The user asked to replace the stand-in sounds and fill the silent events with sounds synthesized from scratch, so the game has one style. Plan in [[design/audio-sfx-synthesis]]; not approved, five decisions open. It would replace the deferred pack-versus-free-sources decision in § Current focus item 4.
 - **2026-11-21**: **Phase 8 stage 12 added** — the scramble bomb replaces the spore lob. The user found spores carry no risk; a design pass showed every way of making the pop harder costs the novice its win, and the user chose a letter-puzzle bomb from five ideas and released the 3% a pop rule ([[design/scramble-bomb]]). The starting numbers are the session's, from the simulator, and wait for real fights.
 - **2026-11-18**: **Phase 8 stage 11 added** — boss movement, at the user's request: the Brain's body should telegraph its attacks and show when it is vulnerable, using only native Roblox tools. The user chose both vulnerability windows (after Ground Slam, on ward break, x1.5), a separate spore-lob tell and a rebuilt rig ([[design/boss-movement]]).
