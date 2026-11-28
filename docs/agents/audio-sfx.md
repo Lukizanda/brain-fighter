@@ -16,9 +16,10 @@ Load this when a task creates, changes or reviews a sound effect. Getting a soun
 - When the user picks a sound, copy its exact settings into a constant in the kit (as with `FIREBALL_EXPLOSION_PARAMS`), so re-running the screen can't change it.
 - **Hand-off to upload:**
   - Add the chosen sound to `tools/sfx/chosen.json`, with the game event it plays on and its hook in `VfxConfig`.
-  - Run `package.py`. It puts named, versioned, linted files in `build/sfx/upload/` with an `UPLOAD.md` checklist.
+  - Run `package.py`. It puts named, linted files in `build/sfx/upload/` with an `UPLOAD.md` checklist.
   - The user imports them in Studio (decided 2026-11-25: by hand for now, to see how tedious it is) and pastes back the asset ids.
-  - Write each id into `chosen.json`, then wire it into the game. A re-render bumps `version`, because the upload is a new asset.
+  - Write each id into `chosen.json`, then wire it into the game.
+  - File and asset names carry no version (user, 2026-11-28). The game refers to sounds by asset id, and `chosen.json` holds the current one. To ship a re-render, clear its `sha256` and `assetId`: an empty `assetId` means it needs uploading, and the new upload is a new asset.
 
 ## You cannot hear
 - Never say a sound is good, punchy or close. Say what you changed and what you measured. Every summary says no one has listened yet, until the user has.
@@ -57,13 +58,21 @@ The style rules live in the theme. These are the working habits that serve them:
 - **Punchy sounds play quieter.** The peak sets the normalisation, so a sharp hit can sit about 6 dB under the other cues on average. Say so on the page, or the user hears it as weak.
 - **The chip envelope is slow at gentle values.** A percussive carrier needs D1R around 18–28. Below about 14 a pop barely decays. Release is `4 * RR + 2` internally, not `2 * RR + 1`; that bug once made pops fall only 4 dB in 200 ms.
 - **Formants need two harmonics.** With one carrier per formant on the nearest harmonic, vowels collapse together at a sung pitch: 'a' = 'e' and 'o' = 'u' at D4. Weight each formant across the two harmonics either side of it (`letter_lab.voice_patches`), and measure that the vowels differ before showing them.
-- **Approved sounds can drift.** Chosen cues are code that later edits can change, often through a shared patch. `package.py` stores each chosen file's sha256 and refuses a render that differs. Never clear a fingerprint to silence the check; bump `version` only when the change is meant to ship.
+- **Approved sounds can drift.** Chosen cues are code that later edits can change, often through a shared patch. `package.py` stores each chosen file's sha256 and refuses a render that differs. Never clear a fingerprint to silence the check; clear `sha256` and `assetId` only when the change is meant to ship.
 - **Check sequences as a timeline.** A layer that sounds right alone can bury the next one. Lab 1's bell pop rang at full level for about 350 ms and hid the collect draw-in entirely, which measured fine on its own. Measure loudness and brightness in 50 ms steps across the whole sequence. When one layer hands over to another, fade the first by stepping its TL down every frame, as old drivers did.
 - **Build from the picture.** For a visual effect, read its code for the real timings (flight time, stagger, when it starts) and look at it in a playtest. The effect code is client-side drawing, so `execute_luau` on the Client can call it directly beside the character, with no need to reach the game state that normally triggers it. Never take a positioned capture during Play.
 - **Changes happen in 60 Hz steps.** Pitch and level move once per frame (16.7 ms). Anything faster, such as a 50 ms kick dive or a 15 ms spark, is a DAC sample built at 48 kHz.
 - **Loops.** Mark the cue `"loop": true`. `render.py` then keeps its exact edges and `lint.py` checks the wrap instead. Build the seam with an equal-power crossfade, and saturate before building it, not after. Add a `"demo": true` row that plays the loop three times so the user can hear the seam. Demo rows are exempt from the 6 s upload cap.
 - **Screening degenerates.** It finds the loophole in every target. Give each target a ceiling as well as a floor where one makes sense (the near-silence gap), and give each family its own tie-break. The default tie-break favours punch, which picked the smallest booms when "big" was the goal.
 - **The shell breaks on long inline Python.** Heredocs containing quotes have failed several times. Write the patch script to a file with the Write tool, run it, then delete it.
+
+## Running production lanes
+For a batch of cues, split them into lanes by family and give each lane to its own session.
+- A lane is one file, `tools/sfx/cues/lane_<name>.py` (`LANE`, `TAKES`, `SHEET`, `CUES[take][cue]`, then `CHOSEN`). `render.py --lane <name>` renders it to `build/sfx/lanes/<name>/`, with its own audition page. Sessions own only their lane file; everything else is read-only to them.
+- Write each cue's brief in the lane file's `SHEET` before spawning: what the event is, its layer, how often it repeats.
+- The director packages: one `chosen.json` entry per pick with `lane` and the take as `kit`, and who picked it (the user by ear, or a lane or the director unheard).
+- **Review the whole set on one scale before upload**: level against the other kits (`gainDb` balances without re-approval), pitch clarity per layer, when each cast or hit reaches its peak, phone band. A lane left to choose alone drifts toward tonal sounds and slow builds.
+- Verify a session's claimed edits with `git diff`; its edit list over-reports.
 
 ## Showing the user
 - Show at most three takes per question, each different from the others, plus the previous liked take as a comparison row.

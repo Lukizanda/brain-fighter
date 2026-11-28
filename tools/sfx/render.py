@@ -2,6 +2,11 @@
 build/sfx/index.json for audition.py and lint.py.
 
     python tools/sfx/render.py [--out build/sfx]
+    python tools/sfx/render.py --lane fire     (one production lane only)
+
+A lane is a module tools/sfx/cues/lane_<name>.py with LANE, TAKES, SHEET and
+CUES = {take_id: {cue_id: builder}}. It renders to build/sfx/lanes/<name>/,
+one column per take, so parallel sessions never write the same files.
 
 Renders are reproducible: every noise source takes a fixed seed.
 """
@@ -71,11 +76,42 @@ def master(x: np.ndarray, band: str, trim_db: float, loop: bool = False) -> np.n
     return x / peak * 10.0 ** (target_db / 20.0)
 
 
+def render_lane(name: str, out: Path) -> int:
+    import importlib
+
+    lane = importlib.import_module(f"cues.lane_{name}")
+    index = {
+        "sampleRate": kit.SAMPLE_RATE,
+        "lane": name,
+        "kits": [{"id": take["id"], "label": take["label"]} for take in lane.TAKES],
+        "cues": lane.SHEET,
+        "files": {},
+    }
+    for take in lane.TAKES:
+        (out / take["id"]).mkdir(parents=True, exist_ok=True)
+        index["files"][take["id"]] = {}
+        for cue in lane.SHEET:
+            build = lane.CUES.get(take["id"], {}).get(cue["id"])
+            if build is None:
+                continue
+            samples = master(build(), cue["band"], take.get("trimDb", 0.0), cue.get("loop", False))
+            rel = f"{take['id']}/{cue['id']}.wav"
+            wavfile.write(out / rel, kit.SAMPLE_RATE, np.round(samples * INT16_MAX).astype(np.int16))
+            index["files"][take["id"]][cue["id"]] = rel
+            print(f"  ok {rel}  {len(samples) / kit.SAMPLE_RATE * 1000:.0f} ms")
+    (out / "index.json").write_text(json.dumps(index, indent=2), encoding="utf-8")
+    print(f"wrote {out / 'index.json'}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default="build/sfx")
+    parser.add_argument("--out", default=None)
+    parser.add_argument("--lane", default=None, help="render one production lane (cues/lane_<name>.py)")
     args = parser.parse_args()
-    out = Path(args.out)
+    if args.lane:
+        return render_lane(args.lane, Path(args.out or f"build/sfx/lanes/{args.lane}"))
+    out = Path(args.out or "build/sfx")
 
     index = {
         "sampleRate": kit.SAMPLE_RATE,

@@ -3,13 +3,13 @@
     python tools/sfx/package.py
 
 Reads tools/sfx/chosen.json, copies each chosen render from build/sfx/ to
-build/sfx/upload/<name>_v<version>.wav, lints each one, and writes
+build/sfx/upload/<name>.wav, lints each one, and writes
 build/sfx/upload/UPLOAD.md: what each file is for and the steps to upload.
 Run render.py first.
 
 The file name becomes the asset's name in Roblox, so it is the name you see
-in the Asset Manager and the Creator Hub. The version is in the name because
-Roblox cannot replace an uploaded sound: a re-render is a new asset.
+in the Asset Manager and the Creator Hub. It carries no version: the game
+refers to sounds by asset id, and chosen.json records which id is current.
 """
 
 from __future__ import annotations
@@ -19,6 +19,9 @@ import json
 import shutil
 import sys
 from pathlib import Path
+
+import numpy as np
+from scipy.io import wavfile
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -42,13 +45,17 @@ def main() -> int:
 
     rows, failed = [], False
     for sound in chosen:
-        rel = index["files"].get(sound["kit"], {}).get(sound["cue"])
+        # A sound chosen from a production lane lives in that lane's render.
+        lane = sound.get("lane")
+        source = BUILD / "lanes" / lane if lane else BUILD
+        source_index = index if not lane else json.loads((source / "index.json").read_text(encoding="utf-8"))
+        rel = source_index["files"].get(sound["kit"], {}).get(sound["cue"])
         if rel is None:
             print(f"FAIL {sound['name']}: {sound['kit']}/{sound['cue']} is not rendered; run render.py")
             failed = True
             continue
-        file_name = f"{sound['name']}_v{sound['version']}.wav"
-        digest = hashlib.sha256((BUILD / rel).read_bytes()).hexdigest()
+        file_name = f"{sound['name']}.wav"
+        digest = hashlib.sha256((source / rel).read_bytes()).hexdigest()
         if sound.get("sha256") is None:
             # First packaging since the user chose it: this is the approved sound.
             sound["sha256"] = digest
@@ -56,11 +63,26 @@ def main() -> int:
         elif sound["sha256"] != digest:
             print(f"FAIL {file_name}: the render no longer matches the sound the user approved "
                   "(the code that makes it changed). Revert that change, or, if it is meant to "
-                  "ship, bump `version` and clear `sha256` in chosen.json.")
+                  "ship, clear both `sha256` and `assetId` in chosen.json.")
             failed = True
             continue
-        shutil.copyfile(BUILD / rel, OUT / file_name)
-        problems = [f for f in lint_file(OUT / file_name) if f[0] == FAIL]
+        # The fingerprint above is of the approved render. `gainDb` is a level
+        # change only, applied to the copy, so the mix can be balanced across
+        # kits without altering (or re-approving) the sound itself.
+        gain_db = sound.get("gainDb", 0.0)
+        if gain_db:
+            rate, samples = wavfile.read(source / rel)
+            scaled = samples.astype(np.float64) * 10.0 ** (gain_db / 20.0)
+            if np.max(np.abs(scaled)) > 32767:
+                print(f"FAIL {file_name}: gainDb {gain_db} would clip")
+                failed = True
+                continue
+            wavfile.write(OUT / file_name, rate, np.round(scaled).astype(np.int16))
+        else:
+            shutil.copyfile(source / rel, OUT / file_name)
+        # A loop is checked at its wrap point, not at its edges.
+        is_loop = any(c["id"] == sound["cue"] and c.get("loop") for c in source_index["cues"])
+        problems = [f for f in lint_file(OUT / file_name, is_loop) if f[0] == FAIL]
         status = "ready" if not problems else "BLOCKED: " + "; ".join(m for _, _, m in problems)
         failed |= bool(problems)
         uploaded = sound.get("assetId")

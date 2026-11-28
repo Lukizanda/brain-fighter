@@ -2310,3 +2310,11 @@ The scramble puzzle (Phase 8 stage 12a to 12e) is committed with the boss work i
 ## [2026-11-25] ingest | Sound direction written; sounds chosen for upload
 
 The synthesized-audio sessions of 2026-11-23 to 25 produced the first chosen sounds and a sound theme. New page `design/AudioDirection`: one console palette, a world layer (physical, noise-led) and a progress layer (musical, sparse), the decided sound of each element, and open questions, every rule citing the user's words. `design/audio-sfx-synthesis` records each round (16-bit chip model, ice, fire, measurement-based screening, letter and collect labs). Chosen and packaged for a hand upload: Fireball explosion, Frost Nip cast, Burning loop, four collect cracks and the collect stream (`tools/sfx/chosen.json`, fingerprinted). The agent guide `docs/agents/audio-sfx.md` is linked from `CLAUDE.md` and loads the theme first. Nothing is wired into the game yet.
+
+## [2026-11-28] ingest | Sound files lose their version suffix
+
+The user called the `_v1` suffix on upload files a bad convention: a version belongs in the record, not the name. `package.py` now names files `BF_<What>.wav`; `chosen.json` drops its `version` field, and shipping a re-render means clearing `sha256` and `assetId` (an empty `assetId` already means "needs uploading"). Updated `design/audio-sfx-synthesis`, `docs/agents/audio-sfx.md` and `tools/sfx/README.md`. The eight approved sounds are byte-identical; only their file names changed.
+
+## [2026-11-28] ingest | Every live stand-in sound has a synthesized replacement
+
+Three audio-lane sessions (fire, nature, boss) produced a sound for each placeholder the game plays, and the director reviewed the whole upload set on one scale. `design/audio-sfx-synthesis` records the lanes, who picked what (the user chose 23 of the 41 by ear; the rest are unheard) and the review (levels balanced, seven tonal or late nature picks revised). `design/AudioDirection` gained the boss rules from the user's notes and picks, and two director's rulings marked as unheard. `docs/agents/audio-sfx.md` gained a section on running lanes. 49 files are packaged for upload; nothing is uploaded or wired.

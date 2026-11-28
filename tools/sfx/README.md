@@ -13,7 +13,7 @@ Run from the repo root. Needs Python with numpy (scipy is used by the synth code
    Families: `fireball`, `fireball_big`. It first prints its measurements for takes the user
    already judged, then writes `tools/sfx/cues/shortlist_<family>.json`, which the kit turns into cues.
 5. Package the chosen sounds for upload: `python tools/sfx/package.py`
-   Copies each sound in `tools/sfx/chosen.json` to `build/sfx/upload/<name>_v<version>.wav`, lints it,
+   Copies each sound in `tools/sfx/chosen.json` to `build/sfx/upload/<name>.wav`, lints it,
    and writes `build/sfx/upload/UPLOAD.md` (what each file is for, and the upload steps).
 
 How to run a sound session (rules, traps, turning feedback into measurements): `docs/agents/audio-sfx.md`.

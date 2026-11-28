@@ -1,7 +1,7 @@
 ---
 type: design
 description: Sound direction — a 16-bit console RPG heard as a physical world; world sounds are noise-led and real, only the player's own progress is musical, and nothing gets busy. Every decision cites the user's words.
-updated: 2026-11-25
+updated: 2026-11-28
 ---
 
 # Audio Direction
@@ -42,7 +42,13 @@ These are decided. Each points at the chosen sound in `tools/sfx/chosen.json`.
 - **Fire: noise that breathes.** Slow, uneven swells and irregular crackles, no pitch, no steady pulse. *From:* "sounds a little like a lawn mower", said of a pitched, evenly pulsing burn. Chosen: Burning take B, roaring.
 - **Round and boomy means low weight that a phone can still play.** Energy between 150 Hz and 2 kHz, with little hiss on top. *From:* "more round and boomy". The phone condition is a proposal (many players are on mobile); the user has not ruled on it.
 - **Collecting a letter: crack, swirl, gust.** The block cracks apart, with its colour carried by the crack's texture (warm red, woody green, glassy blue, bright gold). A whirl draws the mana in, turning faster as it closes. A rush of air lands on the player. *From:* the user chose take C (spin-in), then its fully physical version.
-- **The boss: low, detuned, tritone.** Every attack has a rising tell as long as its windup, so it can be heard from cover. *A proposal* from the plan; the user has heard one tell and has not ruled on it.
+- **The boss has a voice, used sparingly.** A low growl pitched a tritone off the game's key, with a detuned partner, mixed under the physical sound. It goes on **presence moments**: the entrance landing, the word ward going up and breaking. *From:* the user picked the voice take for all three (2026-11-28), and asked for the landing "bass-y". *Director's extension, not yet heard by the user:* the voice also carries the rise before a Ground Slam, as the tell; it stays off frequent sounds (volley shots, eating) and off the impacts themselves, so the slam stays distinct from the landing.
+- **Boss fire sounds like fire.** A shot is flame being thrown, and a dying shot is fire fizzling out. *From:* "this sounds too much like hammering a nail, doesn't sound like a fire being shot out"; "none of these sounds like fire fizzling out. it sounds like something splatting".
+- **Ground Slam: an impact, then a shockwave.** Two events, bass-heavy, with nothing sweeping from high to low. *From:* "sounds like an inferno rather than a ground slam. There is no distinct impact, and shockwave sound. just a high to low consistent sound."
+- **The boss's arrival is an approaching earthquake.** *From:* "none of they sound rumble-ly or bass-y, let's try something more like an approaching earth quake?"
+- **Eating is a crunch and a gulp.** *From:* "can i get a gulp an crunch sound?"
+- **Shields and wards are texture, not a hum.** Air pressed outward, a glassy surface forming, a faint shimmer while held. *Director's ruling in review (2026-11-28), not yet heard by the user:* the lane's first shield was a steady low tone, which is what "lawn mower" warned against.
+- **Healing is physical.** Rustle, a gust drawn into the body, a soft thump; any chime sits far underneath. *Director's ruling in review, same day, unheard:* it follows rule 5.
 
 ## 4. Sparse beats clever
 
@@ -68,5 +74,6 @@ Each of these needs a user decision before it becomes a rule.
 
 - **Where does musical spelling live now?** The user said yes to it (a rising note per letter, resolving on memorize), but the chosen collect sound has no note. The progress layer could carry it: the letter landing in the word buffer, and memorize. *Proposal:* a short note when the tile appears in the buffer, judged in a fast-speller demo.
 - **The letter experiments** (colour instruments, word melodies, singing letters) are all progress-layer ideas. Which, if any, survive rule 4?
-- **The boss's tritone tell**, and how loud the boss sits relative to the player's own sounds.
+- **How loud the boss sits** relative to the player's own sounds, and whether the director's extension of the boss voice to the slam tell holds up in the game.
+- **About 25 of the 49 packaged sounds were picked by a lane or the director and never heard** (marked in `tools/sfx/chosen.json`). The first in-game playtest is their real review.
 - **The phone floor** in rule 3.
