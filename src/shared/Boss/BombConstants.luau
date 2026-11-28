@@ -314,12 +314,12 @@ local BombConstants = {
 	-- BossConstants.SPORE_RING_COLOR / SPORE_BURST_RING_SEC /
 	-- SPORE_BURST_RING_Y_OFFSET_STUDS.
 	-- ============================================================
-	LAND_VFX = "impact_wall", -- the puzzle lands (at its centre)
-	POP_VFX = "impact_buff", -- accepted tap; a chasing pop
+	LAND_VFX = "scramble_land", -- the puzzle lands (at its centre)
+	POP_VFX = "scramble_tap", -- accepted tap; a chasing pop
 	REFUSED_VFX = "impact_damage", -- refused tap
-	HATCH_VFX = "impact_wall", -- a letter hatches (per seeker)
+	HATCH_VFX = "scramble_hatch", -- a letter hatches (per seeker)
 	BURST_VFX = "impact_damage_t3", -- a seeker bursts
-	DEFUSE_VFX = "impact_heal", -- the word is sent back at the boss
+	DEFUSE_VFX = "scramble_defuse", -- the word is sent back at the boss
 
 	-- ============================================================
 	-- Scramble

@@ -300,118 +300,126 @@ local TRAIL_FADE = NumberSequence.new({
 ----------------------------------------------------------------------
 -- SFX
 ----------------------------------------------------------------------
--- Every entry below is a verified-loading asset (checked in Studio via
--- ContentProvider:PreloadAsync — IsLoaded true, TimeLength > 0), but
--- these are INTERIM placeholders, not final art. The project owns no
--- purpose-made spell SFX: the universe inventory is the LaserTag
--- template's gun sounds, and Creator Store audio search returns ripped
--- music and meme clips rather than a usable library. So each spell is
--- mapped to the closest-fitting sound that exists and loads.
+-- Every sound here was synthesized for this game (tools/sfx; the theme is
+-- wiki/design/AudioDirection.md) and uploaded 2026-11-28. One entry per
+-- uploaded file, named after it: `castFirebolt` is BF_Firebolt_Cast.
+-- tools/sfx/chosen.json maps each id back to the render it came from.
 --
--- Swapping in a real pack should be a one-line change per entry — that
--- is the whole reason these are named constants here instead of literals
--- buried in the EFFECTS table.
+-- Roblox cannot replace an audio asset in place, so shipping a re-render
+-- means a new upload and a new id on its line here.
 --
--- 2026-08-04: every entry now points at a real (if reused/mismatched)
--- asset rather than sitting silent — spawnEffect would skip playback for
--- `"rbxassetid://0"`, but a stub you can't hear defeats the point of a
--- stub. If a future effect genuinely has no defensible stand-in, that
--- literal id is still the honoured "silent" sentinel.
+-- The files are already balanced against each other and pitched as
+-- chosen. A SoundSpec's `volume` now says only how prominent the event
+-- should be, and `pitchRange` is either absent or SFX_JITTER.
 
--- Public so UI code that plays spell feedback outside the EFFECTS table
--- (the cast-fizzle buzzer in SpellMenuGui / GameplayHudGui) resolves its
--- id from the same place, instead of keeping its own literal.
+-- Public so code that plays a sound outside the EFFECTS table (the fizzle
+-- buzzer in the HUD scripts, the status loops) reads its id from here.
 VfxConfig.SFX = {
-	-- Universe-owned, 0.24 s. Reads as a staff whoosh at every tier; the
-	-- tier profiles differentiate it by volume and pitch instead.
-	cast = "rbxassetid://134677020800886",
+	-- Casts, one per spell.
+	castFirebolt  = "rbxassetid://109503955523747",
+	castFireball  = "rbxassetid://118669505670359",
+	castInferno   = "rbxassetid://123580349414988",
+	castFrostNip  = "rbxassetid://102428306446346",
+	castShield    = "rbxassetid://83510420002099",
+	castStasis    = "rbxassetid://112167167239780",
+	castMend      = "rbxassetid://90067404035305",
+	castStoneWall = "rbxassetid://135214410240580",
+	castSanctuary = "rbxassetid://73035818632294",
 
-	-- Universe-owned, 0.58 s. A dry percussive hit — generic enough to
-	-- carry a spell impact.
-	impactDamage = "rbxassetid://131133470069125",
+	-- Shots in flight (one-shot at launch; the sound rides the shot).
+	flightFirebolt = "rbxassetid://115859273363493",
+	flightFireball = "rbxassetid://86347100139772",
 
-	-- Creator Store, 2.53 s. Genuinely an explosion; the closest thing to
-	-- a T3 nuke the library offers.
-	impactHeavy = "rbxassetid://9892906940",
+	-- Impacts.
+	damageHit         = "rbxassetid://79413999314678",
+	fireballExplosion = "rbxassetid://119657114308765",
+	infernoEruption   = "rbxassetid://86995873917114",
+	healHit           = "rbxassetid://96873793804242",
+	freezeHit         = "rbxassetid://99592342406656",
+	knockup           = "rbxassetid://91088698801249",
+	projectileDeath   = "rbxassetid://96481499721792",
 
-	-- Creator Store, 2.01 s. A bright pickup chime, which is the usual
-	-- shorthand for "you were healed".
-	impactHeal = "rbxassetid://4612374036",
+	-- Shield.
+	shieldForm    = "rbxassetid://126949143318318",
+	shieldBlock   = "rbxassetid://131971891766020",
+	shieldBreak   = "rbxassetid://121646135352719",
+	shieldHumLoop = "rbxassetid://71008617796891",
 
-	-- Universe-owned, 0.39 s. Sharper and shorter than impactDamage, so
-	-- it passes for a freeze crack. Weakest match in the table.
-	impactFreeze = "rbxassetid://88987851128257",
+	-- Stone Wall and breakable walls.
+	stoneWallRise   = "rbxassetid://104161989791265",
+	stoneWallSettle = "rbxassetid://92655546106611",
+	wallCrack       = "rbxassetid://134464835585870",
+	wallBreak       = "rbxassetid://116693152353200",
 
-	-- Universe-owned, 0.40 s. A mechanical latch — reads as a ward
-	-- snapping into place.
-	impactShield = "rbxassetid://17682723174",
+	-- Burning status (loops while a rig is alight).
+	burningLoop = "rbxassetid://85840446001408",
 
-	-- The shield failing under the last hit. Its own named entry even
-	-- though it currently points at the same asset as `impactFreeze` —
-	-- that *is* the hook: a shell breaking wants a sharp crack, the freeze
-	-- crack is the only crack in the inventory, and swapping in a real
-	-- glass-shatter later is a one-line change here rather than an edit
-	-- inside the EFFECTS table. Callers play it pitched down from the
-	-- freeze use so the two still read as different events.
-	shieldBreak = "rbxassetid://88987851128257",
+	-- Letter blocks: one crack per block colour, and the mana stream
+	-- reaching the collector. The stream's landing is baked into the file
+	-- at 0.4 s, which is collectStream's FLIGHT_SEC; change one and the
+	-- other needs a re-render.
+	collectCrackRed   = "rbxassetid://135293838277497",
+	collectCrackGreen = "rbxassetid://95753410288051",
+	collectCrackBlue  = "rbxassetid://93924423436990",
+	collectCrackGold  = "rbxassetid://118427458345031",
+	collectStream     = "rbxassetid://85899561060457",
 
-	-- A letter block popping. Its own named entry even though it currently
-	-- points at the same asset as `impactFreeze` — same hook as
-	-- `shieldBreak`: a block bursting wants a short bright crack, that is
-	-- the only crack in the inventory, and a real pop lands as a one-line
-	-- change here rather than an edit inside the EFFECTS table. This is the
-	-- single most-heard sound in the game (once per letter, several times a
-	-- word), so it is the first id worth replacing with real audio.
-	blockPop = "rbxassetid://88987851128257",
+	-- A refused cast or tap (not enough mana, no target, wrong letter).
+	fizzle = "rbxassetid://117629874881051",
 
-	-- Cast fizzle (not enough mana / no target in range). Deliberately the
-	-- same swoosh as `cast`, and played pitched-down by the callers: a
-	-- deflated version of the cast sound is the clearest way to say "that
-	-- cast didn't happen" without a dedicated buzzer asset.
-	--
-	-- This is now the only copy. It used to be duplicated into
-	-- StarterPack/Spelling Staff/Handle/FizzleSound.model.json because Rojo
-	-- JSON cannot reference a Luau constant and every client needed the id
-	-- on its own replicated copy of that Sound. Phase 5.7 deleted the staff,
-	-- and BlockTapController's refusal cue is a client-local Sound built
-	-- from this constant like every other caller — so a swap here is now
-	-- genuinely a swap everywhere.
-	fizzle = "rbxassetid://134677020800886",
+	-- Movement.
+	dash = "rbxassetid://115473951508544",
+	roll = "rbxassetid://132633008944877",
 
-	-- Boss FireballVolley launch. No owned or findable asset reads as a
-	-- boss projectile whoosh yet, so this deliberately reuses the same
-	-- asset as `cast` rather than sitting UNSET/silent — callers pitch it
-	-- down so a boss launch doesn't sound identical to a player cast.
-	bossProjectileLaunch = "rbxassetid://134677020800886",
+	-- Arena teleporter.
+	teleportDepart = "rbxassetid://123125336822302",
+	teleportArrive = "rbxassetid://132685040057320",
 
-	-- The ground giving way as a Stone Wall pushes up through it. Points at
-	-- the same dry percussive hit as `impactDamage`, but played at roughly
-	-- a third speed, which stretches a 0.58 s slap into ~1.8 s of low
-	-- grinding — the nearest thing to an earth rumble the inventory has.
-	-- Its own entry despite sharing an asset, for the same reason as
-	-- `shieldBreak`: a real rumble sample is then a one-line swap here
-	-- rather than an edit inside the EFFECTS table.
-	stoneRumble = "rbxassetid://131133470069125",
+	-- Boss.
+	bossVolleyShot    = "rbxassetid://102514507441726",
+	bossSlamRise      = "rbxassetid://85211191488518",
+	bossGroundSlam    = "rbxassetid://133471793656361",
+	bossWardUp        = "rbxassetid://131833607210599",
+	bossWardBreak     = "rbxassetid://117899208805743",
+	bossEntranceStart = "rbxassetid://117794862594407",
+	bossEntranceLand  = "rbxassetid://74287162499968",
+	bossEat           = "rbxassetid://92068123708895",
 
-	-- A single fracture opening across a Stone Wall's face, in the seconds
-	-- before it collapses. Points at the same short sharp asset as
-	-- `impactFreeze` — the only thing in the inventory that snaps rather
-	-- than thuds — played well below the pitch either of its other uses
-	-- takes, which pulls it off ice and onto stone.
-	--
-	-- Its own entry despite sharing an asset, for the same reason as
-	-- `shieldBreak` and `stoneRumble`: a real stone-crack sample is then a
-	-- one-line swap here rather than an edit inside the EFFECTS table.
-	stoneCrack = "rbxassetid://88987851128257",
+	-- Scramble puzzle.
+	scrambleLand   = "rbxassetid://140483683990822",
+	scrambleHatch  = "rbxassetid://89847094308621",
+	scrambleTap    = "rbxassetid://80135051451559",
+	scrambleDefuse = "rbxassetid://84460573857198",
+
+	-- The one placeholder left: a damage-amp buff landing. Its synthesized
+	-- sound is deferred (the spell that grants it is parked), so this is
+	-- still the template's mechanical latch.
+	impactBuffPlaceholder = "rbxassetid://17682723174",
 }
 
--- Shared pitch for the fizzle cue — played pitched-down from `fizzle`'s
--- native speed so a refused cast reads as "deflated" rather than a second
--- copy of the cast swoosh. Was independently redeclared in BlockTapController,
--- GameplayHudGui and SpellMenuGui; same drift risk as the SFX ids above.
-VfxConfig.SFX.FIZZLE_PLAYBACK_SPEED = 0.55
+-- The fizzle file is pitched as chosen, so callers play it at its own
+-- speed. Kept as a named value because four scripts read it.
+VfxConfig.SFX.FIZZLE_PLAYBACK_SPEED = 1
+
+-- Volumes for the two status loops, read by InfernoVfx and ShieldVfx.
+-- Both sit under the one-shots: a loop that plays for seconds at a hit's
+-- level buries everything that happens during it.
+VfxConfig.SFX.BURNING_LOOP_VOLUME = 0.5
+VfxConfig.SFX.SHIELD_HUM_LOOP_VOLUME = 0.3
 
 local SFX = VfxConfig.SFX
+
+-- A slight per-play pitch spread for sounds that repeat many times a
+-- minute (hits, shots, cracks in stone), so a volley is not one sample
+-- twenty times. Narrow on purpose: these files are pitched by design, and
+-- the old placeholder ranges (down to 0.28) existed only to bend one stock
+-- sample into several roles.
+local SFX_JITTER = NumberRange.new(0.97, 1.03)
+
+-- Reach for sounds that happen at the boss and must carry across the
+-- arena. See SoundSpec for why the engine defaults do not.
+local ARENA_EMITTER_SIZE = 120
+local ARENA_ROLLOFF_MAX_DISTANCE = 400
 
 -- Tier-keyed emitter knobs. Pattern: T1 small/narrow → T3 wide/dense.
 -- One shared profile per tier so red/green/blue cast bursts feel uniform
@@ -444,13 +452,13 @@ local function castEmitter(template: string, palette: ColorPalette, profile: {
 end
 
 local TIER_PROFILES = {
-	[1] = { template = "BurstSmall",  emitCount = 14, lifetime = NumberRange.new(0.20, 0.32), sizePeak = 0.55, speed = NumberRange.new(6, 10),   spreadDeg = 35, totalSec = 0.45, soundVol = 0.8, pitch = NumberRange.new(0.95, 1.10) },
-	[2] = { template = "BurstMedium", emitCount = 30, lifetime = NumberRange.new(0.30, 0.55), sizePeak = 0.80, speed = NumberRange.new(10, 18),  spreadDeg = 50, totalSec = 0.60, soundVol = 1.0, pitch = NumberRange.new(0.90, 1.05) },
-	[3] = { template = "BurstMedium", emitCount = 50, lifetime = NumberRange.new(0.40, 0.75), sizePeak = 1.10, speed = NumberRange.new(15, 25),  spreadDeg = 60, totalSec = 0.75, soundVol = 1.0, pitch = NumberRange.new(0.85, 1.00) },
-	[4] = { template = "BurstMedium", emitCount = 36, lifetime = NumberRange.new(0.35, 0.60), sizePeak = 0.90, speed = NumberRange.new(12, 20),  spreadDeg = 45, totalSec = 0.65, soundVol = 1.0, pitch = NumberRange.new(0.88, 1.02) },
+	[1] = { template = "BurstSmall",  emitCount = 14, lifetime = NumberRange.new(0.20, 0.32), sizePeak = 0.55, speed = NumberRange.new(6, 10),   spreadDeg = 35, totalSec = 0.45, soundVol = 0.8 },
+	[2] = { template = "BurstMedium", emitCount = 30, lifetime = NumberRange.new(0.30, 0.55), sizePeak = 0.80, speed = NumberRange.new(10, 18),  spreadDeg = 50, totalSec = 0.60, soundVol = 1.0 },
+	[3] = { template = "BurstMedium", emitCount = 50, lifetime = NumberRange.new(0.40, 0.75), sizePeak = 1.10, speed = NumberRange.new(15, 25),  spreadDeg = 60, totalSec = 0.75, soundVol = 1.0 },
+	[4] = { template = "BurstMedium", emitCount = 36, lifetime = NumberRange.new(0.35, 0.60), sizePeak = 0.90, speed = NumberRange.new(12, 20),  spreadDeg = 45, totalSec = 0.65, soundVol = 1.0 },
 }
 
-local function castEntry(palette: ColorPalette, tier: number): EffectSpec
+local function castEntry(palette: ColorPalette, tier: number, soundId: string): EffectSpec
 	local p = TIER_PROFILES[tier]
 	return {
 		emitters = {
@@ -462,7 +470,7 @@ local function castEntry(palette: ColorPalette, tier: number): EffectSpec
 				spreadDeg = p.spreadDeg,
 			}),
 		},
-		sound            = { soundId = SFX.cast, volume = p.soundVol, pitchRange = p.pitch },
+		sound            = { soundId = soundId, volume = p.soundVol },
 		totalDurationSec = p.totalSec,
 		-- Was "casterStaffTip" until Phase 5.7 deleted the staff.
 		anchor           = "caster",
@@ -492,7 +500,7 @@ local WILDCARD_GOLD: ColorPalette = {
 -- Smaller and faster than a cast burst on purpose. A pop happens several
 -- times per word — at cast-burst weight it would dominate the screen and
 -- bury the spell it is feeding.
-local function blockPopEntry(palette: ColorPalette): EffectSpec
+local function blockPopEntry(palette: ColorPalette, soundId: string): EffectSpec
 	return {
 		emitters = {
 			castEmitter("BurstSmall", palette, {
@@ -503,7 +511,9 @@ local function blockPopEntry(palette: ColorPalette): EffectSpec
 				spreadDeg = 180, -- a block bursts outward in every direction
 			}),
 		},
-		sound            = { soundId = SFX.blockPop, volume = 0.55, pitchRange = NumberRange.new(0.94, 1.12) },
+		-- No pitch spread: the four cracks are pitched apart by colour, and
+		-- the user chose them by ear in a fast-speller run of identical hits.
+		sound            = { soundId = soundId, volume = 0.55 },
 		totalDurationSec = 0.45,
 		-- "worldPosition", not a "blockPosition" of its own: the block is
 		-- already being destroyed when this plays, so the burst is handed a
@@ -641,20 +651,22 @@ end
 
 VfxConfig.EFFECTS = {
 	-- ── Cast bursts ────────────────────────────────────────────────────
-	cast_red_t1   = castEntry(C.red,   1),
-	cast_red_t2   = castEntry(C.red,   2),
-	cast_red_t3   = castEntry(C.red,   3),
-	cast_red_t4   = castEntry(C.red,   4),
-	cast_blue_t1  = castEntry(C.blue,  1),
-	cast_blue_t2  = castEntry(C.blue,  2),
-	cast_blue_t3  = castEntry(C.blue,  3),
+	cast_red_t1   = castEntry(C.red,   1, SFX.castFirebolt),
+	cast_red_t2   = castEntry(C.red,   2, SFX.castFireball),
+	cast_red_t3   = castEntry(C.red,   3, SFX.castInferno),
+	-- Volley (T4) is parked and has no sound of its own; it is a burst of
+	-- firebolts, so it borrows Firebolt's.
+	cast_red_t4   = castEntry(C.red,   4, SFX.castFirebolt),
+	cast_blue_t1  = castEntry(C.blue,  1, SFX.castFrostNip),
+	cast_blue_t2  = castEntry(C.blue,  2, SFX.castShield),
+	cast_blue_t3  = castEntry(C.blue,  3, SFX.castStasis),
 	-- Green was missing entirely until 2026-08-03: resolveCastId built
 	-- "cast_green_tN", found no entry, and VfxController silently skipped
 	-- the burst — so Mend, Stone Wall and Sanctuary cast with no muzzle
 	-- effect and no sound at all. Green has only three tiers (no T4).
-	cast_green_t1 = castEntry(C.green, 1),
-	cast_green_t2 = castEntry(C.green, 2),
-	cast_green_t3 = castEntry(C.green, 3),
+	cast_green_t1 = castEntry(C.green, 1, SFX.castMend),
+	cast_green_t2 = castEntry(C.green, 2, SFX.castStoneWall),
+	cast_green_t3 = castEntry(C.green, 3, SFX.castSanctuary),
 
 	-- ── Charge motes ───────────────────────────────────────────────────
 	-- The sparkle halo around a hold-to-charge orb. Unlike every other
@@ -694,7 +706,7 @@ VfxConfig.EFFECTS = {
 				spreadAngle = Vector2.new(180, 180),
 			},
 		},
-		sound            = { soundId = SFX.impactDamage, volume = 0.85, pitchRange = NumberRange.new(0.92, 1.08) },
+		sound            = { soundId = SFX.damageHit, volume = 0.85, pitchRange = SFX_JITTER },
 		totalDurationSec = 0.65,
 		anchor           = "targetHumanoidRootPart",
 	},
@@ -778,7 +790,7 @@ VfxConfig.EFFECTS = {
 		-- flash of the detonation, not the burn's steady glow — that one
 		-- belongs to InfernoVfx and lasts as long as the flames do.
 		light            = { color = VfxConfig.FIRE.light, brightness = 6, durationSec = 0.45 },
-		sound            = { soundId = SFX.impactHeavy, volume = 1.0, pitchRange = NumberRange.new(0.88, 1.0) },
+		sound            = { soundId = SFX.infernoEruption, volume = 1.0 },
 		-- Covers the longest emitter above (smoke, up to 2.4 s) plus the
 		-- frame it is emitted on. Cutting this short destroys the attachment
 		-- mid-plume and the smoke pops out of existence.
@@ -887,11 +899,11 @@ VfxConfig.EFFECTS = {
 		-- PERF.allowLights inside spawnEffect, so it goes first when that
 		-- switch is turned off (nothing does so at runtime yet).
 		light            = { color = VfxConfig.FIRE.light, brightness = 5.0, durationSec = 0.32 },
-		-- Deliberately still the T1 hit sound pitched down, not T3's
-		-- `impactHeavy`. The visual language is shared; the *weight* is not
-		-- — a Fireball that booms like the 50%-max-HP nuke would flatten
-		-- the audio ladder the tiers are supposed to climb.
-		sound            = { soundId = SFX.impactDamage, volume = 1.0, pitchRange = NumberRange.new(0.82, 0.94) },
+		-- Its own explosion, smaller than Inferno's eruption. The visual
+		-- language is shared; the *weight* is not — a Fireball that booms
+		-- like the 50%-max-HP nuke would flatten the audio ladder the tiers
+		-- are supposed to climb.
+		sound            = { soundId = SFX.fireballExplosion, volume = 1.0 },
 		-- Covers the longest emitter above (smoke, up to 1.15 s) plus the
 		-- frame it is emitted on. Cutting this short destroys the
 		-- attachment mid-plume and the smoke pops out of existence.
@@ -923,7 +935,7 @@ VfxConfig.EFFECTS = {
 				}),
 			},
 		},
-		sound            = { soundId = SFX.impactHeal, volume = 0.75, pitchRange = NumberRange.new(0.95, 1.05) },
+		sound            = { soundId = SFX.healHit, volume = 0.75 },
 		totalDurationSec = 2.3,
 		upward           = true,
 		anchor           = "targetHumanoidRootPart",
@@ -947,7 +959,7 @@ VfxConfig.EFFECTS = {
 				spreadAngle = Vector2.new(180, 180),
 			},
 		},
-		sound            = { soundId = SFX.impactFreeze, volume = 0.85, pitchRange = NumberRange.new(0.90, 1.05) },
+		sound            = { soundId = SFX.freezeHit, volume = 0.85 },
 		totalDurationSec = 0.70,
 		anchor           = "targetHumanoidRootPart",
 	},
@@ -969,15 +981,15 @@ VfxConfig.EFFECTS = {
 				spreadAngle = Vector2.new(180, 180),
 			},
 		},
-		sound            = { soundId = SFX.impactShield, volume = 0.7, pitchRange = NumberRange.new(0.95, 1.05) },
+		sound            = { soundId = SFX.shieldForm, volume = 0.7 },
 		totalDurationSec = 0.90,
 		anchor           = "targetHumanoidRootPart",
 	},
 
 	-- A projectile dying on a shield shell. Deliberately unlike the
 	-- `impact_shield` ward shimmer above, which marks the shield going
-	-- *up*: this one is a spark off glass, so it's faster, narrower and
-	-- pitched high. Anchored at the contact point on the bubble's surface
+	-- *up*: this one is a spark off glass, so it's faster and narrower.
+	-- Anchored at the contact point on the bubble's surface
 	-- rather than on the holder's HRP — the whole point of the shell is
 	-- that the shot never reached the body.
 	shield_block = {
@@ -996,7 +1008,7 @@ VfxConfig.EFFECTS = {
 				rotation    = NumberRange.new(-180, 180),
 			},
 		},
-		sound            = { soundId = SFX.impactShield, volume = 0.9, pitchRange = NumberRange.new(1.15, 1.35) },
+		sound            = { soundId = SFX.shieldBlock, volume = 0.9, pitchRange = SFX_JITTER },
 		totalDurationSec = 0.45,
 		anchor           = "worldPosition",
 	},
@@ -1042,16 +1054,13 @@ VfxConfig.EFFECTS = {
 				}),
 			},
 		},
-		sound            = { soundId = SFX.shieldBreak, volume = 1.0, pitchRange = NumberRange.new(0.80, 0.92) },
+		sound            = { soundId = SFX.shieldBreak, volume = 1.0 },
 		totalDurationSec = 1.5,
 		anchor           = "targetHumanoidRootPart",
 	},
 
 	-- knockup's gameplay handler is real (SkillEffects.knockup — an upward
-	-- AssemblyLinearVelocity shove), used today by boss GroundSlam. The
-	-- sound was left UNSET pending a real "launch" asset; no owned or
-	-- findable asset reads as one, so this reuses impactDamage's percussive
-	-- hit pitched up, standing in for the whump of being thrown skyward.
+	-- AssemblyLinearVelocity shove), used today by boss GroundSlam.
 	impact_knockup = {
 		emitters = {
 			{
@@ -1067,7 +1076,7 @@ VfxConfig.EFFECTS = {
 				spreadAngle = Vector2.new(60, 60),
 			},
 		},
-		sound            = { soundId = SFX.impactDamage, volume = 0.85, pitchRange = NumberRange.new(1.15, 1.30) },
+		sound            = { soundId = SFX.knockup, volume = 0.85 },
 		totalDurationSec = 0.50,
 		anchor           = "targetHumanoidRootPart",
 	},
@@ -1087,9 +1096,7 @@ VfxConfig.EFFECTS = {
 				spreadAngle = Vector2.new(180, 180),
 			},
 		},
-		-- Pitched down hard so the percussive hit lands as stone settling
-		-- rather than as a weapon strike.
-		sound            = { soundId = SFX.impactDamage, volume = 0.9, pitchRange = NumberRange.new(0.55, 0.68) },
+		sound            = { soundId = SFX.stoneWallSettle, volume = 0.9 },
 		totalDurationSec = 0.65,
 		anchor           = "worldPosition",
 	},
@@ -1106,7 +1113,7 @@ VfxConfig.EFFECTS = {
 	-- carries the audio.
 	wall_rise_rumble = {
 		emitters         = stoneRiseEmitters(),
-		sound            = { soundId = SFX.stoneRumble, volume = 0.65, pitchRange = NumberRange.new(0.28, 0.36) },
+		sound            = { soundId = SFX.stoneWallRise, volume = 0.8 },
 		-- Emit window plus the slowest dust particle's full lifetime, so
 		-- the anchor is never destroyed out from under a plume still in
 		-- the air.
@@ -1141,7 +1148,7 @@ VfxConfig.EFFECTS = {
 	-- defaults are tuned for. A crack matters to whoever is sheltering
 	-- behind the wall, and it should fade for everyone else.
 	wall_crack = {
-		sound            = { soundId = SFX.stoneCrack, volume = 0.45, pitchRange = NumberRange.new(0.55, 0.70) },
+		sound            = { soundId = SFX.wallCrack, volume = 0.6, pitchRange = SFX_JITTER },
 		totalDurationSec = WALL_CRACK_SOUND_SEC,
 		anchor           = "worldPosition",
 	},
@@ -1149,9 +1156,8 @@ VfxConfig.EFFECTS = {
 	-- A BreakableWall giving way, played by
 	-- `client/Arena/BreakableWallVisuals` at the wall's centre when the
 	-- server publishes `WallState = "broken"`. A one-shot burst of the same
-	-- stone dust and chips the Stone Wall's rise uses, over the same
-	-- rumble sample pitched a little higher than the rise so a wall
-	-- collapsing is not the sound of one climbing out of the floor.
+	-- stone dust and chips the Stone Wall's rise uses, with a collapse
+	-- sound of its own.
 	wall_break = {
 		emitters = {
 			{
@@ -1187,7 +1193,7 @@ VfxConfig.EFFECTS = {
 				rotation    = NumberRange.new(-180, 180),
 			},
 		},
-		sound            = { soundId = SFX.stoneRumble, volume = 0.85, pitchRange = NumberRange.new(0.40, 0.52) },
+		sound            = { soundId = SFX.wallBreak, volume = 0.9 },
 		totalDurationSec = WALL_RISE_DUST_MAX_LIFETIME_SEC + 0.1,
 		anchor           = "worldPosition",
 	},
@@ -1208,7 +1214,7 @@ VfxConfig.EFFECTS = {
 				spreadAngle = Vector2.new(160, 160),
 			},
 		},
-		sound            = { soundId = SFX.impactShield, volume = 0.8, pitchRange = NumberRange.new(1.10, 1.25) },
+		sound            = { soundId = SFX.impactBuffPlaceholder, volume = 0.8, pitchRange = NumberRange.new(1.10, 1.25) },
 		totalDurationSec = 0.85,
 		anchor           = "targetHumanoidRootPart",
 	},
@@ -1291,7 +1297,7 @@ VfxConfig.EFFECTS = {
 				spreadAngle   = Vector2.new(35, 35),
 			},
 		},
-		sound            = { soundId = SFX.cast, volume = 0.35, pitchRange = NumberRange.new(1.10, 1.25) },
+		sound            = { soundId = SFX.flightFirebolt, volume = 0.5, pitchRange = SFX_JITTER },
 		totalDurationSec = 1.7,
 		anchor           = "worldPosition",
 	},
@@ -1360,7 +1366,7 @@ VfxConfig.EFFECTS = {
 				spreadAngle   = Vector2.new(30, 30),
 			},
 		},
-		sound            = { soundId = SFX.cast, volume = 0.45, pitchRange = NumberRange.new(0.95, 1.05) },
+		sound            = { soundId = SFX.flightFireball, volume = 0.6 },
 		-- Covers the smoke layer (up to 0.95 s) emitted on the last frame of
 		-- a full 2.0 s flight. Cutting it to the flight time destroys the
 		-- attachment mid-plume and the tail pops out of existence.
@@ -1402,7 +1408,7 @@ VfxConfig.EFFECTS = {
 				spreadAngle   = Vector2.new(40, 40),
 			},
 		},
-		sound            = { soundId = SFX.cast, volume = 0.55, pitchRange = NumberRange.new(0.80, 0.90) },
+		sound            = { soundId = SFX.flightFirebolt, volume = 0.5, pitchRange = SFX_JITTER },
 		totalDurationSec = 3.2,
 		anchor           = "worldPosition",
 	},
@@ -1497,11 +1503,11 @@ VfxConfig.EFFECTS = {
 	-- wall of noise rather than a readable cue.
 	projectile_boss_fireball = {
 		sound = {
-			soundId            = SFX.bossProjectileLaunch,
+			soundId            = SFX.bossVolleyShot,
 			volume             = 0.55,
-			pitchRange         = NumberRange.new(0.70, 0.82),
-			emitterSize        = 120,
-			rollOffMaxDistance = 400,
+			pitchRange         = SFX_JITTER,
+			emitterSize        = ARENA_EMITTER_SIZE,
+			rollOffMaxDistance = ARENA_ROLLOFF_MAX_DISTANCE,
 		},
 		totalDurationSec = 0.1,
 		anchor           = "worldPosition",
@@ -1517,14 +1523,14 @@ VfxConfig.EFFECTS = {
 	-- cannot see the shot — it struck the wall they are hiding behind —
 	-- was the silent one.
 	--
-	-- Deliberately quiet, short and pitched below `impactDamage`: it reads
+	-- Deliberately quiet and short: it reads
 	-- as a dull thud against cover rather than a hit on a body, and a
 	-- 30-shot Brain volley plays it up to 30 times ~0.15 s apart.
 	projectile_destroy = {
 		sound = {
-			soundId    = SFX.impactDamage,
+			soundId    = SFX.projectileDeath,
 			volume     = 0.40,
-			pitchRange = NumberRange.new(0.62, 0.78),
+			pitchRange = SFX_JITTER,
 			-- Modest, unlike the launch cue: the wall a player is hiding
 			-- behind is right next to them, so this mostly plays at close
 			-- range anyway. The bump is for shots landing further off, so
@@ -1536,20 +1542,18 @@ VfxConfig.EFFECTS = {
 		anchor           = "worldPosition",
 	},
 
-	-- Boss GroundSlam impact shockwave (Brain). Sound-only stub reusing
-	-- the same T3-Inferno explosion asset, pitched down for a duller
-	-- ground thud instead of a fiery blast — no owned/findable asset reads
-	-- as a slam yet.
+	-- Boss GroundSlam landing (Brain). Sound only; the ring is drawn by
+	-- SkillVisuals.spawnShockwave, which plays this at the slam's centre on
+	-- an anchor of its own, because the sound outlasts the ring.
 	aoe_boss_groundslam = {
 		sound = {
-			soundId    = SFX.impactHeavy,
-			volume     = 0.9,
-			pitchRange = NumberRange.new(0.60, 0.72),
+			soundId    = SFX.bossGroundSlam,
+			volume     = 1.0,
 			-- Same reasoning as the launch cue: it happens at the boss, and
 			-- a slam you can't hear from across the arena tells you nothing.
 			-- Only one plays per attack, so it can afford to be loud.
-			emitterSize        = 120,
-			rollOffMaxDistance = 400,
+			emitterSize        = ARENA_EMITTER_SIZE,
+			rollOffMaxDistance = ARENA_ROLLOFF_MAX_DISTANCE,
 		},
 		totalDurationSec = 0.1,
 		anchor           = "worldPosition",
@@ -1559,11 +1563,88 @@ VfxConfig.EFFECTS = {
 	-- Block pops (Phase 5.7) — one per block colour, resolved by
 	-- VfxConfig.resolveBlockPopId.
 	----------------------------------------------------------------------
-	block_pop_red   = blockPopEntry(C.red),
-	block_pop_green = blockPopEntry(C.green),
-	block_pop_blue  = blockPopEntry(C.blue),
-	block_pop_wild  = blockPopEntry(WILDCARD_GOLD),
+	block_pop_red   = blockPopEntry(C.red, SFX.collectCrackRed),
+	block_pop_green = blockPopEntry(C.green, SFX.collectCrackGreen),
+	block_pop_blue  = blockPopEntry(C.blue, SFX.collectCrackBlue),
+	block_pop_wild  = blockPopEntry(WILDCARD_GOLD, SFX.collectCrackGold),
 }
+
+----------------------------------------------------------------------
+-- Events with their own sound
+----------------------------------------------------------------------
+-- Until 2026-11-28 these events borrowed another effect whole (the boss
+-- ward going up played the Stone Wall's rise, sound included). Each now
+-- has its own entry: the borrowed look, kept, with the event's own sound.
+-- Added after the literal because each one copies an entry out of it.
+local EFFECTS = VfxConfig.EFFECTS :: { [string]: EffectSpec }
+
+-- `totalDurationSec` is only passed where the new sound outlasts the
+-- anchor a point effect gets by default (SkillVisuals keeps it 4 s).
+local function withSound(base: EffectSpec, sound: SoundSpec, totalDurationSec: number?): EffectSpec
+	local copy = table.clone(base)
+	copy.sound = sound
+	if totalDurationSec then
+		copy.totalDurationSec = totalDurationSec
+	end
+	return copy
+end
+
+local function soundOnly(sound: SoundSpec, anchor: any): EffectSpec
+	return { sound = sound, totalDurationSec = 0.1, anchor = anchor }
+end
+
+-- A boss sound: one per event, at the boss, heard across the arena.
+local function arenaSound(soundId: string, volume: number): SoundSpec
+	return {
+		soundId            = soundId,
+		volume             = volume,
+		emitterSize        = ARENA_EMITTER_SIZE,
+		rollOffMaxDistance = ARENA_ROLLOFF_MAX_DISTANCE,
+	}
+end
+
+-- The scramble puzzle lands among the players, so it needs less reach
+-- than the boss but more than a spell on your own body.
+local SCRAMBLE_EMITTER_SIZE = 40
+local SCRAMBLE_ROLLOFF_MAX_DISTANCE = 300
+
+local function scrambleSound(soundId: string, volume: number, pitchRange: NumberRange?): SoundSpec
+	return {
+		soundId            = soundId,
+		volume             = volume,
+		pitchRange         = pitchRange,
+		emitterSize        = SCRAMBLE_EMITTER_SIZE,
+		rollOffMaxDistance = SCRAMBLE_ROLLOFF_MAX_DISTANCE,
+	}
+end
+
+-- Boss.
+EFFECTS.boss_ward_up        = withSound(EFFECTS.wall_rise_rumble, arenaSound(SFX.bossWardUp, 1.0))
+EFFECTS.boss_ward_break     = withSound(EFFECTS.impact_wall, arenaSound(SFX.bossWardBreak, 1.0))
+-- The rumble is 4 s long, the same as the default anchor; 4.5 lets it end.
+EFFECTS.boss_entrance_start = withSound(EFFECTS.wall_rise_rumble, arenaSound(SFX.bossEntranceStart, 1.0), 4.5)
+EFFECTS.boss_entrance_land  = soundOnly(arenaSound(SFX.bossEntranceLand, 1.0), "worldPosition")
+EFFECTS.boss_eat            = withSound(EFFECTS.impact_heal, arenaSound(SFX.bossEat, 0.9))
+-- The warning before a Ground Slam: the boss rising, hanging and dropping.
+-- Played by the client's Telegraph pose layer, timed to end on the landing.
+EFFECTS.boss_slam_rise      = soundOnly(arenaSound(SFX.bossSlamRise, 0.9), "caster")
+
+-- Scramble puzzle.
+EFFECTS.scramble_land   = withSound(EFFECTS.impact_wall, scrambleSound(SFX.scrambleLand, 0.9))
+EFFECTS.scramble_hatch  = withSound(EFFECTS.impact_wall, scrambleSound(SFX.scrambleHatch, 0.8, SFX_JITTER))
+EFFECTS.scramble_tap    = withSound(EFFECTS.impact_buff, scrambleSound(SFX.scrambleTap, 0.7))
+EFFECTS.scramble_defuse = withSound(EFFECTS.impact_heal, scrambleSound(SFX.scrambleDefuse, 0.9))
+
+-- Arena teleporter.
+EFFECTS.teleport_depart = withSound(EFFECTS.impact_shield, { soundId = SFX.teleportDepart, volume = 0.8 })
+EFFECTS.teleport_arrive = withSound(EFFECTS.impact_buff, { soundId = SFX.teleportArrive, volume = 0.8 })
+
+-- Sound-only cues played on a character by client code.
+EFFECTS.dash = soundOnly({ soundId = SFX.dash, volume = 0.6 }, "caster")
+EFFECTS.roll = soundOnly({ soundId = SFX.roll, volume = 0.6 }, "caster")
+-- Once per popped letter, on the collector. Quiet: a fast speller has two
+-- in the air at once.
+EFFECTS.collect_stream = soundOnly({ soundId = SFX.collectStream, volume = 0.5 }, "caster")
 
 ----------------------------------------------------------------------
 -- PROJECTILE_BODIES

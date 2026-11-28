@@ -1,7 +1,7 @@
 ---
 type: system
 description: Full boss system — custom non-humanoid rig (BossBrain) on an invisible R15 skeleton, AI state machine, phase scaffolding, two attack types, and client HUD. One boss cycle per arena session, started on RoundStarted and stopped on RoundEnded; HUD remotes, perception and skill targets are all scoped to the BossPoint's arena (Phase 6 stage 3 + refactor chunk 9).
-updated: 2026-11-25
+updated: 2026-11-28
 ---
 
 # Boss
@@ -299,8 +299,9 @@ round *loop* starting, not a round.)
   (`workspace:GetServerTimeNow()` time, since `os.clock()` is per-VM) and tags it
   `BossEntranceTell`. `client/Arena/BossEntranceCountdown` draws "BOSS INCOMING / N"
   from those two; the tag coming off ends it. World cues go through
-  `VfxBroadcast.playAt`: `wall_rise_rumble` at the start, `aoe_boss_groundslam` when the
-  boss lands. Both are stand-ins.
+  `VfxBroadcast.playAt`: `boss_entrance_start` at the start, `boss_entrance_land` when the
+  boss lands. Each has its own sound since 2026-11-28 ([[systems/AudioSFX]]); the start
+  rumble is 4 s, so it ends 4 s before the landing.
 - **Cancel.** The timer lives in the cycle's `pendingThread`, so `RoundEnded` cancels it
   through the existing `stopArena`, exactly as it cancels a respawn.
 - Only the first arrival of a round starts the countdown. Later arrivals and re-entries
@@ -467,7 +468,8 @@ A type without `wardAtHpFraction` has no ward (Wizard).
   damage is held by the floor like any other.
 - If the arena has no block pool the ward cannot hang letters and is dropped at once
   with a warning, so the boss is never left unkillable.
-- Cues go through `VfxBroadcast` with stand-ins (`BossConstants.WARD_*`): a rumble as
+- Cues go through `VfxBroadcast` (`BossConstants.WARD_*` = `boss_ward_up` / `boss_ward_break`,
+  a borrowed look with their own sounds since 2026-11-28): a rumble as
   it goes up, a ring at the orbit radius every 1.5 s while it holds, a thud as it
   breaks. A hit that is held back still shows the attacker a damage number of 0. No
   new art or audio, and ward letters look like any other letter (they carry the

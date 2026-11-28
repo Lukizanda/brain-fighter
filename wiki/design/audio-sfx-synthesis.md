@@ -1,12 +1,12 @@
 ---
 type: design
-description: Phase 10 plan (2026-11-23, PROPOSED) — replace every sound effect with ones synthesized from a script-defined kit of voices, rendered offline in Python and uploaded through Open Cloud; cue scope, pipeline, team and stages
-updated: 2026-11-23
+description: Phase 10 plan and history (2026-11-23 to 28; 49 sounds uploaded and wired 2026-11-28) — replace every sound effect with ones synthesized from a script-defined kit of voices, rendered offline in Python and uploaded through Open Cloud; cue scope, pipeline, team and stages
+updated: 2026-11-28
 ---
 
 # Synthesized audio FX (Phase 10)
 
-**Status: approved in outline 2026-11-23 (§ Decisions). In progress: a two-kit bake-off of the pilot family, rendered locally. Nothing is uploaded or wired into the game.**
+**Status 2026-11-28: 49 sounds are uploaded and wired into the game (§ Uploaded and wired). About half have never been heard by the user, and none has been judged in a real fight. Next: the user's listening playtest, re-renders from it, then the silent events (tier B).**
 
 The user asked to replace the stand-in sound effects, and fill the silent events, with sounds built from scratch by synthesis so that the whole game sounds like one instrument. This supersedes the "buy a pack or use free sources" question in [[design/build-plan]] § Current focus item 4. Inventory of what plays today: [[systems/AudioSFX]] (stale in places, see § What the audit found).
 
@@ -213,5 +213,17 @@ The user then asked the director for a review pass over the whole upload set. Me
 - **Kept over the line:** user picks (explosion 0.46, shield block 0.50, ward up 0.56) and the bass rumbles of the boss entrance (0.52), where low noise measures as pitch.
 
 The set is 49 files, none under the phone floor. Process lessons: a session's reported edit list over-reports (it named `pilot_md.py`, `lint.py` and a dictionary file that never changed; `git diff` is the check); packaging linted a loop as a one-shot until fixed; a lane left to choose alone drifts toward tonal sounds.
+
+### Uploaded and wired, 2026-11-28
+
+The user imported all 49 files in Studio by hand in one bulk import. The ids did not need pasting back: the Studio MCP's Open Cloud call `GET /cloud/v2/users/<userId>/inventory-items?filter=inventoryItemAssetTypes=AUDIO` lists them, and `MarketplaceService:GetProductInfo` gives each name. One name came back as `##########` (Roblox's text filter on "Knockup"); it was matched by being the only file left and by its length. Every asset loaded in Studio with the same length as its local file. Ids are in `chosen.json` and `VfxConfig.SFX`.
+
+Wiring is described on [[systems/AudioSFX]]. In short: one `VfxConfig.SFX` entry per file; own effect entries for the eleven boss, scramble and teleporter events that borrowed another effect; dash, roll and the collect stream as sound-only effects; a looping path (`Vfx/LoopSound`) for burning and the shield hum; the slam warning triggered by the client's Telegraph so that it ends on the landing; the slam sound moved off the ring that was cutting it at 0.5 s (the suspected cut-off was real); pitch ranges reduced to a slight spread or removed; a client preloader, because a first play started about 0.4 s late.
+
+Checked on one Studio client: everything loads, and each new path plays. **Not checked: how it sounds in a fight.** Open after wiring:
+- The scramble tap plays at one pitch. Climbing per letter needs a pitch on `VfxBroadcast.playAt`.
+- The 4 s entrance rumble starts an 8 s countdown, so it ends 4 s before the landing. Either delay it or render an 8 s one.
+- Volley (parked) borrows Firebolt's sounds. The buff sound is still the old latch.
+- Volumes are first guesses by role. Expect a balance pass after the listening playtest.
 
 Checked: 20 files render and lint with no failures; the page loads with all 20 waveforms drawn and no script errors. **Not checked: how any of it sounds.** No person has listened yet, and the recipes are a first pass written without hearing them. The chiptune kit is trimmed 5 dB so the two sit at about the same loudness.

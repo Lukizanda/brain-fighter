@@ -67,6 +67,15 @@ local TelegraphConstants = {
 	-- Neurons burst outward on the landing, then settle.
 	SLAM_LAND_NEURON_RADIUS_SCALE = 1.5,
 	FALLBACK_SLAM_TOTAL_WARNING_SEC = 1.8,
+	-- The warning's sound (VfxConfig.EFFECTS id): the rise, the hang and
+	-- the drop in one file, built to the timings above so that it ends as
+	-- the slam lands. Its length is the file's; a re-render that changes
+	-- one changes the other.
+	SLAM_RISE_EFFECT_ID = "boss_slam_rise",
+	SLAM_RISE_SOUND_SEC = 1.8,
+	-- With less of the warning left than this, the sound is skipped: only
+	-- the drop would be heard, on top of the slam itself.
+	SLAM_RISE_SOUND_MIN_LEFT_SEC = 0.5,
 	FALLBACK_SLAM_RADIUS_STUDS = 22,
 
 	-- The client-only shadow on the ground under the slam.

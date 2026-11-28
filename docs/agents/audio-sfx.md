@@ -17,8 +17,10 @@ Load this when a task creates, changes or reviews a sound effect. Getting a soun
 - **Hand-off to upload:**
   - Add the chosen sound to `tools/sfx/chosen.json`, with the game event it plays on and its hook in `VfxConfig`.
   - Run `package.py`. It puts named, linted files in `build/sfx/upload/` with an `UPLOAD.md` checklist.
-  - The user imports them in Studio (decided 2026-11-25: by hand for now, to see how tedious it is) and pastes back the asset ids.
-  - Write each id into `chosen.json`, then wire it into the game.
+  - The user imports them in Studio by hand (decided 2026-11-25; a bulk import of 49 worked on 2026-11-28).
+  - Read the ids yourself, no pasting needed: `open_cloud_invoke` `GET /cloud/v2/users/<userId>/inventory-items?filter=inventoryItemAssetTypes=AUDIO`, then `MarketplaceService:GetProductInfo(id)` for each name. A name Roblox's text filter rejects comes back as `#####`; match it by file length.
+  - Check each loads in Studio with the local file's length, then write each id into `chosen.json` and onto its line in `VfxConfig.SFX`.
+  - How sounds are wired (own effect entries, loops, timed sounds, the preloader) is [wiki/systems/AudioSFX.md](../../wiki/systems/AudioSFX.md).
   - File and asset names carry no version (user, 2026-11-28). The game refers to sounds by asset id, and `chosen.json` holds the current one. To ship a re-render, clear its `sha256` and `assetId`: an empty `assetId` means it needs uploading, and the new upload is a new asset.
 
 ## You cannot hear

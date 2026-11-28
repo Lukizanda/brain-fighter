@@ -2,7 +2,7 @@
 type: system
 description: Visual effects — particle effects for spell casts/impacts (the caster's client predicts the cast cue off SpellResolved; the authoritative run broadcasts cast + impact cues over the one VfxBroadcast → WorldVfxEvent lane), projectile bodies and trails, persistent status visuals (shield / freeze / burn / charge orb) bound by one shared CharacterAttributeWatcher, boss windup telegraphs, UI feedback animations, and per-color theming. Core, PERF guardrails and the block-pop collect stream are all shipped.
 status: implemented
-updated: 2026-11-17
+updated: 2026-11-28
 ---
 
 # Visual Effects
@@ -10,7 +10,8 @@ updated: 2026-11-17
 > **Implementation status (2026-06-05).** The world-VFX core shipped — but with different module names than the plan below describes. Read this banner first; treat the rest of the page as the original design plan, accurate in intent but stale on specifics.
 >
 > **What exists on disk:**
-> - `src/shared/Vfx/VfxConfig.luau` — `COLORS`, `SFX` (sound asset ids), `EFFECTS` (cast t1–t4 red, t1–t3 blue, **t1–t3 green**, `impact_damage/heal/freeze/shield/knockup/wall/buff`, **`shield_block`**, **`shield_break`**, **`impact_damage_t2`/`impact_damage_t3`**, `projectile_red_t1/t2/t4`, **`projectile_boss_fireball`**, **`projectile_boss_bolt`/`projectile_boss_arcane_bolt`**, **`aoe_boss_groundslam`**, **`projectile_destroy`**, **`wall_rise_rumble`/`wall_rise_dust`** — 2026-08-04: every `EFFECTS` entry now carries an audible placeholder `sound`, none left `UNSET`), and a `PERF` table.
+> - `src/shared/Vfx/VfxConfig.luau` — `COLORS`, `SFX` (sound asset ids), `EFFECTS` (cast t1–t4 red, t1–t3 blue, **t1–t3 green**, `impact_damage/heal/freeze/shield/knockup/wall/buff`, **`shield_block`**, **`shield_break`**, **`impact_damage_t2`/`impact_damage_t3`**, `projectile_red_t1/t2/t4`, **`projectile_boss_fireball`**, **`projectile_boss_bolt`/`projectile_boss_arcane_bolt`**, **`aoe_boss_groundslam`**, **`projectile_destroy`**, **`wall_rise_rumble`/`wall_rise_dust`** — 2026-08-04: every `EFFECTS` entry now carries an audible `sound`, none left `UNSET`; 2026-11-28: those sounds are the synthesized ones, and `boss_*`, `scramble_*`, `teleport_*`, `dash`, `roll`, `collect_stream` entries were added, see [[systems/AudioSFX]]), and a `PERF` table.
+> - `src/shared/Vfx/LoopSound.luau` — a looping sound that lasts as long as a status (burning, shield); `src/client/Vfx/SfxPreloader.client.luau` fetches every `SFX` id at client start.
 > - `src/shared/Vfx/spawnEffect.luau` — **the shared spawn engine** (cast/impact/projectile), used by *both* the client `VfxController` and `SkillDelivery`. The plan's inline `VfxController.spawnCast/spawnImpact` methods were never built that way.
 > - `src/client/Vfx/VfxController.client.luau` — **the prediction layer**: listens on the `CastAction/Remotes/SpellResolved` BindableEvent (no `CastAction` require) and draws the caster's cast cue on the frame they cast, via `SkillVisuals.spawnCastCue`. Nothing at the target. (Refactor chunk 7, 2026-09-08; it used to also predict impact bursts and relay both through a client-trusted remote — see § Architecture below.)
 > - `src/shared/Vfx/VfxBroadcast.luau` + `src/client/Vfx/WorldVfxController.client.luau` — **the server's only legal way to make a player see or hear something** (2026-08-04), and since chunk 7 the *only* cross-client VFX lane. Kinds: `point`, `attached`, `beam`, `collect`, `shockwave`, `projectile`, `telegraph` (the last added by chunk 10, 2026-09-11, which retired `BossWindupEvent`). See § "Nothing player-facing runs on the server" below.

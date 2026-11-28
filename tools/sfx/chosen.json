@@ -9,7 +9,7 @@
       "plays_when": "A Fireball explodes (the splash impact).",
       "game_hook": "VfxConfig.EFFECTS.impact_damage_t2. It currently uses SFX.impactDamage, which other spells share, so it gets its own SFX entry when wired.",
       "sha256": "49574c7883af892d8d95442795abbf4cec63bfc720bf391176d4dc32fd22c02f",
-      "assetId": null,
+      "assetId": 119657114308765,
       "gainDb": 5.5
     },
     {
@@ -20,7 +20,7 @@
       "plays_when": "Frost Nip (blue tier 1) is cast. Take B, blast: a cold rush into a clashing ice strike and crackle.",
       "game_hook": "VfxConfig.EFFECTS.cast_blue_t1. It currently uses SFX.cast, which every cast shares, so it gets its own SFX entry when wired.",
       "sha256": "323979a11932f889f1260dce87b9f0329e2e9265652e7f979a67171ccd5c5bbf",
-      "assetId": null,
+      "assetId": 102428306446346,
       "gainDb": 5.5
     },
     {
@@ -31,7 +31,7 @@
       "plays_when": "Loops for as long as a target is burning (Inferno's burn). Take B, roaring: a 3 s seamless loop.",
       "game_hook": "None yet: the game has no way to play a looping sound. Needs the loop path (tier D) and a listener on the burning status (InfernoVfxController). Set Looped = true.",
       "sha256": "c120e62d89ca9b203a508c6c9378a31d60bc61f5b0967c0dd67065ca13a7f08c",
-      "assetId": null,
+      "assetId": 85840446001408,
       "gainDb": 5.5
     },
     {
@@ -42,7 +42,7 @@
       "plays_when": "A red letter block is popped: the block cracking apart.",
       "game_hook": "VfxConfig.EFFECTS.block_pop_red: its sound entry (now SFX.blockPop, shared by all four colours) becomes this file. Plays at the block for everyone; the popper hears it on the tap (BlockTapController).",
       "sha256": "a026344c216399b28174701ce796538fb015a7ef53749ec7e4ab0a683faa26d0",
-      "assetId": null,
+      "assetId": 135293838277497,
       "gainDb": 5.5
     },
     {
@@ -53,7 +53,7 @@
       "plays_when": "A green letter block is popped: the block cracking apart.",
       "game_hook": "VfxConfig.EFFECTS.block_pop_green: its sound entry (now SFX.blockPop, shared by all four colours) becomes this file. Plays at the block for everyone; the popper hears it on the tap (BlockTapController).",
       "sha256": "ec9143981469a7a789ed4c625806cf848407ced0cc45063f1f3cecfef1ca4144",
-      "assetId": null,
+      "assetId": 95753410288051,
       "gainDb": 5.5
     },
     {
@@ -64,7 +64,7 @@
       "plays_when": "A blue letter block is popped: the block cracking apart.",
       "game_hook": "VfxConfig.EFFECTS.block_pop_blue: its sound entry (now SFX.blockPop, shared by all four colours) becomes this file. Plays at the block for everyone; the popper hears it on the tap (BlockTapController).",
       "sha256": "597752c3c045de7600aedc6dd15541017134849c233960784a179104b9bf9574",
-      "assetId": null,
+      "assetId": 93924423436990,
       "gainDb": 5.5
     },
     {
@@ -75,7 +75,7 @@
       "plays_when": "A gold letter block is popped: the block cracking apart.",
       "game_hook": "VfxConfig.EFFECTS.block_pop_wild: its sound entry (now SFX.blockPop, shared by all four colours) becomes this file. Plays at the block for everyone; the popper hears it on the tap (BlockTapController).",
       "sha256": "f8e8cf880ab5ac271addf7bd8b6364bfd182cd83d1c2175bf02360950c7a6b8e",
-      "assetId": null,
+      "assetId": 118427458345031,
       "gainDb": 5.5
     },
     {
@@ -86,7 +86,7 @@
       "plays_when": "A popped letter's mana is drawn into the player: the swirl, the spark ticks and the landing (0.4 s).",
       "game_hook": "collectStream.play, which has no sound yet: start this on the collector's HumanoidRootPart when the stream starts (on the server's confirmation). The landing is baked in at 0.4 s = collectStream.FLIGHT_SEC; if that changes, re-render and bump the version.",
       "sha256": "d2e7e8bc63ad34ff9e8e1cb7678e05793ec30602a115617a5d33f1e59784788e",
-      "assetId": null,
+      "assetId": 85899561060457,
       "gainDb": 5.5
     },
     {
@@ -98,7 +98,7 @@
       "plays_when": "Firebolt cast (red T1) (fire lane, take B).",
       "game_hook": "VfxConfig.EFFECTS.cast_red_t1 (now SFX.cast, shared by every cast).",
       "sha256": "ad7fd9f3063a8334b4e77d3dc86c9dfc513b2d37a6466ed847a9603a30658b23",
-      "assetId": null
+      "assetId": 109503955523747
     },
     {
       "cue": "projectile_red_t1",
@@ -109,7 +109,7 @@
       "plays_when": "Firebolt in flight (launch layer) (fire lane, take A).",
       "game_hook": "VfxConfig.EFFECTS.projectile_red_t1 (one-shot at launch, rides the bolt).",
       "sha256": "ffd21c395f3e84a6e21ed94c1e2f47c71136f0b1cb9de9c89b8b448e967a4f37",
-      "assetId": null
+      "assetId": 115859273363493
     },
     {
       "cue": "impact_damage",
@@ -120,7 +120,7 @@
       "plays_when": "Damage hit (Firebolt, boss volley, Wizard bolt) (fire lane, take B).",
       "game_hook": "VfxConfig.EFFECTS.impact_damage (Firebolt hit, boss volley hit, Wizard bolt).",
       "sha256": "b6274403a83e3f508811cf1e0c15543042c8f81984339f9b6567dba7769f35ee",
-      "assetId": null
+      "assetId": 79413999314678
     },
     {
       "cue": "cast_red_t2",
@@ -131,7 +131,7 @@
       "plays_when": "Fireball cast (red T2) (fire lane, take C).",
       "game_hook": "VfxConfig.EFFECTS.cast_red_t2.",
       "sha256": "cfa982924cb920ed21a481b4dd8f1ea2038f6d3a07fa0f05c83f0716ce3f13f8",
-      "assetId": null
+      "assetId": 118669505670359
     },
     {
       "cue": "projectile_red_t2",
@@ -142,7 +142,7 @@
       "plays_when": "Fireball in flight (launch layer) (fire lane, take B).",
       "game_hook": "VfxConfig.EFFECTS.projectile_red_t2.",
       "sha256": "a45e1e1bbdd8f725dcfc13a66f5aac44c9e65d269f8a102a03621ef52e03f669",
-      "assetId": null
+      "assetId": 86347100139772
     },
     {
       "cue": "cast_red_t3",
@@ -153,7 +153,7 @@
       "plays_when": "Inferno cast (red T3) (fire lane, take B).",
       "game_hook": "VfxConfig.EFFECTS.cast_red_t3. Take B peaks about 0.1 s after it starts (a rush, then the burst); check it against the cast visual when wired.",
       "sha256": "3c679eb74f9a9fa7deb07acdbe1d4757ba800f51291d560391b251c388c92227",
-      "assetId": null
+      "assetId": 123580349414988
     },
     {
       "cue": "impact_damage_t3",
@@ -164,7 +164,7 @@
       "plays_when": "Inferno eruption (fire lane, take B).",
       "game_hook": "VfxConfig.EFFECTS.impact_damage_t3. Also borrowed by the scramble seeker burst (BombConstants.BURST_VFX).",
       "sha256": "d2dc28cc95f1a82197668def33aed76b51a463db6b22ce48d15b3bae46528b54",
-      "assetId": null
+      "assetId": 86995873917114
     },
     {
       "cue": "fizzle",
@@ -175,7 +175,7 @@
       "plays_when": "Refused (bad word, no mana, mind full, cancel) (fire lane, take A).",
       "game_hook": "VfxConfig.SFX.fizzle, played by BlockTapController, BombTapController, SpellMenuGui and GameplayHudGui. Set VfxConfig.SFX.FIZZLE_PLAYBACK_SPEED to 1: the new sound is pitched already, and 0.55 would drag it down.",
       "sha256": "78d4382fc9b8744eb148036f003dff53fcd7516f885fe72a36ecede4622fe19c",
-      "assetId": null
+      "assetId": 117629874881051
     },
     {
       "cue": "dash",
@@ -186,7 +186,7 @@
       "plays_when": "Dash (fire lane, take A).",
       "game_hook": "DashController:_playSound('Dash'), today a place-file Sound (ReplicatedStorage.Shared.DashSounds.Dash); bring it under Rojo or code.",
       "sha256": "586a40b2f0bbb3595391b66ac80588baa94419dcd5670d6e6dd5eef90fec2222",
-      "assetId": null
+      "assetId": 115473951508544
     },
     {
       "cue": "roll",
@@ -197,7 +197,7 @@
       "plays_when": "Roll (fire lane, take B).",
       "game_hook": "DashController:_playSound('Roll'), today a place-file Sound (ReplicatedStorage.Shared.DashSounds.Roll).",
       "sha256": "feae7726c52e17850ec5eb483c46a9f5dc09e2ef0df4668e173f4d59b42c84df",
-      "assetId": null
+      "assetId": 132633008944877
     },
     {
       "cue": "arena_depart",
@@ -208,7 +208,7 @@
       "plays_when": "Arena teleporter: depart (fire lane, take A).",
       "game_hook": "ArenaEntryConstants depart cue, which borrows impact_shield today: needs its own VfxConfig.EFFECTS entry.",
       "sha256": "e99bc33b1e0c91233f247cbb716cdae1845c35c7c11ad32f6926a6256cb44dd6",
-      "assetId": null
+      "assetId": 123125336822302
     },
     {
       "cue": "arena_arrive",
@@ -219,7 +219,7 @@
       "plays_when": "Arena teleporter: arrive (fire lane, take A).",
       "game_hook": "ArenaEntryConstants arrive cue, which borrows impact_buff today: needs its own VfxConfig.EFFECTS entry.",
       "sha256": "3f244ccf5cc48e47f4fb7bd057bfa335eab29725e92fe9d284a76b1354f647a5",
-      "assetId": null
+      "assetId": 132685040057320
     },
     {
       "cue": "impact_freeze",
@@ -230,7 +230,7 @@
       "plays_when": "Freeze lands (Frost Nip, Stasis, Wizard bolt) (nature lane, take B; picked by the user by ear).",
       "game_hook": "VfxConfig.EFFECTS.impact_freeze.",
       "sha256": "5b3b66bb2d37b8a3a0502b35fa8280af0d5f4ca82e5df6176fe5de8150244e64",
-      "assetId": null
+      "assetId": 99592342406656
     },
     {
       "cue": "cast_blue_t2",
@@ -241,7 +241,7 @@
       "plays_when": "Shield cast (blue T2) (nature lane, take A; the lane's pick, NOT yet heard by the user (user: 'make your best recommendation, i want to hear the sounds in game first'; revised after the director's review, still unheard).",
       "game_hook": "VfxConfig.EFFECTS.cast_blue_t2.",
       "sha256": "7ed2c0f2bfc98bf714abbc97d22221baa1c6c092298e21504430db023a3e051d",
-      "assetId": null
+      "assetId": 83510420002099
     },
     {
       "cue": "impact_shield",
@@ -252,7 +252,7 @@
       "plays_when": "Shield forms (nature lane, take A; the lane's pick, NOT yet heard by the user (user: 'make your best recommendation, i want to hear the sounds in game first'; revised after the director's review, still unheard).",
       "game_hook": "VfxConfig.EFFECTS.impact_shield.",
       "sha256": "d07d4bc018bcfbce19fec1f436cbceb7421e7c34eb488991f7c141b27bca6d5b",
-      "assetId": null
+      "assetId": 126949143318318
     },
     {
       "cue": "shield_hum",
@@ -263,7 +263,7 @@
       "plays_when": "Shield held up (loop) (nature lane, take A; the lane's pick, NOT yet heard by the user (user: 'make your best recommendation, i want to hear the sounds in game first'; revised after the director's review, still unheard).",
       "game_hook": "New loop, no hook yet: plays while a shield is up (ShieldVfxController). Needs the looping path; set Looped = true.",
       "sha256": "df861e1541af5793a9914b8f98bd40efb7d9c58febc0afee129b966defb296a5",
-      "assetId": null
+      "assetId": 71008617796891
     },
     {
       "cue": "shield_block",
@@ -274,7 +274,7 @@
       "plays_when": "A shot dies on a shield (nature lane, take A; picked by the user by ear).",
       "game_hook": "VfxConfig.EFFECTS.shield_block.",
       "sha256": "73ff306e12864bba306c3ffdad671925f717ef2b663224c6481881c44b907530",
-      "assetId": null
+      "assetId": 131971891766020
     },
     {
       "cue": "shield_break",
@@ -285,7 +285,7 @@
       "plays_when": "Shield breaks (nature lane, take A; the lane's pick, NOT yet heard by the user (user: 'make your best recommendation, i want to hear the sounds in game first'; revised after the director's review, still unheard).",
       "game_hook": "VfxConfig.EFFECTS.shield_break.",
       "sha256": "b351a64f9dee59d65e6cafa7c461b216989404ff9d13c1d768ca538ab2b41a33",
-      "assetId": null
+      "assetId": 121646135352719
     },
     {
       "cue": "cast_blue_t3",
@@ -296,7 +296,7 @@
       "plays_when": "Stasis cast (blue T3) (nature lane, take A; the lane's pick, NOT yet heard by the user (user: 'make your best recommendation, i want to hear the sounds in game first'; revised after the director's review, still unheard).",
       "game_hook": "VfxConfig.EFFECTS.cast_blue_t3.",
       "sha256": "91dc1c6d6691c2370e396256610de6a0c5a9b388a9ab295e94d12d81f1983642",
-      "assetId": null
+      "assetId": 112167167239780
     },
     {
       "cue": "cast_green_t1",
@@ -307,7 +307,7 @@
       "plays_when": "Mend cast (green T1) (nature lane, take A; the lane's pick, NOT yet heard by the user (user: 'make your best recommendation, i want to hear the sounds in game first'; revised after the director's review, still unheard).",
       "game_hook": "VfxConfig.EFFECTS.cast_green_t1.",
       "sha256": "eae38825451aaabb4600be3b417a76458e2ec9a1953ad5b426b73f921e191d58",
-      "assetId": null
+      "assetId": 90067404035305
     },
     {
       "cue": "impact_heal",
@@ -318,7 +318,7 @@
       "plays_when": "Heal lands (nature lane, take A; the lane's pick, NOT yet heard by the user (user: 'make your best recommendation, i want to hear the sounds in game first'; revised after the director's review, still unheard).",
       "game_hook": "VfxConfig.EFFECTS.impact_heal. Boss hunger and the scramble defuse borrow it today; they get their own from the boss lane.",
       "sha256": "dcb1a33cee1f8fb345eb29ce7638e96ff05ea44e64e8f91d6d38865f589e8c65",
-      "assetId": null
+      "assetId": 96873793804242
     },
     {
       "cue": "cast_green_t3",
@@ -329,7 +329,7 @@
       "plays_when": "Sanctuary cast (green T3) (nature lane, take A; the lane's pick, NOT yet heard by the user (user: 'make your best recommendation, i want to hear the sounds in game first')).",
       "game_hook": "VfxConfig.EFFECTS.cast_green_t3.",
       "sha256": "4e5044c4b5e371baade9e1378931ab4213314b1bb716233d7044a8171dcd08aa",
-      "assetId": null
+      "assetId": 73035818632294
     },
     {
       "cue": "cast_green_t2",
@@ -340,7 +340,7 @@
       "plays_when": "Stone Wall cast (green T2) (nature lane, take B; picked by the user by ear).",
       "game_hook": "VfxConfig.EFFECTS.cast_green_t2.",
       "sha256": "55c045f23ffaa1eb7c74206b56fc11ab74224a8fc5255cf9e72c4e5b2732926a",
-      "assetId": null
+      "assetId": 135214410240580
     },
     {
       "cue": "wall_rise_rumble",
@@ -351,7 +351,7 @@
       "plays_when": "Stone Wall rising (nature lane, take B; the lane's pick, NOT yet heard by the user (user: 'make your best recommendation, i want to hear the sounds in game first')).",
       "game_hook": "VfxConfig.EFFECTS.wall_rise_rumble. The boss ward and entrance borrow it today; they get their own from the boss lane.",
       "sha256": "54b3cc56a17bb63361af91be3d3cb93d6431c44703d5c10c6dd6f7f29f291585",
-      "assetId": null
+      "assetId": 104161989791265
     },
     {
       "cue": "impact_wall",
@@ -362,7 +362,7 @@
       "plays_when": "Stone Wall settles (nature lane, take A; the lane's pick, NOT yet heard by the user (user: 'make your best recommendation, i want to hear the sounds in game first')).",
       "game_hook": "VfxConfig.EFFECTS.impact_wall.",
       "sha256": "d793070416b40d2801f41b0fc236a71cb0e55a59160a20a7e8a31a4ca9bb50c7",
-      "assetId": null
+      "assetId": 92655546106611
     },
     {
       "cue": "wall_crack",
@@ -373,7 +373,7 @@
       "plays_when": "Wall cracks (Stone Wall and breakable walls) (nature lane, take C; picked by the user by ear).",
       "game_hook": "VfxConfig.EFFECTS.wall_crack (Stone Wall and breakable walls).",
       "sha256": "73e31ea8dade573dc853980c5e200287e96ff2c46ccfd3deee58f473b14ba7f1",
-      "assetId": null
+      "assetId": 134464835585870
     },
     {
       "cue": "wall_break",
@@ -384,7 +384,7 @@
       "plays_when": "Wall breaks (breakable walls) (nature lane, take B; picked by the user by ear).",
       "game_hook": "VfxConfig.EFFECTS.wall_break (breakable walls).",
       "sha256": "b9590e3b644f78c74a7aee2660e7b9b81b5b224dff11975788d47eae123623ba",
-      "assetId": null
+      "assetId": 116693152353200
     },
     {
       "cue": "boss_ward_up",
@@ -395,7 +395,7 @@
       "plays_when": "Word ward goes up (boss lane, take C; picked by the user by ear).",
       "game_hook": "BossConstants.WARD_UP_VFX = wall_rise_rumble. It borrows that effect today and needs its own VfxConfig.EFFECTS entry.",
       "sha256": "e0117c784712c6499b949435764c1c3d99eed0afce984e46a8ca8f6a8ff92e76",
-      "assetId": null
+      "assetId": 131833607210599
     },
     {
       "cue": "boss_ward_down",
@@ -406,7 +406,7 @@
       "plays_when": "Word ward breaks (boss lane, take C; picked by the user by ear).",
       "game_hook": "BossConstants.WARD_DOWN_VFX = impact_wall. It borrows that effect today and needs its own VfxConfig.EFFECTS entry.",
       "sha256": "6e3a1abab0f4db6cdf5b563d0617be432844c17d02b27876b949d77950a079b2",
-      "assetId": null
+      "assetId": 117899208805743
     },
     {
       "cue": "scramble_land",
@@ -417,7 +417,7 @@
       "plays_when": "Scramble puzzle lands (boss lane, take C; picked by the user by ear).",
       "game_hook": "BombConstants.LAND_VFX = impact_wall. It borrows that effect today and needs its own VfxConfig.EFFECTS entry.",
       "sha256": "0074d9530e4e9c49ac64ec88c8c505dae2bd1cae3f89ec25f9f1654b5f2ac9c2",
-      "assetId": null
+      "assetId": 140483683990822
     },
     {
       "cue": "scramble_hatch",
@@ -428,7 +428,7 @@
       "plays_when": "A letter hatches into a seeker (boss lane, take A; picked by the user by ear).",
       "game_hook": "BombConstants.HATCH_VFX = impact_wall. It borrows that effect today and needs its own VfxConfig.EFFECTS entry.",
       "sha256": "92d89e29aed800e2290b13d1e8526064f8bdcb62a80daf19107fa1f47efa4fb0",
-      "assetId": null
+      "assetId": 89847094308621
     },
     {
       "cue": "scramble_tap",
@@ -439,7 +439,7 @@
       "plays_when": "Scramble: correct tap (boss lane, take B; picked by the user by ear).",
       "game_hook": "BombConstants.POP_VFX = impact_buff. It borrows that effect today and needs its own VfxConfig.EFFECTS entry. The demo climbs the scale per letter: set PlaybackSpeed per tap.",
       "sha256": "b74381a66a096e5294f68ece95d77b1c947410cb09d38dd7443fbc086f8608f0",
-      "assetId": null
+      "assetId": 80135051451559
     },
     {
       "cue": "scramble_defuse",
@@ -450,7 +450,7 @@
       "plays_when": "Scramble: word sent back at the boss (boss lane, take A; picked by the user by ear).",
       "game_hook": "BombConstants.DEFUSE_VFX = impact_heal. It borrows that effect today and needs its own VfxConfig.EFFECTS entry.",
       "sha256": "0dd3c165d50502bb2d08b3f1c13d52f795c27feeba040cd274247a5af40bf59a",
-      "assetId": null
+      "assetId": 84460573857198
     },
     {
       "cue": "projectile_boss_fireball",
@@ -461,7 +461,7 @@
       "plays_when": "Boss volley: one shot launched (boss lane, take A; the director's pick, NOT yet heard by the user).",
       "game_hook": "VfxConfig.EFFECTS.projectile_boss_fireball (20 per volley; keep emitterSize 120 / rollOff 400).",
       "sha256": "c34dd6d09407fdd3d93006ac3a01695325c37ac83dbcf8d44f83b33df5c0b243",
-      "assetId": null
+      "assetId": 102514507441726
     },
     {
       "cue": "projectile_destroy",
@@ -472,7 +472,7 @@
       "plays_when": "A projectile dies on a wall or in the air (boss lane, take C; the director's pick, NOT yet heard by the user).",
       "game_hook": "VfxConfig.EFFECTS.projectile_destroy (once per shot; keep it quiet).",
       "sha256": "03991d4ac95f2f427b59d4c2ce927ae189358ed1736cf109e9a1d0a3de871ae0",
-      "assetId": null
+      "assetId": 96481499721792
     },
     {
       "cue": "boss_slam_rise",
@@ -483,7 +483,7 @@
       "plays_when": "NEW: the boss rises before the Ground Slam (boss lane, take C; the director's pick, NOT yet heard by the user).",
       "game_hook": "No hook today: the boss rising before a Ground Slam is silent. Trigger on the client from the boss's PendingAttack / WindupEndsAt attributes so the 1.8 s cue ends as the slam lands (rise 0.65 s, hang, drop 0.18 s). Check the windup length first.",
       "sha256": "7fbc1cdcbbf62810cb5a60e01c6fb50815a325055a97bd2cab7d1820de3ad3f5",
-      "assetId": null
+      "assetId": 85211191488518
     },
     {
       "cue": "aoe_boss_groundslam",
@@ -494,7 +494,7 @@
       "plays_when": "Ground Slam lands (boss lane, take A; the director's pick, NOT yet heard by the user).",
       "game_hook": "VfxConfig.EFFECTS.aoe_boss_groundslam. 1.8 s long: the sound is parented to a shockwave ring destroyed after 0.5 s, so it will be cut off unless it gets its own anchor. BossConstants.ENTRANCE_APPEAR_VFX borrows this effect today and moves to BF_Boss_Entrance_Land.",
       "sha256": "8c2346c7685009096b6203fe51b44c668aec12ed9a52d8fcb118348561385e69",
-      "assetId": null
+      "assetId": 133471793656361
     },
     {
       "cue": "impact_knockup",
@@ -505,7 +505,7 @@
       "plays_when": "Launched skyward: a PLAYER thrown up by the slam (boss lane, take A; the director's pick, NOT yet heard by the user).",
       "game_hook": "VfxConfig.EFFECTS.impact_knockup (a player thrown up by the slam).",
       "sha256": "5437ebfcebcd650151ac4d9c4ba265f10ae35799eecfc9b68e1575279c43c6a5",
-      "assetId": null
+      "assetId": 91088698801249
     },
     {
       "cue": "boss_entrance_start",
@@ -516,7 +516,7 @@
       "plays_when": "Boss entrance: countdown starts (boss lane, take A; the director's pick, NOT yet heard by the user).",
       "game_hook": "BossConstants.ENTRANCE_START_VFX = wall_rise_rumble. It borrows that effect today and needs its own VfxConfig.EFFECTS entry. 4 s long.",
       "sha256": "28d92b2dee475d3d2fc5d4f54260d442bbdf9d17b420e7b3f061848206de9d87",
-      "assetId": null
+      "assetId": 117794862594407
     },
     {
       "cue": "boss_entrance_appear",
@@ -527,7 +527,7 @@
       "plays_when": "Boss entrance: the Brain lands (boss lane, take A; the director's pick, NOT yet heard by the user).",
       "game_hook": "BossConstants.ENTRANCE_APPEAR_VFX = aoe_boss_groundslam. It borrows that effect today and needs its own VfxConfig.EFFECTS entry.",
       "sha256": "3515c8998b81525bc80774983dc50044fe9d7c397a3c01acc288d35b9eb71ee6",
-      "assetId": null
+      "assetId": 74287162499968
     },
     {
       "cue": "boss_hunger_eat",
@@ -538,7 +538,7 @@
       "plays_when": "The Brain eats a letter (boss lane, take A; the director's pick, NOT yet heard by the user).",
       "game_hook": "BossConstants.HUNGER_HEAL_VFX = impact_heal. It borrows that effect today and needs its own VfxConfig.EFFECTS entry.",
       "sha256": "7ba7b7496eb3c25a13b93938b5e384a0c8e6fdd888914027fa05b324520c2267",
-      "assetId": null
+      "assetId": 92068123708895
     }
   ]
 }

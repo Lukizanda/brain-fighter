@@ -387,11 +387,11 @@ function SkillVisuals.spawnShockwave(center: Vector3, radius: number, opts: Shoc
 	shockwave.Parent       = workspace
 	Debris:AddItem(shockwave, lifetimeSec)
 
+	-- On an anchor of its own, not on the ring: the ring is gone after
+	-- `lifetimeSec` (0.5 s by default) and would take the sound with it.
+	-- The boss slam's sound runs 1.8 s.
 	if o.cosmeticEffectId then
-		local cosmeticEffect = VfxConfig.EFFECTS[o.cosmeticEffectId]
-		if cosmeticEffect then
-			spawnEffect(cosmeticEffect, shockwave)
-		end
+		SkillVisuals.spawnEffectAtPoint(shockwave.Position, o.cosmeticEffectId)
 	end
 
 	return shockwave

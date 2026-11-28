@@ -30,6 +30,7 @@ local RunService        = game:GetService("RunService")
 local Logger    = require(ReplicatedStorage.Shared.Core.Logger)
 local MotePath  = require(ReplicatedStorage.Shared.Vfx.MotePath)
 local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
+local spawnEffect = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
 local log = Logger.new("collectStream")
 
@@ -49,6 +50,11 @@ local log = Logger.new("collectStream")
 -- Below ~0.3 s the arc is too brief to track to its destination, which
 -- defeats the point of pointing at a person.
 local FLIGHT_SEC = 0.4
+
+-- The stream's sound: a whirl drawing in, then the landing. One file,
+-- with the landing baked in at FLIGHT_SEC, so changing the number above
+-- means re-rendering the sound (tools/sfx/cues/collect_lab.py).
+local SOUND_EFFECT_ID = "collect_stream"
 
 -- Ribbon width at the block end and at the player end. It narrows as it
 -- arrives so the eye is pulled along it toward the person, which is the
@@ -223,6 +229,13 @@ function CollectStream.play(origin: Vector3, collectorUserId: number, color: Col
 		return
 	end
 	activeStreams += 1
+
+	-- On the collector, so it is heard where the mana goes. Skipped with
+	-- the stream when the cap drops it, so sound and picture stay paired.
+	local soundEffect = VfxConfig.EFFECTS[SOUND_EFFECT_ID]
+	if soundEffect then
+		spawnEffect(soundEffect, target)
+	end
 
 	local tint = color or VfxConfig.COLORS.red.primary
 

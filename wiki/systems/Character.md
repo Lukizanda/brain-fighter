@@ -1,7 +1,7 @@
 ---
 type: system
 description: Per-character systems (mostly REMOVED 2026-06-22, commit 6610291) — CameraController + LocomotionController deleted; only DashController + CharacterSystemsLoader (CoreGui config) survive. Retained as historical record of the TPS stack.
-updated: 2026-11-17
+updated: 2026-11-28
 ---
 
 # Character System
@@ -58,7 +58,7 @@ Works regardless of `TPS_CHARACTER_ENABLED` — runs on top of the default Roblo
 
 - Uses `BodyVelocity` with `MaxForce = Vector3.new(math.huge, 0, math.huge)`. Y = 0 so gravity and floor contact are unaffected. The `math.huge` XZ force is required — the default PlayerModule actively decelerates the character when no WASD is held, and `LinearVelocity` or smaller BodyVelocity forces cannot overcome it.
 - Direction is computed from `hrp.CFrame.LookVector` flattened to XZ in world space. Using `RelativeTo.Attachment0` with `VelocityConstraintMode.Plane` caused upward movement because `PlaneVelocity.Y` maps to the attachment's local Y axis (world-up with default attachment orientation).
-- Animations loaded from `ReplicatedStorage.Shared.DashAnimations` (Dash, Roll). Sounds from `ReplicatedStorage.Shared.DashSounds`. VFX template from `ReplicatedStorage.Shared.DashEffects.DashParticles`. **These instances live only in the `.rbxl` — re-create via MCP after a fresh place open.**
+- Animations loaded from `ReplicatedStorage.Shared.DashAnimations` (Dash, Roll). Sounds are the sound-only effects `VfxConfig.EFFECTS.dash` / `roll`, played through `spawnEffect` (since 2026-11-28; they used to be `Sound` instances in `ReplicatedStorage.Shared.DashSounds`, which is now unused). VFX template from `ReplicatedStorage.Shared.DashEffects.DashParticles`. **The animation and VFX instances live only in the `.rbxl` — re-create via MCP after a fresh place open.**
 - All timing and speed constants live in `GameConfig.DASH`.
 
 ### Files

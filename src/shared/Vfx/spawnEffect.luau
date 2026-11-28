@@ -55,7 +55,7 @@ local LIGHT_RANGE_STUDS = 30
 -- what makes them 3D-positional. Deliberately NOT parented to the emitter
 -- attachment: that one is destroyed on `totalDurationSec`, which is the
 -- length of the *particle* burst and is routinely shorter than the sound.
-local function playSound(spec: VfxConfig.SoundSpec, anchorPart: BasePart | Attachment)
+local function playSound(spec: VfxConfig.SoundSpec, anchorPart: BasePart | Attachment, startAtSec: number?)
 	if UNSET_SOUND_IDS[spec.soundId] then return end
 
 	local sound = Instance.new("Sound")
@@ -73,6 +73,10 @@ local function playSound(spec: VfxConfig.SoundSpec, anchorPart: BasePart | Attac
 	if spec.emitterSize        then sound.EmitterSize        = spec.emitterSize        end
 	if spec.rollOffMaxDistance then sound.RollOffMaxDistance = spec.rollOffMaxDistance end
 	sound.Parent = anchorPart
+	-- Set before Play, which starts from the last position a script set.
+	if startAtSec and startAtSec > 0 then
+		sound.TimePosition = startAtSec
+	end
 	sound:Play()
 
 	sound.Ended:Once(function()
@@ -138,7 +142,15 @@ local function isReducedVfx(): boolean
 	return holder ~= nil and Settings.read(holder, Settings.Keys.ReducedVfx) == true
 end
 
-local function spawnEffect(effectSpec: VfxConfig.EffectSpec, anchorPart: BasePart | Attachment)
+-- `soundStartSec` starts the sound that far into its file. For a cue that
+-- must END on a moment (the boss's slam warning lands with the slam): a
+-- client that learns of it late skips the part it missed instead of
+-- finishing late.
+local function spawnEffect(
+	effectSpec: VfxConfig.EffectSpec,
+	anchorPart: BasePart | Attachment,
+	soundStartSec: number?
+)
 	-- Hard stop on the server, and loudly.
 	--
 	-- `ParticleEmitter:Emit()` does not replicate, so the burst that is the
@@ -165,7 +177,7 @@ local function spawnEffect(effectSpec: VfxConfig.EffectSpec, anchorPart: BasePar
 	-- sound-only or particle-less (and the emitter-less early return used
 	-- to drop their sound silently).
 	if effectSpec.sound then
-		playSound(effectSpec.sound, anchorPart)
+		playSound(effectSpec.sound, anchorPart, soundStartSec)
 	end
 
 	-- Light, like sound, is outside the emitters guard — an effect is

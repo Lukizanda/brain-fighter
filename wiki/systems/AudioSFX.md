@@ -1,7 +1,7 @@
 ---
 title: Audio SFX
-description: Sound effect inventory, wiring patterns, placeholder locations, and gap list for Brain Fighter
-updated: 2026-11-14
+description: Sound effect inventory and wiring — since 2026-11-28 every played sound is a synthesized one (VfxConfig.SFX, one entry per uploaded file); loops, timed sounds, preloading, and the list of still-silent events
+updated: 2026-11-28
 ---
 
 # Audio SFX
@@ -26,8 +26,8 @@ The three Spelling Staff Sounds (`FireSound` / `HitSound` / `FizzleSound`, child
 
 | Event | Where it lives now | Status | Notes |
 |-------|-------------------|--------|-------|
-| Tap refused (mind full, or buffer rejected) | client-local `Sound` in `SoundService`, `VfxConfig.SFX.fizzle` at `PlaybackSpeed = 0.55` | ✅ wired | Same asset and pitch as `SpellMenuGui` / `GameplayHudGui`, so a refusal sounds identical wherever it was triggered |
-| Block popped | `VfxConfig.EFFECTS.block_pop_{red,green,blue,wild}` → `sound` field, id `SFX.blockPop` | ✅ wired | Positional and replicated by construction, rather than a Sound on a Handle. One entry per block colour, resolved by `VfxConfig.resolveBlockPopId` |
+| Tap refused (mind full, or buffer rejected) | client-local `Sound` in `SoundService`, `VfxConfig.SFX.fizzle` at its own speed | ✅ wired | Same asset as `SpellMenuGui` / `GameplayHudGui`, so a refusal sounds identical wherever it was triggered |
+| Block popped | `VfxConfig.EFFECTS.block_pop_{red,green,blue,wild}` → `sound` field, ids `SFX.collectCrack{Red,Green,Blue,Gold}` | ✅ wired | Positional and replicated by construction, rather than a Sound on a Handle. One entry per block colour, resolved by `VfxConfig.resolveBlockPopId` |
 | Tap attempt (the old `FireSound`) | — | ❌ dropped | There is no weapon to fire |
 | Hit confirmation (the old `HitSound`) | folded into the block pop | ✅ wired | Was shooter-only; the pop is heard by everyone |
 | Cooldown gate | — | ❌ silent | low priority — fast repeat tap |
@@ -37,26 +37,33 @@ The three Spelling Staff Sounds (`FireSound` / `HitSound` / `FizzleSound`, child
 
 ---
 
-### Spell VFX audio (`VfxConfig.SFX` → `spawnEffect`) — 2026-08-03
+### Synthesized sounds (`VfxConfig.SFX` → `spawnEffect`), wired 2026-11-28
 
-Every spell cast and impact burst carries a `SoundSpec` in its
-`VfxConfig.EFFECTS` entry. Two things were wrong until 2026-08-03:
+Every sound the game plays is now one synthesized for it ([[design/audio-sfx-synthesis]]; the style rules are [[design/AudioDirection]]). `VfxConfig.SFX` has one entry per uploaded file, named after it (`castFirebolt` is `BF_Firebolt_Cast`), and `tools/sfx/chosen.json` maps each asset id back to its render. One placeholder is left: `impactBuffPlaceholder`, for a buff landing, whose sound is deferred.
 
-1. **`spawnEffect` never read `effectSpec.sound` at all.** `sound`, `light`
-   and `beam` were declared in `EffectSpec` but only `emitters` was ever
-   consumed, so *all 10 spells were silent* regardless of what the config
-   said. `sound` is now played; `light` was implemented 2026-08-08 (`PointLight` flash, honours `PERF.allowLights` and Reduced effects); `beam` is still unimplemented.
-2. The early `if not effectSpec.emitters then return end` guard sat *above*
-   the sound, so particle-less effects would have stayed silent anyway.
-   Audio now happens before that guard.
+Roblox cannot replace an audio asset in place. Shipping a re-render means a new upload and a new id on that entry's line.
 
-Asset ids live in one place, `VfxConfig.SFX`, so a real SFX pack can be
-dropped in one line per entry. **All current ids are interim placeholders**
-— verified to load (`ContentProvider:PreloadAsync`, `IsLoaded` true,
-`TimeLength > 0`) but not purpose-made. The project owns no spell SFX: the
-universe inventory is the LaserTag template's gun sounds, and Creator Store
-audio search returns ripped music and meme clips rather than a usable
-library. See the gap table below.
+| What changed | Where |
+|---|---|
+| Each spell has its own cast sound (was one swoosh at three pitches) | `castEntry(palette, tier, soundId)` |
+| Each block colour has its own crack (was one sound) | `blockPopEntry(palette, soundId)` |
+| Events that borrowed another effect whole now have their own entry: the borrowed look with their own sound | `boss_ward_up`, `boss_ward_break`, `boss_entrance_start`, `boss_entrance_land`, `boss_eat`, `scramble_land`, `scramble_hatch`, `scramble_tap`, `scramble_defuse`, `teleport_depart`, `teleport_arrive` (built by `withSound` after the `EFFECTS` literal; named in `BossConstants`, `BombConstants`, `ArenaEntryConstants`) |
+| Dash and roll are sound-only effects in code (were `Sound` instances kept in the place file) | `EFFECTS.dash`, `EFFECTS.roll`, played by `DashController:_playSound` |
+| The collect stream has a sound, on the collector | `EFFECTS.collect_stream`, played by `collectStream.play` |
+| Burning and a raised shield loop a sound for as long as they last | `Vfx/LoopSound` (`start` / `stop` with a fade), called by `InfernoVfx` and `ShieldVfx`; ids `SFX.burningLoop`, `SFX.shieldHumLoop` |
+| The Ground Slam has a warning sound that ends as the slam lands | `EFFECTS.boss_slam_rise`, played by the client's `BossPoses/Telegraph` when it first sees a slam windup |
+| The Ground Slam's sound is no longer cut off | `SkillVisuals.spawnShockwave` plays its effect on an anchor of its own. It used to parent the sound to the ring, which is destroyed after 0.5 s; the slam sound runs 1.8 s |
+| The fizzle plays at its own speed | `SFX.FIZZLE_PLAYBACK_SPEED = 1` (was 0.55, to bend the cast swoosh into a buzzer) |
+
+**Volume and pitch.** The files are balanced against each other and pitched as chosen, so a `SoundSpec`'s `volume` now only says how prominent the event is. `pitchRange` is absent, or `SFX_JITTER` (0.97 to 1.03) on sounds that repeat many times a minute. The old ranges went down to 0.28 because one stock sample was being bent into several roles.
+
+**Timed sounds.** Two sounds must line up with the picture: the collect stream has its landing baked in at 0.4 s (`collectStream`'s `FLIGHT_SEC`), and the slam warning must end on the landing. Two things serve that:
+- `client/Vfx/SfxPreloader` fetches every `VfxConfig.SFX` id at client start. Without it the first play of a sound started about 0.4 s late in Studio.
+- `spawnEffect(effect, anchor, soundStartSec)` starts a sound part-way into its file. The Telegraph uses it when a client sees the slam windup late, so the sound still ends on the landing. If less than 0.5 s of warning is left, the sound is skipped.
+
+**Not yet done:** the scramble tap was designed to climb the scale one step per letter (set `PlaybackSpeed` per tap); it plays at one pitch, because `VfxBroadcast.playAt` carries no pitch. The boss entrance rumble is 4 s and plays at the start of an 8 s countdown, so it ends 4 s before the boss lands. Volley (T4, parked) borrows Firebolt's cast and flight sounds.
+
+How it was checked (2026-11-28, one Studio client): all 52 sound-carrying effects load; dash and roll play through the real input path; the slam sound is still playing after its ring is gone; both loops start, and are removed after their fade; the collect stream and the offset slam warning play. **Nobody has listened to them in a fight yet**, and about half were never heard by the user at all.
 
 `spawnEffect` skips the `rbxassetid://0` placeholder rather than playing it,
 which is what stopped the `Failed to load sound` spam. Sounds are parented to
@@ -75,7 +82,8 @@ despite being correctly wired. Check them before concluding an id is wrong.
 **1. A Sound is a child of its anchor, so it dies when the anchor dies.**
 `spawnEffect` parents its Sound to the anchor part. Hanging a *one-shot* cue
 on `cosmeticEffectId` therefore ties it to the projectile: destroy the shot
-on impact and the sound is destroyed mid-play. `cosmeticEffectId` is for
+on impact and the sound is destroyed mid-play. (The same trap cut off the Ground Slam, whose
+sound hung on a ring that lasts 0.5 s; fixed 2026-11-28.) `cosmeticEffectId` is for
 trails, which are supposed to stop when the shot stops. One-shot cues want
 `launchEffectId` (fired at the muzzle on its own throwaway anchor, via
 `SkillVisuals.spawnEffectAtPoint`) or `destroyEffectId`.
@@ -88,10 +96,10 @@ what boss fire did. `SoundSpec` takes `emitterSize` and `rollOffMaxDistance`
 for this; both are left at engine defaults unless a spec sets them, so
 tuning a long-range cue can't quietly re-balance every close-range spell.
 
-Current long-range entries: `projectile_boss_fireball` and
-`aoe_boss_groundslam` at `emitterSize = 120` / `rollOffMaxDistance = 400`
+Current long-range entries: `projectile_boss_fireball`,
+`aoe_boss_groundslam` and every `boss_*` entry at `emitterSize = 120` / `rollOffMaxDistance = 400`
 (past Brain's 100-stud engagement range, so attenuation stays flat across
-the arena); `projectile_destroy` at a more modest 40 / 300, since the wall a
+the arena); `projectile_destroy` and the `scramble_*` entries at a more modest 40 / 300, since the wall a
 player is hiding behind is right next to them anyway.
 
 ---
@@ -137,7 +145,7 @@ walk (`hitARig`) so a body hit stays on the server's burst while a wall
 still thuds.
 
 **Tuning note**: Brain's `FireballVolley` is `count = 30`, so this plays up
-to 30 times ~0.15 s apart. Kept quiet (`volume = 0.40`) and pitched low
+to 30 times ~0.15 s apart. Kept quiet (`volume = 0.40`)
 deliberately; if a volley reads as a machine-gun patter in playtest, drop
 the volume further or add a rate cap rather than removing the cue.
 
@@ -148,9 +156,8 @@ the volume further or add a rate cap rather than removing the cue.
 A single `fizzleSound` Sound instance is created at module level and parented to `SoundService`.
 
 **Resolved 2026-08-03** — was `rbxassetid://0`, which failed to load on every
-refused cast. Now reads `VfxConfig.SFX.fizzle` and plays it at
-`PlaybackSpeed = 0.55`: the fizzle deliberately shares the cast swoosh asset,
-pitched down, so a refused cast is audibly a dud rather than a quiet success.
+refused cast. Now reads `VfxConfig.SFX.fizzle`. Since 2026-11-28 that is a
+synthesized fizzle of its own, played at its own speed.
 
 | Event | Status | Notes |
 |-------|--------|-------|
@@ -165,7 +172,7 @@ pitched down, so a refused cast is audibly a dud rather than a quiet success.
 
 Same pattern as SpellMenuGui — single module-level Sound in SoundService.
 
-**Resolved 2026-08-03** — same fix and same pitch drop as SpellMenuGui, so a
+**Resolved 2026-08-03** — same fix as SpellMenuGui, so a
 refused action sounds identical wherever it was triggered from.
 
 | Event | Status | Notes |
@@ -192,13 +199,13 @@ The firearm, melee and loadout-drop sections were removed 2026-11-04: those syst
 
 | Priority | Gap | Effort |
 |----------|-----|--------|
-| **High** | **Source a real spell SFX pack and replace every `VfxConfig.SFX` id.** All 12 entries (6 distinct assets) are stand-ins; `impactFreeze` (a sword hit standing in for an ice crack) is the weakest match. Needs a purchased/commissioned pack — the free library has nothing usable. | 1 line per entry once assets exist |
+| ~~High~~ **Done 2026-11-28** | Every `VfxConfig.SFX` id was a stand-in (12 entries on 6 assets). Replaced by 49 synthesized sounds; see "Synthesized sounds" above. Left: a listening pass in real fights, and the buff sound. | done |
 | ~~High~~ | ~~FizzleSound SoundId in Studio (LetterBlaster)~~ — **resolved 5.7**: the Studio-side Sound is gone; the cue is built from `VfxConfig.SFX.fizzle` in code | done |
 | Medium | `EffectSpec.beam` is declared but still unimplemented in `spawnEffect` (`emitters`, `sound` and, since 2026-08-08, `light` are consumed) | moderate |
-| Medium | Projectile trails (`projectile_red_t1/t2/t4`) — 2026-08-04: now play a quiet one-shot `SFX.cast` layer at launch (no looping path in `spawnEffect`) instead of nothing; still no real continuous in-flight whoosh | needs a loopable asset |
-| Medium | Boss `FireballVolley` launch (`projectile_boss_fireball`, `SFX.bossProjectileLaunch`) and impact (`impactEffectId = "impact_damage"`) — 2026-08-04: both hooks now wired in `BossConfig` (Brain + Wizard) with an audible reused-asset stand-in, no longer `UNSET`/silent | needs purpose-made launch + hit assets |
-| Medium | Boss `GroundSlam` shockwave (`aoe_boss_groundslam`, reuses `SFX.impactHeavy`) — 2026-08-04: wired in `BossConfig.Brain`, was previously silent | needs a ground-thud asset |
-| Low | `impact_knockup` — 2026-08-04: **correction**, `knockup` has a real gameplay handler (`SkillEffects.knockup`, used by boss GroundSlam); sound was the only stub, now reuses `SFX.impactDamage` pitched up instead of `UNSET` | needs a real "launched skyward" asset |
+| ~~Medium~~ **Done 2026-11-28** | Projectile trails (`projectile_red_t1/t2/t4`) play a purpose-made flight sound, a one-shot at launch that rides the shot | done |
+| ~~Medium~~ **Done 2026-11-28** | Boss `FireballVolley` launch (`SFX.bossVolleyShot`) and impact (`SFX.damageHit`) | done |
+| ~~Medium~~ **Done 2026-11-28** | Boss `GroundSlam`: its own landing sound, a warning sound before it, and the cut-off fixed | done |
+| ~~Low~~ **Done 2026-11-28** | `impact_knockup` has its own sound (`SFX.knockup`) | done |
 | ~~Low~~ **Done 2026-08-04** | Single-target projectiles that hit a wall or expired mid-air were silent — `detonate()` only played `impactEffectId` on a direct victim hit. Now every projectile death is audible via `projectile_destroy`; see "Projectile death cue" below | done |
 | Medium | Memorize success chime | new Sound in GameplayHudGui |
 | Medium | Spell cast success sound | new Sound in SpellMenuGui |

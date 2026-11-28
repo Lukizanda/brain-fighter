@@ -27,6 +27,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService      = game:GetService("TweenService")
 
+local LoopSound   = require(ReplicatedStorage.Shared.Vfx.LoopSound)
 local VfxConfig   = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 local spawnEffect = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
@@ -81,6 +82,8 @@ type ActiveBubble = {
 	-- can only be measured against its own high-water mark.
 	peak: number,
 	amount: number,
+	-- The hum, looping for as long as the bubble is up.
+	hum: Sound,
 }
 
 local _active: { [Model]: ActiveBubble } = {}
@@ -144,7 +147,11 @@ function ShieldVfx.start(character: Model, amount: number, diameterStuds: number
 		{ Size = Vector3.new(diameterStuds, diameterStuds, diameterStuds) }
 	):Play()
 
-	_active[character] = { bubble = bubble, peak = amount, amount = amount }
+	-- On the root, not the bubble: the bubble is destroyed the moment the
+	-- shield goes, and the hum has to fade rather than cut.
+	local hum = LoopSound.start(root, VfxConfig.SFX.shieldHumLoop, VfxConfig.SFX.SHIELD_HUM_LOOP_VOLUME)
+
+	_active[character] = { bubble = bubble, peak = amount, amount = amount, hum = hum }
 end
 
 -- Re-tune an existing bubble to a new pool value: thinner as the pool
@@ -203,6 +210,7 @@ function ShieldVfx.shatter(character: Model)
 	local entry = _active[character]
 	if not entry then return end
 	_active[character] = nil
+	LoopSound.stop(entry.hum, BREAK_TIME)
 
 	local bubble = entry.bubble
 	if not bubble.Parent then return end
@@ -229,6 +237,7 @@ function ShieldVfx.stop(character: Model)
 	local entry = _active[character]
 	if not entry then return end
 	_active[character] = nil
+	LoopSound.stop(entry.hum, COLLAPSE_TIME)
 
 	local bubble = entry.bubble
 	if not bubble.Parent then return end

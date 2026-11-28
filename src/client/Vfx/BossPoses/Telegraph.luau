@@ -27,6 +27,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local BossConfig = require(ReplicatedStorage.Shared.Boss.BossConfig)
 local BossConstants = require(ReplicatedStorage.Shared.Boss.BossConstants)
 local PoseTypes = require(script.Parent.PoseTypes)
+local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
+local spawnEffect = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 local C = require(script.Parent.TelegraphConstants)
 
 local TAU = 2 * math.pi
@@ -127,6 +129,25 @@ local function volleyTell(pose: PoseTypes.Pose, r: number)
 	pose.tintAlpha = math.max(pose.tintAlpha, C.VOLLEY_TINT_ALPHA * draw)
 	pose.neuronSpeedScale *= 1 + C.VOLLEY_NEURON_SPEED_BOOST * draw
 	pose.neuronRadiusScale *= 1 - (1 - C.VOLLEY_NEURON_RADIUS_SCALE) * draw
+end
+
+-- The slam warning's sound, started so that it ends on the landing.
+-- `left` is the seconds until WindupEndsAt when this client first sees
+-- the slam. Seen early, the sound waits; seen late (replication lag, or a
+-- player walking in mid-warning), it starts part-way through its file.
+local function playSlamRise(root: BasePart, left: number)
+	local effect = VfxConfig.EFFECTS[C.SLAM_RISE_EFFECT_ID]
+	if not effect or left < C.SLAM_RISE_SOUND_MIN_LEFT_SEC then return end
+	local early = left - C.SLAM_RISE_SOUND_SEC
+	if early > 0 then
+		task.delay(early, function()
+			if root.Parent then
+				spawnEffect(effect, root)
+			end
+		end)
+	else
+		spawnEffect(effect, root, -early)
+	end
 end
 
 -- Returns how far the slam is through its warning (0..1) for the shadow.
@@ -340,6 +361,11 @@ local layer: PoseTypes.Layer = {
 				memory.attack = pending
 				memory.endsAt = endsAt
 				memory.groundY = nil
+				-- Once per slam: this branch runs only when a new windup is
+				-- first seen.
+				if pending == C.SLAM_ATTACK and ctx.alive then
+					playSlamRise(ctx.root, endsAt - ctx.serverNow)
+				end
 			end
 		end
 		local attack = memory.attack

@@ -4,6 +4,8 @@ local UserInputService = game:GetService("UserInputService")
 
 local GameConfig = require(ReplicatedStorage.Shared.Core.GameConfig)
 local Logger = require(ReplicatedStorage.Shared.Core.Logger)
+local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
+local spawnEffect = require(ReplicatedStorage.Shared.Vfx.spawnEffect)
 
 local CFG = GameConfig.DASH
 
@@ -34,7 +36,8 @@ DashController.__index = DashController
 local log = Logger.new("DashController")
 
 local DASH_ANIM_FOLDER = "DashAnimations"
-local DASH_SOUNDS_FOLDER = "DashSounds"
+local DASH_EFFECT_ID = "dash"
+local ROLL_EFFECT_ID = "roll"
 local DASH_EFFECTS_FOLDER = "DashEffects"
 
 function DashController.new(character: Model): DashController
@@ -94,17 +97,13 @@ function DashController:_playTrack(track: AnimationTrack?)
 	track:Play(CFG.ANIM_FADE_TIME)
 end
 
-function DashController:_playSound(name: string)
-	local folder = ReplicatedStorage.Shared:FindFirstChild(DASH_SOUNDS_FOLDER)
-	if not folder then return end
-	local sound = folder:FindFirstChild(name) :: Sound?
-	if not sound then return end
-	local clone = sound:Clone()
-	clone.Parent = self._hrp
-	clone:Play()
-	task.delay(clone.TimeLength + 0.1, function()
-		if clone then clone:Destroy() end
-	end)
+-- `effectId` is a sound-only VfxConfig.EFFECTS entry. Until 2026-11-28
+-- these were Sound instances kept in the place file
+-- (ReplicatedStorage.Shared.DashSounds), outside Rojo.
+function DashController:_playSound(effectId: string)
+	local effect = VfxConfig.EFFECTS[effectId]
+	if not effect then return end
+	spawnEffect(effect, self._hrp)
 end
 
 function DashController:_playVFX()
@@ -177,7 +176,7 @@ function DashController:_performDash()
 
 	self:_applyLinearVelocity(CFG.DASH_SPEED, CFG.DASH_DURATION, false)
 	self:_playTrack(self._dashTrack)
-	self:_playSound("Dash")
+	self:_playSound(DASH_EFFECT_ID)
 	self:_playVFX()
 end
 
@@ -203,7 +202,7 @@ function DashController:_performRoll()
 
 	self:_applyLinearVelocity(CFG.ROLL_SPEED, CFG.ROLL_DURATION, true)
 	self:_playTrack(self._rollTrack)
-	self:_playSound("Roll")
+	self:_playSound(ROLL_EFFECT_ID)
 	self:_playVFX()
 end
 

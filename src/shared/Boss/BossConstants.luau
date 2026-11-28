@@ -43,9 +43,9 @@ local BossConstants = {
 
 	-- VfxConfig.EFFECTS ids played at the BossPoint through VfxBroadcast:
 	-- a stone rumble as the countdown starts, a heavy thud as the boss lands.
-	-- Reused stand-ins, not final art.
-	ENTRANCE_START_VFX = "wall_rise_rumble",
-	ENTRANCE_APPEAR_VFX = "aoe_boss_groundslam",
+	-- Each borrows a look and has its own sound.
+	ENTRANCE_START_VFX = "boss_entrance_start",
+	ENTRANCE_APPEAR_VFX = "boss_entrance_land",
 
 	-- The client countdown billboard over the BossPoint.
 	ENTRANCE_LABEL_HEIGHT_STUDS = 40,
@@ -61,8 +61,8 @@ local BossConstants = {
 	-- Cause string on the heal request, for the Health log.
 	HUNGER_HEAL_CAUSE = "BossHunger",
 	-- VfxConfig.EFFECTS id played on the boss when a bite actually healed it.
-	-- Reused stand-in (it carries its own sound); not final art.
-	HUNGER_HEAL_VFX = "impact_heal",
+	-- Borrows the heal burst's look; the sound is its own.
+	HUNGER_HEAL_VFX = "boss_eat",
 
 	-- ============================================================
 	-- Spore lob (Boss/Scripts/BossSpores; numbers live in BossConfig)
@@ -114,9 +114,9 @@ local BossConstants = {
 	-- Word ward (Boss/Scripts/BossWard; numbers live in BossConfig)
 	-- ============================================================
 	-- VfxConfig.EFFECTS ids played at the boss through VfxBroadcast as the
-	-- ward goes up and as it breaks. Reused stand-ins, not final art.
-	WARD_UP_VFX = "wall_rise_rumble",
-	WARD_DOWN_VFX = "impact_wall",
+	-- ward goes up and as it breaks. Each borrows a look and has its own sound.
+	WARD_UP_VFX = "boss_ward_up",
+	WARD_DOWN_VFX = "boss_ward_break",
 	-- While the ward holds, a ring at the orbit radius pulses round the boss
 	-- this often, each lasting this long, in this colour.
 	WARD_PULSE_EVERY_SEC = 1.5,

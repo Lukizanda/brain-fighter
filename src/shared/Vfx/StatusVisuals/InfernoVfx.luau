@@ -38,6 +38,7 @@ local RunService        = game:GetService("RunService")
 local TweenService      = game:GetService("TweenService")
 
 local Logger    = require(ReplicatedStorage.Shared.Core.Logger)
+local LoopSound = require(ReplicatedStorage.Shared.Vfx.LoopSound)
 local VfxConfig = require(ReplicatedStorage.Shared.Vfx.VfxConfig)
 
 local log = Logger.new("InfernoVfx")
@@ -115,6 +116,8 @@ type Active = {
 	emitters: { ParticleEmitter },
 	highlight: Highlight?,
 	light: PointLight?,
+	-- The crackle, looping for as long as the rig burns.
+	sound: Sound?,
 	tweens: { Tween },
 }
 
@@ -225,8 +228,19 @@ function InfernoVfx.start(humanoid: Humanoid)
 	local limbs = collectLimbs(character :: Model)
 	if #limbs == 0 then return end
 
-	local entry: Active = { emitters = {}, highlight = nil, light = nil, tweens = {} }
+	local entry: Active = { emitters = {}, highlight = nil, light = nil, sound = nil, tweens = {} }
 	_active[humanoid] = entry
+
+	-- On the root so it follows the rig. Not gated on PERF like the light:
+	-- the sound is how a player who is not looking knows something burns.
+	local soundRoot = (character :: Model):FindFirstChild("HumanoidRootPart")
+	if soundRoot and soundRoot:IsA("BasePart") then
+		entry.sound = LoopSound.start(
+			soundRoot :: BasePart,
+			VfxConfig.SFX.burningLoop,
+			VfxConfig.SFX.BURNING_LOOP_VOLUME
+		)
+	end
 
 	-- Flame on every limb. Parented to the BasePart rather than to an
 	-- Attachment on purpose: a ParticleEmitter parented to a part inherits
@@ -337,6 +351,10 @@ function InfernoVfx.stop(humanoid: Humanoid)
 			Debris:AddItem(emitter, BURNOUT_SEC)
 		end
 	end
+
+	-- Fades over the burn-out, so the crackle dies with the last flames
+	-- instead of stopping while they are still in the air.
+	LoopSound.stop(entry.sound, BURNOUT_SEC)
 
 	local highlight = entry.highlight
 	if highlight and highlight.Parent then

@@ -37,8 +37,8 @@ ArenaEntryConstants.MIN_HEADING_LENGTH = 0.001
 
 -- VfxConfig.EFFECTS keys, played through VfxBroadcast at a point.
 ArenaEntryConstants.Vfx = {
-	Depart = "impact_shield", -- blue shimmer where the player left
-	Arrive = "impact_buff",   -- green burst where they land
+	Depart = "teleport_depart", -- blue shimmer where the player left
+	Arrive = "teleport_arrive",   -- green burst where they land
 }
 
 -- What `handleTouch` reports. Strings so a test failure reads on its own.
