@@ -226,4 +226,22 @@ Checked on one Studio client: everything loads, and each new path plays. **Not c
 - Volley (parked) borrows Firebolt's sounds. The buff sound is still the old latch.
 - Volumes are first guesses by role. Expect a balance pass after the listening playtest.
 
+### Colour lab, 2026-11-28 (open: the user has not listened yet)
+
+After the first in-game listen the user said: "there is no real audio differentiated between the red, blue, and green spells. The player can't tell the difference, and use that as additional information in the game?" The files agree. Measured as spectral shape over four bands, two casts of one colour differ more (0.87) than casts of different colours (0.77), and only 1 of 9 casts has a same-colour cast as its nearest neighbour. Cause: each cast was designed around its own spell, and nothing was shared per colour.
+
+`cues/lane_colour.py` keeps every spell's own sound and adds what a colour shares. Page: `build/sfx/lanes/colour/audition.html` (`render.py --lane colour`).
+
+| Take | What it adds | Same vs other colour, first 0.15 s | Nearest is same colour |
+|---|---|---|---|
+| `now` | nothing (as shipped) | 0.67 vs 0.66 | 1 of 9 |
+| `mat` | a 0.15 s signature in front (red: one strike and a low whump; blue: two quick glass ticks and hiss; green: a slower wooden knock-knock and rustle) and a register tilt (red low, blue high, green middle) | 0.40 vs 1.12 | 9 of 9 |
+| `note` | `mat` plus one short tone per colour (attacks a semitone off the key, green on it) | 0.27 vs 1.35 | 9 of 9 |
+| `light` | the signature only, no tilt; the spell is held down for 0.14 s and is otherwise as shipped | 0.42 vs 1.23 | 6 of 9 |
+| `woven` | no front signature; the colour's material scattered through the whole cast, following the spell's loudness, with the tilt | 0.43 vs 1.01 | 8 of 9 |
+
+`light` and `woven` were built ahead of the listen, at the user's request, for the objections the director expected (a picked sound changed; the signature sounding stuck on). A first `light` with a quieter signature and no ducking measured 3 of 9: the spell's own start buried it. One `light` cast measures 0.17 on the phone band, under the 0.2 floor.
+
+Decided the same day: replacement files carry the colour in the name (`BF_Red_Firebolt_Cast`), so they sort by colour and do not collide with the uploaded ones. Next: the user picks a take by ear; the same signature then goes on each colour's hit sounds; re-render, upload, swap the ids.
+
 Checked: 20 files render and lint with no failures; the page loads with all 20 waveforms drawn and no script errors. **Not checked: how any of it sounds.** No person has listened yet, and the recipes are a first pass written without hearing them. The chiptune kit is trimmed 5 dB so the two sit at about the same loudness.
